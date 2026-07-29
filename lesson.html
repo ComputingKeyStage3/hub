@@ -6,7 +6,6 @@
 <title>Lesson</title>
 <link rel="stylesheet" href="style.css">
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body class="lesson">
 
@@ -14,7 +13,7 @@
   <a class="home" href="index.html">&larr; All lessons</a>
   <span class="sep">/</span>
   <div class="title" id="lessonTitle">Lesson</div>
-  <button class="btn-primary no-print" id="pdfBtn">Download PDF</button>
+  <button class="btn-primary no-print" id="saveBtn">Save Work</button>
 </div>
 
 <div class="tracker" id="tracker" aria-hidden="true"></div>
@@ -49,6 +48,16 @@
   </span>
 </div>
 
+<div class="modal-back no-print" id="softModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="softTitle">
+    <p class="modal-eyebrow">Nearly there</p>
+    <h2 id="softTitle">Keep typing</h2>
+    <p class="modal-text">Add a bit more to your answer before moving on.</p>
+    <button class="btn-primary modal-cta" id="softStay">Keep writing</button>
+    <button class="btn-ghost modal-stay" id="softGo">Continue anyway</button>
+  </div>
+</div>
+
 <div class="modal-back no-print" id="waitModal" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="waitTitle">
     <p class="modal-eyebrow">Not yet</p>
@@ -62,10 +71,10 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="finTitle">
     <p class="modal-eyebrow">Lesson complete</p>
     <h2 id="finTitle">Save your work!</h2>
-    <p class="modal-text">Download your PDF and put it in your OneDrive folder.</p>
+    <p class="modal-text" id="finText">Press the button to send everything to your teacher.</p>
     <p class="handin" id="handinLine"></p>
-    <button class="btn-primary modal-cta" id="modalPdf">&#10515; &nbsp;Download PDF</button>
-    <button class="btn-ghost modal-stay" id="modalStay">Not yet - keep working</button>
+    <button class="btn-primary modal-cta" id="modalSave">&#10515; &nbsp;Save Work</button>
+    <button class="btn-ghost modal-stay" id="modalStay">Keep working</button>
   </div>
 </div>
 
@@ -298,7 +307,7 @@ function showStep(i){
   $("stepCount").textContent = "Step " + (step + 1) + " of " + steps.length;
   $("stageName").textContent = step === steps.length - 1 ? "Final step" : "";
   $("backBtn").disabled = step === 0;
-  $("nextBtn").textContent = step === steps.length - 1 ? "Finish 🏁" : "Continue →";
+  $("nextBtn").textContent = step === steps.length - 1 ? ((lesson && lesson.assessment) ? "Finish & see my score" : "Finish 🏁") : "Continue →";
   $("stage").scrollTop = 0;
   refreshGate();
 }
@@ -313,9 +322,13 @@ function refreshGate(){
   $("lockMsg").hidden = res.ok;
 }
 $("backBtn").addEventListener("click", () => showStep(step - 1));
-$("nextBtn").addEventListener("click", async () => {
+let softSkip = false;
+async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
   if ($("nextBtn").disabled) return;               // activity itself isn't finished
+  const st = steps[step];
+  if (st && st.soft && !softSkip && !st.soft().ok){ showSoftModal(); return; }
+  softSkip = false;
   if (step === steps.length - 1){ finishLesson(); return; }
 
   $("nextBtn").classList.add("checking");
@@ -324,7 +337,14 @@ $("nextBtn").addEventListener("click", async () => {
 
   if (allowed){ hideWaitModal(); showStep(step + 1); }
   else { showWaitModal(); startCooldown(); }
-});
+}
+$("nextBtn").addEventListener("click", tryContinue);
+
+function showSoftModal(){ $("softModal").hidden = false; $("softStay").focus(); }
+function hideSoftModal(){ $("softModal").hidden = true; }
+$("softStay").addEventListener("click", hideSoftModal);
+$("softGo").addEventListener("click", () => { hideSoftModal(); softSkip = true; tryContinue(); });
+$("softModal").addEventListener("click", (e) => { if (e.target === $("softModal")) hideSoftModal(); });
 
 function paintTracker(){
   Array.from($("tracker").children).forEach((seg, n) => {
@@ -334,31 +354,49 @@ function paintTracker(){
   });
 }
 
-let lastSubmit = 0;
+let lastSubmittedPayload = "";
 async function submitWork(){
-  /* The one write per lesson. Fires on Finish and on Download PDF. */
+  /* Writes to the database only when something actually changed since the
+     last successful write — pressing Save Work twice costs nothing. */
   if (!token || !apiReady) return "offline";
-  if (Date.now() - lastSubmit < 30000) return "done";   // don't double-write
+  const payload = JSON.stringify(snapshot());
+  if (payload === lastSubmittedPayload) return "done";
   try{
     const r = await fetch(API + "/api/submit", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-      body: JSON.stringify({ lesson: lessonId, data: snapshot() })
+      body: JSON.stringify({ lesson: lessonId, data: JSON.parse(payload) })
     });
     if (!r.ok) return "failed";
-    lastSubmit = Date.now();
+    lastSubmittedPayload = payload;
     return "done";
   }catch(e){ return "failed"; }
+}
+
+/* Mid-lesson manual save — for lessons that run out of time. */
+let flashTimer = null;
+async function manualSave(){
+  save();
+  const btn = $("saveBtn");
+  btn.textContent = "Saving…";
+  const state = await submitWork();
+  clearTimeout(flashTimer);
+  btn.classList.remove("flash-ok","flash-bad");
+  if (state === "done"){ btn.textContent = "Saved ✓"; btn.classList.add("flash-ok"); }
+  else if (state === "offline"){ btn.textContent = "Sign in to save"; btn.classList.add("flash-bad"); }
+  else { btn.textContent = "Try again"; btn.classList.add("flash-bad"); }
+  flashTimer = setTimeout(() => { btn.textContent = "Save Work"; btn.classList.remove("flash-ok","flash-bad"); }, 2500);
 }
 function paintHandin(state){
   const el2 = $("handinLine");
   if (!el2) return;
-  el2.textContent = state === "done" ? "✓ Also sent to your teacher"
-                  : state === "offline" ? "Sign in next time to send it to your teacher too"
-                  : "Could not reach the server — your PDF is your hand-in";
+  el2.textContent = state === "done" ? "✓ Sent to your teacher"
+                  : state === "offline" ? "Sign in so your work can be sent to your teacher"
+                  : "Could not reach the server — press Save Work to try again";
   el2.dataset.state = state;
 }
 function finishLesson(){
+  if (lesson && lesson.assessment){ assessmentFinish(); return; }
   save();
   submitWork().then(paintHandin);
   finished = true;
@@ -366,21 +404,32 @@ function finishLesson(){
   $("stageName").textContent = "Complete";
   $("briefEyebrow").textContent = "Complete";
   $("briefTitle").textContent = "Well done — now save your work.";
-  $("briefText").textContent = "Your work only exists on this computer. Download the PDF and put it in your OneDrive folder.";
-  $("nextBtn").textContent = "Save your work ⤓";
+  $("briefText").textContent = "Press Save Work to send everything to your teacher.";
+  $("nextBtn").textContent = "Save Work ⤓";
   $("nextBtn").onclick = showFinishModal;
   showFinishModal();
 }
 
 /* ---------- finish pop-up ---------- */
-function showFinishModal(){ $("finishModal").hidden = false; $("modalPdf").focus(); }
+function showFinishModal(){ $("finishModal").hidden = false; $("modalSave").focus(); }
 function hideFinishModal(){ $("finishModal").hidden = true; }
 $("waitOk").addEventListener("click", hideWaitModal);
 $("waitModal").addEventListener("click", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
 $("modalStay").addEventListener("click", hideFinishModal);
-$("modalPdf").addEventListener("click", () => { hideFinishModal(); downloadPdf(); });
+$("modalSave").addEventListener("click", async () => {
+  /* By the time the student sees this, finishLesson() has already written to
+     the database — this click is the habit, and a retry if that write failed. */
+  $("modalSave").textContent = "Saving…";
+  const state = await submitWork();
+  paintHandin(state);
+  $("modalSave").textContent = "✓ Saved";
+  $("finTitle").textContent = state === "done" ? "All saved!" : "Saved on this computer";
+  $("finText").textContent = state === "done" ? "Your work has been sent to your teacher." :
+    state === "offline" ? "Sign in next lesson and press Save Work to send it." : "The server couldn't be reached — try Save Work again in a minute.";
+  $("modalStay").textContent = "Close";
+});
 $("finishModal").addEventListener("click", (e) => { if (e.target === $("finishModal")) hideFinishModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideFinishModal(); hideWaitModal(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideFinishModal(); hideWaitModal(); hideSoftModal(); } });
 
 /* ---------- bypass ---------- */
 $("bypassDot").addEventListener("click", askBypass);
@@ -405,7 +454,8 @@ function renderBlock(b, i){
   // to store their state, or they silently fail to restore. Give them one.
   if (!b.id) b.id = b.type + "_" + i;
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
-              quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage }[b.type];
+              quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
+              mc:rMC, order:rOrder, blanks:rBlanks, short:rShort }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return; }
   let built;
   try { built = R(b); }
@@ -456,14 +506,16 @@ function rQuestion(b){
   const counter = el("p","counter");
   function tick(){
     const n = wordCount(ta.value);
-    counter.textContent = n + " word" + (n===1?"":"s") + (n < min ? " · write at least " + min : " · long enough ✓");
-    counter.dataset.ok = n >= min;
+    const stage = n >= min ? "good" : n >= Math.ceil(min/2) ? "going" : "more";
+    counter.textContent = stage === "good" ? "Looking good!" : stage === "going" ? "Keep going!" : "Write more";
+    counter.dataset.stage = stage;
   }
   ta.addEventListener("input", () => { tick(); markDirty(); });
   fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; tick(); } };
   s.appendChild(ta); s.appendChild(counter); tick();
   return { section:s,
-           check:() => wordCount(ta.value) >= min ? { ok:true } : { ok:false, message:"Write at least " + min + " words" },
+           check:() => ({ ok:true }),   // Continue stays clickable; the nudge happens on click
+           soft:() => ({ ok: wordCount(ta.value) >= min }),
            brief:{ eyebrow:"Answer", title:"Write your answer", text:stripTags(b.prompt) } };
 }
 
@@ -721,6 +773,7 @@ function applyLock(b, built){
   const origBrief = built.brief;
   return {
     section: built.section,
+    soft: built.soft,
     check: () => (unlocked || bypassed) ? origCheck() : { ok:false, message:"Wait for your teacher to give you the code" },
     brief: () => (unlocked || bypassed) ? origBrief : {
       eyebrow: "Locked",
@@ -824,6 +877,230 @@ function rImage(b){
                     text: b.task || "Paste a screenshot of your work below." } };
 }
 
+/* =====================================================================
+   ASSESSMENT QUESTION TYPES
+   Used in lessons flagged "assessment": true. Unlike lesson quizzes there
+   is no right/wrong feedback while answering and no retry-until-correct:
+   students answer once, and everything is marked together at the end,
+   like a Microsoft Form — but marked instantly on screen.
+   ===================================================================== */
+
+function normAns(x){
+  return String(x || "").toLowerCase().trim().replace(/\s+/g, " ").replace(/[.,!?;:'"]+$/g, "");
+}
+
+/* Multiple choice: one selection, no feedback until the end. */
+function rMC(b){
+  const s = el("section");
+  const opts = el("div","opts");
+  let chosen = null;
+  b.options.forEach((text, j) => {
+    const lab = el("label","opt");
+    const radio = el("input"); radio.type = "radio"; radio.name = b.id;
+    radio.addEventListener("change", () => {
+      chosen = j;
+      Array.from(opts.children).forEach((c,k)=>c.classList.toggle("chosen", k===j));
+      markDirty();
+    });
+    lab.appendChild(radio); lab.appendChild(el("span","", text));
+    opts.appendChild(lab);
+  });
+  s.appendChild(opts);
+  fields[b.id] = { get:() => chosen, set:(v) => {
+    if (v === null || v === undefined) return;
+    chosen = v;
+    const r = opts.querySelectorAll("input")[v]; if (r) r.checked = true;
+    Array.from(opts.children).forEach((c,k)=>c.classList.toggle("chosen", k===v));
+  }};
+  return { section:s,
+           check:() => chosen !== null ? { ok:true } : { ok:false, message:"Choose an answer" },
+           brief:{ eyebrow:"Question", title:stripTags(b.prompt), text:b.note || "" } };
+}
+
+/* Ordering (drag and drop, with arrow buttons as the keyboard fallback). */
+function rOrder(b){
+  const s = el("section");
+  const list = el("div","order-list");
+  s.appendChild(list);
+
+  // deterministic shuffle so a reload shows the same starting order
+  let arrangement = b.items.map((_, i) => i);
+  for (let i = arrangement.length - 1; i > 0; i--){
+    const j = (strHash(b.id + ":" + i) % (i + 1));
+    [arrangement[i], arrangement[j]] = [arrangement[j], arrangement[i]];
+  }
+
+  function redraw(){
+    list.innerHTML = "";
+    arrangement.forEach((itemIdx, pos) => {
+      const row = el("div","order-item");
+      row.draggable = true;
+      row.appendChild(el("span","grip","&#9776;"));
+      row.appendChild(el("span","txt", b.items[itemIdx]));
+      const mv = el("span","mv");
+      const up = el("button","btn-ghost","&#8593;"); const dn = el("button","btn-ghost","&#8595;");
+      up.type = "button"; dn.type = "button";
+      up.addEventListener("click", () => move(pos, pos-1));
+      dn.addEventListener("click", () => move(pos, pos+1));
+      mv.appendChild(up); mv.appendChild(dn);
+      row.appendChild(mv);
+
+      row.addEventListener("dragstart", (e) => { row.classList.add("dragging"); e.dataTransfer && e.dataTransfer.setData("text/plain", String(pos)); });
+      row.addEventListener("dragend", () => row.classList.remove("dragging"));
+      row.addEventListener("dragover", (e) => e.preventDefault());
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
+        if (!isNaN(from)) move(from, pos);
+      });
+      list.appendChild(row);
+    });
+  }
+  function move(from, to){
+    if (to < 0 || to >= arrangement.length || from === to) return;
+    const [x] = arrangement.splice(from, 1);
+    arrangement.splice(to, 0, x);
+    redraw(); markDirty();
+  }
+  redraw();
+
+  fields[b.id] = { get:() => arrangement.slice(),
+                   set:(v) => { if (Array.isArray(v) && v.length === b.items.length){ arrangement = v.slice(); redraw(); } } };
+  return { section:s,
+           check:() => ({ ok:true }),   // any order can be submitted, like a Form
+           brief:{ eyebrow:"Put in order", title:stripTags(b.prompt), text:b.note || "Drag the steps, or use the arrows." } };
+}
+
+/* Fill in the blanks: text with [[answer|alt1|alt2]] tokens. */
+function rBlanks(b){
+  const s = el("section");
+  const p = el("p","blanks");
+  const inputs = [];
+  String(b.text).split(/(\[\[.*?\]\])/).forEach(part => {
+    const m = /^\[\[(.*?)\]\]$/.exec(part);
+    if (m){
+      const inp = el("input","blank-input"); inp.type = "text"; inp.autocomplete = "off";
+      inp.addEventListener("input", markDirty);
+      inputs.push(inp); p.appendChild(inp);
+    } else if (part){
+      p.appendChild(el("span","", part.replace(/</g,"&lt;")));
+    }
+  });
+  s.appendChild(p);
+  fields[b.id] = { get:() => inputs.map(i => i.value),
+                   set:(v) => { if (Array.isArray(v)) v.forEach((x,i) => { if (inputs[i]) inputs[i].value = x || ""; }); } };
+  return { section:s,
+           check:() => inputs.every(i => i.value.trim()) ? { ok:true } : { ok:false, message:"Fill in every gap" },
+           brief:{ eyebrow:"Fill in the blanks", title:stripTags(b.prompt) || "Complete the sentences", text:b.note || "" } };
+}
+
+/* Short answer, auto-checked by keywords at the end. */
+function rShort(b){
+  const s = el("section");
+  const ta = el("textarea","answer"); ta.rows = 4; ta.placeholder = "Type your answer here\u2026";
+  ta.addEventListener("input", markDirty);
+  s.appendChild(ta);
+  fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; } };
+  return { section:s,
+           check:() => ta.value.trim() ? { ok:true } : { ok:false, message:"Write an answer" },
+           brief:{ eyebrow:"Short answer", title:stripTags(b.prompt), text:b.note || "" } };
+}
+
+/* ---------- marking ---------- */
+function computeAssessment(){
+  const perQ = [], byTopic = {};
+  let score = 0, outOf = 0;
+  lesson.blocks.forEach((b) => {
+    const v = fields[b.id] ? fields[b.id].get() : null;
+    let pts = 0, max = 0, detail = "";
+    if (b.type === "mc"){
+      max = 1;
+      const right = v === b.answer;
+      pts = right ? 1 : 0;
+      detail = right ? "" : "Answer: " + stripTags(b.options[b.answer]);
+    } else if (b.type === "order"){
+      max = 1;
+      const right = Array.isArray(v) && v.every((x, i) => x === i);
+      pts = right ? 1 : 0;
+      detail = right ? "" : "Correct order: " + b.items.join("  \u2192  ");
+    } else if (b.type === "blanks"){
+      const accepted = [];
+      String(b.text).replace(/\[\[(.*?)\]\]/g, (_, g) => { accepted.push(g.split("|").map(normAns)); return ""; });
+      max = accepted.length;
+      const wrong = [];
+      accepted.forEach((set, i) => {
+        if (set.includes(normAns(v && v[i]))) pts++;
+        else wrong.push(set[0]);
+      });
+      detail = wrong.length ? "Missing: " + wrong.join(", ") : "";
+    } else if (b.type === "short"){
+      max = 1;
+      const ans = normAns(v);
+      const groups = b.keywords || [];
+      const hit = groups.every(g => g.some(k => ans.includes(normAns(k))));
+      pts = hit ? 1 : 0;
+      detail = hit ? "" : (b.model ? "A good answer mentions: " + b.model : "");
+    } else {
+      return; // text blocks etc. carry no marks
+    }
+    score += pts; outOf += max;
+    perQ.push({ id: b.id, title: stripTags(b.prompt || b.title || b.id), pts, max, detail });
+    const topic = b.topic || "general";
+    byTopic[topic] = byTopic[topic] || { right: 0, total: 0 };
+    byTopic[topic].right += pts; byTopic[topic].total += max;
+  });
+  return { score, outOf, perQ, byTopic };
+}
+
+async function assessmentFinish(){
+  save();
+  finished = true;
+  paintTracker();
+  const res = computeAssessment();
+
+  // hand the answers AND the score to the server (two writes, once each)
+  submitWork().then(paintHandin);
+  let sent = "offline";
+  if (token && apiReady){
+    try{
+      const r = await fetch(API + "/api/assessment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ lesson: lessonId, score: res.score, outOf: res.outOf, breakdown: res.byTopic })
+      });
+      sent = r.ok ? "done" : "failed";
+    }catch(e){ sent = "failed"; }
+  }
+
+  // results screen
+  steps.forEach(st => { st.section.hidden = true; });
+  const box = el("section");
+  const hero = el("div","score-hero");
+  hero.appendChild(el("div","big", res.score + " / " + res.outOf));
+  hero.appendChild(el("div","pct", Math.round(100*res.score/Math.max(1,res.outOf)) + "%  \u00b7  " +
+    (sent === "done" ? "Result saved" : sent === "offline" ? "Sign in to save your result" : "Result could not be saved \u2014 tell your teacher")));
+  box.appendChild(hero);
+  res.perQ.forEach(q => {
+    const row = el("div","resq " + (q.pts === q.max ? "right" : "wrong"));
+    row.appendChild(el("div","mark", q.pts === q.max ? "\u2713" : "\u2717"));
+    const body = el("div","body");
+    body.appendChild(el("b","", q.title));
+    if (q.max > 1) body.appendChild(el("span","", q.pts + " / " + q.max + (q.detail ? " \u00b7 " + q.detail : "")));
+    else if (q.detail) body.appendChild(el("span","", q.detail));
+    body._html = body.innerHTML; // keep
+    row.appendChild(body);
+    box.appendChild(row);
+  });
+  $("blocks").appendChild(box);
+  $("briefEyebrow").textContent = "Assessment complete";
+  $("briefTitle").textContent = "Here's how you did.";
+  $("briefText").textContent = "";
+  $("stageName").textContent = "Complete";
+  $("nextBtn").textContent = "Finished";
+  $("nextBtn").disabled = true;
+  $("backBtn").disabled = true;
+}
+
 /* ---------- Python via Pyodide ---------- */
 let pyodide = null, pyLoading = null;
 async function ensurePyodide(out){
@@ -854,7 +1131,7 @@ async function runPython(code, out, err){
   }catch(e){ out.textContent = ""; err.textContent = e.message || "Something went wrong running your code."; }
 }
 
-$("pdfBtn").addEventListener("click", downloadPdf);
+$("saveBtn").addEventListener("click", manualSave);
 
 /* ---------- build the PDF and download it, no dialog ----------
    window.print() ALWAYS opens the browser's print dialog — no site can stop
@@ -897,6 +1174,9 @@ function clip(s, n){
   return t.length > n ? t.slice(0, n - 1) + "..." : t;
 }
 
+/* ---- PDF export is retired from the interface but kept below, dormant.
+   To bring it back: re-add the jsPDF <script> tag and wire a button to
+   downloadPdf(). Nothing calls it today. ---- */
 function downloadPdf(){
   save();
   submitWork().then(paintHandin);
@@ -919,7 +1199,7 @@ function downloadPdf(){
 function markHandedIn(){
   pdfDone = true;
   document.body.classList.add("pdf-done");
-  $("pdfBtn").textContent = "Download PDF again";
+
 }
 function fileName(){
   const d = new Date();

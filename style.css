@@ -35,7 +35,7 @@
 html,body{margin:0;padding:0}
 body{
   background:var(--bg); color:var(--text);
-  font-family:var(--body); font-size:17px; line-height:1.6;
+  font-family:var(--body); font-size:18px; line-height:1.6;
   -webkit-font-smoothing:antialiased;
 }
 a{color:var(--mint)}
@@ -43,7 +43,7 @@ h1,h2,h3{font-family:var(--display); letter-spacing:-.02em; margin:0}
 
 /* ---------- buttons ---------- */
 button{
-  font-family:var(--body); font-size:15px; font-weight:600; cursor:pointer;
+  font-family:var(--body); font-size:16px; font-weight:600; cursor:pointer;
   border-radius:10px; border:1px solid transparent; padding:11px 18px;
   transition:background .14s, border-color .14s, transform .06s;
 }
@@ -57,16 +57,16 @@ button:disabled{cursor:not-allowed}
 
 /* ---------- generic surfaces (used by home + admin too) ---------- */
 .station{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:24px}
-label{display:block; font-weight:600; font-size:15px; margin:0 0 8px; color:var(--text)}
+label{display:block; font-weight:600; font-size:16px; margin:0 0 8px; color:var(--text)}
 input[type=text],input[type=password],textarea{
-  width:100%; font-family:var(--body); font-size:17px; color:var(--text);
+  width:100%; font-family:var(--body); font-size:18px; color:var(--text);
   background:var(--bg); border:1.5px solid var(--line-2); border-radius:10px; padding:12px 14px;
 }
 textarea{resize:vertical}
 input::placeholder,textarea::placeholder{color:var(--dim)}
 input:focus,textarea:focus{outline:none; border-color:var(--amber); box-shadow:0 0 0 3px rgba(240,168,60,.16)}
 .err{color:var(--red); font-size:14px; font-weight:600}
-.hint{color:var(--muted); font-size:15px}
+.hint{color:var(--muted); font-size:16px}
 .row{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
 
 /* save-state chip */
@@ -132,7 +132,7 @@ body.lesson{
   font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.14em; text-transform:uppercase;
   color:var(--amber); margin:0 0 3px;
 }
-.brief h2{font-family:var(--display); font-size:17px; font-weight:700; line-height:1.25; margin:0 0 3px}
+.brief h2{font-family:var(--display); font-size:22px; font-weight:700; line-height:1.25; margin:0 0 4px}
 .brief p{margin:0; font-size:14.5px; line-height:1.45; color:#CBD5E4; max-width:88ch}
 
 /* the stage: the activity itself. Only this scrolls, and only if it must. */
@@ -149,12 +149,12 @@ body.lesson{
 }
 .dock .mid{flex:1; text-align:center; min-width:0}
 .lockmsg{
-  margin:0; font-size:15px; font-weight:600; color:var(--amber);
+  margin:0; font-size:16px; font-weight:600; color:var(--amber);
   display:inline-flex; align-items:center; gap:9px;
 }
 .lockmsg::before{content:"🔒"; font-size:14px}
 .lockmsg[hidden]{display:none}
-.btn-continue{font-size:17px; padding:14px 30px; border-radius:11px}
+.btn-continue{font-size:18px; padding:14px 30px; border-radius:11px}
 .btn-continue:disabled{background:var(--line); border-color:var(--line); color:var(--dim)}
 #backBtn:disabled{opacity:.35}
 
@@ -169,14 +169,14 @@ body.bypassed #bypassDot{color:var(--mint)}
 body.bypassed .btn-continue:disabled{background:var(--amber); color:#131A26; border-color:var(--amber)}
 
 /* ---------- activity content ---------- */
-.prose{font-size:18px; line-height:1.65; color:#D6DEEA}
-.prose h2{font-size:24px; margin:0 0 14px; color:var(--text)}
+.prose{font-size:19px; line-height:1.65; color:#D6DEEA}
+.prose h2{font-size:26px; margin:0 0 14px; color:var(--text)}
 .prose p{margin:0 0 14px}
 .prose ul{margin:0 0 14px; padding-left:22px}
 .prose li{margin:7px 0}
 .prose b{color:var(--text); font-weight:600}
 
-textarea.answer{min-height:150px; font-size:18px; line-height:1.55}
+textarea.answer{min-height:150px; font-size:19px; line-height:1.55}
 .counter{font-family:var(--mono); font-size:13px; color:var(--dim); margin:10px 0 0; letter-spacing:.03em}
 .counter[data-ok=true]{color:var(--mint)}
 
@@ -197,13 +197,13 @@ iframe.embed{
   font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase;
   color:var(--dim); margin:0 0 12px;
 }
-.qtext{font-size:19px; line-height:1.55; margin:0 0 18px; color:var(--text)}
+.qtext{font-size:20px; line-height:1.55; margin:0 0 18px; color:var(--text)}
 .qtext b{color:var(--amber)}
 .opts{display:grid; gap:10px}
 .opt{
-  display:flex; align-items:flex-start; gap:13px; margin:0; padding:15px 17px;
+  display:flex; align-items:flex-start; gap:13px; margin:0; padding:16px 18px;
   border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel);
-  font-size:17px; font-weight:400; line-height:1.45; cursor:pointer; transition:border-color .12s, background .12s;
+  font-size:18px; font-weight:400; line-height:1.45; cursor:pointer; transition:border-color .12s, background .12s;
 }
 .opt:hover{border-color:var(--muted); background:var(--panel-2)}
 .opt input{width:20px; height:20px; margin-top:1px; flex:none; accent-color:var(--amber)}
@@ -211,7 +211,7 @@ iframe.embed{
 .opt.right{border-color:var(--mint); background:rgba(65,199,164,.08)}
 .opt.wrong{border-color:var(--red); background:rgba(232,97,90,.08)}
 
-.feedback{margin-top:16px; padding:15px 17px; border-radius:12px; font-size:16px; line-height:1.5; border:1px solid var(--line)}
+.feedback{margin-top:16px; padding:15px 17px; border-radius:12px; font-size:17px; line-height:1.5; border:1px solid var(--line)}
 .feedback[hidden]{display:none}
 .feedback b{display:block; font-family:var(--display); font-size:17px; margin-bottom:4px}
 .feedback[data-verdict=correct]{background:rgba(65,199,164,.08); border-color:var(--mint-dim); color:#BFEADD}
@@ -285,8 +285,8 @@ textarea.code{
   border:1px solid var(--line-2); border-radius:9px;
 }
 .lessonCard .body{flex:1; min-width:0}
-.lessonCard b{font-family:var(--display); font-size:19px; display:block; margin-bottom:3px}
-.lessonCard span{font-size:15px; color:var(--muted)}
+.lessonCard b{font-family:var(--display); font-size:20px; display:block; margin-bottom:3px}
+.lessonCard span{font-size:16px; color:var(--muted)}
 .lessonCard .go{color:var(--amber); font-size:20px; flex:none}
 
 .grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px}
@@ -335,7 +335,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 }
 
 /* the PDF is the hand-in, so make it loud once they reach the end */
-.pdf-done #pdfBtn{background:transparent; color:var(--mint); border-color:var(--mint-dim)}
+
 
 /* ---- leave warning ---- */
 .modal-back{
@@ -369,7 +369,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
   }
   .print-header h1{font-size:22px; margin:0 0 6px}
   .print-header p{margin:0; font-size:13px}
-  .who-chip,.chip,#pdfBtn{display:none !important}
+  .who-chip,.chip,#saveBtn{display:none !important}
 }
 
 
@@ -384,7 +384,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
   font-family:var(--mono); font-size:18px; background:var(--bg); border:1px solid var(--line-2);
   border-bottom-width:3px; border-radius:7px; padding:3px 9px; margin:0 2px; color:var(--amber);
 }
-.paste-sub{font-size:15px; color:var(--muted); margin:0 auto 20px; max-width:52ch; line-height:1.5}
+.paste-sub{font-size:16px; color:var(--muted); margin:0 auto 20px; max-width:52ch; line-height:1.5}
 .paste-sub b{color:var(--text)}
 .paste-or{display:flex; justify-content:center}
 .shot[hidden]{display:none}
@@ -401,7 +401,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 }
 .lock-mark{font-size:34px; line-height:1; margin-bottom:12px; opacity:.8}
 .lock-title{font-family:var(--display); font-size:22px; font-weight:700; margin:0 0 8px; color:var(--text)}
-.lock-text{font-size:15.5px; color:var(--muted); margin:0 auto 20px; max-width:46ch; line-height:1.5}
+.lock-text{font-size:16.5px; color:var(--muted); margin:0 auto 20px; max-width:46ch; line-height:1.5}
 .lock-row{display:flex; gap:10px; justify-content:center; max-width:340px; margin:0 auto}
 .lock-row input{text-align:center; font-family:var(--mono); letter-spacing:.14em; text-transform:uppercase}
 .lock-msg{color:var(--red); font-size:14px; font-weight:600; margin:12px 0 0; min-height:18px}
@@ -435,8 +435,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 }
 
 /* ---- v2: clearer task, quieter chrome ---- */
-.brief h2{font-size:19px}
-.brief p{font-size:14px; color:#B7C2D4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.brief p{font-size:17px; max-width:none; color:#C4CEDD; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .signin-hint{font-size:12.5px; color:var(--dim); margin:0 0 14px}
 .signin-hint a{color:var(--muted)}
 .handin{font-size:14px; font-weight:600; margin:14px 0 0; min-height:18px}
@@ -452,3 +451,64 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .handin-k{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0 0 3px}
 .handin-v{font-size:14px; white-space:pre-wrap}
 .handin-img{max-width:340px; max-height:240px; border-radius:8px; border:1px solid var(--line-2); display:block}
+
+
+/* ---- Save Work button feedback ---- */
+#saveBtn.flash-ok{background:transparent; color:var(--mint); border-color:var(--mint-dim)}
+#saveBtn.flash-bad{background:transparent; color:var(--amber); border-color:#5A4520}
+
+/* ---- writing coach (replaces the word count) ---- */
+.counter{font-family:var(--body); font-size:15px; font-weight:700; letter-spacing:0}
+.counter[data-stage=more]{color:var(--dim)}
+.counter[data-stage=going]{color:var(--amber)}
+.counter[data-stage=good]{color:var(--mint)}
+
+/* ---- assessment: ordering ---- */
+.order-list{display:grid; gap:10px; margin:4px 0 0}
+.order-item{
+  display:flex; align-items:center; gap:12px; padding:14px 16px;
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
+  font-size:18px; cursor:grab; user-select:none;
+}
+.order-item.dragging{opacity:.45; border-color:var(--amber)}
+.order-item .grip{font-family:var(--mono); color:var(--dim); font-size:14px}
+.order-item .txt{flex:1}
+.order-item .mv{display:flex; gap:6px}
+.order-item .mv button{padding:4px 10px; font-size:15px}
+
+/* ---- assessment: fill in the blanks ---- */
+.blanks{font-size:19px; line-height:2.3}
+.blank-input{
+  display:inline-block; width:150px; margin:0 4px; padding:6px 10px;
+  font-size:17px; text-align:center; border-radius:8px;
+  background:var(--bg); border:1.5px solid var(--line-2); color:var(--text);
+}
+.blank-input:focus{outline:none; border-color:var(--amber)}
+
+/* ---- assessment results screen ---- */
+.score-hero{text-align:center; padding:26px 20px 8px}
+.score-hero .big{font-family:var(--display); font-size:56px; font-weight:700; line-height:1}
+.score-hero .pct{font-family:var(--mono); font-size:16px; color:var(--muted); margin-top:8px}
+.resq{display:flex; gap:12px; align-items:flex-start; padding:12px 4px; border-top:1px solid var(--line)}
+.resq .mark{flex:none; width:26px; font-size:18px; text-align:center}
+.resq.right .mark{color:var(--mint)} .resq.wrong .mark{color:var(--red)}
+.resq .body{flex:1; font-size:16px}
+.resq .body b{display:block; font-size:16.5px; margin-bottom:2px}
+.resq .body span{color:var(--muted); font-size:15px}
+
+/* ---- homepage tabs + results ---- */
+.tabs{display:flex; gap:8px; margin:26px 0 16px}
+.tabs button{background:transparent; border-color:var(--line-2); color:var(--muted); font-size:16px}
+.tabs button.on{background:var(--panel-2); color:var(--text); border-color:var(--amber)}
+.unit-head{font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--amber); margin:26px 0 10px}
+.unit-head:first-child{margin-top:0}
+.badge{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--amber); border:1px solid #5A4520; border-radius:999px; padding:3px 9px; white-space:nowrap}
+.result-card{display:flex; align-items:center; gap:18px; background:var(--panel); border:1px solid var(--line);
+  border-radius:14px; padding:18px 20px; margin-bottom:12px}
+.result-card .sc{font-family:var(--display); font-size:26px; font-weight:700; flex:none; min-width:86px}
+.result-card .body{flex:1}
+.result-card .body b{font-size:17px; display:block}
+.result-card .body span{font-size:14px; color:var(--muted)}
+.result-card .st{font-size:14.5px; max-width:40%}
+.result-card .st b{color:var(--mint)} .result-card .st i{color:var(--amber); font-style:normal}

@@ -1,0 +1,92 @@
+{
+  "title": "Unit 1 Assessment — Cybersecurity",
+  "intro": "Answer every question. You get your score at the end — you can't change answers after finishing.",
+  "assessment": true,
+  "blocks": [
+    {
+      "type": "text",
+      "html": "<h2>📋 Before you start</h2><p>This assessment covers everything from the unit: phishing, passwords and encryption.</p><ul><li>Answer every question — there are 7.</li><li>No hints, no retries: this is the real thing.</li><li>Press <b>Finish &amp; see my score</b> at the end.</li></ul>"
+    },
+    {
+      "type": "mc",
+      "id": "a1",
+      "topic": "phishing",
+      "prompt": "What is phishing?",
+      "options": [
+        "Tricking a person into giving away private details",
+        "A virus that deletes files",
+        "Guessing a password by trying every combination",
+        "Blocking a website with too much traffic"
+      ],
+      "answer": 0
+    },
+    {
+      "type": "mc",
+      "id": "a2",
+      "topic": "phishing",
+      "prompt": "An email says your account will be deleted in ONE HOUR unless you click a link. What is the safest response?",
+      "options": [
+        "Click quickly before time runs out",
+        "Reply and ask if it is real",
+        "Don't click — go to the real website yourself",
+        "Forward it to friends as a warning"
+      ],
+      "answer": 2
+    },
+    {
+      "type": "order",
+      "id": "a3",
+      "topic": "passwords",
+      "prompt": "Put these passwords in order of strength — weakest first",
+      "items": [
+        "password1",
+        "Chelsea2011",
+        "P@ssw0rd99",
+        "correct-horse-battery-42!"
+      ]
+    },
+    {
+      "type": "blanks",
+      "id": "a4",
+      "topic": "encryption",
+      "prompt": "Complete the sentences about encryption",
+      "text": "Encryption scrambles a message so only someone with the [[key]] can read it. A Caesar cipher moves every letter along the [[alphabet]] by the same amount, which is called the [[shift|key]]."
+    },
+    {
+      "type": "mc",
+      "id": "a5",
+      "topic": "passwords",
+      "prompt": "Why does two-factor authentication make an account safer?",
+      "options": [
+        "It makes the password longer",
+        "A hacker needs your password AND your phone",
+        "It hides your password from the website",
+        "It stops the website being hacked"
+      ],
+      "answer": 1
+    },
+    {
+      "type": "short",
+      "id": "a6",
+      "topic": "phishing",
+      "prompt": "Give TWO warning signs that an email might be phishing.",
+      "note": "One or two sentences.",
+      "keywords": [
+        ["urgent", "hurry", "panic", "pressure", "deadline", "quickly", "rush", "scare"],
+        ["sender", "address", "spelling", "password", "details", "link", "attachment", "prize", "too good"]
+      ],
+      "model": "pressure to act fast, and a suspicious sender address, link, or request for details"
+    },
+    {
+      "type": "short",
+      "id": "a7",
+      "topic": "passwords",
+      "prompt": "Why is a LONG password made of random words stronger than a short one with symbols?",
+      "note": "One or two sentences.",
+      "keywords": [
+        ["combination", "guess", "longer", "crack", "possibilities", "harder", "time"]
+      ],
+      "model": "length multiplies the possible combinations, so it takes far longer to guess or crack"
+    }
+  ]
+}

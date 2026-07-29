@@ -1,4 +1,13 @@
-[
-  { "id": "cyber-escape", "title": "Escape the Hacker",
-    "description": "Five cybersecurity missions, then design a poster." }
-]
+{
+  "units": [
+    {
+      "name": "Year 8 · Unit 1 — Cybersecurity",
+      "lessons": [
+        { "id": "cyber-escape", "title": "Escape the Hacker",
+          "description": "Five cybersecurity missions, then design a poster." },
+        { "id": "cyber-assessment", "title": "Unit 1 Assessment",
+          "description": "Check what you've learned. Marked instantly.", "assessment": true }
+      ]
+    }
+  ]
+}

@@ -73,13 +73,14 @@ const cur = () => ({ lesson: $("lessonSel").value, group: $("groupSel").value })
 function stripTags(x){ return String(x||"").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
 function stepTitle(b){
   if (b.type==="text"){ const m=/<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(b.html||""); return m?stripTags(m[1]):"Information"; }
-  return stripTags(b.title||b.prompt||b.task||"") || b.type;
+  return stripTags(b.title||b.prompt||b.task||"") || b.type;  // covers mc/order/blanks/short too
 }
 
 /* ---- populate pickers ---- */
-fetch("lessons/index.json").then(r=>r.json()).then(list=>{
+fetch("lessons/index.json").then(r=>r.json()).then(data=>{
+  const list = (data.units ? data.units.flatMap(u=>u.lessons) : data);
   $("lessonSel").innerHTML = "";
-  list.forEach(l=>{ const o=document.createElement("option"); o.value=l.id; o.textContent=l.title; $("lessonSel").appendChild(o); });
+  list.forEach(l=>{ const o=document.createElement("option"); o.value=l.id; o.textContent=l.title+(l.assessment?" (assessment)":""); $("lessonSel").appendChild(o); });
   loadLesson();
 });
 async function loadGroups(){
