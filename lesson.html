@@ -67,16 +67,6 @@
   </div>
 </div>
 
-<div class="modal-back no-print" id="finishModal" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="finTitle">
-    <p class="modal-eyebrow">Lesson complete</p>
-    <h2 id="finTitle">Save your work!</h2>
-    <p class="modal-text" id="finText">Press the button to send everything to your teacher.</p>
-    <p class="handin" id="handinLine"></p>
-    <button class="btn-primary modal-cta" id="modalSave">&#10515; &nbsp;Save Work</button>
-    <button class="btn-ghost modal-stay" id="modalStay">Keep working</button>
-  </div>
-</div>
 
 <script>
 /* ---------------------------------------------------------------------
@@ -95,6 +85,8 @@ const fields = {};   // id -> { get, set }
 const steps  = [];   // { section, check(), brief:{eyebrow,title,text} }
 let step = 0, bypassed = false, lesson = null;
 let finished = false;          // set once they press Finish
+let restoredData = null;       // last saved data we restored (responses re-apply from it)
+let wasDone = false;           // the saved copy says this lesson was completed
 let releasedTo = Infinity;     // how many steps the teacher has opened
 if (!localStorage.getItem("hub_token")) { document.addEventListener("DOMContentLoaded", () => { const h = document.getElementById("signinHint"); if (h) h.hidden = false; }); }
 let restoredWork = false;      // did we put saved work back on the page?
@@ -119,7 +111,7 @@ function stripTags(s){ return String(s || "").replace(/<[^>]*>/g, " ").replace(/
 let saveTimer = null, lastSaved = "";
 
 function snapshot(){
-  const data = { __step: step, __saved: new Date().toISOString() };
+  const data = { __step: step, __saved: new Date().toISOString(), __done: finished };
   Object.entries(fields).forEach(([id, f]) => { data[id] = f.get(); });
   return data;
 }
@@ -233,6 +225,11 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
     l.blocks.forEach(renderBlock);
     buildTracker();
     await loadSaved();
+    if (wasDone){
+      if (lesson.assessment){ renderAssessmentComplete(false); }
+      else { showLessonComplete(true); }
+      return;
+    }
     await fetchRelease();      // know the state before we show anything
     showStep(step);
   })
@@ -257,6 +254,7 @@ async function loadSaved(){
       const d = JSON.parse(raw);
       Object.entries(d).forEach(([id, val]) => { if (fields[id]) fields[id].set(val); });
       if (typeof d.__step === "number") step = Math.min(Math.max(d.__step, 0), steps.length - 1);
+      restoredData = d; wasDone = !!d.__done;
       lastSaved = JSON.stringify(snapshot());
       restoredWork = true;
       return;                       // cache hit: the database is not contacted
@@ -272,6 +270,7 @@ async function loadSaved(){
     if (d && d.data){
       Object.entries(d.data).forEach(([id, val]) => { if (fields[id]) fields[id].set(val); });
       if (typeof d.data.__step === "number") step = Math.min(Math.max(d.data.__step, 0), steps.length - 1);
+      restoredData = d.data; wasDone = !!d.data.__done;
       restoredWork = true;
       save();                       // write the server copy back into this browser
     }
@@ -397,39 +396,16 @@ function paintHandin(state){
 }
 function finishLesson(){
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
-  save();
-  submitWork().then(paintHandin);
   finished = true;
-  paintTracker();
-  $("stageName").textContent = "Complete";
-  $("briefEyebrow").textContent = "Complete";
-  $("briefTitle").textContent = "Well done — now save your work.";
-  $("briefText").textContent = "Press Save Work to send everything to your teacher.";
-  $("nextBtn").textContent = "Save Work ⤓";
-  $("nextBtn").onclick = showFinishModal;
-  showFinishModal();
+  save();
+  showLessonComplete(false);
 }
 
 /* ---------- finish pop-up ---------- */
-function showFinishModal(){ $("finishModal").hidden = false; $("modalSave").focus(); }
-function hideFinishModal(){ $("finishModal").hidden = true; }
 $("waitOk").addEventListener("click", hideWaitModal);
 $("waitModal").addEventListener("click", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
-$("modalStay").addEventListener("click", hideFinishModal);
-$("modalSave").addEventListener("click", async () => {
-  /* By the time the student sees this, finishLesson() has already written to
-     the database — this click is the habit, and a retry if that write failed. */
-  $("modalSave").textContent = "Saving…";
-  const state = await submitWork();
-  paintHandin(state);
-  $("modalSave").textContent = "✓ Saved";
-  $("finTitle").textContent = state === "done" ? "All saved!" : "Saved on this computer";
-  $("finText").textContent = state === "done" ? "Your work has been sent to your teacher." :
-    state === "offline" ? "Sign in next lesson and press Save Work to send it." : "The server couldn't be reached — try Save Work again in a minute.";
-  $("modalStay").textContent = "Close";
-});
-$("finishModal").addEventListener("click", (e) => { if (e.target === $("finishModal")) hideFinishModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideFinishModal(); hideWaitModal(); hideSoftModal(); } });
+
+document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); hideSoftModal(); } });
 
 /* ---------- bypass ---------- */
 $("bypassDot").addEventListener("click", askBypass);
@@ -449,6 +425,7 @@ function askBypass(){
 }
 
 /* ---------- renderers: { section, check, brief } ---------- */
+let qCounter = 0;
 function renderBlock(b, i){
   // Blocks without an id in the lesson file (e.g. videos) still need somewhere
   // to store their state, or they silently fail to restore. Give them one.
@@ -464,6 +441,10 @@ function renderBlock(b, i){
     const s = el("section","station");
     s.appendChild(el("p","err","This activity could not be displayed. Continue and tell your teacher."));
     built = { section:s, check:() => ({ ok:true }), brief:{ eyebrow:"Notice", title:"Activity unavailable", text:"" } };
+  }
+  if (lesson && lesson.assessment && ["mc","order","blanks","short"].includes(b.type)){
+    qCounter++;
+    built.brief = { ...built.brief, title: qCounter + ". " + built.brief.title };
   }
   built = applyLock(b, built);
   built.section.hidden = true;
@@ -1009,42 +990,46 @@ function rShort(b){
 /* ---------- marking ---------- */
 function computeAssessment(){
   const perQ = [], byTopic = {};
-  let score = 0, outOf = 0;
+  let score = 0, outOf = 0, n = 0;
   lesson.blocks.forEach((b) => {
+    if (!["mc","order","blanks","short"].includes(b.type)) return;
     const v = fields[b.id] ? fields[b.id].get() : null;
-    let pts = 0, max = 0, detail = "";
+    n++;
+    let pts = 0, max = 0, review = {};
     if (b.type === "mc"){
       max = 1;
-      const right = v === b.answer;
-      pts = right ? 1 : 0;
-      detail = right ? "" : "Answer: " + stripTags(b.options[b.answer]);
+      const chosen = (v === null || v === undefined) ? null : v;
+      pts = chosen === b.answer ? 1 : 0;
+      review = { yours: chosen === null ? "(not answered)" : stripTags(b.options[chosen]),
+                 correct: stripTags(b.options[b.answer]) };
     } else if (b.type === "order"){
       max = 1;
-      const right = Array.isArray(v) && v.every((x, i) => x === i);
-      pts = right ? 1 : 0;
-      detail = right ? "" : "Correct order: " + b.items.join("  \u2192  ");
+      const ok = Array.isArray(v) && v.length === b.items.length && v.every((x,i) => x === i);
+      pts = ok ? 1 : 0;
+      review = { yours: (Array.isArray(v) ? v.map(i => b.items[i]) : b.items).join("  \u2192  "),
+                 correct: b.items.join("  \u2192  ") };
     } else if (b.type === "blanks"){
       const accepted = [];
-      String(b.text).replace(/\[\[(.*?)\]\]/g, (_, g) => { accepted.push(g.split("|").map(normAns)); return ""; });
+      String(b.text).replace(/\[\[(.*?)\]\]/g, (_, g) => { accepted.push(g.split("|")); return ""; });
       max = accepted.length;
-      const wrong = [];
-      accepted.forEach((set, i) => {
-        if (set.includes(normAns(v && v[i]))) pts++;
-        else wrong.push(set[0]);
+      review.items = accepted.map((set, i) => {
+        const given = (v && v[i]) ? String(v[i]).trim() : "";
+        const ok = set.map(normAns).includes(normAns(given));
+        if (ok) pts++;
+        return { given: given || "(blank)", ok, expected: set[0] };
       });
-      detail = wrong.length ? "Missing: " + wrong.join(", ") : "";
     } else if (b.type === "short"){
       max = 1;
       const ans = normAns(v);
-      const groups = b.keywords || [];
-      const hit = groups.every(g => g.some(k => ans.includes(normAns(k))));
-      pts = hit ? 1 : 0;
-      detail = hit ? "" : (b.model ? "A good answer mentions: " + b.model : "");
-    } else {
-      return; // text blocks etc. carry no marks
+      const groups = (b.keywords || []).map((g, i) => ({
+        ok: g.some(k => ans.includes(normAns(k))),
+        label: (b.keywordLabels && b.keywordLabels[i]) || ("key idea " + (i+1))
+      }));
+      pts = groups.length && groups.every(g => g.ok) ? 1 : 0;
+      review = { yours: String(v || "").trim() || "(not answered)", groups, model: b.model || "" };
     }
     score += pts; outOf += max;
-    perQ.push({ id: b.id, title: stripTags(b.prompt || b.title || b.id), pts, max, detail });
+    perQ.push({ id: b.id, n, type: b.type, title: stripTags(b.prompt || b.title || b.id), pts, max, review });
     const topic = b.topic || "general";
     byTopic[topic] = byTopic[topic] || { right: 0, total: 0 };
     byTopic[topic].right += pts; byTopic[topic].total += max;
@@ -1052,53 +1037,224 @@ function computeAssessment(){
   return { score, outOf, perQ, byTopic };
 }
 
-async function assessmentFinish(){
-  save();
-  finished = true;
-  paintTracker();
-  const res = computeAssessment();
+/* Best topic -> strength, worst topic -> target. Sentences live in the
+   assessment JSON's "topics" bank, so each assessment owns its own wording. */
+function computeST(byTopic){
+  const bank = (lesson && lesson.topics) || {};
+  const entries = Object.entries(byTopic).filter(([, v]) => v.total > 0);
+  if (!entries.length) return { strength: "", target: "", targetTopic: null };
+  const pct = ([, v]) => v.right / v.total;
+  let best = entries[0], worst = entries[0];
+  entries.forEach(e => { if (pct(e) > pct(best)) best = e; if (pct(e) < pct(worst)) worst = e; });
+  const bBank = bank[best[0]] || {}, wBank = bank[worst[0]] || {};
+  const strength = bBank.strength || ("Strong work on " + (bBank.label || best[0]) + ".");
+  let target;
+  if (pct(worst) === 1){
+    target = (lesson && lesson.perfectTarget) || "Full marks \u2014 stretch yourself with the response tasks below.";
+  } else {
+    target = wBank.target || ("Keep practising " + (wBank.label || worst[0]) + ".");
+  }
+  return { strength, target, targetTopic: worst[0] };
+}
 
-  // hand the answers AND the score to the server (two writes, once each)
-  submitWork().then(paintHandin);
+async function assessmentFinish(){
+  finished = true;
+  save();
+  const res = computeAssessment();
+  const st = computeST(res.byTopic);
+
+  submitWork().then(() => {});
   let sent = "offline";
   if (token && apiReady){
     try{
       const r = await fetch(API + "/api/assessment", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-        body: JSON.stringify({ lesson: lessonId, score: res.score, outOf: res.outOf, breakdown: res.byTopic })
+        body: JSON.stringify({ lesson: lessonId, score: res.score, outOf: res.outOf,
+                               breakdown: res.byTopic, strength: st.strength, target: st.target })
       });
       sent = r.ok ? "done" : "failed";
     }catch(e){ sent = "failed"; }
   }
+  renderAssessmentComplete(true, res, st, sent);
+}
 
-  // results screen
-  steps.forEach(st => { st.section.hidden = true; });
-  const box = el("section");
-  const hero = el("div","score-hero");
-  hero.appendChild(el("div","big", res.score + " / " + res.outOf));
-  hero.appendChild(el("div","pct", Math.round(100*res.score/Math.max(1,res.outOf)) + "%  \u00b7  " +
-    (sent === "done" ? "Result saved" : sent === "offline" ? "Sign in to save your result" : "Result could not be saved \u2014 tell your teacher")));
+function renderAssessmentComplete(justFinished, res, st, sent){
+  if (!res){ res = computeAssessment(); }
+  if (!st){ st = computeST(res.byTopic); }
+  const box = doneShell();
+
+  // hero + score
+  const hero = heroBits("");
+  hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
+  hero.appendChild(el("div","done-pct", Math.round(100*res.score/Math.max(1,res.outOf)) + "%"));
+  const status = el("p","handin");
+  if (justFinished) paintStatus(status, sent === "done" ? "done" : sent);
+  else if (token){ status.dataset.state = "done"; status.textContent = "Result saved earlier \u2713"; }
+  hero.appendChild(status);
   box.appendChild(hero);
+  confetti();
+
+  // per-question review: your answer, the model answer, and why the mark
+  const rev = el("div","review");
+  rev.appendChild(el("h2","sect-head","Your answers"));
   res.perQ.forEach(q => {
-    const row = el("div","resq " + (q.pts === q.max ? "right" : "wrong"));
-    row.appendChild(el("div","mark", q.pts === q.max ? "\u2713" : "\u2717"));
+    const cls = q.pts === q.max ? "right" : q.pts > 0 ? "part" : "wrong";
+    const row = el("div","resq " + cls);
+    row.appendChild(el("div","mark", q.pts === q.max ? "\u2713" : q.pts > 0 ? (q.pts + "/" + q.max) : "\u2717"));
     const body = el("div","body");
-    body.appendChild(el("b","", q.title));
-    if (q.max > 1) body.appendChild(el("span","", q.pts + " / " + q.max + (q.detail ? " \u00b7 " + q.detail : "")));
-    else if (q.detail) body.appendChild(el("span","", q.detail));
-    body._html = body.innerHTML; // keep
+    body.appendChild(el("b","", q.n + ". " + q.title));
+    if (q.type === "mc" || q.type === "order"){
+      body.appendChild(el("span","", "Your answer: " + q.review.yours));
+      if (q.pts < q.max) body.appendChild(el("span","", "Correct answer: " + q.review.correct));
+      body.appendChild(el("span","why", q.pts === q.max ? "Full mark \u2014 exactly right." : "No mark \u2014 the correct answer is shown above."));
+    }
+    if (q.type === "blanks"){
+      const chips = el("div","chips");
+      q.review.items.forEach(it => {
+        const chip = el("span","chip-ans " + (it.ok ? "ok" : "no"),
+          it.ok ? it.given : (it.given + " \u2192 " + it.expected));
+        chips.appendChild(chip);
+      });
+      body.appendChild(chips);
+      body.appendChild(el("span","why", q.pts + " of " + q.max + " gaps correct \u2014 one mark per gap."));
+    }
+    if (q.type === "short"){
+      body.appendChild(el("span","", "Your answer: \u201c" + q.review.yours + "\u201d"));
+      const found = q.review.groups.map(g => (g.ok ? "\u2713 " : "\u2717 ") + g.label).join("   ");
+      body.appendChild(el("span","why", "Checked for: " + found));
+      if (q.pts < q.max && q.review.model) body.appendChild(el("span","", "A good answer mentions: " + q.review.model));
+    }
     row.appendChild(body);
-    box.appendChild(row);
+    rev.appendChild(row);
   });
-  $("blocks").appendChild(box);
-  $("briefEyebrow").textContent = "Assessment complete";
-  $("briefTitle").textContent = "Here's how you did.";
-  $("briefText").textContent = "";
+  box.appendChild(rev);
+
+  // strength + target
+  const stCard = el("div","st-card");
+  stCard.appendChild(el("h2","sect-head","Your feedback"));
+  const sRow = el("p","st-strength"); sRow.innerHTML = "<b>Strength</b>"; sRow.appendChild(el("span","", " " + st.strength));
+  const tRow = el("p","st-target"); tRow.innerHTML = "<b>Target</b>"; tRow.appendChild(el("span","", " " + st.target));
+  stCard.appendChild(sRow); stCard.appendChild(tRow);
+  box.appendChild(stCard);
+
+  // response tasks for the target topic
+  renderResponses(box, st.targetTopic, status);
+}
+
+function renderResponses(container, targetTopic, statusEl){
+  const bank = (lesson && lesson.responses) || {};
+  const list = bank[targetTopic] || [];
+  if (!list.length) return;
+  const wrap = el("div","responses");
+  wrap.appendChild(el("h2","sect-head","Response tasks"));
+  wrap.appendChild(el("p","resp-sub","Chosen from your target. Work through them \u2014 press Save Work when you're done."));
+  list.forEach((b, i) => {
+    if (!b.id) b.id = "resp_" + targetTopic + "_" + i;
+    const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort, text:rText }[b.type];
+    if (!R) return;
+    try{
+      const built = R(b);
+      const bb = (typeof built.brief === "function") ? built.brief() : built.brief;
+      const task = el("div","resp-task");
+      task.appendChild(el("p","resp-q", stripTags(b.prompt || b.title || bb.title)));
+      if (b.note) task.appendChild(el("p","resp-note", stripTags(b.note)));
+      built.section.hidden = false;
+      task.appendChild(built.section);
+      wrap.appendChild(task);
+      if (restoredData && restoredData[b.id] !== undefined && fields[b.id]) fields[b.id].set(restoredData[b.id]);
+    }catch(e){ console.error("response task failed:", e); }
+  });
+  wrap.appendChild(saveButton(statusEl));
+  container.appendChild(wrap);
+}
+
+/* ---------- completion screens ---------- */
+function confetti(){
+  try{
+    if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const c = document.createElement("canvas");
+    if (!c.getContext) return;
+    c.className = "confetti";
+    document.body.appendChild(c);
+    const ctx = c.getContext("2d");
+    c.width = window.innerWidth; c.height = window.innerHeight;
+    const cols = ["#F0A83C","#41C7A4","#E8615A","#7FA8F0","#E8EDF6"];
+    const P = Array.from({length:130}, () => ({
+      x: Math.random()*c.width, y: -20 - Math.random()*c.height*0.35,
+      r: 4 + Math.random()*5, vx: (Math.random()-.5)*2.4, vy: 2 + Math.random()*3,
+      rot: Math.random()*6.28, vr: (Math.random()-.5)*.3,
+      col: cols[(Math.random()*cols.length)|0]
+    }));
+    let t0 = null;
+    function frame(ts){
+      if (!t0) t0 = ts;
+      const elapsed = ts - t0;
+      ctx.clearRect(0,0,c.width,c.height);
+      P.forEach(p => {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.03; p.rot += p.vr;
+        ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+        ctx.globalAlpha = Math.max(0, 1 - elapsed/2600);
+        ctx.fillStyle = p.col; ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*0.6);
+        ctx.restore();
+      });
+      if (elapsed < 2600) requestAnimationFrame(frame); else c.remove();
+    }
+    requestAnimationFrame(frame);
+  }catch(e){ /* purely decorative */ }
+}
+
+function doneShell(){
+  steps.forEach(st => { st.section.hidden = true; });
+  let box = $("doneScreen");
+  if (!box){ box = el("section"); box.id = "doneScreen"; $("blocks").appendChild(box); }
+  box.hidden = false; box.innerHTML = "";
+  $("briefEyebrow").textContent = "Complete";
+  $("briefTitle").textContent = "Well done!";
+  $("briefText").textContent = ""; $("briefText").hidden = true;
   $("stageName").textContent = "Complete";
-  $("nextBtn").textContent = "Finished";
-  $("nextBtn").disabled = true;
+  $("nextBtn").textContent = "Finished"; $("nextBtn").disabled = true;
   $("backBtn").disabled = true;
+  $("stage").scrollTop = 0;
+  finished = true; paintTracker();
+  return box;
+}
+function heroBits(sub){
+  const hero = el("div","done-hero");
+  hero.appendChild(el("div","done-tick","\u2713"));
+  hero.appendChild(el("h2","done-title","Well done!"));
+  if (sub) hero.appendChild(el("p","done-sub", sub));
+  return hero;
+}
+function saveButton(statusEl){
+  const btn = el("button","btn-primary done-save","\u2913\u00a0 Save Work");
+  btn.addEventListener("click", async () => {
+    btn.textContent = "Saving\u2026";
+    const st = await submitWork();
+    paintStatus(statusEl, st);
+    btn.textContent = st === "done" ? "\u2713 Saved" : "\u2913\u00a0 Save Work";
+  });
+  return btn;
+}
+function paintStatus(elm, state){
+  elm.dataset.state = state;
+  elm.textContent = state === "done" ? "\u2713 Sent to your teacher"
+                  : state === "offline" ? "Sign in so your work can be sent to your teacher"
+                  : "Could not reach the server \u2014 press Save Work to try again";
+}
+
+function showLessonComplete(revisit){
+  const box = doneShell();
+  const hero = heroBits(lesson.title + " complete");
+  const status = el("p","handin");
+  hero.appendChild(status);
+  hero.appendChild(saveButton(status));
+  const back = el("a","done-back","\u2190 Back to lessons"); back.href = "index.html";
+  hero.appendChild(back);
+  box.appendChild(hero);
+  confetti();
+  if (!revisit){ submitWork().then(st => paintStatus(status, st)); }
+  else if (token){ status.dataset.state = "done"; status.textContent = "Saved earlier \u2713"; }
 }
 
 /* ---------- Python via Pyodide ---------- */

@@ -125,14 +125,15 @@ body.lesson{
 
 /* the brief: instructions, big, always at the top, never scrolls away */
 .brief{
-  padding:11px 20px 12px 16px; background:var(--panel-2);
-  border-bottom:1px solid var(--line); border-left:3px solid var(--amber);
+  width:min(760px, calc(100% - 40px)); margin:10px auto 2px;
+  padding:10px 26px 12px; background:var(--panel-2);
+  border:1px solid var(--line); border-radius:20px; text-align:center;
 }
 .brief .eyebrow{
   font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.14em; text-transform:uppercase;
-  color:var(--amber); margin:0 0 3px;
+  color:var(--amber); margin:0 0 2px;
 }
-.brief h2{font-family:var(--display); font-size:22px; font-weight:700; line-height:1.25; margin:0 0 4px}
+.brief h2{font-family:var(--display); font-size:20px; font-weight:700; line-height:1.25; margin:0 0 3px}
 .brief p{margin:0; font-size:14.5px; line-height:1.45; color:#CBD5E4; max-width:88ch}
 
 /* the stage: the activity itself. Only this scrolls, and only if it must. */
@@ -435,7 +436,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 }
 
 /* ---- v2: clearer task, quieter chrome ---- */
-.brief p{font-size:17px; max-width:none; color:#C4CEDD; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.brief p{font-size:16px; max-width:62ch; margin:0 auto; color:#C4CEDD; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .signin-hint{font-size:12.5px; color:var(--dim); margin:0 0 14px}
 .signin-hint a{color:var(--muted)}
 .handin{font-size:14px; font-weight:600; margin:14px 0 0; min-height:18px}
@@ -512,3 +513,48 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .result-card .body span{font-size:14px; color:var(--muted)}
 .result-card .st{font-size:14.5px; max-width:40%}
 .result-card .st b{color:var(--mint)} .result-card .st i{color:var(--amber); font-style:normal}
+
+
+/* ---- completion ---- */
+.confetti{position:fixed; inset:0; pointer-events:none; z-index:200}
+.done-hero{text-align:center; padding:26px 20px 6px}
+.done-tick{
+  width:78px; height:78px; margin:0 auto 16px; border-radius:50%;
+  display:grid; place-items:center; font-size:38px; color:var(--mint);
+  border:3px solid var(--mint); background:rgba(65,199,164,.08);
+  animation:tickpop .55s cubic-bezier(.2,1.6,.4,1) both;
+}
+@keyframes tickpop{from{transform:scale(.2); opacity:0} to{transform:scale(1); opacity:1}}
+.done-title{font-family:var(--display); font-size:42px; font-weight:700; margin:0 0 6px}
+.done-sub{color:var(--muted); font-size:17px; margin:0 0 10px}
+.done-score{font-family:var(--display); font-size:58px; font-weight:700; line-height:1; margin-top:6px}
+.done-pct{font-family:var(--mono); font-size:16px; color:var(--muted); margin:8px 0 4px}
+.done-save{font-size:19px; padding:15px 34px; border-radius:12px; margin:14px auto 0; display:inline-block}
+.done-back{display:block; margin:18px 0 4px; color:var(--muted); font-size:15px; text-decoration:none}
+.done-back:hover{color:var(--text)}
+
+.sect-head{font-family:var(--display); font-size:21px; margin:0 0 14px}
+.review,.st-card,.responses{border-top:1px solid var(--line); margin-top:28px; padding-top:24px}
+.resq .mark{min-width:40px; font-weight:700}
+.resq.part .mark{color:var(--amber); font-family:var(--mono); font-size:14.5px}
+.resq.part .body b{color:var(--text)}
+.resq .why{display:block; color:var(--dim); font-size:14px; margin-top:3px}
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin:7px 0 3px}
+.chip-ans{padding:5px 13px; border-radius:999px; font-size:14.5px; border:1px solid}
+.chip-ans.ok{color:var(--mint); border-color:var(--mint-dim); background:rgba(65,199,164,.07)}
+.chip-ans.no{color:#F0A6A1; border-color:#5A2B28; background:rgba(232,97,90,.07)}
+
+.st-card p{font-size:17.5px; margin:0 0 10px; line-height:1.55}
+.st-strength b{color:var(--mint); margin-right:8px}
+.st-target b{color:var(--amber); margin-right:8px}
+
+.resp-sub{color:var(--muted); font-size:15.5px; margin:0 0 18px}
+.resp-task{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin:0 0 16px}
+.resp-q{font-family:var(--display); font-size:19px; font-weight:700; margin:0 0 4px}
+.resp-note{color:var(--muted); font-size:15px; margin:0 0 12px}
+.resp-task section{margin:0}
+
+/* homepage: completed lessons + clickable results */
+.badge-done{color:var(--mint); border-color:var(--mint-dim)}
+a.result-card{text-decoration:none; color:inherit; cursor:pointer}
+a.result-card:hover{border-color:var(--amber)}
