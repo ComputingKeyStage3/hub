@@ -1,0 +1,454 @@
+/* =====================================================================
+   Lesson Hub — "mission console"
+   Deep navy shell, amber for actions, mint reserved for success/progress.
+   Space Grotesk (display) · IBM Plex Sans (body) · IBM Plex Mono (code)
+   ===================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root{
+  --bg:#0F1420;
+  --panel:#171F2E;
+  --panel-2:#1F2A3C;
+  --line:#2C3950;
+  --line-2:#3E5070;
+
+  --text:#E8EDF6;
+  --muted:#93A2B8;
+  --dim:#6D7C93;
+
+  --amber:#F0A83C;      /* actions only */
+  --amber-dark:#D8912A;
+  --amber-ink:#131A26;  /* text on amber */
+  --mint:#41C7A4;       /* success + progress only */
+  --mint-dim:#1E4F45;
+  --red:#E8615A;
+  --red-dim:#4A2320;
+
+  --display:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+  --body:'IBM Plex Sans','Segoe UI',system-ui,-apple-system,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
+
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:var(--body); font-size:17px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--mint)}
+h1,h2,h3{font-family:var(--display); letter-spacing:-.02em; margin:0}
+
+/* ---------- buttons ---------- */
+button{
+  font-family:var(--body); font-size:15px; font-weight:600; cursor:pointer;
+  border-radius:10px; border:1px solid transparent; padding:11px 18px;
+  transition:background .14s, border-color .14s, transform .06s;
+}
+button:active{transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+.btn-primary{background:var(--amber); color:#131A26; border-color:var(--amber)}
+.btn-primary:hover{background:var(--amber-dark); border-color:var(--amber-dark)}
+.btn-ghost{background:transparent; color:var(--text); border-color:var(--line-2)}
+.btn-ghost:hover{border-color:var(--muted)}
+button:disabled{cursor:not-allowed}
+
+/* ---------- generic surfaces (used by home + admin too) ---------- */
+.station{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:24px}
+label{display:block; font-weight:600; font-size:15px; margin:0 0 8px; color:var(--text)}
+input[type=text],input[type=password],textarea{
+  width:100%; font-family:var(--body); font-size:17px; color:var(--text);
+  background:var(--bg); border:1.5px solid var(--line-2); border-radius:10px; padding:12px 14px;
+}
+textarea{resize:vertical}
+input::placeholder,textarea::placeholder{color:var(--dim)}
+input:focus,textarea:focus{outline:none; border-color:var(--amber); box-shadow:0 0 0 3px rgba(240,168,60,.16)}
+.err{color:var(--red); font-size:14px; font-weight:600}
+.hint{color:var(--muted); font-size:15px}
+.row{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+
+/* save-state chip */
+.chip{
+  font-family:var(--mono); font-size:12px; font-weight:500; letter-spacing:.04em; text-transform:uppercase;
+  padding:5px 11px; border-radius:999px; border:1px solid var(--line-2); color:var(--muted);
+  display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
+}
+.chip::before{content:""; width:6px; height:6px; border-radius:50%; background:var(--dim)}
+.chip[data-state=saving]{color:var(--amber); border-color:#5A4520}
+.chip[data-state=saving]::before{background:var(--amber)}
+.chip[data-state=saved]{color:var(--mint); border-color:var(--mint-dim)}
+.chip[data-state=saved]::before{background:var(--mint)}
+.chip[data-state=error]{color:var(--red); border-color:var(--red-dim)}
+.chip[data-state=error]::before{background:var(--red)}
+
+/* =====================================================================
+   LESSON SHELL — fixed height, never scrolls; only the stage does.
+   ===================================================================== */
+body.lesson{
+  height:100dvh; display:grid;
+  grid-template-rows:auto auto auto 1fr auto;
+  overflow:hidden;
+}
+
+/* topbar */
+.topbar{
+  display:flex; align-items:center; gap:12px;
+  padding:6px 20px; border-bottom:1px solid var(--line); background:var(--panel);
+}
+.topbar .home{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--muted); text-decoration:none; white-space:nowrap;
+}
+.topbar .home:hover{color:var(--text)}
+.topbar .title{
+  font-family:var(--display); font-weight:700; font-size:14px; letter-spacing:-.01em;
+  margin-right:auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.topbar .sep{color:var(--line-2)}
+
+/* signature: segmented mission tracker */
+.tracker{display:flex; gap:3px; padding:6px 20px 0; background:var(--panel)}
+.seg{
+  flex:1; height:3px; border-radius:2px; background:var(--line);
+  transition:background .3s ease;
+}
+.seg.done{background:var(--mint)}
+.seg.now{background:var(--amber)}
+.trackmeta{
+  display:flex; justify-content:space-between; align-items:baseline;
+  padding:4px 20px 6px; background:var(--panel); border-bottom:1px solid var(--line);
+  font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim);
+}
+.trackmeta .now-label{color:var(--amber)}
+
+/* the brief: instructions, big, always at the top, never scrolls away */
+.brief{
+  padding:11px 20px 12px 16px; background:var(--panel-2);
+  border-bottom:1px solid var(--line); border-left:3px solid var(--amber);
+}
+.brief .eyebrow{
+  font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--amber); margin:0 0 3px;
+}
+.brief h2{font-family:var(--display); font-size:17px; font-weight:700; line-height:1.25; margin:0 0 3px}
+.brief p{margin:0; font-size:14.5px; line-height:1.45; color:#CBD5E4; max-width:88ch}
+
+/* the stage: the activity itself. Only this scrolls, and only if it must. */
+.stage{overflow-y:auto; padding:18px 20px; scrollbar-width:thin; scrollbar-color:var(--line-2) transparent}
+.stage::-webkit-scrollbar{width:10px}
+.stage::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:5px; border:3px solid var(--bg)}
+.stage > section{max-width:840px; margin:0 auto}
+.stage > section[hidden]{display:none}
+
+/* docked footer */
+.dock{
+  display:flex; align-items:center; gap:16px;
+  padding:10px 20px; background:var(--panel); border-top:1px solid var(--line);
+}
+.dock .mid{flex:1; text-align:center; min-width:0}
+.lockmsg{
+  margin:0; font-size:15px; font-weight:600; color:var(--amber);
+  display:inline-flex; align-items:center; gap:9px;
+}
+.lockmsg::before{content:"🔒"; font-size:14px}
+.lockmsg[hidden]{display:none}
+.btn-continue{font-size:17px; padding:14px 30px; border-radius:11px}
+.btn-continue:disabled{background:var(--line); border-color:var(--line); color:var(--dim)}
+#backBtn:disabled{opacity:.35}
+
+/* bypass: present, unremarkable */
+#bypassDot{
+  font-family:var(--mono); color:var(--line-2); font-size:20px; line-height:1;
+  padding:6px 10px; cursor:default; user-select:none; border-radius:6px;
+}
+#bypassDot:hover{color:var(--dim)}
+#bypassDot:focus-visible{outline:1px solid var(--line-2)}
+body.bypassed #bypassDot{color:var(--mint)}
+body.bypassed .btn-continue:disabled{background:var(--amber); color:#131A26; border-color:var(--amber)}
+
+/* ---------- activity content ---------- */
+.prose{font-size:18px; line-height:1.65; color:#D6DEEA}
+.prose h2{font-size:24px; margin:0 0 14px; color:var(--text)}
+.prose p{margin:0 0 14px}
+.prose ul{margin:0 0 14px; padding-left:22px}
+.prose li{margin:7px 0}
+.prose b{color:var(--text); font-weight:600}
+
+textarea.answer{min-height:150px; font-size:18px; line-height:1.55}
+.counter{font-family:var(--mono); font-size:13px; color:var(--dim); margin:10px 0 0; letter-spacing:.03em}
+.counter[data-ok=true]{color:var(--mint)}
+
+iframe.embed{
+  display:block; width:100%; aspect-ratio:16/9; height:auto; max-height:56vh;
+  border:1px solid var(--line); border-radius:var(--r); background:#000;
+}
+.confirm{
+  display:flex; align-items:center; gap:14px; margin:18px 0 0; padding:16px 18px;
+  border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel);
+  font-size:17px; font-weight:600; cursor:pointer;
+}
+.confirm:hover{border-color:var(--mint)}
+.confirm input{width:22px; height:22px; flex:none; accent-color:var(--mint)}
+
+/* quiz — one question at a time */
+.qhead{
+  font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--dim); margin:0 0 12px;
+}
+.qtext{font-size:19px; line-height:1.55; margin:0 0 18px; color:var(--text)}
+.qtext b{color:var(--amber)}
+.opts{display:grid; gap:10px}
+.opt{
+  display:flex; align-items:flex-start; gap:13px; margin:0; padding:15px 17px;
+  border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel);
+  font-size:17px; font-weight:400; line-height:1.45; cursor:pointer; transition:border-color .12s, background .12s;
+}
+.opt:hover{border-color:var(--muted); background:var(--panel-2)}
+.opt input{width:20px; height:20px; margin-top:1px; flex:none; accent-color:var(--amber)}
+.opt.chosen{border-color:var(--amber)}
+.opt.right{border-color:var(--mint); background:rgba(65,199,164,.08)}
+.opt.wrong{border-color:var(--red); background:rgba(232,97,90,.08)}
+
+.feedback{margin-top:16px; padding:15px 17px; border-radius:12px; font-size:16px; line-height:1.5; border:1px solid var(--line)}
+.feedback[hidden]{display:none}
+.feedback b{display:block; font-family:var(--display); font-size:17px; margin-bottom:4px}
+.feedback[data-verdict=correct]{background:rgba(65,199,164,.08); border-color:var(--mint-dim); color:#BFEADD}
+.feedback[data-verdict=correct] b{color:var(--mint)}
+.feedback[data-verdict=incorrect]{background:rgba(232,97,90,.08); border-color:var(--red-dim); color:#F2C4C1}
+.feedback[data-verdict=incorrect] b{color:var(--red)}
+
+/* password meter */
+.warnline{
+  background:rgba(240,168,60,.09); border:1px solid #5A4520; color:#F3D6A4;
+  border-radius:12px; padding:13px 16px; font-size:15.5px; margin:0 0 18px;
+}
+.meter{height:8px; background:var(--line); border-radius:999px; overflow:hidden; margin:16px 0 10px}
+.meter-bar{height:100%; width:0; border-radius:999px; transition:width .2s ease, background .2s ease}
+.meter-bar[data-level=weak]{background:var(--red)}
+.meter-bar[data-level=ok]{background:var(--amber)}
+.meter-bar[data-level=strong]{background:var(--mint)}
+.pw-verdict{font-weight:600; font-size:16px; min-height:24px; color:var(--muted)}
+.pw-checks{list-style:none; padding:0; margin:14px 0 0; display:grid; gap:7px; font-size:16px}
+.pw-checks .pass{color:var(--mint)}
+.pw-checks .fail{color:var(--dim)}
+
+/* cipher */
+.cipher-text,.cipher-out{
+  font-family:var(--mono); font-size:19px; letter-spacing:.16em; text-align:center;
+  border-radius:12px; padding:18px; word-break:break-word;
+}
+.cipher-text{background:var(--bg); border:1px solid var(--line); color:var(--muted)}
+.cipher-out{background:rgba(65,199,164,.08); border:1px solid var(--mint-dim); color:var(--mint); margin:14px 0 6px; min-height:24px}
+.shiftrow{display:flex; align-items:center; gap:16px; margin-top:16px}
+.shiftrow label{margin:0; font-family:var(--mono); font-size:14px; letter-spacing:.06em; color:var(--muted); white-space:nowrap}
+.shiftrow b{color:var(--amber); font-size:16px}
+input[type=range]{flex:1; accent-color:var(--amber); height:6px}
+
+/* python */
+textarea.code{
+  font-family:var(--mono); font-size:15px; line-height:1.55; min-height:190px;
+  background:#0A0E17; color:#D6E4DF; border-color:var(--line);
+}
+.output{
+  margin-top:14px; font-family:var(--mono); font-size:14.5px; white-space:pre-wrap; word-break:break-word;
+  background:#0A0E17; border:1px solid var(--line); border-radius:10px; padding:14px; min-height:48px; color:#D6E4DF;
+}
+.output:empty::before{content:"Output appears here after you press Run."; color:var(--dim)}
+
+/* =====================================================================
+   HOME + ADMIN
+   ===================================================================== */
+.page{max-width:900px; margin:0 auto; padding:34px 24px 80px}
+.masthead{margin:14px 0 30px}
+.masthead .eyebrow{
+  font-family:var(--mono); font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--amber); margin:0 0 10px;
+}
+.masthead h1{font-size:40px; line-height:1.1; margin:0 0 10px}
+.masthead p{margin:0; font-size:18px; color:var(--muted); max-width:60ch}
+.homebar{display:flex; align-items:center; gap:14px; padding:14px 24px; border-bottom:1px solid var(--line); background:var(--panel)}
+.homebar .title{font-family:var(--display); font-weight:700; margin-right:auto}
+.who{font-size:14px; color:var(--muted)}
+.who b{color:var(--text)}
+
+.lessons{display:grid; gap:14px; margin-top:8px}
+.lessonCard{
+  display:flex; align-items:center; gap:20px; text-decoration:none; color:var(--text);
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:22px 24px;
+  transition:border-color .14s, transform .14s;
+}
+.lessonCard:hover{border-color:var(--amber); transform:translateX(3px)}
+.lessonCard .num{
+  font-family:var(--mono); font-size:13px; color:var(--dim); flex:none;
+  width:34px; height:34px; display:grid; place-items:center;
+  border:1px solid var(--line-2); border-radius:9px;
+}
+.lessonCard .body{flex:1; min-width:0}
+.lessonCard b{font-family:var(--display); font-size:19px; display:block; margin-bottom:3px}
+.lessonCard span{font-size:15px; color:var(--muted)}
+.lessonCard .go{color:var(--amber); font-size:20px; flex:none}
+
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px}
+.banner{background:rgba(240,168,60,.09); border:1px solid #5A4520; color:#F3D6A4; border-radius:12px; padding:14px 18px; font-size:16px; margin-bottom:22px}
+.banner a{color:#F3D6A4; font-weight:600}
+
+table{width:100%; border-collapse:collapse; font-size:15px}
+th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+th{font-family:var(--mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim)}
+details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13px; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; margin:6px 0 0}
+
+/* ---------- quality floor ---------- */
+@media (max-width:720px){
+  .topbar,.tracker,.trackmeta,.brief,.stage,.dock{padding-left:16px; padding-right:16px}
+  .brief h2{font-size:20px} .brief p{font-size:17px}
+  .btn-continue{padding:13px 20px}
+  .masthead h1{font-size:30px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important; animation:none !important}}
+
+@media print{
+  body.lesson{height:auto; display:block; overflow:visible}
+  .topbar,.tracker,.trackmeta,.dock,.no-print,iframe{display:none !important}
+  .stage{overflow:visible; padding:0}
+  .stage > section[hidden]{display:block !important; page-break-inside:avoid; margin-bottom:20px}
+  body{background:#fff; color:#000}
+  .station,.opt,.feedback{background:#fff; border-color:#bbb}
+}
+
+/* ---- name chip (replaces the sign-in state) ---- */
+.who-chip{
+  font-family:var(--mono); font-size:12px; letter-spacing:.04em;
+  padding:5px 11px; border-radius:999px; border:1px dashed var(--line-2);
+  color:var(--muted); cursor:pointer; white-space:nowrap;
+}
+.who-chip:hover{border-color:var(--amber); color:var(--text)}
+.who-chip:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+.homebar .who-chip{margin-left:auto}
+
+.banner-ok{background:rgba(65,199,164,.08); border-color:var(--mint-dim); color:#BFEADD}
+
+/* progress marker on the lesson list */
+.lessonCard .status{
+  font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--mint); border:1px solid var(--mint-dim); border-radius:999px; padding:4px 10px; white-space:nowrap;
+}
+
+/* the PDF is the hand-in, so make it loud once they reach the end */
+.pdf-done #pdfBtn{background:transparent; color:var(--mint); border-color:var(--mint-dim)}
+
+/* ---- leave warning ---- */
+.modal-back{
+  position:fixed; inset:0; z-index:100; background:rgba(8,11,18,.78);
+  display:grid; place-items:center; padding:24px; backdrop-filter:blur(3px);
+}
+.modal-back[hidden]{display:none}
+.modal{
+  background:var(--panel); border:1px solid var(--line-2); border-radius:18px;
+  padding:34px 32px 28px; max-width:440px; width:100%; text-align:center;
+  box-shadow:0 24px 60px rgba(0,0,0,.5);
+}
+.modal-eyebrow{
+  font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--amber); margin:0 0 10px;
+}
+.modal h2{font-size:25px; margin:0 0 12px; line-height:1.2}
+.modal-text{font-size:16.5px; line-height:1.55; color:var(--muted); margin:0 0 24px}
+.modal-text b{color:var(--text)}
+.modal-cta{
+  display:block; width:100%; font-size:19px; padding:17px; border-radius:12px; margin:0 0 10px;
+}
+.modal-stay{display:block; width:100%; padding:11px; font-size:14px; color:var(--muted); border-color:transparent}
+.modal-stay:hover{color:var(--text); border-color:var(--line-2)}
+
+/* print header: only appears on the PDF itself */
+.print-header{display:none}
+@media print{
+  .print-header{
+    display:block !important; padding:0 0 14px; margin:0 0 18px; border-bottom:2px solid #000;
+  }
+  .print-header h1{font-size:22px; margin:0 0 6px}
+  .print-header p{margin:0; font-size:13px}
+  .who-chip,.chip,#pdfBtn{display:none !important}
+}
+
+
+/* ---- screenshot: paste or browse ---- */
+.paste-zone{
+  border:2px dashed var(--line-2); border-radius:16px; padding:34px 24px; text-align:center;
+  background:rgba(240,168,60,.04);
+}
+.paste-zone[hidden]{display:none}
+.paste-big{font-family:var(--display); font-size:23px; font-weight:700; margin:0 0 10px; color:var(--text)}
+.paste-big kbd{
+  font-family:var(--mono); font-size:18px; background:var(--bg); border:1px solid var(--line-2);
+  border-bottom-width:3px; border-radius:7px; padding:3px 9px; margin:0 2px; color:var(--amber);
+}
+.paste-sub{font-size:15px; color:var(--muted); margin:0 auto 20px; max-width:52ch; line-height:1.5}
+.paste-sub b{color:var(--text)}
+.paste-or{display:flex; justify-content:center}
+.shot[hidden]{display:none}
+.shot-img{
+  display:block; max-width:100%; max-height:46vh; margin:0 auto 14px;
+  border:1px solid var(--line-2); border-radius:12px; background:#fff;
+}
+
+/* ---- teacher-released tasks ---- */
+.locked > *:not(.lockpanel){display:none !important}
+.lockpanel{
+  text-align:center; padding:40px 24px; border:2px dashed var(--line-2);
+  border-radius:16px; background:rgba(240,168,60,.05);
+}
+.lock-mark{font-size:34px; line-height:1; margin-bottom:12px; opacity:.8}
+.lock-title{font-family:var(--display); font-size:22px; font-weight:700; margin:0 0 8px; color:var(--text)}
+.lock-text{font-size:15.5px; color:var(--muted); margin:0 auto 20px; max-width:46ch; line-height:1.5}
+.lock-row{display:flex; gap:10px; justify-content:center; max-width:340px; margin:0 auto}
+.lock-row input{text-align:center; font-family:var(--mono); letter-spacing:.14em; text-transform:uppercase}
+.lock-msg{color:var(--red); font-size:14px; font-weight:600; margin:12px 0 0; min-height:18px}
+.seg.locked-seg{background:var(--line-2)}
+
+/* ---- teacher-paced release ---- */
+.sel{
+  width:100%; font-family:var(--body); font-size:16px; color:var(--text);
+  background:var(--bg); border:1.5px solid var(--line-2); border-radius:10px; padding:12px 14px;
+}
+.sel:focus{outline:none; border-color:var(--amber)}
+.lessonCard .status{cursor:pointer}
+
+
+/* ---- Continue button: cooldown + tooltip ----
+   During the cooldown the button stays fully coloured on purpose — it is not
+   "off", it is "not yet". Only the cursor and the tooltip say wait. */
+.btn-wrap{position:relative; display:inline-block}
+.btn-wrap.cooling #nextBtn{cursor:not-allowed}
+.btn-continue.checking{opacity:.75}
+.tip{
+  position:absolute; bottom:calc(100% + 10px); right:0; z-index:40;
+  background:var(--panel-2); color:var(--text); border:1px solid var(--line-2);
+  border-radius:9px; padding:8px 12px; font-size:13.5px; font-weight:600;
+  white-space:nowrap; box-shadow:0 8px 22px rgba(0,0,0,.4); pointer-events:none;
+}
+.tip[hidden]{display:none}
+.tip::after{
+  content:""; position:absolute; top:100%; right:26px;
+  border:6px solid transparent; border-top-color:var(--line-2);
+}
+
+/* ---- v2: clearer task, quieter chrome ---- */
+.brief h2{font-size:19px}
+.brief p{font-size:14px; color:#B7C2D4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.signin-hint{font-size:12.5px; color:var(--dim); margin:0 0 14px}
+.signin-hint a{color:var(--muted)}
+.handin{font-size:14px; font-weight:600; margin:14px 0 0; min-height:18px}
+.handin[data-state=done]{color:var(--mint)}
+.handin[data-state=failed],.handin[data-state=offline]{color:var(--amber)}
+
+/* ---- teacher hand-in cards ---- */
+.handin-card{background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:0 0 14px}
+.handin-head{display:flex; justify-content:space-between; align-items:baseline; margin:0 0 10px}
+.handin-head b{font-family:var(--display); font-size:16px}
+.handin-head span{font-family:var(--mono); font-size:11px; color:var(--dim)}
+.handin-field{padding:7px 0; border-top:1px solid var(--line)}
+.handin-k{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0 0 3px}
+.handin-v{font-size:14px; white-space:pre-wrap}
+.handin-img{max-width:340px; max-height:240px; border-radius:8px; border:1px solid var(--line-2); display:block}

@@ -1,0 +1,175 @@
+{
+  "title": "Escape the Hacker",
+  "intro": "Work through the missions in order. Headphones on for the video.",
+  "blocks": [
+    {
+      "type": "text",
+      "html": "<h2>🚨 Mission Briefing</h2><p>A hacker is in the school network. Complete <b>five missions</b> to stop them, then design a poster.</p><ul><li>🎥 How hackers steal information</li><li>🎣 Spot the phishing emails</li><li>🔐 Password strength</li><li>🔎 Crack the cipher</li><li>🧠 Final quiz</li><li>🏆 Design a poster</li></ul>"
+    },
+    {
+      "type": "embed",
+      "title": "🎥 Mission 1 — How hackers steal information",
+      "url": "https://www.youtube-nocookie.com/embed/PASTE_VIDEO_ID_HERE",
+      "height": 420,
+      "note": "Watch it all, then tick the box."
+    },
+    {
+      "type": "question",
+      "id": "q1",
+      "prompt": "🎥 <b>Mission 1 debrief.</b> Name <b>two</b> different ways a hacker can steal someone's information, and say which of the two you think is easiest for a hacker to do.",
+      "criteria": "A good answer names two distinct methods (such as phishing, guessing or cracking passwords, malware, fake websites, public wi-fi snooping, or shoulder surfing) and gives a reason for the one chosen as easiest."
+    },
+    {
+      "type": "quiz",
+      "id": "quiz1",
+      "title": "🎣 Mission 2 — Spot the phishing emails",
+      "note": "Is each email real or a scam? Check the sender, the pressure, and what it asks for.",
+      "questions": [
+        {
+          "q": "<b>From:</b> Netflix-Support &lt;billing@netfIix-account.co&gt;<br><b>Subject:</b> URGENT!! Your account will be DELETED in 24 hours<br><br>\"Dear Customer, we could not take your payment. Click here NOW to enter your card details or you will lose all your shows forever.\"",
+          "options": [
+            "Phishing — it is a scam",
+            "Safe — a normal email from Netflix"
+          ],
+          "answer": 0,
+          "why": "Spot on. Look at the sender address — it is spelled with a capital I instead of an L. It also rushes you with a scary deadline and asks for card details. Real companies never do this.",
+          "hint": "Read the sender's address very carefully, letter by letter. Then ask yourself: why is it in such a hurry?"
+        },
+        {
+          "q": "<b>From:</b> Mrs Chowdhury &lt;a.chowdhury@yourschool.sch.uk&gt;<br><b>Subject:</b> Homework due Friday<br><br>\"Hi Year 9, the worksheet we started in class is on the school system under Week 4. See me at lunch if you are stuck.\"",
+          "options": [
+            "Phishing — it is a scam",
+            "Safe — a normal email from a teacher"
+          ],
+          "answer": 1,
+          "why": "Correct. The address is the real school domain, it does not rush you, it asks for nothing personal, and it points to somewhere you already have access to.",
+          "hint": "Does this email ask you for any personal details, passwords or money? Does it try to panic you?"
+        },
+        {
+          "q": "<b>From:</b> Free Gaming Prizes &lt;winner@freeprize-vbucks.ru&gt;<br><b>Subject:</b> You have won 10,000 V-Bucks!!!<br><br>\"Congratulations!!! You are our 1,000,000th visitor. Just log in with your Epic Games username and password to claim your prize.\"",
+          "options": [
+            "Phishing — it is a scam",
+            "Safe — a real competition win"
+          ],
+          "answer": 0,
+          "why": "Exactly. You cannot win a competition you never entered, and no real company ever asks you to type your password into an email to claim a prize.",
+          "hint": "Did you ever enter this competition? And what exactly is it asking you to hand over?"
+        },
+        {
+          "q": "<b>From:</b> IT Helpdesk &lt;it.support@yourschool.sch.uk&gt;<br><b>Subject:</b> Password reset<br><br>\"Your password expires today. Reply to this email with your current username and password so we can reset it for you.\"",
+          "options": [
+            "Phishing — it is a scam",
+            "Safe — the school IT team need it"
+          ],
+          "answer": 0,
+          "why": "Well spotted — this one is tricky because the address looks right. But real IT staff never need your password, and no one should ever send a password in an email. Senders' addresses can be faked.",
+          "hint": "The address looks genuine, so ignore it for a moment. Would a real IT technician ever need to be told your password?"
+        }
+      ]
+    },
+    {
+      "type": "password",
+      "id": "pw1",
+      "title": "🔐 Mission 3 — Password strength challenge",
+      "task": "Invent a made-up password that turns all five checks green."
+    },
+    {
+      "type": "question",
+      "id": "q2",
+      "prompt": "🔐 <b>Mission 3 debrief.</b> Why is a <b>long</b> password made of several random words safer than a <b>short</b> one with a few symbols in it? And why should you never use the same password for two different accounts?",
+      "criteria": "A good answer says that length means many more possible combinations so it takes a computer far longer to guess, and that reusing a password means one leaked account lets an attacker into all the others."
+    },
+    {
+      "type": "caesar",
+      "id": "cipher1",
+      "title": "🔎 Mission 4 — Caesar cipher puzzle",
+      "task": "Slide the shift until the message becomes English, then type it in.",
+      "ciphertext": "AOL WHZZDVYK PZ MPYLDHSS",
+      "answerHash": 2618160235,
+      "prompt": "Type the hidden message here (letters only, spaces are fine):"
+    },
+    {
+      "type": "quiz",
+      "id": "quiz2",
+      "title": "🧠 Mission 5 — Cybersecurity quiz",
+      "note": "Get every question right. Wrong answers give a hint — try again.",
+      "questions": [
+        {
+          "q": "What is <b>phishing</b>?",
+          "options": [
+            "Tricking someone into giving away their private details",
+            "A virus that deletes all your files",
+            "Guessing a password by trying every combination",
+            "Watching what someone types on public wi-fi"
+          ],
+          "answer": 0,
+          "why": "Yes — phishing is a trick that fools a person, not a machine. That is why being careful matters as much as any software.",
+          "hint": "Think back to Mission 2. Were those emails attacking the computer, or attacking the person reading them?"
+        },
+        {
+          "q": "Which of these is the <b>strongest</b> password?",
+          "options": [
+            "Chelsea2011",
+            "P@ssw0rd",
+            "correct-horse-battery-42!",
+            "MyName123"
+          ],
+          "answer": 2,
+          "why": "Correct. It is long, mixes letter types, uses a symbol and a number, and is not based on anything a hacker could look up about you.",
+          "hint": "Length beats cleverness. Which one is the longest, and which ones contain something a stranger could find out about you?"
+        },
+        {
+          "q": "A Caesar cipher keeps a message secret by…",
+          "options": [
+            "Deleting some of the letters",
+            "Moving every letter along the alphabet by the same amount",
+            "Turning the letters into numbers at random",
+            "Hiding the message inside a picture"
+          ],
+          "answer": 1,
+          "why": "That is it — and because the shift is always the same, someone who works out the shift can read the whole message. That is why modern encryption is far more complicated.",
+          "hint": "Think about what you did with the slider in Mission 4. What was it changing?"
+        },
+        {
+          "q": "An email says you must click a link <b>within one hour</b> or lose your account. What should you do?",
+          "options": [
+            "Click the link quickly before time runs out",
+            "Reply asking if it is real",
+            "Do not click. Go to the website yourself, or tell an adult",
+            "Forward it to your friends to warn them"
+          ],
+          "answer": 2,
+          "why": "Exactly right. Making you panic is the whole trick. Going to the real website yourself means you never touch the hacker's link.",
+          "hint": "A scammer wants you to act fast and stop thinking. What is the calmest, safest thing you could do instead?"
+        },
+        {
+          "q": "Why does <b>two-factor authentication</b> (getting a code on your phone) make an account safer?",
+          "options": [
+            "It makes your password longer",
+            "A hacker needs your password AND your phone to get in",
+            "It hides your password from the website",
+            "It stops the website from being hacked"
+          ],
+          "answer": 1,
+          "why": "Perfect. Even if a hacker steals your password, they are stopped at the second door because they do not have your phone.",
+          "hint": "'Two-factor' means two separate things are needed. If a hacker had only one of them, could they still get in?"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "html": "<h2>🏆 Final challenge</h2><p>Design a <b>cybersecurity poster</b> for Year 7 (paper, Canva or PowerPoint). It must include:</p><ul><li>A catchy title</li><li>Two phishing warning signs</li><li>Three strong-password rules</li><li>One sentence on what encryption does</li><li>What to do if you think you've been hacked</li></ul><p>Big text, short sentences, a picture for each rule.</p>",
+      "lockCode": 3359652066,
+      "lockTitle": "Final challenge is locked",
+      "lockHint": "Your teacher will give you the code.",
+      "id": "final_lock"
+    },
+    {
+      "type": "image",
+      "id": "poster1",
+      "title": "Hand in your poster",
+      "task": "Paste a screenshot of your finished poster.",
+      "hint": "Hold <b>Windows</b> + <b>Shift</b> + <b>S</b>, drag a box around your poster, then click here and press Ctrl + V."
+    }
+  ]
+}

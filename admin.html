@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher console — Computing hub</title>
+<link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="homebar">
+  <div class="title">Teacher console</div>
+  <span class="who" id="liveState">—</span>
+</div>
+
+<div class="page">
+
+  <section class="station">
+    <div class="grid3">
+      <div><label for="tkey">Teacher key</label><input type="password" id="tkey" autocomplete="off"></div>
+      <div><label for="groupSel">Class</label>
+        <select id="groupSel" class="sel"><option value="">Loading…</option></select></div>
+      <div><label for="lessonSel">Lesson</label><select id="lessonSel" class="sel"></select></div>
+    </div>
+    <p class="hint" style="margin:10px 0 0">Release is per class — another teacher pacing their own class won't affect yours.</p>
+  </section>
+
+  <section class="station" style="margin-top:16px">
+    <div class="row">
+      <button class="btn-primary" id="nextBtn">Release next task</button>
+      <button class="btn-ghost" id="allBtn">Open everything</button>
+      <button class="btn-ghost" id="noneBtn">Lock everything</button>
+      <button class="btn-ghost" id="freeBtn">Stop controlling</button>
+      <span class="err" id="err"></span>
+    </div>
+    <p class="hint" id="stateLine" style="margin:12px 0 0">—</p>
+    <div id="stepList" class="lessons" style="margin-top:14px"></div>
+  </section>
+
+  <details class="station" style="margin-top:16px">
+    <summary style="cursor:pointer;font-weight:600">Add or update students</summary>
+    <p class="hint" style="margin:12px 0 8px">One per line: <b>class, username, password, display name</b>. Re-adding resets the password.</p>
+    <textarea id="csv" rows="5" placeholder="9A, jsmith, Sunfl0wer!, Jamie S"></textarea>
+    <div class="row" style="margin-top:12px">
+      <button class="btn-primary" id="addBtn">Add students</button>
+      <span class="hint" id="addMsg"></span><span class="err" id="addErr"></span>
+    </div>
+  </details>
+
+  <details class="station" style="margin-top:16px" id="handinBox">
+    <summary style="cursor:pointer;font-weight:600">Hand-ins for this class &amp; lesson</summary>
+    <div class="row" style="margin:12px 0 0">
+      <button class="btn-primary" id="loadWork">Load hand-ins</button>
+      <span class="err" id="workErr"></span>
+    </div>
+    <div id="results" style="margin-top:14px"></div>
+  </details>
+
+</div>
+
+<script>
+const API = (window.HUB && window.HUB.API) || "";
+const ready = API && API.indexOf("PASTE_") !== 0;
+const $ = (id) => document.getElementById(id);
+$("tkey").value = sessionStorage.getItem("hub_tkey") || "";
+$("tkey").addEventListener("input", () => sessionStorage.setItem("hub_tkey", $("tkey").value));
+const H = () => ({ "X-Teacher-Key": $("tkey").value });
+
+let blocks = [], released = 0, managed = false;
+const cur = () => ({ lesson: $("lessonSel").value, group: $("groupSel").value });
+
+function stripTags(x){ return String(x||"").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
+function stepTitle(b){
+  if (b.type==="text"){ const m=/<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(b.html||""); return m?stripTags(m[1]):"Information"; }
+  return stripTags(b.title||b.prompt||b.task||"") || b.type;
+}
+
+/* ---- populate pickers ---- */
+fetch("lessons/index.json").then(r=>r.json()).then(list=>{
+  $("lessonSel").innerHTML = "";
+  list.forEach(l=>{ const o=document.createElement("option"); o.value=l.id; o.textContent=l.title; $("lessonSel").appendChild(o); });
+  loadLesson();
+});
+async function loadGroups(){
+  if (!ready || !$("tkey").value) return;
+  try{
+    const r = await fetch(API+"/api/teacher/groups",{headers:H()});
+    const d = await r.json();
+    if (!r.ok) return;
+    const sel = $("groupSel"); const before = sel.value;
+    sel.innerHTML = "";
+    d.groups.forEach(g=>{ const o=document.createElement("option"); o.value=g.name; o.textContent=g.name+" ("+g.students+")"; sel.appendChild(o); });
+    if (before) sel.value = before;
+    refresh();
+  }catch(e){}
+}
+$("tkey").addEventListener("change", loadGroups);
+if ($("tkey").value) loadGroups();
+
+async function loadLesson(){
+  try{
+    const r = await fetch("lessons/"+encodeURIComponent($("lessonSel").value)+".json");
+    blocks = (await r.json()).blocks || [];
+  }catch(e){ blocks = []; }
+  refresh();
+}
+$("lessonSel").addEventListener("change", loadLesson);
+$("groupSel").addEventListener("change", refresh);
+
+/* ---- release state ---- */
+async function refresh(){
+  const c = cur();
+  if (!ready || !c.lesson || !c.group){ paint(); return; }
+  try{
+    const r = await fetch(API+"/api/release?lesson="+encodeURIComponent(c.lesson)+"&group="+encodeURIComponent(c.group)+"&t="+Date.now(),{cache:"no-store"});
+    const d = await r.json();
+    released = d.released; managed = d.managed;
+    $("liveState").textContent = "Live";
+    paint();
+  }catch(e){ $("liveState").textContent = "Offline"; }
+}
+function paint(){
+  const total = blocks.length, open = Math.min(released, total);
+  $("stateLine").innerHTML = !managed
+    ? "Not being controlled — <b>every task is open</b> to this class."
+    : "Open to this class: <b>" + open + " of " + total + "</b>";
+  const box = $("stepList"); box.innerHTML = "";
+  blocks.forEach((b,i)=>{
+    const isOpen = !managed || i < released;
+    const card = document.createElement("a");
+    card.className="lessonCard"; card.href="#";
+    card.innerHTML='<span class="num">'+String(i+1).padStart(2,"0")+'</span><span class="body"><b></b></span><span class="status"></span>';
+    card.querySelector("b").textContent = stepTitle(b);
+    const st=card.querySelector(".status");
+    st.textContent = isOpen ? "Open" : "Locked";
+    st.style.color = isOpen ? "var(--mint)" : "var(--dim)";
+    st.style.borderColor = isOpen ? "var(--mint-dim)" : "var(--line-2)";
+    card.addEventListener("click",(e)=>{e.preventDefault(); setRelease(i+1);});
+    box.appendChild(card);
+  });
+}
+async function setRelease(n){
+  $("err").textContent = "";
+  const c = cur();
+  if (!c.group){ $("err").textContent = "Choose a class first."; return; }
+  if (!$("tkey").value){ $("err").textContent = "Enter your teacher key."; return; }
+  try{
+    const r = await fetch(API+"/api/release",{method:"POST",
+      headers:{...H(),"Content-Type":"application/json"},
+      body:JSON.stringify({lesson:c.lesson, group:c.group, released:n})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error||"Failed.");
+    released = d.released; managed = true; paint();
+  }catch(e){ $("err").textContent = e.message; }
+}
+$("nextBtn").addEventListener("click",()=>setRelease(Math.min((managed?released:0)+1, blocks.length)));
+$("allBtn").addEventListener("click",()=>setRelease(blocks.length));
+$("noneBtn").addEventListener("click",()=>setRelease(0));
+$("freeBtn").addEventListener("click",()=>setRelease(9999));
+setInterval(()=>{ if(!document.hidden) refresh(); }, 10000);
+
+/* ---- add students ---- */
+$("addBtn").addEventListener("click", async ()=>{
+  $("addErr").textContent=""; $("addMsg").textContent="";
+  const students = $("csv").value.split("\n").map(line=>{
+    const [group,username,password,...rest]=line.split(",").map(x=>(x||"").trim());
+    return {group,username,password,displayName:rest.join(", ")};
+  }).filter(s=>s.group&&s.username&&s.password);
+  if (!students.length){ $("addErr").textContent="Nothing to add — check the format."; return; }
+  try{
+    const r = await fetch(API+"/api/teacher/students",{method:"POST",
+      headers:{...H(),"Content-Type":"application/json"},body:JSON.stringify({students})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error||"Failed.");
+    $("addMsg").textContent = d.added+" added/updated" + (d.skipped?(", "+d.skipped+" skipped"):"");
+    loadGroups();
+  }catch(e){ $("addErr").textContent = e.message; }
+});
+
+/* ---- hand-ins, readable: text as text, screenshots as pictures ---- */
+$("loadWork").addEventListener("click", async ()=>{
+  $("workErr").textContent=""; $("results").innerHTML="";
+  const c = cur();
+  try{
+    const r = await fetch(API+"/api/teacher/work?lesson="+encodeURIComponent(c.lesson)+"&group="+encodeURIComponent(c.group),{headers:H()});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error||"Failed.");
+    if (!d.rows.length){ $("results").innerHTML='<p class="hint">No hand-ins yet.</p>'; return; }
+    d.rows.forEach(row=>{
+      const card=document.createElement("div"); card.className="handin-card";
+      const h=document.createElement("div"); h.className="handin-head";
+      h.innerHTML="<b></b><span></span>";
+      h.querySelector("b").textContent=row.display_name;
+      h.querySelector("span").textContent=new Date(row.updated_at+"Z").toLocaleString("en-GB");
+      card.appendChild(h);
+      Object.entries(row.data).forEach(([k,v])=>{
+        if (k.startsWith("__")) return;
+        const f=document.createElement("div"); f.className="handin-field";
+        const lab=document.createElement("div"); lab.className="handin-k"; lab.textContent=k; f.appendChild(lab);
+        if (typeof v==="string" && v.startsWith("data:image")){
+          const img=document.createElement("img"); img.className="handin-img"; img.src=v; f.appendChild(img);
+        } else if (typeof v==="object" && v!==null){
+          const p=document.createElement("div"); p.className="handin-v";
+          p.textContent = ("score" in v) ? ("Score: "+v.score+" / "+v.outOf)
+                        : ("bestScore" in v) ? ("Best: "+v.bestScore+" / "+v.outOf)
+                        : ("solved" in v && "answer" in v) ? ((v.solved?"Solved — ":"Not solved — ")+'"'+v.answer+'"')
+                        : JSON.stringify(v);
+          f.appendChild(p);
+        } else {
+          const p=document.createElement("div"); p.className="handin-v"; p.textContent = v===true?"Done":v===false?"Not done":String(v||"—");
+          f.appendChild(p);
+        }
+        card.appendChild(f);
+      });
+      $("results").appendChild(card);
+    });
+  }catch(e){ $("workErr").textContent = e.message; }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computing hub</title>
+<link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="homebar">
+  <div class="title">Computing hub</div>
+  <div class="auth" id="auth"></div>
+</div>
+
+<div class="page">
+
+  <div class="masthead">
+    <p class="eyebrow">Computing</p>
+    <h1 id="headline">Sign in</h1>
+  </div>
+
+  <section class="station" id="loginCard">
+    <div class="grid3">
+      <div><label for="u">Username</label><input type="text" id="u" autocomplete="username"></div>
+      <div><label for="p">Password</label><input type="password" id="p" autocomplete="current-password"></div>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn-primary" id="loginBtn">Sign in</button>
+      <span class="err" id="loginErr" role="alert"></span>
+    </div>
+  </section>
+
+  <h2 style="margin:34px 0 14px; font-size:20px">Lessons</h2>
+  <div id="lessonList" class="lessons"><p class="hint">Loading…</p></div>
+
+</div>
+
+<script>
+const API = (window.HUB && window.HUB.API) || "";
+const ready = API && API.indexOf("PASTE_") !== 0;
+const $ = (id) => document.getElementById(id);
+
+function renderAuth(){
+  const name = localStorage.getItem("hub_name");
+  if (name && localStorage.getItem("hub_token")){
+    $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn">Sign out</button>';
+    $("auth").querySelector("b").textContent = name;
+    $("outBtn").addEventListener("click", () => {
+      ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
+      renderAuth();
+    });
+    $("loginCard").hidden = true;
+    $("headline").textContent = "Pick a lesson, " + name.split(" ")[0];
+  } else {
+    $("auth").innerHTML = "";
+    $("loginCard").hidden = false;
+    $("headline").textContent = "Sign in";
+  }
+}
+renderAuth();
+
+$("loginBtn").addEventListener("click", async () => {
+  $("loginErr").textContent = "";
+  if (!ready){ $("loginErr").textContent = "Site not connected to its server yet (config.js)."; return; }
+  try{
+    const r = await fetch(API + "/api/login", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ username: $("u").value, password: $("p").value })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Sign-in failed.");
+    localStorage.setItem("hub_token", d.token);
+    localStorage.setItem("hub_name", d.name);
+    localStorage.setItem("hub_group", d.group || "");
+    renderAuth();
+  }catch(e){ $("loginErr").textContent = e.message; }
+});
+$("p").addEventListener("keydown", (e) => { if (e.key === "Enter") $("loginBtn").click(); });
+
+/* housekeeping: clear stored work for retired or stale lessons */
+const MAX_AGE_DAYS = 60;
+function pruneStorage(validIds){
+  const keep = new Set(validIds.map(id => "hub_work_" + id));
+  const cutoff = Date.now() - MAX_AGE_DAYS * 86400000;
+  const doomed = [];
+  for (let i = 0; i < localStorage.length; i++){
+    const k = localStorage.key(i);
+    if (!k || k.indexOf("hub_work_") !== 0) continue;
+    if (!keep.has(k)){ doomed.push(k); continue; }
+    try{
+      const d = JSON.parse(localStorage.getItem(k));
+      if (d.__saved && new Date(d.__saved).getTime() < cutoff) doomed.push(k);
+    }catch(e){ doomed.push(k); }
+  }
+  doomed.forEach(k => localStorage.removeItem(k));
+}
+
+fetch("lessons/index.json").then(r => r.json()).then(list => {
+  try{ pruneStorage(list.map(l => l.id)); }catch(e){}
+  const box = $("lessonList"); box.innerHTML = "";
+  list.forEach((l, i) => {
+    const a = document.createElement("a");
+    a.className = "lessonCard"; a.href = "lesson.html?id=" + encodeURIComponent(l.id);
+    a.innerHTML = '<span class="num">' + String(i+1).padStart(2,"0") + '</span>' +
+                  '<span class="body"><b></b><span></span></span><span class="go">&rarr;</span>';
+    a.querySelector("b").textContent = l.title;
+    a.querySelector(".body span").textContent = l.description || "";
+    box.appendChild(a);
+  });
+}).catch(() => { $("lessonList").innerHTML = '<p class="hint">Could not load the lesson list.</p>'; });
+</script>
+</body>
+</html>
