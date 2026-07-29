@@ -5,5 +5,5 @@
 // run with every step open, exactly as they do now. Teacher-paced release only
 // switches on once this points at your backend.
 window.HUB = {
-  API: "PASTE_YOUR_VERCEL_URL_HERE".replace(/\/+$/, "")
+  API: "https://hub-backend-azure.vercel.app".replace(/\/+$/, "")
 };
