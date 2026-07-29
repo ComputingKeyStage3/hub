@@ -3,14 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Computing hub</title>
+<title>Prince Henry's Computing KS3</title>
 <link rel="stylesheet" href="style.css">
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 </head>
 <body>
 
 <div class="homebar">
-  <div class="title">Computing hub</div>
+  <div class="title">Prince Henry's Computing KS3</div>
+  <button class="btn-ghost settings-btn" id="setBtn">&#9881;&#65038; Settings</button>
   <div class="auth" id="auth"></div>
 </div>
 
@@ -43,6 +45,34 @@
     <div id="resultList"><p class="hint">Sign in to see your results.</p></div>
   </div>
 
+</div>
+
+<div class="modal-back no-print" id="setModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <h2 id="setTitle" style="margin-top:0">Settings</h2>
+    <div class="set-group">
+      <span class="set-label">Background colour</span>
+      <div class="swatches" id="swatches">
+        <button class="swatch" data-bg="" style="background:#FAF5EC" title="Paper"></button>
+        <button class="swatch" data-bg="white" style="background:#FFFFFF" title="White"></button>
+        <button class="swatch" data-bg="blue" style="background:#EAF1F7" title="Soft blue"></button>
+        <button class="swatch" data-bg="green" style="background:#ECF3EA" title="Soft green"></button>
+        <button class="swatch" data-bg="peach" style="background:#FAEFE5" title="Peach"></button>
+        <button class="swatch" data-bg="yellow" style="background:#FAF3D8" title="Soft yellow"></button>
+        <button class="swatch" data-bg="dark" style="background:#23262E" title="Dark"></button>
+      </div>
+    </div>
+    <div class="set-group">
+      <span class="set-label">Font</span>
+      <div class="font-opts" id="fontOpts">
+        <button class="font-opt" data-font="" style="font-family:'Nunito'">Nunito — the standard font</button>
+        <button class="font-opt" data-font="atkinson" style="font-family:'Atkinson Hyperlegible'">Atkinson Hyperlegible — extra-clear letters</button>
+        <button class="font-opt" data-font="lexend" style="font-family:'Lexend'">Lexend — wide, easy-reading spacing</button>
+        <button class="font-opt" data-font="comic" style="font-family:'Comic Neue'">Comic Neue — rounded and friendly</button>
+      </div>
+    </div>
+    <button class="btn-primary modal-cta" id="setDone">Done</button>
+  </div>
 </div>
 
 <script>
@@ -132,6 +162,26 @@ fetch("lessons/index.json").then(r => r.json()).then(data => {
     box.appendChild(wrap);
   });
 }).catch(() => { $("lessonList").innerHTML = '<p class="hint">Could not load the lesson list.</p>'; });
+
+/* ---- settings: background + font, saved for every page ---- */
+function prefs(){ try{ return JSON.parse(localStorage.getItem("hub_prefs") || "{}"); }catch(e){ return {}; } }
+function paintPrefs(){
+  const p = prefs();
+  document.querySelectorAll("#swatches .swatch").forEach(b => b.classList.toggle("on", (p.bg || "") === b.dataset.bg));
+  document.querySelectorAll("#fontOpts .font-opt").forEach(b => b.classList.toggle("on", (p.font || "") === b.dataset.font));
+}
+function setPref(k, v){
+  const p = prefs(); p[k] = v;
+  localStorage.setItem("hub_prefs", JSON.stringify(p));
+  if (k === "bg"){ if (v) document.documentElement.dataset.bg = v; else delete document.documentElement.dataset.bg; }
+  if (k === "font"){ if (v) document.documentElement.dataset.font = v; else delete document.documentElement.dataset.font; }
+  paintPrefs();
+}
+$("setBtn").addEventListener("click", () => { paintPrefs(); $("setModal").hidden = false; });
+$("setDone").addEventListener("click", () => { $("setModal").hidden = true; });
+$("setModal").addEventListener("click", (e) => { if (e.target === $("setModal")) $("setModal").hidden = true; });
+document.querySelectorAll("#swatches .swatch").forEach(b => b.addEventListener("click", () => setPref("bg", b.dataset.bg)));
+document.querySelectorAll("#fontOpts .font-opt").forEach(b => b.addEventListener("click", () => setPref("font", b.dataset.font)));
 
 /* ---- My results tab ---- */
 $("tabLessons").addEventListener("click", () => switchTab("lessons"));

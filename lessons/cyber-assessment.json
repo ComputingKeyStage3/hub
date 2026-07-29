@@ -50,7 +50,11 @@
       "id": "a4",
       "topic": "encryption",
       "prompt": "Complete the sentences about encryption",
-      "text": "Encryption scrambles a message so only someone with the [[key]] can read it. A Caesar cipher moves every letter along the [[alphabet]] by the same amount, which is called the [[shift|key]]."
+      "text": "Encryption scrambles a message so only someone with the [[key]] can read it. A Caesar cipher moves every letter along the [[alphabet]] by the same amount, which is called the [[shift|key]].",
+      "distractors": [
+        "password",
+        "message"
+      ]
     },
     {
       "type": "mc",
@@ -179,7 +183,11 @@
         "type": "blanks",
         "id": "rp_blanks",
         "prompt": "Fill in the safety rule",
-        "text": "Never click a [[link]] in an unexpected email — go to the real [[website|site]] yourself and log in there."
+        "text": "Never click a [[link]] in an unexpected email — go to the real [[website|site]] yourself and log in there.",
+        "distractors": [
+          "password",
+          "attachment"
+        ]
       },
       {
         "type": "question",
@@ -225,7 +233,11 @@
         "type": "blanks",
         "id": "rw_blanks",
         "prompt": "Complete the rule",
-        "text": "A strong password is [[long]] above all — every extra character multiplies the [[combinations|possibilities]] a hacker must try."
+        "text": "A strong password is [[long]] above all — every extra character multiplies the [[combinations|possibilities]] a hacker must try.",
+        "distractors": [
+          "symbols",
+          "short"
+        ]
       },
       {
         "type": "question",
@@ -271,7 +283,11 @@
         "type": "blanks",
         "id": "re_blanks",
         "prompt": "Complete the sentences",
-        "text": "In a Caesar cipher, moving letters by the [[shift|key]] scrambles the message; moving them back [[decrypts|unscrambles]] it."
+        "text": "In a Caesar cipher, moving letters by the [[shift|key]] scrambles the message; moving them back [[decrypts|unscrambles]] it.",
+        "distractors": [
+          "deletes",
+          "alphabet"
+        ]
       },
       {
         "type": "question",

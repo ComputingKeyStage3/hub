@@ -4,33 +4,48 @@
    Space Grotesk (display) · IBM Plex Sans (body) · IBM Plex Mono (code)
    ===================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Atkinson+Hyperlegible:wght@400;700&family=Lexend:wght@400;600;700&family=Comic+Neue:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root{
-  --bg:#0F1420;
-  --panel:#171F2E;
-  --panel-2:#1F2A3C;
-  --line:#2C3950;
-  --line-2:#3E5070;
+  --bg:#FAF5EC;
+  --panel:#FFFFFF;
+  --panel-2:#FDF9F1;
+  --line:#EAE0CE;
+  --line-2:#D9CCB2;
 
-  --text:#E8EDF6;
-  --muted:#93A2B8;
-  --dim:#6D7C93;
+  --text:#3B352C;
+  --muted:#7B7263;
+  --dim:#A69C89;
 
-  --amber:#F0A83C;      /* actions only */
-  --amber-dark:#D8912A;
-  --amber-ink:#131A26;  /* text on amber */
-  --mint:#41C7A4;       /* success + progress only */
-  --mint-dim:#1E4F45;
-  --red:#E8615A;
-  --red-dim:#4A2320;
+  --amber:#DC8A3E;      /* the one action colour */
+  --amber-dark:#C67730;
+  --amber-ink:#FFFFFF;  /* text on the action colour */
+  --mint:#4C9E76;       /* success + progress only */
+  --mint-dim:#CBE6D7;
+  --red:#C9564E;
+  --red-dim:#F2D7D4;
 
-  --display:'Space Grotesk','Segoe UI',system-ui,sans-serif;
-  --body:'IBM Plex Sans','Segoe UI',system-ui,-apple-system,sans-serif;
+  --display:'Nunito','Segoe UI',system-ui,sans-serif;
+  --body:'Nunito','Segoe UI',system-ui,-apple-system,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
 
-  --r:14px;
+  --r:16px;
 }
+/* background choices (Settings on the home page) */
+html[data-bg=white]{--bg:#FFFFFF; --panel:#FFFFFF; --panel-2:#FAF8F4; --line:#E7E2D8; --line-2:#D3CCBC}
+html[data-bg=blue]{--bg:#EAF1F7; --panel:#FFFFFF; --panel-2:#F4F9FC; --line:#D4E1EB; --line-2:#B9CDDD}
+html[data-bg=green]{--bg:#ECF3EA; --panel:#FFFFFF; --panel-2:#F5FAF3; --line:#D6E4D2; --line-2:#BCD3B7}
+html[data-bg=peach]{--bg:#FAEFE5; --panel:#FFFFFF; --panel-2:#FDF6F0; --line:#EFD9C7; --line-2:#DEC0A6}
+html[data-bg=yellow]{--bg:#FAF3D8; --panel:#FFFFFF; --panel-2:#FCF8E9; --line:#E9DDAF; --line-2:#D6C588}
+html[data-bg=dark]{--bg:#23262E; --panel:#2C303A; --panel-2:#333846; --line:#3D434F; --line-2:#4C5464;
+  --text:#EAEBEF; --muted:#A9AFBC; --dim:#7E8595; --amber:#E39B52; --amber-ink:#221A0F;
+  --mint:#5BBE94; --mint-dim:#2C5847; --red:#DE7C74; --red-dim:#54312E}
+/* font choices */
+html[data-font=atkinson]{--display:'Atkinson Hyperlegible',sans-serif; --body:'Atkinson Hyperlegible',sans-serif}
+html[data-font=lexend]{--display:'Lexend',sans-serif; --body:'Lexend',sans-serif}
+html[data-font=comic]{--display:'Comic Neue',cursive,sans-serif; --body:'Comic Neue',cursive,sans-serif}
+
+[hidden]{display:none !important}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
@@ -558,3 +573,110 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .badge-done{color:var(--mint); border-color:var(--mint-dim)}
 a.result-card{text-decoration:none; color:inherit; cursor:pointer}
 a.result-card:hover{border-color:var(--amber)}
+
+
+/* ================= SOFT THEME OVERRIDES ================= */
+body{font-weight:500}
+b,strong,h1,h2,h3,.done-title,.lessonCard b{font-weight:800}
+
+.btn-primary{
+  background:var(--amber); color:var(--amber-ink); border:none;
+  border-radius:14px; box-shadow:0 2px 6px rgba(90,60,20,.14);
+  text-shadow:none;
+}
+.btn-primary:hover:not(:disabled){background:var(--amber-dark); transform:none}
+.btn-primary:disabled{background:var(--line-2); color:var(--panel); box-shadow:none}
+.btn-ghost{background:var(--panel); border:1.5px solid var(--line-2); color:var(--text); border-radius:14px}
+.btn-ghost:hover:not(:disabled){border-color:var(--amber); color:var(--amber-dark); background:var(--panel)}
+
+.topbar,.dock{background:var(--panel); border-color:var(--line)}
+.station,.resp-task,.result-card,.lessonCard,.login-card{
+  box-shadow:0 1px 3px rgba(96,74,42,.07);
+}
+.brief{box-shadow:0 1px 3px rgba(96,74,42,.06); padding:9px 24px 11px}
+.brief h2{margin:0}
+.brief p{color:var(--muted)}
+
+/* tracker: bar only, softer states */
+.seg{background:#EFE7D6; border-radius:99px}
+html[data-bg=dark] .seg{background:#3D434F}
+.seg.done{background:var(--mint)}
+.seg.now{background:var(--amber)}
+
+/* options, inputs */
+.opt{background:var(--panel); border-color:var(--line-2); border-radius:14px}
+.opt:hover{border-color:var(--amber)}
+.opt.chosen{border-color:var(--amber); background:var(--panel-2); box-shadow:0 0 0 3px rgba(220,138,62,.15)}
+input[type=text],input[type=password],textarea,select{
+  background:var(--panel); border:1.5px solid var(--line-2); color:var(--text); border-radius:12px;
+}
+input:focus,textarea:focus,select:focus{border-color:var(--amber); outline:none}
+
+/* the code terminal stays dark on purpose — it's a terminal */
+.output{background:#20242E !important; color:#D8DEE9 !important; border-color:#20242E !important}
+textarea.code{background:#20242E !important; color:#D8DEE9 !important; border-color:#3A4150 !important}
+
+/* no more orange caps */
+.unit-head{font-family:var(--display); font-size:16px; letter-spacing:0; text-transform:none;
+  color:var(--muted); font-weight:800}
+.badge{letter-spacing:.02em; text-transform:none; font-family:var(--body); font-size:12.5px; font-weight:700;
+  color:var(--amber-dark); border-color:var(--line-2); background:var(--panel)}
+.badge-done{color:var(--mint); border-color:var(--mint-dim); background:var(--panel)}
+.eyebrow,.brief .eyebrow{display:none}
+
+/* dock hides on completion screens */
+.dock.gone{display:none}
+
+/* blanks: dropdowns in a small inline box */
+.blank-select{
+  display:inline-block; width:auto; min-width:110px; max-width:220px; margin:0 4px;
+  padding:7px 30px 7px 12px; font-size:16.5px; font-family:var(--body); color:var(--text);
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:10px;
+  appearance:auto; vertical-align:baseline;
+}
+.blanks{line-height:2.5}
+
+/* review: mirror the real question UIs, read-only */
+.rev-opts{display:grid; gap:8px; margin:8px 0 2px}
+.rev-opt{display:flex; align-items:center; gap:10px; padding:11px 14px; border:1.5px solid var(--line);
+  border-radius:12px; background:var(--panel); font-size:16.5px}
+.rev-opt .dot{width:16px; height:16px; border-radius:50%; border:2px solid var(--line-2); flex:none}
+.rev-opt.picked .dot{border-color:currentColor; background:currentColor}
+.rev-opt.picked.good{color:var(--mint); border-color:var(--mint)}
+.rev-opt.picked.bad{color:var(--red); border-color:var(--red)}
+.rev-opt.answer{border-color:var(--mint); box-shadow:0 0 0 2px var(--mint-dim)}
+.rev-opt .tag{margin-left:auto; font-size:13.5px; font-weight:700}
+.rev-opt.answer .tag{color:var(--mint)}
+
+.rev-order{display:grid; gap:8px; margin:8px 0 2px}
+.rev-order .row{display:flex; align-items:center; gap:10px; padding:11px 14px; border:1.5px solid var(--line);
+  border-radius:12px; background:var(--panel); font-size:16.5px}
+.rev-order .row.good{border-color:var(--mint-dim)}
+.rev-order .row.bad{border-color:var(--red-dim)}
+.rev-order .pos{font-weight:800; color:var(--dim); min-width:20px}
+.rev-order .ok{margin-left:auto; font-weight:800}
+.rev-order .row.good .ok{color:var(--mint)} .rev-order .row.bad .ok{color:var(--red)}
+.rev-order-label{font-size:14px; color:var(--muted); margin:10px 0 4px; font-weight:700}
+
+.blank-fill{display:inline-block; padding:4px 12px; margin:0 3px; border-radius:9px; font-weight:700;
+  border:1.5px solid; font-size:16px}
+.blank-fill.ok{color:var(--mint); border-color:var(--mint-dim); background:var(--panel)}
+.blank-fill.no{color:var(--red); border-color:var(--red-dim); background:var(--panel)}
+
+.rev-quote{background:var(--panel); border:1.5px solid var(--line); border-radius:12px;
+  padding:12px 16px; font-size:16.5px; margin:8px 0 6px; color:var(--text)}
+
+/* settings */
+.settings-btn{white-space:nowrap}
+.set-group{margin:0 0 18px}
+.set-label{font-weight:800; font-size:16px; margin:0 0 10px; display:block; text-align:left}
+.swatches{display:flex; gap:10px; flex-wrap:wrap}
+.swatch{width:44px; height:44px; border-radius:12px; border:2px solid var(--line-2); cursor:pointer; padding:0}
+.swatch.on{border-color:var(--amber); box-shadow:0 0 0 3px rgba(220,138,62,.2)}
+.font-opts{display:grid; gap:8px}
+.font-opt{text-align:left; padding:11px 14px; border:1.5px solid var(--line-2); border-radius:12px;
+  background:var(--panel); font-size:17px; cursor:pointer}
+.font-opt.on{border-color:var(--amber); box-shadow:0 0 0 2px rgba(220,138,62,.18)}
+.modal{background:var(--panel); border-color:var(--line)}
+
+.masthead{position:relative}

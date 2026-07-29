@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson</title>
 <link rel="stylesheet" href="style.css">
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 </head>
 <body class="lesson">
@@ -17,13 +18,7 @@
 </div>
 
 <div class="tracker" id="tracker" aria-hidden="true"></div>
-<div class="trackmeta">
-  <span id="stepCount">Step 1</span>
-  <span class="now-label" id="stageName"></span>
-</div>
-
 <div class="brief">
-  <p class="eyebrow" id="briefEyebrow">Your task</p>
   <h2 id="briefTitle"></h2>
   <p id="briefText"></p>
 </div>
@@ -36,7 +31,7 @@
   <div id="blocks"></div>
 </div>
 
-<div class="dock">
+<div class="dock" id="dock">
   <button class="btn-ghost" id="backBtn">&larr; Back</button>
   <div class="mid">
     <p class="lockmsg" id="lockMsg" aria-live="polite"></p>
@@ -298,13 +293,10 @@ function showStep(i){
 
   const sb = steps[step].brief;
   const b = (typeof sb === "function") ? sb() : sb;
-  $("briefEyebrow").textContent = b.eyebrow || "Your task";
   $("briefTitle").textContent = b.title || "";
   $("briefText").textContent = b.text || "";
   $("briefText").hidden = !b.text;
 
-  $("stepCount").textContent = "Step " + (step + 1) + " of " + steps.length;
-  $("stageName").textContent = step === steps.length - 1 ? "Final step" : "";
   $("backBtn").disabled = step === 0;
   $("nextBtn").textContent = step === steps.length - 1 ? ((lesson && lesson.assessment) ? "Finish & see my score" : "Finish 🏁") : "Continue →";
   $("stage").scrollTop = 0;
@@ -952,26 +944,45 @@ function rOrder(b){
            brief:{ eyebrow:"Put in order", title:stripTags(b.prompt), text:b.note || "Drag the steps, or use the arrows." } };
 }
 
-/* Fill in the blanks: text with [[answer|alt1|alt2]] tokens. */
+/* Fill in the blanks — a dropdown per gap. The choices are every gap's
+   answer plus any "distractors" from the lesson file, shuffled the same way
+   on every load. */
 function rBlanks(b){
   const s = el("section");
   const p = el("p","blanks");
-  const inputs = [];
+  const gaps = [];
+  String(b.text).replace(/\[\[(.*?)\]\]/g, (_, g) => { gaps.push(g.split("|")[0]); return ""; });
+  let pool = [...new Set(gaps.concat(b.distractors || []))];
+  for (let i = pool.length - 1; i > 0; i--){
+    const j = strHash(b.id + ":" + i) % (i + 1);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const selects = [];
   String(b.text).split(/(\[\[.*?\]\])/).forEach(part => {
     const m = /^\[\[(.*?)\]\]$/.exec(part);
     if (m){
-      const inp = el("input","blank-input"); inp.type = "text"; inp.autocomplete = "off";
-      inp.addEventListener("input", markDirty);
-      inputs.push(inp); p.appendChild(inp);
+      const sel = el("select","blank-select");
+      const ph = el("option","","Choose\u2026"); ph.value = ""; sel.appendChild(ph);
+      pool.forEach(w => { const o = el("option","", w); o.value = w; sel.appendChild(o); });
+      sel.addEventListener("change", markDirty);
+      selects.push(sel); p.appendChild(sel);
     } else if (part){
       p.appendChild(el("span","", part.replace(/</g,"&lt;")));
     }
   });
   s.appendChild(p);
-  fields[b.id] = { get:() => inputs.map(i => i.value),
-                   set:(v) => { if (Array.isArray(v)) v.forEach((x,i) => { if (inputs[i]) inputs[i].value = x || ""; }); } };
+  fields[b.id] = { get:() => selects.map(x => x.value),
+                   set:(v) => { if (!Array.isArray(v)) return;
+                     v.forEach((x, i) => {
+                       const sel = selects[i]; if (!sel || !x) return;
+                       // older saves may hold typed words — keep them selectable
+                       if (!Array.from(sel.children).some(o => o.value === x)){
+                         const o = el("option","", x); o.value = x; sel.appendChild(o);
+                       }
+                       sel.value = x;
+                     }); } };
   return { section:s,
-           check:() => inputs.every(i => i.value.trim()) ? { ok:true } : { ok:false, message:"Fill in every gap" },
+           check:() => selects.every(x => x.value) ? { ok:true } : { ok:false, message:"Choose a word for every gap" },
            brief:{ eyebrow:"Fill in the blanks", title:stripTags(b.prompt) || "Complete the sentences", text:b.note || "" } };
 }
 
@@ -1082,12 +1093,14 @@ async function assessmentFinish(){
 function renderAssessmentComplete(justFinished, res, st, sent){
   if (!res){ res = computeAssessment(); }
   if (!st){ st = computeST(res.byTopic); }
-  const box = doneShell();
+  const pct = Math.round(100*res.score/Math.max(1,res.outOf));
+  const heading = resultHeading(pct);
+  const box = doneShell(heading);
 
-  // hero + score
-  const hero = heroBits("");
+  // hero + score — the tick appears whatever the score
+  const hero = heroBits(heading, lesson.title);
   hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
-  hero.appendChild(el("div","done-pct", Math.round(100*res.score/Math.max(1,res.outOf)) + "%"));
+  hero.appendChild(el("div","done-pct", pct + "%"));
   const status = el("p","handin");
   if (justFinished) paintStatus(status, sent === "done" ? "done" : sent);
   else if (token){ status.dataset.state = "done"; status.textContent = "Result saved earlier \u2713"; }
@@ -1095,36 +1108,82 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   box.appendChild(hero);
   confetti();
 
-  // per-question review: your answer, the model answer, and why the mark
+  // per-question review, shown the way the questions looked
   const rev = el("div","review");
   rev.appendChild(el("h2","sect-head","Your answers"));
   res.perQ.forEach(q => {
+    const b = lesson.blocks.find(x => x.id === q.id) || {};
+    const v = fields[q.id] ? fields[q.id].get() : null;
     const cls = q.pts === q.max ? "right" : q.pts > 0 ? "part" : "wrong";
     const row = el("div","resq " + cls);
     row.appendChild(el("div","mark", q.pts === q.max ? "\u2713" : q.pts > 0 ? (q.pts + "/" + q.max) : "\u2717"));
     const body = el("div","body");
     body.appendChild(el("b","", q.n + ". " + q.title));
-    if (q.type === "mc" || q.type === "order"){
-      body.appendChild(el("span","", "Your answer: " + q.review.yours));
-      if (q.pts < q.max) body.appendChild(el("span","", "Correct answer: " + q.review.correct));
-      body.appendChild(el("span","why", q.pts === q.max ? "Full mark \u2014 exactly right." : "No mark \u2014 the correct answer is shown above."));
-    }
-    if (q.type === "blanks"){
-      const chips = el("div","chips");
-      q.review.items.forEach(it => {
-        const chip = el("span","chip-ans " + (it.ok ? "ok" : "no"),
-          it.ok ? it.given : (it.given + " \u2192 " + it.expected));
-        chips.appendChild(chip);
+
+    if (q.type === "mc"){
+      const opts = el("div","rev-opts");
+      (b.options || []).forEach((text, j) => {
+        let c = "rev-opt";
+        if (j === v) c += " picked " + (j === b.answer ? "good" : "bad");
+        if (j === b.answer) c += " answer";
+        const o = el("div", c);
+        o.appendChild(el("span","dot",""));
+        o.appendChild(el("span","", stripTags(text)));
+        if (j === b.answer) o.appendChild(el("span","tag","Correct"));
+        else if (j === v) o.appendChild(el("span","tag","Your answer"));
+        opts.appendChild(o);
       });
-      body.appendChild(chips);
+      body.appendChild(opts);
+    }
+
+    if (q.type === "order"){
+      const arr = Array.isArray(v) ? v : (b.items || []).map((_, i) => i);
+      const list = el("div","rev-order");
+      arr.forEach((itemIdx, pos) => {
+        const good = itemIdx === pos;
+        const r = el("div","row " + (good ? "good" : "bad"));
+        r.appendChild(el("span","pos", (pos+1) + "."));
+        r.appendChild(el("span","", b.items ? b.items[itemIdx] : ""));
+        r.appendChild(el("span","ok", good ? "\u2713" : "\u2717"));
+        list.appendChild(r);
+      });
+      body.appendChild(list);
+      if (q.pts < q.max && b.items){
+        body.appendChild(el("p","rev-order-label","Correct order"));
+        const cl = el("div","rev-order");
+        b.items.forEach((t, pos) => {
+          const r = el("div","row good");
+          r.appendChild(el("span","pos", (pos+1) + "."));
+          r.appendChild(el("span","", t));
+          cl.appendChild(r);
+        });
+        body.appendChild(cl);
+      }
+    }
+
+    if (q.type === "blanks"){
+      const sent2 = el("p","blanks");
+      let gi = 0;
+      String(b.text || "").split(/(\[\[.*?\]\])/).forEach(part => {
+        if (/^\[\[.*\]\]$/.test(part)){
+          const it = q.review.items[gi++] || { given:"", ok:false, expected:"" };
+          sent2.appendChild(el("span","blank-fill " + (it.ok ? "ok" : "no"),
+            it.ok ? it.given : ((it.given === "(blank)" ? "\u2014" : it.given) + " \u2192 " + it.expected)));
+        } else if (part){
+          sent2.appendChild(el("span","", part.replace(/</g,"&lt;")));
+        }
+      });
+      body.appendChild(sent2);
       body.appendChild(el("span","why", q.pts + " of " + q.max + " gaps correct \u2014 one mark per gap."));
     }
+
     if (q.type === "short"){
-      body.appendChild(el("span","", "Your answer: \u201c" + q.review.yours + "\u201d"));
+      body.appendChild(el("div","rev-quote", q.review.yours));
       const found = q.review.groups.map(g => (g.ok ? "\u2713 " : "\u2717 ") + g.label).join("   ");
       body.appendChild(el("span","why", "Checked for: " + found));
       if (q.pts < q.max && q.review.model) body.appendChild(el("span","", "A good answer mentions: " + q.review.model));
     }
+
     row.appendChild(body);
     rev.appendChild(row);
   });
@@ -1204,35 +1263,38 @@ function confetti(){
   }catch(e){ /* purely decorative */ }
 }
 
-function doneShell(){
+function doneShell(title){
   steps.forEach(st => { st.section.hidden = true; });
   let box = $("doneScreen");
   if (!box){ box = el("section"); box.id = "doneScreen"; $("blocks").appendChild(box); }
   box.hidden = false; box.innerHTML = "";
-  $("briefEyebrow").textContent = "Complete";
-  $("briefTitle").textContent = "Well done!";
+  $("briefTitle").textContent = title || "Well done!";
   $("briefText").textContent = ""; $("briefText").hidden = true;
-  $("stageName").textContent = "Complete";
-  $("nextBtn").textContent = "Finished"; $("nextBtn").disabled = true;
-  $("backBtn").disabled = true;
+  $("dock").classList.add("gone");
   $("stage").scrollTop = 0;
   finished = true; paintTracker();
   return box;
 }
-function heroBits(sub){
+/* every score gets the tick — the words change with the result */
+function resultHeading(pct){
+  if (pct > 75) return "Exceptional work! Keep it up.";
+  if (pct < 25) return "Submitted! Let's aim higher next time.";
+  return "Well done!";
+}
+function heroBits(title, sub){
   const hero = el("div","done-hero");
   hero.appendChild(el("div","done-tick","\u2713"));
-  hero.appendChild(el("h2","done-title","Well done!"));
+  hero.appendChild(el("h2","done-title", title || "Well done!"));
   if (sub) hero.appendChild(el("p","done-sub", sub));
   return hero;
 }
 function saveButton(statusEl){
-  const btn = el("button","btn-primary done-save","\u2913\u00a0 Save Work");
+  const btn = el("button","btn-primary done-save","Save Work");
   btn.addEventListener("click", async () => {
     btn.textContent = "Saving\u2026";
     const st = await submitWork();
     paintStatus(statusEl, st);
-    btn.textContent = st === "done" ? "\u2713 Saved" : "\u2913\u00a0 Save Work";
+    btn.textContent = st === "done" ? "\u2713 Saved" : "Save Work";
   });
   return btn;
 }
@@ -1244,8 +1306,8 @@ function paintStatus(elm, state){
 }
 
 function showLessonComplete(revisit){
-  const box = doneShell();
-  const hero = heroBits(lesson.title + " complete");
+  const box = doneShell("Well done!");
+  const hero = heroBits("Well done!", lesson.title + " complete");
   const status = el("p","handin");
   hero.appendChild(status);
   hero.appendChild(saveButton(status));
