@@ -1,224 +1,533 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Teacher console — Computing hub</title>
+<title>Teacher console — Prince Henry's Computing KS3</title>
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
+<script src="settings.js"></script>
 </head>
 <body>
 
-<div class="homebar">
-  <div class="title">Teacher console</div>
-  <span class="who" id="liveState">—</span>
+<div class="homebar" id="topbar" hidden>
+  <div class="title">Prince Henry's Computing KS3 — Teacher console</div>
+  <span class="online-pill off" id="pill"><span class="odot"></span><span id="pillTxt">Offline</span></span>
+  <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
 <div class="page">
 
-  <section class="station">
-    <div class="grid3">
-      <div><label for="tkey">Teacher key</label><input type="password" id="tkey" autocomplete="off"></div>
-      <div><label for="groupSel">Class</label>
-        <select id="groupSel" class="sel"><option value="">Loading…</option></select></div>
-      <div><label for="lessonSel">Lesson</label><select id="lessonSel" class="sel"></select></div>
-    </div>
-    <p class="hint" style="margin:10px 0 0">Release is per class — another teacher pacing their own class won't affect yours.</p>
-  </section>
+  <!-- ============ key ============ -->
+  <div class="keywrap" id="keyView">
+    <section class="station">
+      <h2 style="margin:0 0 6px">Teacher console</h2>
+      <p class="hint" style="margin:0 0 16px">Enter the teacher key to load your classes.</p>
+      <div class="field"><input type="password" id="keyIn" placeholder="Teacher key" autocomplete="off"></div>
+      <button class="btn-primary" id="keyGo" style="margin-top:12px; width:100%">Load classes</button>
+      <p class="hint" id="keyMsg" style="margin:12px 0 0"></p>
+    </section>
+  </div>
 
-  <section class="station" style="margin-top:16px">
-    <div class="row">
-      <button class="btn-primary" id="nextBtn">Release next task</button>
-      <button class="btn-ghost" id="allBtn">Open everything</button>
-      <button class="btn-ghost" id="noneBtn">Lock everything</button>
-      <button class="btn-ghost" id="freeBtn">Stop controlling</button>
-      <span class="err" id="err"></span>
-    </div>
-    <p class="hint" id="stateLine" style="margin:12px 0 0">—</p>
-    <div id="stepList" class="lessons" style="margin-top:14px"></div>
-  </section>
+  <!-- ============ classes grid ============ -->
+  <div id="classesView" hidden>
+    <h2 style="margin:22px 0 4px">Your classes</h2>
+    <p class="hint" style="margin:0">Choose a class to manage its students and lessons.</p>
+    <div class="classgrid" id="classGrid"></div>
+  </div>
 
-  <details class="station" style="margin-top:16px">
-    <summary style="cursor:pointer;font-weight:600">Add or update students</summary>
-    <p class="hint" style="margin:12px 0 8px">One per line: <b>class, username, password, display name</b>. Re-adding resets the password.</p>
-    <textarea id="csv" rows="5" placeholder="9A, jsmith, Sunfl0wer!, Jamie S"></textarea>
-    <div class="row" style="margin-top:12px">
-      <button class="btn-primary" id="addBtn">Add students</button>
-      <span class="hint" id="addMsg"></span><span class="err" id="addErr"></span>
+  <!-- ============ one class ============ -->
+  <div id="classView" hidden>
+    <button class="crumb" id="backClasses">&larr; All classes</button>
+    <div class="classhead">
+      <h2 id="clsName"></h2>
+      <button class="btn-ghost iconbtn" id="renameBtn" title="Rename class">&#9998;</button>
     </div>
-  </details>
+    <div class="bigcards">
+      <button class="classtile" id="openStudents"><b>&#128101; Students</b><span id="stuCount"></span></button>
+      <button class="classtile" id="openLessons"><b>&#128214; Lessons &amp; release</b><span>Unlock tasks, watch progress, view work</span></button>
+    </div>
+  </div>
 
-  <details class="station" style="margin-top:16px" id="handinBox">
-    <summary style="cursor:pointer;font-weight:600">Hand-ins for this class &amp; lesson</summary>
-    <div class="row" style="margin:12px 0 0">
-      <button class="btn-primary" id="loadWork">Load hand-ins</button>
-      <span class="err" id="workErr"></span>
+  <!-- ============ students ============ -->
+  <div id="studentsView" hidden>
+    <button class="crumb" id="backClass1">&larr; <span class="bk"></span></button>
+    <h2 style="margin:14px 0 6px">Students</h2>
+    <div class="toolrow">
+      <button class="btn-primary" id="addOneBtn">+ Add student</button>
+      <button class="btn-ghost" id="addManyBtn">Add many at once</button>
     </div>
-    <div id="results" style="margin-top:14px"></div>
-  </details>
+    <table class="stutable" id="stuTable"></table>
+    <p class="hint" id="stuMsg" style="margin-top:12px"></p>
+  </div>
+
+  <!-- ============ lessons + release ============ -->
+  <div id="lessonsView" hidden>
+    <button class="crumb" id="backClass2">&larr; <span class="bk"></span></button>
+    <h2 style="margin:14px 0 6px">Lessons</h2>
+    <div class="toolrow">
+      <select id="lessonSel" style="max-width:340px"></select>
+      <button class="btn-primary" id="progressBtn">Progress</button>
+      <button class="btn-ghost" id="openAll">Open all</button>
+      <button class="btn-ghost" id="lockAll">Lock all</button>
+    </div>
+    <p class="hint" id="relMsg" style="margin:0 0 12px"></p>
+    <div id="taskList"></div>
+  </div>
 
 </div>
 
+<!-- one modal, many jobs -->
+<div class="modal-back no-print" id="tmodal" hidden>
+  <div class="modal" id="tmodalBox" role="dialog" aria-modal="true"></div>
+</div>
+
 <script>
-const API = (window.HUB && window.HUB.API) || "";
-const ready = API && API.indexOf("PASTE_") !== 0;
 const $ = (id) => document.getElementById(id);
-$("tkey").value = sessionStorage.getItem("hub_tkey") || "";
-$("tkey").addEventListener("input", () => sessionStorage.setItem("hub_tkey", $("tkey").value));
-const H = () => ({ "X-Teacher-Key": $("tkey").value });
+const API = (window.HUB && window.HUB.API) || "";
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, ""); }
+function esc(s){ return String(s); }
 
-let blocks = [], released = 0, managed = false;
-const cur = () => ({ lesson: $("lessonSel").value, group: $("groupSel").value });
+let KEY = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
+let rel = { released: 9999, managed: false };
+let workCache = { key: "", rows: [], t: 0 };
+let relTimer = null, beatTimer = null;
 
-function stripTags(x){ return String(x||"").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
-function stepTitle(b){
-  if (b.type==="text"){ const m=/<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(b.html||""); return m?stripTags(m[1]):"Information"; }
-  return stripTags(b.title||b.prompt||b.task||"") || b.type;  // covers mc/order/blanks/short too
+const H = () => ({ "x-teacher-key": KEY });
+const HJ = () => ({ "x-teacher-key": KEY, "Content-Type": "application/json" });
+
+/* ---------- online pill ---------- */
+function setOnline(on){
+  $("pill").classList.toggle("off", !on);
+  $("pillTxt").textContent = on ? "Online" : "Offline";
+}
+async function heartbeat(){
+  try{
+    const r = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
+    setOnline(r.ok);
+  }catch(e){ setOnline(false); }
 }
 
-/* ---- populate pickers ---- */
-fetch("lessons/index.json").then(r=>r.json()).then(data=>{
-  const list = (data.units ? data.units.flatMap(u=>u.lessons) : data);
-  $("lessonSel").innerHTML = "";
-  list.forEach(l=>{ const o=document.createElement("option"); o.value=l.id; o.textContent=l.title+(l.assessment?" (assessment)":""); $("lessonSel").appendChild(o); });
-  loadLesson();
-});
-async function loadGroups(){
-  if (!ready || !$("tkey").value) return;
+/* ---------- view switching ---------- */
+const VIEWS = ["keyView","classesView","classView","studentsView","lessonsView"];
+function show(view){
+  VIEWS.forEach(v => { $(v).hidden = v !== view; });
+  clearInterval(relTimer);
+  if (view === "lessonsView"){ relTimer = setInterval(refreshRelease, 8000); }
+}
+
+/* ---------- modal ---------- */
+function openModal(build){
+  const box = $("tmodalBox");
+  box.innerHTML = "";
+  build(box);
+  $("tmodal").hidden = false;
+}
+function closeModal(){ $("tmodal").hidden = true; }
+$("tmodal").addEventListener("click", (e) => { if (e.target === $("tmodal")) closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+function modalTitle(box, text){ const h = el("h2","",text); h.style.marginTop = "0"; box.appendChild(h); }
+function fieldRow(box, label, type, value){
+  const w = el("div","field");
+  w.appendChild(el("label","",label));
+  const i = el("input"); i.type = type || "text"; i.value = value || ""; i.autocomplete = "off";
+  w.appendChild(i); box.appendChild(w);
+  return i;
+}
+
+/* ---------- key ---------- */
+async function tryKey(){
+  KEY = $("keyIn").value.trim();
+  if (!KEY){ $("keyMsg").textContent = "Type the teacher key first."; return; }
+  $("keyMsg").textContent = "Checking\u2026";
   try{
-    const r = await fetch(API+"/api/teacher/groups",{headers:H()});
+    const r = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
     const d = await r.json();
-    if (!r.ok) return;
-    const sel = $("groupSel"); const before = sel.value;
-    sel.innerHTML = "";
-    d.groups.forEach(g=>{ const o=document.createElement("option"); o.value=g.name; o.textContent=g.name+" ("+g.students+")"; sel.appendChild(o); });
-    if (before) sel.value = before;
-    refresh();
+    if (!r.ok) throw new Error(d.error || "That key was not accepted.");
+    localStorage.setItem("hub_tkey", KEY);
+    groups = d.groups || [];
+    setOnline(true);
+    $("topbar").hidden = false;
+    clearInterval(beatTimer); beatTimer = setInterval(heartbeat, 25000);
+    paintClasses();
+    show("classesView");
+  }catch(e){
+    setOnline(false);
+    $("keyMsg").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
+  }
+}
+$("keyGo").addEventListener("click", tryKey);
+$("keyIn").addEventListener("keydown", (e) => { if (e.key === "Enter") tryKey(); });
+
+/* ---------- classes grid ---------- */
+function paintClasses(){
+  const g = $("classGrid"); g.innerHTML = "";
+  if (!groups.length){ g.appendChild(el("p","hint","No students yet \u2014 open a class after adding some, or add them from any class page.")); }
+  groups.forEach(gr => {
+    const t = el("button","classtile");
+    t.appendChild(el("b","", gr.name));
+    t.appendChild(el("span","", gr.students + " student" + (gr.students === 1 ? "" : "s")));
+    t.addEventListener("click", () => openClass(gr.name));
+    g.appendChild(t);
+  });
+  const add = el("button","classtile");
+  add.appendChild(el("b","","+ New class"));
+  add.appendChild(el("span","","A class appears when its first student is added"));
+  add.addEventListener("click", () => {
+    openModal(box => {
+      modalTitle(box, "New class");
+      const i = fieldRow(box, "Class name (e.g. 8B)", "text", "");
+      const go = el("button","btn-primary modal-cta","Open class");
+      go.addEventListener("click", () => { const v = i.value.trim(); if (v){ closeModal(); openClass(v); } });
+      box.appendChild(go);
+    });
+  });
+  g.appendChild(add);
+}
+async function refreshGroups(){
+  try{
+    const r = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
+    const d = await r.json();
+    if (r.ok) { groups = d.groups || []; paintClasses(); }
   }catch(e){}
 }
-$("tkey").addEventListener("change", loadGroups);
-if ($("tkey").value) loadGroups();
 
-async function loadLesson(){
-  try{
-    const r = await fetch("lessons/"+encodeURIComponent($("lessonSel").value)+".json");
-    blocks = (await r.json()).blocks || [];
-  }catch(e){ blocks = []; }
-  refresh();
+/* ---------- one class ---------- */
+function openClass(name){
+  cls = name;
+  $("clsName").textContent = cls;
+  document.querySelectorAll(".bk").forEach(b => b.textContent = cls);
+  const gr = groups.find(g => g.name === cls);
+  $("stuCount").textContent = gr ? (gr.students + " on the roll \u2014 add, edit or remove") : "Add the first students";
+  show("classView");
 }
-$("lessonSel").addEventListener("change", loadLesson);
-$("groupSel").addEventListener("change", refresh);
+$("backClasses").addEventListener("click", () => { refreshGroups(); show("classesView"); });
+$("backClass1").addEventListener("click", () => openClass(cls));
+$("backClass2").addEventListener("click", () => openClass(cls));
 
-/* ---- release state ---- */
-async function refresh(){
-  const c = cur();
-  if (!ready || !c.lesson || !c.group){ paint(); return; }
+$("renameBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Rename class");
+    const i = fieldRow(box, "Class name", "text", cls);
+    const msg = el("p","hint",""); 
+    const go = el("button","btn-primary modal-cta","Rename");
+    go.addEventListener("click", async () => {
+      const to = i.value.trim();
+      if (!to || to === cls){ closeModal(); return; }
+      msg.textContent = "Renaming\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/rename-group", { method:"POST", headers: HJ(), body: JSON.stringify({ from: cls, to }) });
+        if (!r.ok) throw new Error((await r.json()).error || "Rename failed.");
+        cls = to; await refreshGroups(); openClass(cls); closeModal();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+});
+
+/* ---------- students ---------- */
+$("openStudents").addEventListener("click", async () => { show("studentsView"); await loadStudents(); });
+async function loadStudents(){
+  $("stuMsg").textContent = "Loading\u2026";
   try{
-    const r = await fetch(API+"/api/release?lesson="+encodeURIComponent(c.lesson)+"&group="+encodeURIComponent(c.group)+"&t="+Date.now(),{cache:"no-store"});
+    const r = await fetch(API + "/api/teacher/students?group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" });
     const d = await r.json();
-    released = d.released; managed = d.managed;
-    $("liveState").textContent = "Live";
-    paint();
-  }catch(e){ $("liveState").textContent = "Offline"; }
+    if (!r.ok) throw new Error(d.error || "Could not load students.");
+    students = d.students || [];
+    paintStudents();
+    $("stuMsg").textContent = students.length ? "" : "No students in " + cls + " yet \u2014 add the first above.";
+  }catch(e){ $("stuMsg").textContent = e.message; }
 }
-function paint(){
-  const total = blocks.length, open = Math.min(released, total);
-  $("stateLine").innerHTML = !managed
-    ? "Not being controlled — <b>every task is open</b> to this class."
-    : "Open to this class: <b>" + open + " of " + total + "</b>";
-  const box = $("stepList"); box.innerHTML = "";
-  blocks.forEach((b,i)=>{
-    const isOpen = !managed || i < released;
-    const card = document.createElement("a");
-    card.className="lessonCard"; card.href="#";
-    card.innerHTML='<span class="num">'+String(i+1).padStart(2,"0")+'</span><span class="body"><b></b></span><span class="status"></span>';
-    card.querySelector("b").textContent = stepTitle(b);
-    const st=card.querySelector(".status");
-    st.textContent = isOpen ? "Open" : "Locked";
-    st.style.color = isOpen ? "var(--mint)" : "var(--dim)";
-    st.style.borderColor = isOpen ? "var(--mint-dim)" : "var(--line-2)";
-    card.addEventListener("click",(e)=>{e.preventDefault(); setRelease(i+1);});
-    box.appendChild(card);
+function paintStudents(){
+  const t = $("stuTable"); t.innerHTML = "";
+  students.forEach(st => {
+    const tr = el("tr");
+    const td1 = el("td","", st.display_name); td1.style.fontWeight = "700";
+    const td2 = el("td","", st.username); td2.style.color = "var(--muted)";
+    const td3 = el("td");
+    const ed = el("button","btn-ghost iconbtn","\u270E"); ed.title = "Edit " + st.display_name;
+    const dl = el("button","btn-ghost iconbtn","\u{1F5D1}"); dl.title = "Delete " + st.display_name; dl.style.marginLeft = "6px";
+    ed.addEventListener("click", () => editStudent(st));
+    dl.addEventListener("click", () => confirmDelete(st));
+    td3.appendChild(ed); td3.appendChild(dl);
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+    t.appendChild(tr);
   });
 }
-async function setRelease(n){
-  $("err").textContent = "";
-  const c = cur();
-  if (!c.group){ $("err").textContent = "Choose a class first."; return; }
-  if (!$("tkey").value){ $("err").textContent = "Enter your teacher key."; return; }
-  try{
-    const r = await fetch(API+"/api/release",{method:"POST",
-      headers:{...H(),"Content-Type":"application/json"},
-      body:JSON.stringify({lesson:c.lesson, group:c.group, released:n})});
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error||"Failed.");
-    released = d.released; managed = true; paint();
-  }catch(e){ $("err").textContent = e.message; }
+function pwField(box, label){
+  const w = el("div","field");
+  w.appendChild(el("label","",label));
+  const row = el("div","pwrow");
+  const i = el("input"); i.type = "password"; i.autocomplete = "new-password";
+  const eye = el("button","btn-ghost iconbtn","\u{1F441}"); eye.type = "button"; eye.title = "Show/hide";
+  eye.addEventListener("click", () => { i.type = i.type === "password" ? "text" : "password"; });
+  row.appendChild(i); row.appendChild(eye); w.appendChild(row); box.appendChild(w);
+  return i;
 }
-$("nextBtn").addEventListener("click",()=>setRelease(Math.min((managed?released:0)+1, blocks.length)));
-$("allBtn").addEventListener("click",()=>setRelease(blocks.length));
-$("noneBtn").addEventListener("click",()=>setRelease(0));
-$("freeBtn").addEventListener("click",()=>setRelease(9999));
-setInterval(()=>{ if(!document.hidden) refresh(); }, 10000);
-
-/* ---- add students ---- */
-$("addBtn").addEventListener("click", async ()=>{
-  $("addErr").textContent=""; $("addMsg").textContent="";
-  const students = $("csv").value.split("\n").map(line=>{
-    const [group,username,password,...rest]=line.split(",").map(x=>(x||"").trim());
-    return {group,username,password,displayName:rest.join(", ")};
-  }).filter(s=>s.group&&s.username&&s.password);
-  if (!students.length){ $("addErr").textContent="Nothing to add — check the format."; return; }
-  try{
-    const r = await fetch(API+"/api/teacher/students",{method:"POST",
-      headers:{...H(),"Content-Type":"application/json"},body:JSON.stringify({students})});
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error||"Failed.");
-    $("addMsg").textContent = d.added+" added/updated" + (d.skipped?(", "+d.skipped+" skipped"):"");
-    loadGroups();
-  }catch(e){ $("addErr").textContent = e.message; }
-});
-
-/* ---- hand-ins, readable: text as text, screenshots as pictures ---- */
-$("loadWork").addEventListener("click", async ()=>{
-  $("workErr").textContent=""; $("results").innerHTML="";
-  const c = cur();
-  try{
-    const r = await fetch(API+"/api/teacher/work?lesson="+encodeURIComponent(c.lesson)+"&group="+encodeURIComponent(c.group),{headers:H()});
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error||"Failed.");
-    if (!d.rows.length){ $("results").innerHTML='<p class="hint">No hand-ins yet.</p>'; return; }
-    d.rows.forEach(row=>{
-      const card=document.createElement("div"); card.className="handin-card";
-      const h=document.createElement("div"); h.className="handin-head";
-      h.innerHTML="<b></b><span></span>";
-      h.querySelector("b").textContent=row.display_name;
-      h.querySelector("span").textContent=new Date(row.updated_at+"Z").toLocaleString("en-GB");
-      card.appendChild(h);
-      Object.entries(row.data).forEach(([k,v])=>{
-        if (k.startsWith("__")) return;
-        const f=document.createElement("div"); f.className="handin-field";
-        const lab=document.createElement("div"); lab.className="handin-k"; lab.textContent=k; f.appendChild(lab);
-        if (typeof v==="string" && v.startsWith("data:image")){
-          const img=document.createElement("img"); img.className="handin-img"; img.src=v; f.appendChild(img);
-        } else if (typeof v==="object" && v!==null){
-          const p=document.createElement("div"); p.className="handin-v";
-          p.textContent = ("score" in v) ? ("Score: "+v.score+" / "+v.outOf)
-                        : ("bestScore" in v) ? ("Best: "+v.bestScore+" / "+v.outOf)
-                        : ("solved" in v && "answer" in v) ? ((v.solved?"Solved — ":"Not solved — ")+'"'+v.answer+'"')
-                        : JSON.stringify(v);
-          f.appendChild(p);
-        } else {
-          const p=document.createElement("div"); p.className="handin-v"; p.textContent = v===true?"Done":v===false?"Not done":String(v||"—");
-          f.appendChild(p);
-        }
-        card.appendChild(f);
-      });
-      $("results").appendChild(card);
+function editStudent(st){
+  openModal(box => {
+    modalTitle(box, "Edit student");
+    const d = fieldRow(box, "Display name", "text", st.display_name);
+    const u = fieldRow(box, "Username", "text", st.username);
+    const p = pwField(box, "Set a new password");
+    box.appendChild(el("p","subnote","Existing passwords are stored scrambled and can't be shown \u2014 type a new one here to reset it, and use the eye to check your typing."));
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Save changes");
+    go.addEventListener("click", async () => {
+      msg.textContent = "Saving\u2026";
+      const payload = { username: st.username };
+      if (d.value.trim() && d.value.trim() !== st.display_name) payload.display = d.value.trim();
+      if (u.value.trim() && u.value.trim() !== st.username) payload.newUsername = u.value.trim();
+      if (p.value) payload.newPassword = p.value;
+      try{
+        const r = await fetch(API + "/api/teacher/update-student", { method:"POST", headers: HJ(), body: JSON.stringify(payload) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Could not save.");
+        closeModal(); loadStudents();
+      }catch(e){ msg.textContent = e.message; }
     });
-  }catch(e){ $("workErr").textContent = e.message; }
+    box.appendChild(go); box.appendChild(msg);
+  });
+}
+function confirmDelete(st){
+  openModal(box => {
+    modalTitle(box, "Delete " + st.display_name + "?");
+    box.appendChild(el("p","modal-text","This removes their login AND all their saved work and results. It cannot be undone."));
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Yes, delete"); go.style.background = "var(--red)";
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    go.addEventListener("click", async () => {
+      msg.textContent = "Deleting\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/delete-student", { method:"POST", headers: HJ(), body: JSON.stringify({ username: st.username }) });
+        if (!r.ok) throw new Error((await r.json()).error || "Could not delete.");
+        closeModal(); loadStudents(); refreshGroups();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
+  });
+}
+$("addOneBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Add a student to " + cls);
+    const d = fieldRow(box, "Display name", "text", "");
+    const u = fieldRow(box, "Username", "text", "");
+    const p = pwField(box, "Password");
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Add student");
+    go.addEventListener("click", async () => {
+      if (!u.value.trim() || p.value.length < 4){ msg.textContent = "Username and a password of at least 4 characters are needed."; return; }
+      msg.textContent = "Adding\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/students", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ students: [{ group: cls, username: u.value.trim(), password: p.value, displayName: d.value.trim() || u.value.trim() }] }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Could not add.");
+        closeModal(); loadStudents(); refreshGroups();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
 });
+$("addManyBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Add many to " + cls);
+    box.appendChild(el("p","modal-text","One student per line: username, password, display name. Re-adding an existing username resets their password."));
+    const ta = el("textarea"); ta.rows = 8; ta.placeholder = "jsmith, otter42, Jamie Smith"; ta.style.width = "100%";
+    box.appendChild(ta);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Add students");
+    go.addEventListener("click", async () => {
+      const rows = ta.value.split("\n").map(l => l.split(",").map(x => x.trim())).filter(p2 => p2[0]);
+      const list = rows.map(p2 => ({ group: cls, username: p2[0], password: p2[1] || "", displayName: p2[2] || p2[0] }));
+      if (!list.length){ msg.textContent = "Nothing to add yet."; return; }
+      msg.textContent = "Adding\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/students", { method:"POST", headers: HJ(), body: JSON.stringify({ students: list }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Could not add.");
+        msg.textContent = "Added " + j.added + (j.skipped ? " \u00b7 skipped " + j.skipped + " (missing name or password under 4 characters)" : "");
+        loadStudents(); refreshGroups();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+});
+
+/* ---------- lessons + release ---------- */
+$("openLessons").addEventListener("click", async () => {
+  show("lessonsView");
+  if (!lessons.length) await loadLessonIndex();
+  await loadLesson();
+});
+async function loadLessonIndex(){
+  const d = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
+  lessons = d.units ? d.units.flatMap(u => u.lessons) : d;
+  $("lessonSel").innerHTML = "";
+  lessons.forEach(l => {
+    const o = el("option","", l.title + (l.assessment ? " (assessment)" : ""));
+    o.value = l.id; $("lessonSel").appendChild(o);
+  });
+}
+$("lessonSel").addEventListener("change", loadLesson);
+async function loadLesson(){
+  lessonId = $("lessonSel").value || (lessons[0] && lessons[0].id);
+  workCache = { key: "", rows: [], t: 0 };
+  lessonJson = await (await fetch("lessons/" + lessonId + ".json", { cache: "no-store" })).json();
+  await refreshRelease();
+}
+async function refreshRelease(){
+  try{
+    const r = await fetch(API + "/api/release?lesson=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(cls) + "&t=" + Date.now(), { cache: "no-store" });
+    const d = await r.json();
+    rel = { released: d.released, managed: d.managed };
+    setOnline(true);
+  }catch(e){ setOnline(false); }
+  paintTasks();
+}
+async function setReleased(n){
+  $("relMsg").textContent = "Updating\u2026";
+  try{
+    const r = await fetch(API + "/api/release", { method:"POST", headers: HJ(),
+      body: JSON.stringify({ lesson: lessonId, group: cls, released: n }) });
+    if (!r.ok) throw new Error((await r.json()).error || "Could not update.");
+    rel = { released: n, managed: true };
+    $("relMsg").textContent = "";
+  }catch(e){ $("relMsg").textContent = e.message; }
+  paintTasks();
+}
+$("openAll").addEventListener("click", () => setReleased(9999));
+$("lockAll").addEventListener("click", () => setReleased(0));
+function stepTitle(b, i){ return stripTags(b.title || b.prompt || b.task || "") || b.type; }
+function paintTasks(){
+  const list = $("taskList"); list.innerHTML = "";
+  if (!lessonJson) return;
+  $("relMsg").textContent = rel.managed
+    ? (rel.released >= 9999 ? "Everything is open for " + cls + "."
+       : rel.released === 0 ? "Everything is locked for " + cls + "."
+       : "Open up to task " + rel.released + " for " + cls + ".")
+    : "Not being paced \u2014 " + cls + " can see every task. Lock one to start pacing.";
+  lessonJson.blocks.forEach((b, i) => {
+    const open = !rel.managed || i < rel.released;
+    const row = el("div","taskrow" + (open ? "" : " locked"));
+    row.appendChild(el("span","tn", (i+1) + "."));
+    const t = el("span","", stepTitle(b, i)); t.style.flex = "1"; row.appendChild(t);
+    row.appendChild(el("span","statechip " + (open ? "open" : "shut"), open ? "Open" : "Locked"));
+    const btns = el("span","taskbtns");
+    const lock = el("button","btn-ghost iconbtn", open ? "\u{1F513}" : "\u{1F512}");
+    lock.title = open ? "Lock from this task onwards" : "Open up to and including this task";
+    lock.addEventListener("click", () => setReleased(open ? i : i + 1));
+    const eye = el("button","btn-ghost iconbtn","\u{1F441}");
+    eye.title = "Preview as a student";
+    eye.addEventListener("click", () => window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&preview=" + i, "_blank"));
+    const who = el("button","btn-ghost iconbtn","\u{1F465}");
+    who.title = "Who has done this task?";
+    who.addEventListener("click", () => whoDone(i, b));
+    btns.appendChild(lock); btns.appendChild(eye); btns.appendChild(who);
+    row.appendChild(btns);
+    list.appendChild(row);
+  });
+}
+
+/* ---------- progress + who's done (from the same work snapshots) ---------- */
+async function getWorkRows(){
+  const key = lessonId + "\u0000" + cls;
+  if (workCache.key === key && Date.now() - workCache.t < 15000) return workCache.rows;
+  const r = await fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "Could not load work.");
+  workCache = { key, rows: d.rows || [], t: Date.now() };
+  return workCache.rows;
+}
+async function getRoster(){
+  if (students.length && workCache.rosterFor === cls) return students;
+  const r = await fetch(API + "/api/teacher/students?group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "Could not load students.");
+  students = d.students || []; workCache.rosterFor = cls;
+  return students;
+}
+function nonEmpty(v){
+  if (v === null || v === undefined || v === "") return false;
+  if (Array.isArray(v)) return v.some(x => x);
+  if (typeof v === "object") return Object.keys(v).length > 0;
+  return true;
+}
+function inspect(row, stepIdx){
+  localStorage.setItem("hub_inspect", JSON.stringify({ lesson: lessonId, name: row.display_name, data: row.data }));
+  window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1" + (stepIdx !== undefined ? "&step=" + stepIdx : ""), "_blank");
+}
+$("progressBtn").addEventListener("click", async () => {
+  openModal(async (box) => {
+    modalTitle(box, "Progress \u2014 " + cls);
+    const holder = el("div"); box.appendChild(holder);
+    holder.appendChild(el("p","hint","Loading\u2026"));
+    try{
+      const [roster, rows] = [await getRoster(), await getWorkRows()];
+      holder.innerHTML = "";
+      const total = lessonJson.blocks.length;
+      roster.forEach(st => {
+        const row = rows.find(w => w.username === st.username);
+        const line = el("div","who-row");
+        line.appendChild(el("span","nm", st.display_name));
+        let status, cl = "no";
+        if (!row){ status = "Not started"; }
+        else if (row.data.__done){ status = "Completed \u2713"; cl = "yes"; }
+        else {
+          const n = Math.min((row.data.__step || 0), total - 1);
+          status = "Task " + (n + 1) + " of " + total + ": " + stepTitle(lessonJson.blocks[n], n).slice(0, 34);
+        }
+        line.appendChild(el("span","st " + cl, status));
+        const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View their work";
+        if (row) v.addEventListener("click", () => inspect(row)); else v.disabled = true;
+        line.appendChild(v);
+        holder.appendChild(line);
+      });
+      if (!roster.length) holder.appendChild(el("p","hint","No students in this class yet."));
+    }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
+    const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+});
+async function whoDone(i, b){
+  openModal(async (box) => {
+    modalTitle(box, "Task " + (i+1) + " \u2014 who's done it?");
+    box.appendChild(el("p","modal-text", stepTitle(b, i)));
+    const holder = el("div"); box.appendChild(holder);
+    holder.appendChild(el("p","hint","Loading\u2026"));
+    try{
+      const [roster, rows] = [await getRoster(), await getWorkRows()];
+      holder.innerHTML = "";
+      roster.forEach(st => {
+        const row = rows.find(w => w.username === st.username);
+        const d = row && row.data;
+        const done = !!(d && (d.__done || (d.__step || 0) > i || nonEmpty(d[b.id])));
+        const line = el("div","who-row");
+        line.appendChild(el("span","nm", st.display_name));
+        line.appendChild(el("span","st " + (done ? "yes" : "no"), done ? "Done \u2713" : "Not yet"));
+        const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View at this task";
+        if (row) v.addEventListener("click", () => inspect(row, i)); else v.disabled = true;
+        line.appendChild(v);
+        holder.appendChild(line);
+      });
+    }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
+    const done2 = el("button","btn-ghost modal-stay","Close"); done2.addEventListener("click", closeModal);
+    box.appendChild(done2);
+  });
+}
+
+/* ---------- boot ---------- */
+if (window.initSettings) initSettings($("setBtn"));
+const savedKey = localStorage.getItem("hub_tkey");
+if (savedKey){ $("keyIn").value = savedKey; tryKey(); }
 </script>
 </body>
 </html>

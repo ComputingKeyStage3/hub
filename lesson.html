@@ -7,13 +7,15 @@
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
+<script src="settings.js"></script>
 </head>
 <body class="lesson">
 
 <div class="topbar">
-  <a class="home" href="index.html">&larr; All lessons</a>
+  <a class="home" href="index.html">&larr; Home</a>
   <span class="sep">/</span>
   <div class="title" id="lessonTitle">Lesson</div>
+  <button class="btn-ghost iconbtn no-print" id="setBtn" title="Settings">&#9881;&#65038;</button>
   <button class="btn-primary no-print" id="saveBtn">Save Work</button>
 </div>
 
@@ -73,12 +75,19 @@
    The PDF is the thing that gets handed in.
    --------------------------------------------------------------------- */
 const $ = (id) => document.getElementById(id);
-const lessonId = new URLSearchParams(location.search).get("id") || "demo";
+const qs = new URLSearchParams(location.search);
+const previewParam = qs.get("preview");
+const viewParam = qs.get("view");
+const stepParam = qs.get("step");
+const spectate = previewParam !== null || viewParam !== null;   // teacher preview / viewing a student
+let inspectName = "";
+const lessonId = qs.get("id") || "demo";
 const WORK_KEY = "hub_work_" + lessonId;
 
 const fields = {};   // id -> { get, set }
 const steps  = [];   // { section, check(), brief:{eyebrow,title,text} }
 let step = 0, bypassed = false, lesson = null;
+if (spectate) bypassed = true;   // teachers see past every lock
 let finished = false;          // set once they press Finish
 let restoredData = null;       // last saved data we restored (responses re-apply from it)
 let wasDone = false;           // the saved copy says this lesson was completed
@@ -111,11 +120,13 @@ function snapshot(){
   return data;
 }
 function markDirty(){
+  if (spectate) return;
   refreshGate();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 400);
 }
 function save(){
+  if (spectate) return;
   const payload = JSON.stringify(snapshot());
   if (payload === lastSaved) return;
   try{
@@ -220,6 +231,22 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
     l.blocks.forEach(renderBlock);
     buildTracker();
     await loadSaved();
+    if (spectate){
+      $("saveBtn").hidden = true; $("signinHint").hidden = true;
+      const vb = el("div","viewbar", viewParam !== null
+        ? "Viewing " + (inspectName || "a student") + "'s work \u2014 they can't see this"
+        : "Teacher preview \u2014 this is what students will see");
+      if (document.body.insertBefore && document.body.firstChild) document.body.insertBefore(vb, document.body.firstChild);
+      else document.body.appendChild(vb);
+      const target = stepParam !== null ? parseInt(stepParam, 10)
+                   : (previewParam !== null && previewParam !== "" ? parseInt(previewParam, 10) : null);
+      if (viewParam !== null && wasDone && target === null){
+        if (lesson.assessment) renderAssessmentComplete(false); else showLessonComplete(true);
+      } else {
+        showStep(Math.min(Math.max(target || 0, 0), steps.length - 1));
+      }
+      return;
+    }
     if (wasDone){
       if (lesson.assessment){ renderAssessmentComplete(false); }
       else { showLessonComplete(true); }
@@ -238,6 +265,23 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
   });
 
 async function loadSaved(){
+  if (spectate){
+    if (viewParam !== null){
+      try{
+        const box = JSON.parse(localStorage.getItem("hub_inspect") || "null");
+        if (box && box.lesson === lessonId && box.data){
+          inspectName = box.name || "";
+          const d = box.data;
+          Object.keys(d).forEach(k => {
+            if (!k.startsWith("__") && fields[k]){ try{ fields[k].set(d[k]); }catch(e){} }
+          });
+          if (typeof d.__step === "number") step = Math.min(Math.max(d.__step, 0), steps.length - 1);
+          restoredData = d; wasDone = !!d.__done;
+        }
+      }catch(e){}
+    }
+    return;
+  }
   /* Priority: 1) this browser's saved copy — costs nothing, no network.
      2) only if that is EMPTY and the student is signed in, ask the server
         once (covers wiped profiles and switching computers). A first-ever
@@ -317,6 +361,10 @@ let softSkip = false;
 async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
   if ($("nextBtn").disabled) return;               // activity itself isn't finished
+  if (spectate){                                   // teachers roam freely
+    if (step === steps.length - 1){ finishLesson(); } else { showStep(step + 1); }
+    return;
+  }
   const st = steps[step];
   if (st && st.soft && !softSkip && !st.soft().ok){ showSoftModal(); return; }
   softSkip = false;
@@ -347,6 +395,7 @@ function paintTracker(){
 
 let lastSubmittedPayload = "";
 async function submitWork(){
+  if (spectate) return "offline";
   /* Writes to the database only when something actually changed since the
      last successful write — pressing Save Work twice costs nothing. */
   if (!token || !apiReady) return "offline";
@@ -1069,6 +1118,7 @@ function computeST(byTopic){
 }
 
 async function assessmentFinish(){
+  if (spectate){ renderAssessmentComplete(false); return; }
   finished = true;
   save();
   const res = computeAssessment();
@@ -1224,7 +1274,7 @@ function renderResponses(container, targetTopic, statusEl){
       if (restoredData && restoredData[b.id] !== undefined && fields[b.id]) fields[b.id].set(restoredData[b.id]);
     }catch(e){ console.error("response task failed:", e); }
   });
-  wrap.appendChild(saveButton(statusEl));
+  if (!spectate) wrap.appendChild(saveButton(statusEl));
   container.appendChild(wrap);
 }
 
@@ -1310,13 +1360,50 @@ function showLessonComplete(revisit){
   const hero = heroBits("Well done!", lesson.title + " complete");
   const status = el("p","handin");
   hero.appendChild(status);
-  hero.appendChild(saveButton(status));
-  const back = el("a","done-back","\u2190 Back to lessons"); back.href = "index.html";
-  hero.appendChild(back);
+  if (!revisit && !spectate) hero.appendChild(saveButton(status));
+  const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
+  if (!spectate) hero.appendChild(back);
   box.appendChild(hero);
   confetti();
-  if (!revisit){ submitWork().then(st => paintStatus(status, st)); }
-  else if (token){ status.dataset.state = "done"; status.textContent = "Saved earlier \u2713"; }
+  if (!revisit && !spectate){ submitWork().then(st => paintStatus(status, st)); }
+  else if (revisit && token && !spectate){ status.dataset.state = "done"; status.textContent = "Saved earlier \u2713"; }
+  buildOverview(box);
+}
+
+/* every task, clickable to reopen and edit */
+function taskPreview(b){
+  const v = fields[b.id] ? fields[b.id].get() : null;
+  if (b.type === "question" || b.type === "short"){
+    const t = String(v || "").trim();
+    return t ? t.slice(0, 60) + (t.length > 60 ? "\u2026" : "") : "No answer yet";
+  }
+  if (b.type === "image") return v ? "Screenshot added \u2713" : "No screenshot yet";
+  if (b.type === "python") return (v && String(v).trim()) ? "Code written \u2713" : "Not run yet";
+  if (b.type === "text") return "Reading";
+  const empty = v === null || v === undefined || v === "" ||
+    (Array.isArray(v) && !v.some(x => x)) ||
+    (typeof v === "object" && v !== null && !Object.keys(v).length);
+  return empty ? "\u2014" : "Done \u2713";
+}
+function buildOverview(box){
+  const ov = el("div","ov");
+  ov.appendChild(el("h2","sect-head","Your tasks"));
+  steps.forEach((stp, i) => {
+    const b = lesson.blocks[i] || {};
+    const bb = (typeof stp.brief === "function") ? stp.brief() : (stp.brief || {});
+    const row = el("button","ov-row"); row.type = "button";
+    row.appendChild(el("span","n", (i + 1) + "."));
+    row.appendChild(el("span","t", bb.title || b.type || "Task"));
+    row.appendChild(el("span","p", taskPreview(b)));
+    row.appendChild(el("span","edit", spectate ? "View \u2192" : "Edit \u270E"));
+    row.addEventListener("click", () => {
+      $("doneScreen").hidden = true;
+      $("dock").classList.remove("gone");
+      showStep(i);
+    });
+    ov.appendChild(row);
+  });
+  box.appendChild(ov);
 }
 
 /* ---------- Python via Pyodide ---------- */
@@ -1569,6 +1656,7 @@ function buildPdf(){
   }
   return doc;
 }
+  if (window.initSettings) initSettings($("setBtn"));
 </script>
 </body>
 </html>
