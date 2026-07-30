@@ -12,7 +12,7 @@
 <body class="lesson">
 
 <div class="topbar">
-  <a class="home" href="index.html">&larr; Home</a>
+  <a class="home" id="homeLink" href="index.html">&larr; Home</a>
   <span class="sep">/</span>
   <div class="title" id="lessonTitle">Lesson</div>
   <button class="btn-ghost iconbtn no-print" id="setBtn" title="Settings">&#9881;&#65038;</button>
@@ -91,7 +91,8 @@ if (spectate) bypassed = true;   // teachers see past every lock
 let finished = false;          // set once they press Finish
 let restoredData = null;       // last saved data we restored (responses re-apply from it)
 let wasDone = false;           // the saved copy says this lesson was completed
-let releasedTo = Infinity;     // how many steps the teacher has opened
+let lockedSet = new Set();     // task indexes the teacher has locked shut
+let relManaged = false;
 if (!localStorage.getItem("hub_token")) { document.addEventListener("DOMContentLoaded", () => { const h = document.getElementById("signinHint"); if (h) h.hidden = false; }); }
 let restoredWork = false;      // did we put saved work back on the page?
 let resumeShown = false;       // the "welcome back" note is strictly one-shot
@@ -159,10 +160,13 @@ const RELEASE_KEY = "hub_rel_" + lessonId;
 
 try{
   const cached = localStorage.getItem(RELEASE_KEY);
-  if (cached !== null) releasedTo = parseInt(cached, 10);
+  if (cached){
+    const arr = JSON.parse(cached);
+    if (Array.isArray(arr)) lockedSet = new Set(arr);   // old numeric caches are ignored
+  }
 }catch(e){}
 
-/* Returns the number of open steps, or null if we couldn't find out. */
+/* Refreshes which tasks the teacher has locked. Null = couldn't find out. */
 async function fetchRelease(){
   if (!apiReady) return null;
   try{
@@ -170,21 +174,36 @@ async function fetchRelease(){
                           { cache:"no-store" });
     if (!r.ok) return null;
     const d = await r.json();
-    if (typeof d.released !== "number") return null;
-    releasedTo = d.released;
-    try{ localStorage.setItem(RELEASE_KEY, String(releasedTo)); }catch(e){}
-    return releasedTo;
+    if (Array.isArray(d.locks)){
+      lockedSet = new Set(d.locks);
+    } else if (typeof d.released === "number"){
+      // an older backend: "released" = number of open tasks from the front
+      lockedSet = new Set();
+      if (d.managed) for (let i = d.released; i < steps.length; i++) lockedSet.add(i);
+    } else return null;
+    relManaged = !!d.managed;
+    try{ localStorage.setItem(RELEASE_KEY, JSON.stringify([...lockedSet])); }catch(e){}
+    return lockedSet;
   }catch(e){
     return null;   // offline or blocked
   }
 }
 
-/* Is the step after this one open to the student? */
-async function nextIsReleased(){
-  if (bypassed || !apiReady || !token) return true;
-  const fresh = await fetchRelease();
-  const rel = (fresh === null) ? releasedTo : fresh;   // last known, or Infinity
-  return (step + 1) < rel;
+const isLocked = (i) => !bypassed && lockedSet.has(i);
+/* First unlocked index walking in a direction; null if there isn't one. */
+function nextOpen(from, dir){
+  for (let i = from; i >= 0 && i < steps.length; i += dir){
+    if (!isLocked(i)) return i;
+  }
+  return null;
+}
+
+/* Where should Continue land? A single locked task is skipped (the teacher
+   shut just that one); when everything ahead is locked, that's pacing — wait. */
+async function continueTarget(){
+  if (bypassed || !apiReady || !token) return step + 1;
+  await fetchRelease();                 // freshen; offline keeps the last known
+  return nextOpen(step + 1, +1);
 }
 
 /* ---------- cooldown on the Continue button ----------
@@ -233,11 +252,18 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
     await loadSaved();
     if (spectate){
       $("saveBtn").hidden = true; $("signinHint").hidden = true;
-      const vb = el("div","viewbar", viewParam !== null
-        ? "Viewing " + (inspectName || "a student") + "'s work \u2014 they can't see this"
-        : "Teacher preview \u2014 this is what students will see");
-      if (document.body.insertBefore && document.body.firstChild) document.body.insertBefore(vb, document.body.firstChild);
-      else document.body.appendChild(vb);
+      if (document.body.classList) document.body.classList.add("spectating");
+      const vb = el("button","viewbar", viewParam !== null
+        ? "Viewing " + (inspectName || "a student") + "'s work \u2014 click here to go back"
+        : "Teacher preview \u2014 this is what students will see \u00b7 click here to go back");
+      vb.type = "button";
+      vb.addEventListener("click", () => {
+        if (window.close) window.close();
+        setTimeout(() => { location.href = "admin.html"; }, 150);
+      });
+      document.body.appendChild(vb);           // position:fixed — order doesn't matter
+      const home = $("homeLink");
+      if (home){ home.textContent = "\u2190 Teacher console"; home.href = "admin.html"; }
       const target = stepParam !== null ? parseInt(stepParam, 10)
                    : (previewParam !== null && previewParam !== "" ? parseInt(previewParam, 10) : null);
       if (viewParam !== null && wasDone && target === null){
@@ -291,9 +317,13 @@ async function loadSaved(){
     const raw = localStorage.getItem(WORK_KEY);
     if (raw){
       const d = JSON.parse(raw);
-      Object.entries(d).forEach(([id, val]) => { if (fields[id]) fields[id].set(val); });
-      if (typeof d.__step === "number") step = Math.min(Math.max(d.__step, 0), steps.length - 1);
       restoredData = d; wasDone = !!d.__done;
+      if (wasDone) finished = true;          // later saves must keep the flag
+      Object.entries(d).forEach(([id, val]) => {
+        if (!fields[id]) return;
+        try{ fields[id].set(val); }catch(e){ console.warn("Could not restore " + id, e); }
+      });
+      if (typeof d.__step === "number") step = Math.min(Math.max(d.__step, 0), steps.length - 1);
       lastSaved = JSON.stringify(snapshot());
       restoredWork = true;
       return;                       // cache hit: the database is not contacted
@@ -307,9 +337,13 @@ async function loadSaved(){
     if (!r.ok) return;
     const d = await r.json();
     if (d && d.data){
-      Object.entries(d.data).forEach(([id, val]) => { if (fields[id]) fields[id].set(val); });
-      if (typeof d.data.__step === "number") step = Math.min(Math.max(d.data.__step, 0), steps.length - 1);
       restoredData = d.data; wasDone = !!d.data.__done;
+      if (wasDone) finished = true;          // so the write-back below keeps it
+      Object.entries(d.data).forEach(([id, val]) => {
+        if (!fields[id]) return;
+        try{ fields[id].set(val); }catch(e){ console.warn("Could not restore " + id, e); }
+      });
+      if (typeof d.data.__step === "number") step = Math.min(Math.max(d.data.__step, 0), steps.length - 1);
       restoredWork = true;
       save();                       // write the server copy back into this browser
     }
@@ -325,7 +359,10 @@ function buildTracker(){
 function showStep(i){
   step = Math.min(Math.max(i, 0), steps.length - 1);
   // A restored position can be ahead of what the teacher has opened.
-  if (!bypassed && step >= releasedTo) step = Math.max(0, releasedTo - 1);
+  if (isLocked(step)){
+    const b = nextOpen(step, -1);
+    step = (b !== null) ? b : (nextOpen(0, +1) !== null ? nextOpen(0, +1) : 0);
+  }
   steps.forEach((s, n) => { s.section.hidden = (n !== step); });
 
   paintTracker();
@@ -356,7 +393,10 @@ function refreshGate(){
   $("lockMsg").textContent = res.ok ? "" : (res.message || "Finish this activity to continue.");
   $("lockMsg").hidden = res.ok;
 }
-$("backBtn").addEventListener("click", () => showStep(step - 1));
+$("backBtn").addEventListener("click", () => {
+  const b = nextOpen(step - 1, -1);
+  if (b !== null) showStep(b);
+});
 let softSkip = false;
 async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
@@ -371,10 +411,10 @@ async function tryContinue(){
   if (step === steps.length - 1){ finishLesson(); return; }
 
   $("nextBtn").classList.add("checking");
-  const allowed = await nextIsReleased();
+  const target = await continueTarget();
   $("nextBtn").classList.remove("checking");
 
-  if (allowed){ hideWaitModal(); showStep(step + 1); }
+  if (target !== null){ hideWaitModal(); showStep(target); }
   else { showWaitModal(); startCooldown(); }
 }
 $("nextBtn").addEventListener("click", tryContinue);
@@ -389,7 +429,8 @@ function paintTracker(){
   Array.from($("tracker").children).forEach((seg, n) => {
     // Once finished, every segment is complete — including the last one, which
     // previously stayed amber forever because "n < step" can never include it.
-    seg.className = "seg" + (finished ? " done" : n < step ? " done" : n === step ? " now" : "");
+    seg.className = "seg" + (finished ? " done" : n < step ? " done" : n === step ? " now" : "")
+                  + (isLocked(n) && !finished ? " locked-seg" : "");
   });
 }
 

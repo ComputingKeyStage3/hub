@@ -66,14 +66,19 @@
   <div id="lessonsView" hidden>
     <button class="crumb" id="backClass2">&larr; <span class="bk"></span></button>
     <h2 style="margin:14px 0 6px">Lessons</h2>
-    <div class="toolrow">
-      <select id="lessonSel" style="max-width:340px"></select>
-      <button class="btn-primary" id="progressBtn">Progress</button>
-      <button class="btn-ghost" id="openAll">Open all</button>
-      <button class="btn-ghost" id="lockAll">Lock all</button>
+    <div class="lesson-picker">
+      <select id="lessonSel"></select>
+      <button class="btn-primary" id="loadLessonBtn">Load</button>
     </div>
-    <p class="hint" id="relMsg" style="margin:0 0 12px"></p>
-    <div id="taskList"></div>
+    <div id="lessonDetail" hidden>
+      <div class="toolrow">
+        <button class="btn-primary" id="progressBtn">View Student Progress</button>
+        <button class="btn-ghost" id="openAll">Open all</button>
+        <button class="btn-ghost" id="lockAll">Lock all</button>
+      </div>
+      <p class="hint" id="relMsg" style="margin:0 0 12px"></p>
+      <div id="taskList"></div>
+    </div>
   </div>
 
 </div>
@@ -96,7 +101,7 @@ function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, ""); }
 function esc(s){ return String(s); }
 
 let KEY = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
-let rel = { released: 9999, managed: false };
+let locks = new Set();
 let workCache = { key: "", rows: [], t: 0 };
 let relTimer = null, beatTimer = null;
 
@@ -365,66 +370,82 @@ $("addManyBtn").addEventListener("click", () => {
 /* ---------- lessons + release ---------- */
 $("openLessons").addEventListener("click", async () => {
   show("lessonsView");
+  $("lessonDetail").hidden = true;
+  lessonId = "";
   if (!lessons.length) await loadLessonIndex();
-  await loadLesson();
 });
 async function loadLessonIndex(){
   const d = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
   lessons = d.units ? d.units.flatMap(u => u.lessons) : d;
   $("lessonSel").innerHTML = "";
+  const ph = el("option","","Choose lesson"); ph.value = ""; ph.disabled = true; ph.selected = true;
+  $("lessonSel").appendChild(ph);
   lessons.forEach(l => {
     const o = el("option","", l.title + (l.assessment ? " (assessment)" : ""));
     o.value = l.id; $("lessonSel").appendChild(o);
   });
 }
-$("lessonSel").addEventListener("change", loadLesson);
+$("lessonSel").addEventListener("change", () => { $("lessonDetail").hidden = true; lessonId = ""; });
+$("loadLessonBtn").addEventListener("click", loadLesson);
 async function loadLesson(){
-  lessonId = $("lessonSel").value || (lessons[0] && lessons[0].id);
+  const chosen = $("lessonSel").value;
+  if (!chosen) return;
+  lessonId = chosen;
   workCache = { key: "", rows: [], t: 0 };
   lessonJson = await (await fetch("lessons/" + lessonId + ".json", { cache: "no-store" })).json();
+  $("lessonDetail").hidden = false;
   await refreshRelease();
 }
 async function refreshRelease(){
+  if (!lessonId) return;
   try{
     const r = await fetch(API + "/api/release?lesson=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(cls) + "&t=" + Date.now(), { cache: "no-store" });
     const d = await r.json();
-    rel = { released: d.released, managed: d.managed };
+    if (Array.isArray(d.locks)) locks = new Set(d.locks);
+    else if (d.managed && typeof d.released === "number"){
+      locks = new Set();
+      for (let i = d.released; i < (lessonJson ? lessonJson.blocks.length : 0); i++) locks.add(i);
+    } else locks = new Set();
     setOnline(true);
   }catch(e){ setOnline(false); }
   paintTasks();
 }
-async function setReleased(n){
+async function postLocks(next){
   $("relMsg").textContent = "Updating\u2026";
   try{
     const r = await fetch(API + "/api/release", { method:"POST", headers: HJ(),
-      body: JSON.stringify({ lesson: lessonId, group: cls, released: n }) });
+      body: JSON.stringify({ lesson: lessonId, group: cls, locks: [...next].sort((a,b)=>a-b) }) });
     if (!r.ok) throw new Error((await r.json()).error || "Could not update.");
-    rel = { released: n, managed: true };
+    locks = next;
     $("relMsg").textContent = "";
   }catch(e){ $("relMsg").textContent = e.message; }
   paintTasks();
 }
-$("openAll").addEventListener("click", () => setReleased(9999));
-$("lockAll").addEventListener("click", () => setReleased(0));
+$("openAll").addEventListener("click", () => postLocks(new Set()));
+$("lockAll").addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i))));
 function stepTitle(b, i){ return stripTags(b.title || b.prompt || b.task || "") || b.type; }
 function paintTasks(){
   const list = $("taskList"); list.innerHTML = "";
   if (!lessonJson) return;
-  $("relMsg").textContent = rel.managed
-    ? (rel.released >= 9999 ? "Everything is open for " + cls + "."
-       : rel.released === 0 ? "Everything is locked for " + cls + "."
-       : "Open up to task " + rel.released + " for " + cls + ".")
-    : "Not being paced \u2014 " + cls + " can see every task. Lock one to start pacing.";
+  $("relMsg").textContent = locks.size === 0
+    ? "Every task is open for " + cls + "."
+    : locks.size === lessonJson.blocks.length
+      ? "Every task is locked for " + cls + "."
+      : locks.size + " task" + (locks.size === 1 ? "" : "s") + " locked for " + cls + ".";
   lessonJson.blocks.forEach((b, i) => {
-    const open = !rel.managed || i < rel.released;
+    const open = !locks.has(i);
     const row = el("div","taskrow" + (open ? "" : " locked"));
     row.appendChild(el("span","tn", (i+1) + "."));
     const t = el("span","", stepTitle(b, i)); t.style.flex = "1"; row.appendChild(t);
     row.appendChild(el("span","statechip " + (open ? "open" : "shut"), open ? "Open" : "Locked"));
     const btns = el("span","taskbtns");
     const lock = el("button","btn-ghost iconbtn", open ? "\u{1F513}" : "\u{1F512}");
-    lock.title = open ? "Lock from this task onwards" : "Open up to and including this task";
-    lock.addEventListener("click", () => setReleased(open ? i : i + 1));
+    lock.title = open ? "Lock this task" : "Unlock this task";
+    lock.addEventListener("click", () => {
+      const next = new Set(locks);
+      if (open) next.add(i); else next.delete(i);
+      postLocks(next);
+    });
     const eye = el("button","btn-ghost iconbtn","\u{1F441}");
     eye.title = "Preview as a student";
     eye.addEventListener("click", () => window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&preview=" + i, "_blank"));

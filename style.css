@@ -148,7 +148,7 @@ body.lesson{
   color:var(--amber); margin:0 0 2px;
 }
 .brief h2{font-family:var(--display); font-size:20px; font-weight:700; line-height:1.25; margin:0 0 3px}
-.brief p{margin:0; font-size:14.5px; line-height:1.45; color:#CBD5E4; max-width:88ch}
+.brief p{margin:0; font-size:14.5px; line-height:1.45; color:var(--muted); max-width:88ch}
 
 /* the stage: the activity itself. Only this scrolls, and only if it must. */
 .stage{overflow-y:auto; padding:18px 20px; scrollbar-width:thin; scrollbar-color:var(--line-2) transparent}
@@ -184,7 +184,7 @@ body.bypassed #bypassDot{color:var(--mint)}
 body.bypassed .btn-continue:disabled{background:var(--amber); color:#131A26; border-color:var(--amber)}
 
 /* ---------- activity content ---------- */
-.prose{font-size:19px; line-height:1.65; color:#D6DEEA}
+.prose{font-size:19px; line-height:1.65; color:var(--text)}
 .prose h2{font-size:26px; margin:0 0 14px; color:var(--text)}
 .prose p{margin:0 0 14px}
 .prose ul{margin:0 0 14px; padding-left:22px}
@@ -450,7 +450,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 }
 
 /* ---- v2: clearer task, quieter chrome ---- */
-.brief p{font-size:16px; max-width:62ch; margin:0 auto; color:#C4CEDD; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.brief p{font-size:16px; max-width:62ch; margin:0 auto; color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .signin-hint{font-size:12.5px; color:var(--dim); margin:0 0 14px}
 .signin-hint a{color:var(--muted)}
 .handin{font-size:14px; font-weight:600; margin:14px 0 0; min-height:18px}
@@ -760,3 +760,23 @@ html[data-bg=dark] .who-row .st.yes{color:var(--mint)}
 .pwrow{display:flex; gap:8px}
 .pwrow input{flex:1}
 .subnote{font-size:14px; color:var(--muted); margin-top:6px; text-align:left}
+
+
+/* ---- v2.4.2 fixes ---- */
+/* belt and braces: every text surface follows the theme */
+.station,.qtext,.opt,.lead,.qhead,.paste-sub,.lock-text{color:var(--text)}
+.classtile,.classtile b,.font-opt{color:var(--text)}
+.classtile span{color:var(--muted)}
+
+/* the spectator strip floats, so the page grid keeps its shape (pill fix) */
+.viewbar{position:fixed; top:0; left:0; right:0; width:100%; z-index:120;
+  border:none; cursor:pointer; font-family:var(--body)}
+body.spectating{padding-top:40px}
+
+/* locked tasks on the student progress bar */
+.seg.locked-seg{background:var(--line-2); opacity:.55}
+
+/* teacher: big centred lesson picker */
+.lesson-picker{max-width:560px; margin:26px auto 8px; text-align:center}
+.lesson-picker select{width:100%; font-size:19px; padding:14px 16px; text-align:center; text-align-last:center}
+.lesson-picker .btn-primary{margin-top:14px; font-size:18px; padding:13px 34px}
