@@ -396,16 +396,31 @@ async function loadLesson(){
   $("lessonDetail").hidden = false;
   await refreshRelease();
 }
+/* Same default the students use: a lesson opens only up to its first real
+   task; an assessment opens fully. */
+function defaultLocks(){
+  const out = new Set();
+  if (!lessonJson || lessonJson.assessment) return out;
+  const b = lessonJson.blocks || [];
+  let firstDo = -1;
+  for (let i = 0; i < b.length; i++){ if (b[i].type !== "text"){ firstDo = i; break; } }
+  if (firstDo === -1) return out;
+  for (let i = firstDo + 1; i < b.length; i++) out.add(i);
+  return out;
+}
+let usingDefaults = false;
 async function refreshRelease(){
   if (!lessonId) return;
   try{
     const r = await fetch(API + "/api/release?lesson=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(cls) + "&t=" + Date.now(), { cache: "no-store" });
     const d = await r.json();
-    if (Array.isArray(d.locks)) locks = new Set(d.locks);
-    else if (d.managed && typeof d.released === "number"){
+    if (d.managed === false){ locks = defaultLocks(); usingDefaults = true; }
+    else if (Array.isArray(d.locks)){ locks = new Set(d.locks); usingDefaults = false; }
+    else if (typeof d.released === "number"){
       locks = new Set();
       for (let i = d.released; i < (lessonJson ? lessonJson.blocks.length : 0); i++) locks.add(i);
-    } else locks = new Set();
+      usingDefaults = false;
+    } else { locks = new Set(); usingDefaults = false; }
     setOnline(true);
   }catch(e){ setOnline(false); }
   paintTasks();
@@ -416,25 +431,38 @@ async function postLocks(next){
     const r = await fetch(API + "/api/release", { method:"POST", headers: HJ(),
       body: JSON.stringify({ lesson: lessonId, group: cls, locks: [...next].sort((a,b)=>a-b) }) });
     if (!r.ok) throw new Error((await r.json()).error || "Could not update.");
-    locks = next;
+    locks = next; usingDefaults = false;
     $("relMsg").textContent = "";
   }catch(e){ $("relMsg").textContent = e.message; }
   paintTasks();
 }
 $("openAll").addEventListener("click", () => postLocks(new Set()));
 $("lockAll").addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i))));
-function stepTitle(b, i){ return stripTags(b.title || b.prompt || b.task || "") || b.type; }
+function stepTitle(b, i){
+  const named = stripTags(b.title || b.prompt || b.task || "");
+  if (named) return named;
+  if (b.type === "text"){
+    const m = /<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(b.html || "");
+    return "Reading: " + (m ? stripTags(m[1]) : "information page");
+  }
+  const friendly = { embed:"Watch the video", link:"Open a website", image:"Upload a screenshot",
+                     python:"Python code", quiz:"Quiz", question:"Written answer", password:"Password checker",
+                     caesar:"Caesar cipher", mc:"Multiple choice", order:"Put in order",
+                     blanks:"Fill in the blanks", short:"Short answer" };
+  return friendly[b.type] || b.type;
+}
 function paintTasks(){
   const list = $("taskList"); list.innerHTML = "";
   if (!lessonJson) return;
-  $("relMsg").textContent = locks.size === 0
+  const base = locks.size === 0
     ? "Every task is open for " + cls + "."
     : locks.size === lessonJson.blocks.length
       ? "Every task is locked for " + cls + "."
       : locks.size + " task" + (locks.size === 1 ? "" : "s") + " locked for " + cls + ".";
+  $("relMsg").textContent = usingDefaults ? base + " (starting pattern \u2014 unlock as you teach)" : base;
   lessonJson.blocks.forEach((b, i) => {
     const open = !locks.has(i);
-    const row = el("div","taskrow" + (open ? "" : " locked"));
+    const row = el("div","taskrow" + (open ? "" : " shut"));
     row.appendChild(el("span","tn", (i+1) + "."));
     const t = el("span","", stepTitle(b, i)); t.style.flex = "1"; row.appendChild(t);
     row.appendChild(el("span","statechip " + (open ? "open" : "shut"), open ? "Open" : "Locked"));

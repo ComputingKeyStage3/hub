@@ -94,7 +94,22 @@ let wasDone = false;           // the saved copy says this lesson was completed
 let lockedSet = new Set();     // task indexes the teacher has locked shut
 let relManaged = false;
 if (!localStorage.getItem("hub_token")) { document.addEventListener("DOMContentLoaded", () => { const h = document.getElementById("signinHint"); if (h) h.hidden = false; }); }
-let restoredWork = false;      // did we put saved work back on the page?
+let restoredWork = false;      // did we put MEANINGFUL saved work back on the page?
+function hasContent(v){
+  if (v === null || v === undefined || v === "") return false;
+  if (Array.isArray(v)) return v.some(x => x !== null && x !== undefined && x !== "");
+  if (typeof v === "object") return Object.keys(v).length > 0;
+  if (typeof v === "boolean") return v;
+  return true;
+}
+/* A student who only opened the first page and read it hasn't "come back" to
+   anything, so the welcome-back note stays hidden. */
+function worthMentioning(d){
+  if (!d) return false;
+  if (d.__done) return true;
+  if (typeof d.__step === "number" && d.__step > 0) return true;
+  return Object.entries(d).some(([k, v]) => !k.startsWith("__") && hasContent(v));
+}
 let resumeShown = false;       // the "welcome back" note is strictly one-shot
 let pdfDone = false;   // becomes true once they've downloaded their PDF
 
@@ -174,7 +189,9 @@ async function fetchRelease(){
                           { cache:"no-store" });
     if (!r.ok) return null;
     const d = await r.json();
-    if (Array.isArray(d.locks)){
+    if (d.managed === false){
+      lockedSet = defaultLocks();
+    } else if (Array.isArray(d.locks)){
       lockedSet = new Set(d.locks);
     } else if (typeof d.released === "number"){
       // an older backend: "released" = number of open tasks from the front
@@ -189,7 +206,21 @@ async function fetchRelease(){
   }
 }
 
-const isLocked = (i) => !bypassed && lockedSet.has(i);
+/* With no teacher release saved, a lesson starts closed after its first real
+   task (any reading before that stays open) and an assessment starts fully
+   open. Teachers override this the moment they lock or unlock anything. */
+function defaultLocks(){
+  const out = new Set();
+  if (!lesson || lesson.assessment) return out;
+  const blocks = lesson.blocks || [];
+  let firstDo = -1;
+  for (let i = 0; i < blocks.length; i++){ if (blocks[i].type !== "text"){ firstDo = i; break; } }
+  if (firstDo === -1) return out;                 // all reading: nothing to gate
+  for (let i = firstDo + 1; i < blocks.length; i++) out.add(i);
+  return out;
+}
+/* Offline or signed out, nothing is locked — never strand a student. */
+const isLocked = (i) => !bypassed && !!apiReady && !!token && lockedSet.has(i);
 /* First unlocked index walking in a direction; null if there isn't one. */
 function nextOpen(from, dir){
   for (let i = from; i >= 0 && i < steps.length; i += dir){
@@ -210,7 +241,7 @@ async function continueTarget(){
    The button is deliberately NOT disabled during the cooldown: a disabled
    button can't show a custom cursor or fire hover events. We keep it looking
    normal, intercept the click, and swap the cursor instead.                  */
-const COOLDOWN_SECONDS = 10;
+const COOLDOWN_SECONDS = 5;
 let cooldownUntil = 0, cooldownTimer = null;
 
 function coolingDown(){ return Date.now() < cooldownUntil; }
@@ -325,7 +356,7 @@ async function loadSaved(){
       });
       if (typeof d.__step === "number") step = Math.min(Math.max(d.__step, 0), steps.length - 1);
       lastSaved = JSON.stringify(snapshot());
-      restoredWork = true;
+      restoredWork = worthMentioning(d);
       return;                       // cache hit: the database is not contacted
     }
   }catch(e){ /* unreadable cache: fall through to the server copy */ }
@@ -344,7 +375,7 @@ async function loadSaved(){
         try{ fields[id].set(val); }catch(e){ console.warn("Could not restore " + id, e); }
       });
       if (typeof d.data.__step === "number") step = Math.min(Math.max(d.data.__step, 0), steps.length - 1);
-      restoredWork = true;
+      restoredWork = worthMentioning(d.data);
       save();                       // write the server copy back into this browser
     }
   }catch(e){ /* offline: start fresh; the browser copy takes over from here */ }
@@ -490,7 +521,7 @@ $("waitModal").addEventListener("click", (e) => { if (e.target === $("waitModal"
 document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); hideSoftModal(); } });
 
 /* ---------- bypass ---------- */
-$("bypassDot").addEventListener("click", askBypass);
+$("bypassDot").addEventListener("dblclick", askBypass);   // double-click: a stray single click does nothing
 $("bypassDot").addEventListener("keydown", (e) => { if (e.key === "Enter") askBypass(); });
 function askBypass(){
   const code = prompt("Enter code:");

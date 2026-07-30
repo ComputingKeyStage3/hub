@@ -745,7 +745,7 @@ html:not([data-bg=dark]) .online-pill{color:#2E7B54}
 .taskrow{display:flex; align-items:center; gap:12px; background:var(--panel); border:1.5px solid var(--line);
   border-radius:12px; padding:11px 14px; margin:0 0 9px; font-size:16px}
 .taskrow .tn{font-weight:800; color:var(--dim); min-width:22px}
-.taskrow.locked{opacity:.75}
+.taskrow.shut{opacity:.7}   /* NOT .locked — that class hides its children on the student page */
 .statechip{font-size:12.5px; font-weight:800; border-radius:999px; padding:3px 10px; border:1.5px solid}
 .statechip.open{color:var(--mint); border-color:var(--mint-dim)}
 html:not([data-bg=dark]) .statechip.open{color:#2E7B54}

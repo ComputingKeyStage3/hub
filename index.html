@@ -82,6 +82,13 @@ $("loginBtn").addEventListener("click", async () => {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Sign-in failed.");
+    /* Shared computers: if this is a DIFFERENT student from the last one to
+       sign in here, drop the cached work so nobody sees someone else's answers.
+       (Signing out deliberately leaves the cache alone — the same student
+       coming back keeps working offline-fast.) */
+    const uname = $("u").value.trim().toLowerCase();
+    if (localStorage.getItem("hub_user") !== uname) clearStudentCache();
+    localStorage.setItem("hub_user", uname);
     localStorage.setItem("hub_token", d.token);
     localStorage.setItem("hub_name", d.name);
     localStorage.setItem("hub_group", d.group || "");
@@ -147,6 +154,17 @@ function switchTab(which){
   $("view-results").hidden = which !== "results";
   if (which === "results" && !resultsLoaded) loadResults();
 }
+function clearStudentCache(){
+  try{
+    const doomed = [];
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && (k.startsWith("hub_work_") || k.startsWith("hub_rel_") || k === "hub_inspect")) doomed.push(k);
+    }
+    doomed.forEach(k => localStorage.removeItem(k));   // display settings are kept
+  }catch(e){}
+}
+
 async function loadResults(){
   const token = localStorage.getItem("hub_token");
   const box = $("resultList");
