@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="pyhub.js"></script>
 <script src="config.js"></script>
 <script src="settings.js"></script>
 </head>
@@ -289,7 +290,13 @@ function showWaitModal(){ $("waitModal").hidden = false; $("waitOk").focus(); }
 function hideWaitModal(){ $("waitModal").hidden = true; }
 
 /* ---------- load ---------- */
-fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
+(lessonId === "__preview"
+   ? Promise.resolve({ ok:true, json: async () => {
+       const raw = localStorage.getItem("hub_preview");
+       if (!raw) throw new Error("missing");
+       return JSON.parse(raw);
+     } })
+   : fetch("lessons/" + encodeURIComponent(lessonId) + ".json"))
   .then(r => { if (!r.ok) throw new Error("missing"); return r.json().catch(() => { throw new Error("badjson"); }); })
   .then(async (l) => {
     lesson = l;
@@ -601,7 +608,7 @@ function renderBlock(b, i){
   if (!b.id) b.id = b.type + "_" + i;
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
-              mc:rMC, order:rOrder, blanks:rBlanks, short:rShort }[b.type];
+              mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return; }
   let built;
   try { built = R(b); }
@@ -697,6 +704,186 @@ function rPython(b){
   return { section:s,
            check:() => ran ? { ok:true } : { ok:false, message:"Press Run at least once" },
            brief:{ eyebrow:"Code", title:"Python", text:b.task || "Read the code, run it, then change it." } };
+}
+
+/* ======================================================================
+   BUILT-IN PYTHON IDE  —  replaces Trinket
+   {"type":"ide", "task":"...", "starter":"...", "turtle":true,
+    "inputs":"Ada\n12", "expect":"Hello", "height":320, "readOnly":false}
+   Runs entirely in the browser through Pyodide. Turtle graphics, input()
+   and a guard against endless loops all come from pyhub.js.
+   ====================================================================== */
+let pyBooted = false;
+async function ensureHubPython(status){
+  const py = await ensurePyodide(status);
+  if (!pyBooted){
+    py.runPython(window.HUB_PY_BOOT);
+    pyBooted = true;
+  }
+  return py;
+}
+
+function rIDE(b){
+  const s = el("section","ide");
+  const wrap = el("div","ide-wrap" + (b.turtle ? " has-canvas" : ""));
+
+  /* ---- editor with line numbers ---- */
+  const pane = el("div","ide-pane");
+  const bar = el("div","ide-bar");
+  bar.appendChild(el("span","ide-file", (b.filename || "main.py")));
+  const runBtn = el("button","btn-primary ide-run","\u25B6 Run");
+  const resetBtn = el("button","btn-ghost ide-small","Reset");
+  bar.appendChild(resetBtn); bar.appendChild(runBtn);
+  pane.appendChild(bar);
+
+  const editor = el("div","ide-editor");
+  const gutter = el("div","ide-gutter");
+  const ta = el("textarea","ide-code");
+  ta.spellcheck = false; ta.autocapitalize = "off"; ta.autocomplete = "off";
+  ta.value = b.starter || "";
+  if (b.readOnly) ta.readOnly = true;
+  if (b.height) editor.style.height = b.height + "px";
+  editor.appendChild(gutter); editor.appendChild(ta);
+  pane.appendChild(editor);
+  wrap.appendChild(pane);
+
+  /* ---- output (and the turtle canvas, when asked for) ---- */
+  const side = el("div","ide-side");
+  if (b.turtle){
+    const cwrap = el("div","ide-canvaswrap");
+    const canvas = el("canvas","ide-canvas");
+    canvas.width = 480; canvas.height = 360;
+    cwrap.appendChild(canvas);
+    side.appendChild(cwrap);
+    b._canvas = canvas;
+  }
+  const outBar = el("div","ide-bar ide-outbar");
+  outBar.appendChild(el("span","ide-file","Output"));
+  const clearBtn = el("button","btn-ghost ide-small","Clear");
+  outBar.appendChild(clearBtn);
+  side.appendChild(outBar);
+  const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
+  side.appendChild(out);
+  wrap.appendChild(side);
+  s.appendChild(wrap);
+
+  /* ---- inputs the program will be fed (so input() doesn't need pop-ups) ---- */
+  let inputBox = null;
+  if (b.inputs !== false){
+    const det = el("div","ide-inputs");
+    det.appendChild(el("label","","Answers for any input() questions — one per line (optional)"));
+    inputBox = el("textarea","ide-inputbox"); inputBox.rows = 2;
+    inputBox.value = (typeof b.inputs === "string") ? b.inputs : "";
+    inputBox.addEventListener("input", markDirty);
+    det.appendChild(inputBox);
+    s.appendChild(det);
+  }
+
+  const note = el("p","ide-note"); note.hidden = true;
+  s.appendChild(note);
+
+  /* ---- line numbers + friendly typing ---- */
+  function paintGutter(){
+    const n = ta.value.split("\n").length;
+    let html = "";
+    for (let i = 1; i <= n; i++) html += i + "\n";
+    gutter.textContent = html;
+  }
+  ta.addEventListener("input", () => { paintGutter(); markDirty(); });
+  ta.addEventListener("scroll", () => { gutter.scrollTop = ta.scrollTop; });
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Tab"){
+      e.preventDefault();
+      const st = ta.selectionStart, en = ta.selectionEnd;
+      ta.value = ta.value.slice(0, st) + "    " + ta.value.slice(en);
+      ta.selectionStart = ta.selectionEnd = st + 4;
+      paintGutter(); markDirty();
+    } else if (e.key === "Enter"){
+      // keep the indent, and add one after a colon — like a real editor
+      const st = ta.selectionStart;
+      const line = ta.value.slice(0, st).split("\n").pop();
+      const indent = (line.match(/^[ \t]*/) || [""])[0];
+      const extra = /:\s*$/.test(line) ? "    " : "";
+      if (indent || extra){
+        e.preventDefault();
+        const ins = "\n" + indent + extra;
+        ta.value = ta.value.slice(0, st) + ins + ta.value.slice(ta.selectionEnd);
+        ta.selectionStart = ta.selectionEnd = st + ins.length;
+        paintGutter(); markDirty();
+      }
+    }
+  });
+  paintGutter();
+
+  /* ---- running ---- */
+  let ran = false, lastOut = "";
+  async function run(){
+    runBtn.disabled = true;
+    const wasLabel = runBtn.textContent;
+    runBtn.textContent = "Running\u2026";
+    note.hidden = true;
+    out.textContent = "";
+    try{
+      if (b.turtle && window.hubTurtleAttach) window.hubTurtleAttach(b._canvas);
+      else if (window.hubTurtleAttach) window.hubTurtleAttach(null);
+      const py = await ensureHubPython(out);
+      const lines = inputBox ? inputBox.value.split("\n").filter(x => x !== "") : [];
+      py.globals.set("_hub_next_inputs", lines.join("\u0000"));
+      py.runPython("_hub_set_inputs([x for x in _hub_next_inputs.split(chr(0)) if x != ''])");
+      py.globals.set("_hub_src", ta.value);
+      const raw = py.runPython("_hub_run(_hub_src, 10.0)");
+      const res = JSON.parse(raw);
+      lastOut = res.out || "";
+      out.textContent = lastOut || "(your program printed nothing)";
+      out.classList.toggle("has-error", !res.ok);
+      ran = true;
+      if (b.expect && res.ok){
+        const good = lastOut.toLowerCase().includes(String(b.expect).toLowerCase());
+        note.hidden = false;
+        note.className = "ide-note " + (good ? "ok" : "no");
+        note.textContent = good ? "That's the output we were looking for \u2713"
+                                : "Not quite yet \u2014 keep going.";
+      }
+      markDirty();
+    }catch(e){
+      out.textContent = "";
+      note.hidden = false; note.className = "ide-note no";
+      note.textContent = "Python could not start here: " + (e.message || "unknown problem") +
+                         ". Check the internet connection and try again.";
+    }finally{
+      runBtn.disabled = false;
+      runBtn.textContent = wasLabel;
+    }
+  }
+  runBtn.addEventListener("click", run);
+  clearBtn.addEventListener("click", () => { out.textContent = ""; out.classList.remove("has-error"); });
+  resetBtn.addEventListener("click", () => {
+    if (ta.value !== (b.starter || "") && !confirm("Put the code back to how it started? Your changes will be lost.")) return;
+    ta.value = b.starter || "";
+    paintGutter(); markDirty();
+  });
+
+  fields[b.id] = {
+    get:() => ({ code: ta.value, inputs: inputBox ? inputBox.value : "", out: lastOut.slice(0, 4000), ran }),
+    set:(v) => {
+      if (!v) return;
+      if (typeof v === "string"){ ta.value = v; paintGutter(); return; }   // older saves
+      if (typeof v.code === "string") ta.value = v.code;
+      if (inputBox && typeof v.inputs === "string") inputBox.value = v.inputs;
+      if (typeof v.out === "string" && v.out){ lastOut = v.out; out.textContent = v.out; }
+      ran = !!v.ran;
+      paintGutter();
+    }
+  };
+
+  return { section:s,
+           check:() => {
+             if (!ran) return { ok:false, message:"Press Run to try your code" };
+             if (b.expect && !lastOut.toLowerCase().includes(String(b.expect).toLowerCase()))
+               return { ok:false, message:"Keep going until the output is right" };
+             return { ok:true };
+           },
+           brief:{ eyebrow:"Code", title:b.title || "Python", text:b.task || "Write your code, then press Run." } };
 }
 
 /* ---- QUIZ: one question at a time, instant marking, retry on wrong ---- */

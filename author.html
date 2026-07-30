@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worksheet converter — Prince Henry's Computing KS3</title>
+<link rel="stylesheet" href="style.css">
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<script src="settings.js"></script>
+<style>
+  .authwrap{display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start}
+  @media (max-width:1000px){ .authwrap{grid-template-columns:1fr} }
+  .authwrap textarea{width:100%; height:62vh; font-family:var(--mono); font-size:14px; line-height:1.55}
+  #jsonOut{height:62vh; overflow:auto; white-space:pre; font-family:var(--mono); font-size:12.5px;
+    background:#20242E; color:#D8DEE9; border-radius:14px; padding:16px; margin:0}
+  .authbar{display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin:14px 0}
+  .cheat{font-size:15px; line-height:1.7}
+  .cheat code{font-family:var(--mono); font-size:13.5px; background:var(--panel-2); padding:2px 7px;
+    border-radius:6px; border:1px solid var(--line)}
+  details.cheatbox{background:var(--panel); border:1.5px solid var(--line); border-radius:14px; padding:16px 20px; margin-bottom:18px}
+  details.cheatbox summary{font-weight:800; font-size:17px; cursor:pointer}
+</style>
+</head>
+<body>
+
+<div class="homebar">
+  <div class="title">Worksheet converter</div>
+  <a class="crumb" href="index.html" style="margin-right:10px">&larr; Home</a>
+  <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
+</div>
+
+<div class="page">
+  <div class="masthead">
+    <h1 style="margin-bottom:6px">Turn a worksheet into a lesson</h1>
+    <p>Paste your worksheet on the left using the simple marks below, press <b>Convert</b>, then
+       <b>Preview</b> to try it exactly as a student would. When it's right, copy the JSON into
+       <code>lessons/your-lesson-id.json</code> and add the lesson to <code>lessons/index.json</code>.</p>
+  </div>
+
+  <details class="cheatbox">
+    <summary>The marks you can use</summary>
+    <div class="cheat">
+      <p><code># Title</code> — the lesson title (first line).<br>
+      <code>&gt; One sentence</code> — the description shown on the home page.</p>
+      <p><code>## A heading</code> — starts a <b>reading page</b>. Plain lines under it become paragraphs,
+      and lines starting with <code>-</code> become bullet points.</p>
+      <p><code>[write] Explain what a variable is</code> — a <b>written answer</b> box.
+      Add <code>(30 words)</code> at the end to set how much you'd like.</p>
+      <p><code>[code] Fixing the greeting</code> — a <b>Python IDE</b> task. Put the starter code in a fenced
+      block straight after, between lines of <code>```</code>. Options on the same line:
+      <code>+turtle</code> (adds the drawing canvas), <code>+inputs: Ada, 12</code> (answers for
+      <code>input()</code>), <code>+expect: Hello</code> (what the output should contain).</p>
+      <p><code>[quiz] Which one is a loop?</code> then option lines: <code>* correct</code> and <code>- wrong</code>.
+      Add <code>? a hint</code> under the options to give a hint.</p>
+      <p><code>[mc] …</code>, <code>[blanks] The [[cat]] sat</code>, <code>[order] a | b | c</code>,
+      <code>[short] … +keywords: loop, repeat</code> — assessment questions.</p>
+      <p><code>[screenshot] Show your program running</code> — a screenshot upload.<br>
+      <code>[video] https://…</code> — an embedded video.<br>
+      <code>[link] https://… | Trinket</code> — a link out.</p>
+      <p>Add <code>+lock: HAWK</code> to any task line to keep it shut until you give the class a code.</p>
+    </div>
+  </details>
+
+  <div class="authwrap">
+    <div>
+      <b>Your worksheet</b>
+      <textarea id="src" spellcheck="false"></textarea>
+      <div class="authbar">
+        <button class="btn-primary" id="convert">Convert</button>
+        <button class="btn-ghost" id="preview">Preview as a student</button>
+        <button class="btn-ghost" id="sample">Load an example</button>
+        <span class="hint" id="msg"></span>
+      </div>
+    </div>
+    <div>
+      <b>Lesson JSON</b>
+      <pre id="jsonOut">Press Convert and the lesson file appears here.</pre>
+      <div class="authbar">
+        <button class="btn-ghost" id="copy">Copy JSON</button>
+        <button class="btn-ghost" id="download">Save as a file</button>
+        <span class="hint" id="idHint"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let lastLesson = null;
+
+/* ---------------- the converter ----------------
+   Deliberately forgiving: anything it doesn't recognise becomes ordinary
+   reading text, so a pasted worksheet is never silently lost. */
+function convert(text){
+  const lines = String(text).replace(/\r/g, "").split("\n");
+  const lesson = { title: "Untitled lesson", intro: "", blocks: [] };
+  let i = 0, n = 0;
+  let readingTitle = null, readingBody = [];
+
+  const nextId = (p) => p + (++n);
+
+  function flushReading(){
+    if (readingTitle === null && !readingBody.length) return;
+    let html = readingTitle ? "<h2>" + esc(readingTitle) + "</h2>" : "";
+    let bullets = [];
+    readingBody.forEach(l => {
+      if (/^\s*[-*]\s+/.test(l)){ bullets.push(l.replace(/^\s*[-*]\s+/, "")); return; }
+      if (bullets.length){ html += "<ul>" + bullets.map(b => "<li>" + inline(b) + "</li>").join("") + "</ul>"; bullets = []; }
+      if (l.trim()) html += "<p>" + inline(l) + "</p>";
+    });
+    if (bullets.length) html += "<ul>" + bullets.map(b => "<li>" + inline(b) + "</li>").join("") + "</ul>";
+    readingTitle = null; readingBody = [];
+    if (!html.trim()) return;              // blank lines between tasks are not a reading page
+    lesson.blocks.push({ type: "text", id: nextId("read"), html });
+  }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function inline(s){
+    return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+                 .replace(/(^|[^`])`([^`]+)`/g, "$1<code>$2</code>");
+  }
+  /* pull "+key: value" options off the end of a marker line */
+  function opts(rest){
+    const o = { text: rest, flags: {} };
+    o.text = rest.replace(/\+(\w+)\s*:\s*([^+]+)/g, (m, k, v) => { o.flags[k.toLowerCase()] = v.trim(); return ""; })
+                 .replace(/\+(\w+)\b/g, (m, k) => { o.flags[k.toLowerCase()] = true; return ""; })
+                 .trim();
+    return o;
+  }
+  function fenced(){
+    // collect a ``` block sitting under the current line
+    if (i < lines.length && /^\s*```/.test(lines[i])){
+      i++;
+      const buf = [];
+      while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]);
+      i++;                                   // closing fence
+      return buf.join("\n");
+    }
+    return "";
+  }
+  function bulletsUnder(){
+    const got = [];
+    while (i < lines.length && /^\s*[-*?]\s+/.test(lines[i])) got.push(lines[i++]);
+    return got;
+  }
+  function addLock(block, flags){
+    if (flags.lock && typeof flags.lock === "string"){
+      block.lockCode = djb2(flags.lock.trim().toUpperCase());
+      block.lockTitle = "Wait for your teacher";
+      block.lockHint = "Your teacher will give you the code.";
+    }
+    return block;
+  }
+
+  while (i < lines.length){
+    const line = lines[i];
+    const t = line.trim();
+
+    if (/^#\s+/.test(t) && !/^##/.test(t)){ flushReading(); lesson.title = t.replace(/^#\s+/, ""); i++; continue; }
+    if (/^>\s+/.test(t)){ flushReading(); lesson.intro = t.replace(/^>\s+/, ""); i++; continue; }
+    if (/^##\s+/.test(t)){ flushReading(); readingTitle = t.replace(/^##\s+/, ""); i++; continue; }
+
+    const m = /^\[(\w+)\]\s*(.*)$/.exec(t);
+    if (!m){ readingBody.push(line); i++; continue; }
+
+    flushReading();
+    const kind = m[1].toLowerCase();
+    const o = opts(m[2]);
+    i++;
+
+    if (kind === "code" || kind === "ide" || kind === "python"){
+      const starter = fenced();
+      const blk = { type: "ide", id: nextId("code"), title: o.text || "Python", task: o.flags.task || o.text || "Write your code, then press Run.", starter };
+      if (o.flags.turtle) blk.turtle = true;
+      if (typeof o.flags.inputs === "string") blk.inputs = o.flags.inputs.split(/\s*,\s*/).join("\n");
+      if (typeof o.flags.expect === "string") blk.expect = o.flags.expect;
+      if (o.flags.readonly) blk.readOnly = true;
+      lesson.blocks.push(addLock(blk, o.flags));
+      continue;
+    }
+    if (kind === "write" || kind === "question"){
+      const wm = /\((\d+)\s*words?\)/i.exec(o.text);
+      const blk = { type: "question", id: nextId("q"),
+                    prompt: o.text.replace(/\((\d+)\s*words?\)/i, "").trim(),
+                    minWords: wm ? parseInt(wm[1], 10) : 20 };
+      lesson.blocks.push(addLock(blk, o.flags));
+      continue;
+    }
+    if (kind === "quiz"){
+      const rows = bulletsUnder();
+      const options = [], hints = [];
+      let answer = 0;
+      rows.forEach(r => {
+        const rt = r.trim();
+        if (/^\?\s+/.test(rt)){ hints.push(rt.replace(/^\?\s+/, "")); return; }
+        if (/^\*\s+/.test(rt)){ answer = options.length; options.push(rt.replace(/^\*\s+/, "")); return; }
+        options.push(rt.replace(/^-\s+/, ""));
+      });
+      lesson.blocks.push(addLock({ type: "quiz", id: nextId("quiz"), title: "Check your understanding",
+        questions: [{ q: o.text, options, answer, hint: hints[0] || "", why: hints[1] || "" }] }, o.flags));
+      continue;
+    }
+    if (kind === "mc"){
+      const rows = bulletsUnder();
+      const options = []; let answer = 0;
+      rows.forEach(r => {
+        const rt = r.trim();
+        if (/^\*\s+/.test(rt)){ answer = options.length; options.push(rt.replace(/^\*\s+/, "")); return; }
+        options.push(rt.replace(/^-\s+/, ""));
+      });
+      lesson.blocks.push(addLock({ type: "mc", id: nextId("mc"), prompt: o.text, options, answer,
+        topic: o.flags.topic || undefined }, o.flags));
+      continue;
+    }
+    if (kind === "blanks"){
+      lesson.blocks.push(addLock({ type: "blanks", id: nextId("gap"), prompt: o.flags.prompt || "Fill in the gaps",
+        text: o.text, distractors: typeof o.flags.extra === "string" ? o.flags.extra.split(/\s*,\s*/) : undefined,
+        topic: o.flags.topic || undefined }, o.flags));
+      continue;
+    }
+    if (kind === "order"){
+      lesson.blocks.push(addLock({ type: "order", id: nextId("ord"),
+        prompt: o.flags.prompt || "Put these in the right order",
+        items: o.text.split("|").map(x => x.trim()).filter(Boolean),
+        topic: o.flags.topic || undefined }, o.flags));
+      continue;
+    }
+    if (kind === "short"){
+      lesson.blocks.push(addLock({ type: "short", id: nextId("sa"), prompt: o.text,
+        keywords: typeof o.flags.keywords === "string"
+          ? o.flags.keywords.split(";").map(g => g.split(/\s*,\s*/).map(x => x.trim()).filter(Boolean)).filter(g => g.length)
+          : [],
+        model: o.flags.model || "", topic: o.flags.topic || undefined }, o.flags));
+      continue;
+    }
+    if (kind === "screenshot" || kind === "image"){
+      lesson.blocks.push(addLock({ type: "image", id: nextId("shot"),
+        task: o.text || "Take a screenshot and paste it here." }, o.flags));
+      continue;
+    }
+    if (kind === "video" || kind === "embed"){
+      const url = (o.text.split("|")[0] || "").trim();
+      lesson.blocks.push(addLock({ type: "embed", id: nextId("vid"), url,
+        title: (o.text.split("|")[1] || "Watch this").trim() }, o.flags));
+      continue;
+    }
+    if (kind === "link"){
+      const parts = o.text.split("|");
+      lesson.blocks.push(addLock({ type: "link", id: nextId("link"), url: (parts[0] || "").trim(),
+        title: (parts[1] || "Open this").trim(), task: o.flags.task || "" }, o.flags));
+      continue;
+    }
+    // unknown marker: keep the words rather than lose them
+    readingBody.push(line);
+  }
+  flushReading();
+  if (!lesson.intro) delete lesson.intro;
+  return lesson;
+}
+
+/* the same tiny hash the lesson page uses for teacher codes */
+function djb2(str){
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+$("convert").addEventListener("click", () => {
+  try{
+    lastLesson = convert($("src").value);
+    $("jsonOut").textContent = JSON.stringify(lastLesson, null, 2);
+    const tasks = lastLesson.blocks.length;
+    $("msg").textContent = "Converted \u2014 " + tasks + " task" + (tasks === 1 ? "" : "s") + ".";
+    $("idHint").textContent = "Suggested file name: " +
+      lastLesson.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) + ".json";
+  }catch(e){ $("msg").textContent = "Could not convert that: " + e.message; }
+});
+$("preview").addEventListener("click", () => {
+  if (!lastLesson){ $("convert").click(); }
+  if (!lastLesson) return;
+  localStorage.setItem("hub_preview", JSON.stringify(lastLesson));
+  window.open("lesson.html?id=__preview&preview=0", "_blank");
+});
+$("copy").addEventListener("click", async () => {
+  if (!lastLesson) return;
+  try{ await navigator.clipboard.writeText(JSON.stringify(lastLesson, null, 2)); $("msg").textContent = "Copied."; }
+  catch(e){ $("msg").textContent = "Select the JSON and copy it with Ctrl+C."; }
+});
+$("download").addEventListener("click", () => {
+  if (!lastLesson) return;
+  const name = lastLesson.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) + ".json";
+  const blob = new Blob([JSON.stringify(lastLesson, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+$("sample").addEventListener("click", () => { $("src").value = SAMPLE; $("convert").click(); });
+
+const SAMPLE = [
+"# Python 1 - Printing and variables",
+"> Your first Python program, straight in the browser.",
+"",
+"## What we are doing today",
+"Python is a language for telling a computer what to do.",
+"Today you will write your own program and make it say your name.",
+"- Everything runs in this page - nothing to install",
+"- Press **Run** to see what your code does",
+"",
+"[code] Say hello +expect: Hello",
+"```",
+"print(\"Hello\")",
+"```",
+"",
+"[write] What did the computer do when you pressed Run? (20 words)",
+"",
+"[code] Ask for a name +inputs: Ada",
+"```",
+"name = input(\"What is your name? \")",
+"print(\"Hello \" + name)",
+"```",
+"",
+"[quiz] What does print() do?",
+"* Shows something on the screen",
+"- Sends the code to a printer",
+"- Saves the file",
+"? Think about where the words appeared.",
+"",
+"## Drawing with code",
+"The turtle draws lines as it moves. Try changing the numbers.",
+"",
+"[code] Draw a square +turtle",
+"```",
+"import turtle",
+"t = turtle.Turtle()",
+"for side in range(4):",
+"    t.forward(100)",
+"    t.right(90)",
+"```",
+"",
+"[screenshot] Take a screenshot of your finished drawing.",
+""
+].join("\n");
+
+if (window.initSettings) initSettings($("setBtn"));
+</script>
+</body>
+</html>
