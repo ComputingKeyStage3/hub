@@ -54,6 +54,28 @@
 
 </div>
 
+<div class="modal-back no-print" id="resetModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div id="rsStep1">
+      <h2 style="margin-top:0">Reset your password</h2>
+      <p class="modal-text" id="rsWho"></p>
+      <div class="field"><label for="rp1">New password (12–25 characters)</label><input type="password" id="rp1" autocomplete="new-password"></div>
+      <div class="field"><label for="rp2">Type it again</label><input type="password" id="rp2" autocomplete="new-password"></div>
+      <p class="subnote">Tip: three random words joined together — like <b>otter-lamp-window</b>.</p>
+      <button class="btn-primary modal-cta" id="rsGo">Update password</button>
+      <button class="btn-ghost modal-stay" id="rsCancel">Cancel</button>
+      <p class="hint" id="rsMsg" style="margin-top:10px"></p>
+    </div>
+    <div id="rsStep2" hidden>
+      <h2 style="margin-top:0">Waiting for your teacher</h2>
+      <div class="load-dots" style="margin:18px 0"><span></span><span></span><span></span></div>
+      <p class="modal-text">Put your hand up — your teacher needs to approve this. Keep this window open.</p>
+      <p class="handin" id="rsCount"></p>
+      <button class="btn-ghost modal-stay" id="rsGiveUp">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-back no-print" id="pwModal" hidden>
   <div class="modal" role="dialog" aria-modal="true">
     <h2 style="margin-top:0">Choose your password</h2>
@@ -280,18 +302,92 @@ $("npGo").addEventListener("click", async () => {
   }catch(e){ $("npMsg").textContent = e.message; }
 });
 
-/* ---- forgot password: asks the teacher, tells them nothing about accounts ---- */
+/* ---- forgot password ----
+   Check the username, let them choose the new password there and then, and
+   hold it until their teacher approves it — no emails, no teacher typing. */
+let rsUser = "", rsTicket = "", rsPoll = null, rsDeadline = 0;
+
 $("forgotBtn").addEventListener("click", async () => {
   const u = $("u").value.trim();
   if (!u){ $("loginErr").textContent = "Type your username first, then press Forgot password?"; return; }
+  if (!ready){ $("loginErr").textContent = "Site not connected to its server yet (config.js)."; return; }
   $("loginErr").textContent = "";
-  $("loginNote").textContent = "Asking your teacher…";
+  $("forgotBtn").textContent = "Checking…";
   try{
-    await fetch(API + "/api/login", { method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ action:"reset-request", username: u }) });
-  }catch(e){}
-  $("loginNote").textContent = "Your teacher has been asked. Once they say yes, sign in with an empty password box and pick a new one.";
+    const r = await fetch(API + "/api/login", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ action:"check-username", username: u }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not check that.");
+    if (!d.exists){
+      alert("We can't find the username \"" + u + "\".\n\nCheck the spelling and try again — your teacher can tell you your exact username.");
+      return;
+    }
+    rsUser = u;
+    $("rsWho").textContent = "Signing in as " + u + ". Choose a new password, then your teacher will approve it.";
+    $("rsStep1").hidden = false; $("rsStep2").hidden = true;
+    $("rsMsg").textContent = ""; $("rp1").value = ""; $("rp2").value = "";
+    $("resetModal").hidden = false;
+    $("rp1").focus();
+  }catch(e){ $("loginErr").textContent = e.message; }
+  finally{ $("forgotBtn").textContent = "Forgot password?"; }
 });
+$("rsCancel").addEventListener("click", () => { $("resetModal").hidden = true; });
+$("rsGiveUp").addEventListener("click", stopReset);
+function stopReset(){
+  clearInterval(rsPoll); rsPoll = null;
+  $("resetModal").hidden = true;
+}
+$("rsGo").addEventListener("click", async () => {
+  const a = $("rp1").value, b = $("rp2").value;
+  if (a.length < 12 || a.length > 25){ $("rsMsg").textContent = "It must be 12 to 25 characters long."; return; }
+  if (a !== b){ $("rsMsg").textContent = "The two boxes don't match."; return; }
+  $("rsMsg").textContent = "Sending to your teacher…";
+  try{
+    const r = await fetch(API + "/api/login", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ action:"reset-request", username: rsUser, newPassword: a }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not send it.");
+    rsTicket = d.ticket;
+    $("rsStep1").hidden = true; $("rsStep2").hidden = false;
+    rsDeadline = Date.now() + 5*60*1000;
+    tickCountdown();
+    rsPoll = setInterval(pollReset, 5000);
+  }catch(e){ $("rsMsg").textContent = e.message; }
+});
+function tickCountdown(){
+  const left = Math.max(0, Math.ceil((rsDeadline - Date.now())/1000));
+  const m = Math.floor(left/60), sec = String(left%60).padStart(2,"0");
+  $("rsCount").textContent = left ? ("Time left: " + m + ":" + sec) : "";
+}
+async function pollReset(){
+  tickCountdown();
+  if (Date.now() > rsDeadline){
+    stopReset();
+    alert("Teacher did not approve your password quick enough. Please try reset your password again.");
+    return;
+  }
+  try{
+    const r = await fetch(API + "/api/login", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ action:"reset-status", username: rsUser, ticket: rsTicket }) });
+    const d = await r.json();
+    if (d.status === "approved"){
+      stopReset();
+      if (localStorage.getItem("hub_user") !== rsUser.toLowerCase()) clearStudentCache();
+      localStorage.setItem("hub_user", rsUser.toLowerCase());
+      localStorage.setItem("hub_token", d.token);
+      localStorage.setItem("hub_name", d.name);
+      localStorage.setItem("hub_group", d.group || "");
+      renderAuth();
+      loadLessons();
+    } else if (d.status === "denied"){
+      stopReset();
+      alert("Your teacher did not approve this password change. Ask them why, then try again.");
+    } else if (d.status === "expired"){
+      stopReset();
+      alert("That request is no longer valid. Please try reset your password again.");
+    }
+  }catch(e){ /* a blip: keep polling until the deadline */ }
+}
 
 async function loadResults(){
   const token = localStorage.getItem("hub_token");

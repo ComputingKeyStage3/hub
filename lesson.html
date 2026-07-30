@@ -6,10 +6,18 @@
 <title>Lesson</title>
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
 <script src="settings.js"></script>
 </head>
 <body class="lesson">
+
+<div class="loadscreen" id="loadScreen">
+  <div class="load-inner">
+    <div class="load-dots"><span></span><span></span><span></span></div>
+    <p id="loadMsg">Loading your lesson…</p>
+  </div>
+</div>
 
 <div class="topbar">
   <a class="home" id="homeLink" href="index.html">&larr; Home</a>
@@ -79,8 +87,8 @@ const qs = new URLSearchParams(location.search);
 const previewParam = qs.get("preview");
 const viewParam = qs.get("view");
 const stepParam = qs.get("step");
-const printParam = qs.get("print");                             // printable copy of a student's work
-const spectate = previewParam !== null || viewParam !== null || printParam !== null;
+const pdfParam = qs.get("pdf");                                  // teacher wants the PDF view
+const spectate = previewParam !== null || viewParam !== null || pdfParam !== null;
 let inspectName = "";
 let inspectList = null, inspectIdx = 0;
 const lessonId = qs.get("id") || "demo";
@@ -116,6 +124,13 @@ let resumeShown = false;       // the "welcome back" note is strictly one-shot
 let pdfDone = false;   // becomes true once they've downloaded their PDF
 
 
+function hideLoader(msg){
+  const el2 = document.getElementById("loadScreen");
+  if (!el2) return;
+  if (msg){ const m = document.getElementById("loadMsg"); if (m) m.textContent = msg; return; }
+  el2.hidden = true;
+  if (el2.classList) el2.classList.add("gone");
+}
 function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!==undefined)e.innerHTML=html; return e; }
 /* Saving is deliberately silent. Any badge — even a warning — made students
    think their work was safe somewhere. The PDF is the only hand-in, and the
@@ -296,7 +311,7 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
         setTimeout(() => { location.href = "admin.html"; }, 150);
       });
       vb.appendChild(backBit);
-      if (inspectList && inspectList.length > 1 && printParam === null){
+      if (inspectList && inspectList.length && pdfParam === null){   // show it even for one student
         const nav = el("span","vb-nav");
         const prev = el("button","vb-arrow","\u2190"); prev.type = "button"; prev.title = "Previous student";
         const sel = el("select","vb-sel");
@@ -323,7 +338,8 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
       document.body.appendChild(vb);           // position:fixed — order doesn't matter
       const home = $("homeLink");
       if (home){ home.textContent = "\u2190 Teacher console"; home.href = "admin.html"; }
-      if (printParam !== null){ showPrintable(); return; }
+      hideLoader();
+      if (pdfParam !== null){ showPdfView(); return; }
       const target = stepParam !== null ? parseInt(stepParam, 10)
                    : (previewParam !== null && previewParam !== "" ? parseInt(previewParam, 10) : null);
       if (viewParam !== null && wasDone && target === null){
@@ -334,14 +350,18 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
       return;
     }
     if (wasDone){
+      hideLoader();
       if (lesson.assessment){ renderAssessmentComplete(false); }
       else { showLessonComplete(true); }
       return;
     }
+    hideLoader("Checking with your teacher\u2026");
     await fetchRelease();      // know the state before we show anything
+    hideLoader();
     showStep(step);
   })
   .catch((e) => {
+    hideLoader();
     $("blocks").innerHTML = '<section class="station"><p class="err">' + (
       e.message === "missing" ? "Could not find this lesson. Check the lesson id in the address bar."
       : e.message === "badjson" ? "This lesson file has a typo in it and could not be read."
@@ -352,7 +372,7 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
 
 async function loadSaved(){
   if (spectate){
-    if (viewParam !== null || printParam !== null){
+    if (viewParam !== null || pdfParam !== null){
       try{
         let box = JSON.parse(localStorage.getItem("hub_inspect") || "null");
         if (box && Array.isArray(box.list) && box.list.length){
@@ -397,6 +417,7 @@ async function loadSaved(){
   }catch(e){ /* unreadable cache: fall through to the server copy */ }
 
   if (!token || !apiReady) return;
+  hideLoader("Fetching your saved work\u2026");
   try{
     const r = await fetch(API + "/api/work?lesson=" + encodeURIComponent(lessonId),
                           { headers: { Authorization: "Bearer " + token } });
@@ -489,7 +510,7 @@ function showSoftModal(){ $("softModal").hidden = false; $("softStay").focus(); 
 function hideSoftModal(){ $("softModal").hidden = true; }
 $("softStay").addEventListener("click", hideSoftModal);
 $("softGo").addEventListener("click", () => { hideSoftModal(); softSkip = true; tryContinue(); });
-$("softModal").addEventListener("click", (e) => { if (e.target === $("softModal")) hideSoftModal(); });
+$("softModal").addEventListener("mousedown", (e) => { if (e.target === $("softModal")) hideSoftModal(); });
 
 function paintTracker(){
   Array.from($("tracker").children).forEach((seg, n) => {
@@ -551,7 +572,7 @@ function finishLesson(){
 
 /* ---------- finish pop-up ---------- */
 $("waitOk").addEventListener("click", hideWaitModal);
-$("waitModal").addEventListener("click", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
+$("waitModal").addEventListener("mousedown", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
 
 document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); hideSoftModal(); } });
 
@@ -1385,7 +1406,36 @@ function renderResponses(container, targetTopic, statusEl){
   container.appendChild(wrap);
 }
 
-/* Every task on one long page, ready for the browser's "Save as PDF". */
+/* Builds the PDF in the browser and shows it inside the page. Nothing is
+   downloaded and nothing is stored — the file only exists in memory. */
+function showPdfView(){
+  $("dock").classList.add("gone");
+  const shell = el("div","pdfshell");
+  const bar = el("div","pdfbar");
+  bar.appendChild(el("span","pdfname", (inspectName || "Student") + " \u00b7 " + (lesson.title || lessonId)));
+  const dl = el("button","btn-ghost","Save a copy");
+  const close = el("button","btn-ghost","Close");
+  close.addEventListener("click", () => { if (window.close) window.close(); setTimeout(() => { location.href = "admin.html"; }, 120); });
+  bar.appendChild(dl); bar.appendChild(close);
+  shell.appendChild(bar);
+  const frame = el("iframe","pdfframe");
+  shell.appendChild(frame);
+  document.body.appendChild(shell);
+  try{
+    if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
+    const doc = buildPdf();
+    frame.src = doc.output("bloburl");
+    dl.addEventListener("click", () => doc.save(fileName()));
+  }catch(e){
+    shell.removeChild(frame);
+    console.error("PDF build failed:", e);
+    const msg = el("p","hint","Could not build the PDF here (" + e.message + "). Use the eye button to read the work on screen instead.");
+    shell.appendChild(msg);
+    dl.hidden = true;
+  }
+}
+
+/* Kept from the old export: every task on one long page. */
 function showPrintable(){
   $("dock").classList.add("gone");
   const wrap = el("div","printwrap");

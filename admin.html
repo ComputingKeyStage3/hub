@@ -14,6 +14,7 @@
 <div class="homebar" id="topbar" hidden>
   <div class="title">Prince Henry's Computing KS3 — Teacher console</div>
   <span class="online-pill off" id="pill"><span class="odot"></span><span id="pillTxt">Offline</span></span>
+  <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
@@ -34,6 +35,7 @@
   <div id="classesView" hidden>
     <h2 style="margin:22px 0 4px">Your classes</h2>
     <p class="hint" style="margin:0">Choose a class to manage its students and lessons.</p>
+    <div class="toolrow"><button class="btn-ghost" id="newClassBtn">+ New class</button></div>
     <div class="classgrid" id="classGrid"></div>
   </div>
 
@@ -45,8 +47,8 @@
       <button class="btn-ghost iconbtn" id="renameBtn" title="Rename class">&#9998;</button>
     </div>
     <div class="bigcards">
-      <button class="classtile" id="openStudents"><b>&#128101; Students</b><span id="stuCount"></span></button>
       <button class="classtile" id="openLessons"><b>&#128218; Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
+      <button class="classtile" id="openStudents"><b>&#128101; Students</b><span id="stuCount"></span></button>
     </div>
   </div>
 
@@ -64,10 +66,22 @@
   </div>
 
   <!-- ============ lessons + release ============ -->
+  <div id="pwView" hidden>
+    <button class="crumb" id="backFromPw">&larr; Back</button>
+    <h2 style="margin:14px 0 4px">Password updates</h2>
+    <p class="hint" style="margin:0 0 4px">Students who have chosen a new password and are waiting for you. Approving signs them straight in.</p>
+    <div class="toolrow">
+      <span class="hint" id="pwPollMsg"></span>
+      <button class="btn-ghost" id="pwRefresh" hidden>&#8635; Refresh</button>
+    </div>
+    <div id="pwList"></div>
+  </div>
+
   <div id="unitsView" hidden>
     <button class="crumb" id="backClass2">&larr; <span class="bk"></span></button>
     <h2 style="margin:14px 0 4px">Units</h2>
     <p class="hint" style="margin:0">Lessons live inside units. Choose one to publish and pace its lessons.</p>
+    <div class="toolrow"><button class="btn-ghost" id="newUnitBtn">+ New unit</button></div>
     <div class="classgrid" id="unitGrid"></div>
   </div>
 
@@ -123,7 +137,7 @@ async function heartbeat(){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","classesView","classView","studentsView","unitsView","lessonsView"];
+const VIEWS = ["keyView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
 function show(view){
   VIEWS.forEach(v => { $(v).hidden = v !== view; });
   clearInterval(relTimer);
@@ -137,7 +151,7 @@ function openModal(build){
   $("tmodal").hidden = false;
 }
 function closeModal(){ $("tmodal").hidden = true; }
-$("tmodal").addEventListener("click", (e) => { if (e.target === $("tmodal")) closeModal(); });
+$("tmodal").addEventListener("mousedown", (e) => { if (e.target === $("tmodal")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 function modalTitle(box, text){ const h = el("h2","",text); h.style.marginTop = "0"; box.appendChild(h); }
 function fieldRow(box, label, type, value){
@@ -183,20 +197,16 @@ function paintClasses(){
     t.addEventListener("click", () => openClass(gr.name));
     g.appendChild(t);
   });
-  const add = el("button","classtile");
-  add.appendChild(el("b","","+ New class"));
-  add.appendChild(el("span","","A class appears when its first student is added"));
-  add.addEventListener("click", () => {
-    openModal(box => {
-      modalTitle(box, "New class");
-      const i = fieldRow(box, "Class name (e.g. 8B)", "text", "");
-      const go = el("button","btn-primary modal-cta","Open class");
-      go.addEventListener("click", () => { const v = i.value.trim(); if (v){ closeModal(); openClass(v); } });
-      box.appendChild(go);
-    });
-  });
-  g.appendChild(add);
 }
+$("newClassBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "New class");
+    const i = fieldRow(box, "Class name (e.g. 8B)", "text", "");
+    const go = el("button","btn-primary modal-cta","Open class");
+    go.addEventListener("click", () => { const v = i.value.trim(); if (v){ closeModal(); openClass(v); } });
+    box.appendChild(go);
+  });
+});
 async function refreshGroups(){
   try{
     const r = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
@@ -460,27 +470,24 @@ function paintUnits(){
     t.addEventListener("click", () => openUnit(""));
     g.appendChild(t);
   }
-  const add = el("button","classtile");
-  add.appendChild(el("b","","+ New unit"));
-  add.appendChild(el("span","","Group a term's lessons together"));
-  add.addEventListener("click", () => {
-    openModal(box => {
-      modalTitle(box, "New unit");
-      const i = fieldRow(box, "Unit name (e.g. Unit 1 \u2014 Cybersecurity)", "text", "");
-      const msg = el("p","hint","");
-      const go = el("button","btn-primary modal-cta","Create unit");
-      go.addEventListener("click", async () => {
-        const v = i.value.trim(); if (!v) return;
-        msg.textContent = "Creating\u2026";
-        try{ await catPost({ op:"add-unit", name: v, position: (cat.units || []).length + 1 });
-             closeModal(); paintUnits(); }
-        catch(e){ msg.textContent = e.message; }
-      });
-      box.appendChild(go); box.appendChild(msg);
-    });
-  });
-  g.appendChild(add);
 }
+
+$("newUnitBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "New unit");
+    const i = fieldRow(box, "Unit name (e.g. Unit 1 \u2014 Cybersecurity)", "text", "");
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Create unit");
+    go.addEventListener("click", async () => {
+      const v = i.value.trim(); if (!v) return;
+      msg.textContent = "Creating\u2026";
+      try{ await catPost({ op:"add-unit", name: v, position: (cat.units || []).length + 1 });
+           closeModal(); paintUnits(); }
+      catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+});
 
 function openUnit(name){
   unit = name;
@@ -608,24 +615,22 @@ function openManage(){
   openModal(box => {
     box.classList.add("wide");
     modalTitle(box, titleOf(lessonId));
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715"); x.title = "Close";
+    x.addEventListener("click", closeModal);
+    box.appendChild(x);
     const bar = el("div","toolrow");
-    const lockBtn = el("button", lessonLocks[lessonId] ? "btn-primary" : "btn-ghost",
-      lessonLocks[lessonId] ? "\u{1F513} Unlock whole lesson" : "\u{1F512} Lock whole lesson");
-    lockBtn.addEventListener("click", async () => {
-      lockBtn.textContent = "\u2026";
+    const isLive = !!catOf(lessonId).published;
+    const pubBtn = el("button", isLive ? "btn-ghost" : "btn-primary", isLive ? "Unpublish" : "Publish");
+    pubBtn.addEventListener("click", async () => {
+      pubBtn.textContent = "\u2026";
       try{
-        const r = await fetch(API + "/api/release", { method:"POST", headers: HJ(),
-          body: JSON.stringify({ lesson: lessonId, group: cls, lessonLocked: !lessonLocks[lessonId] }) });
-        if (!r.ok) throw new Error((await r.json()).error || "Could not update.");
-        lessonLocks[lessonId] = !lessonLocks[lessonId];
+        await catPost({ op:"set-lesson", id: lessonId, published: !isLive });
         closeModal(); paintLessonGrid(); openManage();
       }catch(e){ alert(e.message); }
     });
     const workBtn = el("button","btn-ghost","View Student Work");
     workBtn.addEventListener("click", () => pickStudentWork(lessonId));
-    const prog = el("button","btn-primary","View Student Progress");
-    prog.addEventListener("click", showProgress);
-    bar.appendChild(prog); bar.appendChild(workBtn); bar.appendChild(lockBtn);
+    bar.appendChild(pubBtn); bar.appendChild(workBtn);
     box.appendChild(bar);
     const tools = el("div","toolrow");
     const oa = el("button","btn-ghost","Open all tasks"); oa.addEventListener("click", () => postLocks(new Set()));
@@ -753,7 +758,7 @@ function inspect(rows, idx, stepIdx){
 }
 function printWork(rows, idx){
   handOff(rows, idx);
-  window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&print=1", "_blank");
+  window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&pdf=1", "_blank");
 }
 async function pickStudentWork(id){
   if (id && id !== lessonId){
@@ -766,16 +771,29 @@ async function pickStudentWork(id){
     holder.appendChild(el("p","hint","Loading\u2026"));
     try{
       const rows = await getWorkRows();
+      const roster = await getRoster();
       holder.innerHTML = "";
       if (!rows.length){ holder.appendChild(el("p","hint","Nobody in " + cls + " has saved any work for this lesson yet.")); }
+      roster.filter(st => !rows.some(w => w.username === st.username)).forEach(st => {
+        const line = el("div","who-row");
+        line.appendChild(el("span","nm", st.display_name));
+        line.appendChild(el("span","st no","Not started"));
+        holder.appendChild(line);
+      });
       rows.forEach((r, i) => {
         const line = el("div","who-row");
         line.appendChild(el("span","nm", r.display_name));
-        line.appendChild(el("span","st " + (r.data && r.data.__done ? "yes" : "no"),
-          r.data && r.data.__done ? "Completed \u2713" : "In progress"));
+        const total = (lessonJson && lessonJson.blocks) ? lessonJson.blocks.length : 0;
+        let status = "In progress", cl = "no";
+        if (r.data && r.data.__done){ status = "Completed \u2713"; cl = "yes"; }
+        else if (r.data && total){
+          const n = Math.min((r.data.__step || 0), total - 1);
+          status = "Task " + (n + 1) + " of " + total + ": " + stepTitle(lessonJson.blocks[n], n).slice(0, 30);
+        }
+        line.appendChild(el("span","st " + cl, status));
         const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View their work";
         v.addEventListener("click", () => inspect(rows, i));
-        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "Printable copy (save as PDF)";
+        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "See it as a PDF";
         p.addEventListener("click", () => printWork(rows, i));
         line.appendChild(v); line.appendChild(p);
         holder.appendChild(line);
@@ -808,7 +826,7 @@ function showProgress(){
         }
         line.appendChild(el("span","st " + cl, status));
         const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View their work";
-        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "Printable copy (save as PDF)";
+        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "See it as a PDF";
         if (row){ v.addEventListener("click", () => inspect(rows, idx)); p.addEventListener("click", () => printWork(rows, idx)); }
         else { v.disabled = true; p.disabled = true; }
         line.appendChild(v); line.appendChild(p);
@@ -838,7 +856,7 @@ async function whoDone(i, b){
         line.appendChild(el("span","nm", st.display_name));
         line.appendChild(el("span","st " + (done ? "yes" : "no"), done ? "Done \u2713" : "Not yet"));
         const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View at this task";
-        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "Printable copy (save as PDF)";
+        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "See it as a PDF";
         if (row){ v.addEventListener("click", () => inspect(rows, idx, i)); p.addEventListener("click", () => printWork(rows, idx)); }
         else { v.disabled = true; p.disabled = true; }
         line.appendChild(v); line.appendChild(p);
@@ -848,6 +866,62 @@ async function whoDone(i, b){
     const done2 = el("button","btn-ghost modal-stay","Close"); done2.addEventListener("click", closeModal);
     box.appendChild(done2);
   });
+}
+
+/* ---------- password updates ----------
+   Polls while the page is open, but only for a minute at a time — an
+   abandoned tab shouldn't sit there hammering the database all lesson. */
+let pwPoll = null, pwStop = 0, pwFrom = "classesView";
+function showPwView(){
+  pwFrom = VIEWS.find(v => !$(v).hidden) || "classesView";
+  show("pwView");
+  startPwPolling();
+}
+$("pwBtn").addEventListener("click", showPwView);
+$("backFromPw").addEventListener("click", () => { stopPwPolling(); show(pwFrom); });
+$("pwRefresh").addEventListener("click", startPwPolling);
+function startPwPolling(){
+  clearInterval(pwPoll);
+  $("pwRefresh").hidden = true;
+  pwStop = Date.now() + 60000;
+  loadResetQueue();
+  pwPoll = setInterval(() => {
+    if (Date.now() > pwStop){ stopPwPolling(true); return; }
+    loadResetQueue();
+  }, 5000);
+  $("pwPollMsg").textContent = "Checking every 5 seconds\u2026";
+}
+function stopPwPolling(showRefresh){
+  clearInterval(pwPoll); pwPoll = null;
+  if (showRefresh){
+    $("pwRefresh").hidden = false;
+    $("pwPollMsg").textContent = "Stopped checking \u2014 press Refresh to look again.";
+  }
+}
+async function loadResetQueue(){
+  try{
+    const r = await fetch(API + "/api/teacher/resets", { headers: H(), cache: "no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not load requests.");
+    setOnline(true);
+    const list = d.requests || [];
+    $("pwCount").textContent = list.length;
+    $("pwCount").hidden = !list.length;
+    const box = $("pwList"); box.innerHTML = "";
+    if (!list.length){ box.appendChild(el("p","hint","Nothing waiting. Requests appear here within a few seconds of a student asking.")); return; }
+    list.forEach(x => {
+      const line = el("div","who-row");
+      line.appendChild(el("span","nm", x.display_name + " \u00b7 " + x.username + (x.group_name ? " \u00b7 " + x.group_name : "")));
+      line.appendChild(el("span","st " + (x.hasNewPassword ? "yes" : "no"),
+        x.hasNewPassword ? "New password ready" : "Waiting"));
+      const yes = el("button","btn-primary","Approve");
+      const no = el("button","btn-ghost","Deny"); no.style.marginLeft = "8px";
+      yes.addEventListener("click", async () => { yes.textContent = "\u2026"; await resetAction("approve-reset", x.username); loadResetQueue(); });
+      no.addEventListener("click", async () => { no.textContent = "\u2026"; await resetAction("deny-reset", x.username); loadResetQueue(); });
+      line.appendChild(yes); line.appendChild(no);
+      box.appendChild(line);
+    });
+  }catch(e){ setOnline(false); }
 }
 
 /* ---------- boot ---------- */

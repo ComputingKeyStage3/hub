@@ -29,7 +29,6 @@
       FONTS.map(f => '<button class="font-opt" data-font="' + f[0] + '" style="font-family:' + f[2] + '">' + f[1] + '</button>').join("") +
       '</div></div>' +
       '<div class="set-group" id="pwGroup" hidden><span class="set-label">Your password</span>' +
-      '<div class="field"><label>Current password</label><input type="password" id="pwCur" autocomplete="current-password"></div>' +
       '<div class="field"><label>New password (12\u201325 characters)</label><input type="password" id="pwNew" autocomplete="new-password"></div>' +
       '<div class="field"><label>Type it again</label><input type="password" id="pwNew2" autocomplete="new-password"></div>' +
       '<button class="btn-ghost" id="pwGo">Change password</button>' +
@@ -60,15 +59,15 @@
       try{
         const r = await fetch(API + "/api/login", { method:"POST",
           headers:{ "Content-Type":"application/json", Authorization: "Bearer " + localStorage.getItem("hub_token") },
-          body: JSON.stringify({ action:"set-password", currentPassword: back.querySelector("#pwCur").value, newPassword: next }) });
+          body: JSON.stringify({ action:"set-password", newPassword: next }) });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || "Could not change it.");
         msg.textContent = "Password changed \u2713";
-        back.querySelector("#pwCur").value = back.querySelector("#pwNew").value = back.querySelector("#pwNew2").value = "";
+        back.querySelector("#pwNew").value = back.querySelector("#pwNew2").value = "";
       }catch(e){ msg.textContent = e.message; }
     });
     back.querySelector("#setDone").addEventListener("click", () => { back.hidden = true; });
-    back.addEventListener("click", (e) => { if (e.target === back) back.hidden = true; });
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.hidden = true; });
     return { back, paint };
   }
   let ui = null;
