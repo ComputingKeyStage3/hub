@@ -79,8 +79,10 @@ const qs = new URLSearchParams(location.search);
 const previewParam = qs.get("preview");
 const viewParam = qs.get("view");
 const stepParam = qs.get("step");
-const spectate = previewParam !== null || viewParam !== null;   // teacher preview / viewing a student
+const printParam = qs.get("print");                             // printable copy of a student's work
+const spectate = previewParam !== null || viewParam !== null || printParam !== null;
 let inspectName = "";
+let inspectList = null, inspectIdx = 0;
 const lessonId = qs.get("id") || "demo";
 const WORK_KEY = "hub_work_" + lessonId;
 
@@ -284,17 +286,44 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
     if (spectate){
       $("saveBtn").hidden = true; $("signinHint").hidden = true;
       if (document.body.classList) document.body.classList.add("spectating");
-      const vb = el("button","viewbar", viewParam !== null
+      const vb = el("div","viewbar");
+      const backBit = el("button","vb-back", viewParam !== null
         ? "Viewing " + (inspectName || "a student") + "'s work \u2014 click here to go back"
         : "Teacher preview \u2014 this is what students will see \u00b7 click here to go back");
-      vb.type = "button";
-      vb.addEventListener("click", () => {
+      backBit.type = "button";
+      backBit.addEventListener("click", () => {
         if (window.close) window.close();
         setTimeout(() => { location.href = "admin.html"; }, 150);
       });
+      vb.appendChild(backBit);
+      if (inspectList && inspectList.length > 1 && printParam === null){
+        const nav = el("span","vb-nav");
+        const prev = el("button","vb-arrow","\u2190"); prev.type = "button"; prev.title = "Previous student";
+        const sel = el("select","vb-sel");
+        inspectList.forEach((p, i) => {
+          const o = el("option","", p.name || p.username);
+          o.value = String(i); if (i === inspectIdx) o.selected = true;
+          sel.appendChild(o);
+        });
+        const next = el("button","vb-arrow","\u2192"); next.type = "button"; next.title = "Next student";
+        const go = (i) => {
+          if (i < 0 || i >= inspectList.length) return;
+          try{
+            const box = JSON.parse(localStorage.getItem("hub_inspect") || "{}");
+            box.idx = i; localStorage.setItem("hub_inspect", JSON.stringify(box));
+          }catch(e){}
+          location.reload();
+        };
+        prev.addEventListener("click", () => go(inspectIdx - 1));
+        next.addEventListener("click", () => go(inspectIdx + 1));
+        sel.addEventListener("change", () => go(parseInt(sel.value, 10)));
+        nav.appendChild(prev); nav.appendChild(sel); nav.appendChild(next);
+        vb.appendChild(nav);
+      }
       document.body.appendChild(vb);           // position:fixed — order doesn't matter
       const home = $("homeLink");
       if (home){ home.textContent = "\u2190 Teacher console"; home.href = "admin.html"; }
+      if (printParam !== null){ showPrintable(); return; }
       const target = stepParam !== null ? parseInt(stepParam, 10)
                    : (previewParam !== null && previewParam !== "" ? parseInt(previewParam, 10) : null);
       if (viewParam !== null && wasDone && target === null){
@@ -323,9 +352,15 @@ fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
 
 async function loadSaved(){
   if (spectate){
-    if (viewParam !== null){
+    if (viewParam !== null || printParam !== null){
       try{
-        const box = JSON.parse(localStorage.getItem("hub_inspect") || "null");
+        let box = JSON.parse(localStorage.getItem("hub_inspect") || "null");
+        if (box && Array.isArray(box.list) && box.list.length){
+          inspectList = box.list;
+          inspectIdx = Math.min(Math.max(parseInt(box.idx, 10) || 0, 0), box.list.length - 1);
+          const pick = box.list[inspectIdx];
+          box = { lesson: box.lesson, name: pick.name, data: pick.data };
+        }
         if (box && box.lesson === lessonId && box.data){
           inspectName = box.name || "";
           const d = box.data;
@@ -1348,6 +1383,28 @@ function renderResponses(container, targetTopic, statusEl){
   });
   if (!spectate) wrap.appendChild(saveButton(statusEl));
   container.appendChild(wrap);
+}
+
+/* Every task on one long page, ready for the browser's "Save as PDF". */
+function showPrintable(){
+  $("dock").classList.add("gone");
+  const wrap = el("div","printwrap");
+  const head = el("div","print-head");
+  head.appendChild(el("h1","", lesson.title || lessonId));
+  head.appendChild(el("p","", (inspectName || "Student") + "  \u00b7  " + new Date().toLocaleDateString("en-GB")));
+  wrap.appendChild(head);
+  steps.forEach((st, i) => {
+    const bb = (typeof st.brief === "function") ? st.brief() : (st.brief || {});
+    const t = el("div","print-task");
+    t.appendChild(el("h3","print-h", (i + 1) + ". " + (bb.title || "Task")));
+    st.section.hidden = false;
+    t.appendChild(st.section);
+    wrap.appendChild(t);
+  });
+  $("blocks").appendChild(wrap);
+  $("briefTitle").textContent = lesson.title || "";
+  $("briefText").hidden = true;
+  setTimeout(() => { if (window.print) window.print(); }, 600);
 }
 
 /* ---------- completion screens ---------- */

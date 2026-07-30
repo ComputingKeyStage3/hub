@@ -46,7 +46,7 @@
     </div>
     <div class="bigcards">
       <button class="classtile" id="openStudents"><b>&#128101; Students</b><span id="stuCount"></span></button>
-      <button class="classtile" id="openLessons"><b>&#128214; Lessons &amp; release</b><span>Unlock tasks, watch progress, view work</span></button>
+      <button class="classtile" id="openLessons"><b>&#128218; Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
     </div>
   </div>
 
@@ -58,27 +58,30 @@
       <button class="btn-primary" id="addOneBtn">+ Add student</button>
       <button class="btn-ghost" id="addManyBtn">Add many at once</button>
     </div>
+    <div id="resetBox"></div>
     <table class="stutable" id="stuTable"></table>
     <p class="hint" id="stuMsg" style="margin-top:12px"></p>
   </div>
 
   <!-- ============ lessons + release ============ -->
-  <div id="lessonsView" hidden>
+  <div id="unitsView" hidden>
     <button class="crumb" id="backClass2">&larr; <span class="bk"></span></button>
-    <h2 style="margin:14px 0 6px">Lessons</h2>
-    <div class="lesson-picker">
-      <select id="lessonSel"></select>
-      <button class="btn-primary" id="loadLessonBtn">Load</button>
+    <h2 style="margin:14px 0 4px">Units</h2>
+    <p class="hint" style="margin:0">Lessons live inside units. Choose one to publish and pace its lessons.</p>
+    <div class="classgrid" id="unitGrid"></div>
+  </div>
+
+  <div id="lessonsView" hidden>
+    <button class="crumb" id="backUnits">&larr; Units</button>
+    <div class="classhead">
+      <h2 id="unitName"></h2>
+      <button class="btn-ghost iconbtn" id="renameUnitBtn" title="Rename unit">&#9998;</button>
+      <button class="btn-ghost iconbtn" id="deleteUnitBtn" title="Delete unit">&#128465;</button>
     </div>
-    <div id="lessonDetail" hidden>
-      <div class="toolrow">
-        <button class="btn-primary" id="progressBtn">View Student Progress</button>
-        <button class="btn-ghost" id="openAll">Open all</button>
-        <button class="btn-ghost" id="lockAll">Lock all</button>
-      </div>
-      <p class="hint" id="relMsg" style="margin:0 0 12px"></p>
-      <div id="taskList"></div>
+    <div class="toolrow">
+      <button class="btn-ghost" id="addLessonBtn">+ Add a lesson to this unit</button>
     </div>
+    <div class="lessongrid" id="lessonGrid"></div>
   </div>
 
 </div>
@@ -101,7 +104,6 @@ function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, ""); }
 function esc(s){ return String(s); }
 
 let KEY = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
-let locks = new Set();
 let workCache = { key: "", rows: [], t: 0 };
 let relTimer = null, beatTimer = null;
 
@@ -121,11 +123,10 @@ async function heartbeat(){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","classesView","classView","studentsView","lessonsView"];
+const VIEWS = ["keyView","classesView","classView","studentsView","unitsView","lessonsView"];
 function show(view){
   VIEWS.forEach(v => { $(v).hidden = v !== view; });
   clearInterval(relTimer);
-  if (view === "lessonsView"){ relTimer = setInterval(refreshRelease, 8000); }
 }
 
 /* ---------- modal ---------- */
@@ -205,8 +206,9 @@ async function refreshGroups(){
 }
 
 /* ---------- one class ---------- */
-function openClass(name){
+async function openClass(name){
   cls = name;
+  try{ await loadClassLocks(); }catch(e){}
   $("clsName").textContent = cls;
   document.querySelectorAll(".bk").forEach(b => b.textContent = cls);
   const gr = groups.find(g => g.name === cls);
@@ -239,7 +241,39 @@ $("renameBtn").addEventListener("click", () => {
 
 /* ---------- students ---------- */
 $("openStudents").addEventListener("click", async () => { show("studentsView"); await loadStudents(); });
+async function loadResets(){
+  const box = $("resetBox"); box.innerHTML = "";
+  try{
+    const r = await fetch(API + "/api/teacher/resets", { headers: H(), cache: "no-store" });
+    const d = await r.json();
+    if (!r.ok) return;
+    const mine = (d.requests || []).filter(x => (x.group_name || "").toLowerCase() === cls.toLowerCase());
+    if (!mine.length) return;
+    const card = el("div","station"); card.style.marginBottom = "18px";
+    card.appendChild(el("b","","Password help requested"));
+    card.appendChild(el("p","hint","Approving lets them sign in with an empty password box and choose a new one."));
+    mine.forEach(x => {
+      const line = el("div","who-row");
+      line.appendChild(el("span","nm", x.display_name + " (" + x.username + ")"));
+      const yes = el("button","btn-primary","Approve");
+      const no = el("button","btn-ghost","Deny"); no.style.marginLeft = "8px";
+      yes.addEventListener("click", async () => { await resetAction("approve-reset", x.username); });
+      no.addEventListener("click", async () => { await resetAction("deny-reset", x.username); });
+      line.appendChild(yes); line.appendChild(no);
+      card.appendChild(line);
+    });
+    box.appendChild(card);
+  }catch(e){}
+}
+async function resetAction(action, username){
+  try{
+    await fetch(API + "/api/teacher/" + action, { method:"POST", headers: HJ(), body: JSON.stringify({ username }) });
+  }catch(e){}
+  loadResets(); loadStudents();
+}
+
 async function loadStudents(){
+  loadResets();
   $("stuMsg").textContent = "Loading\u2026";
   try{
     const r = await fetch(API + "/api/teacher/students?group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" });
@@ -255,7 +289,10 @@ function paintStudents(){
   students.forEach(st => {
     const tr = el("tr");
     const td1 = el("td","", st.display_name); td1.style.fontWeight = "700";
-    const td2 = el("td","", st.username); td2.style.color = "var(--muted)";
+    const td2 = el("td"); td2.style.color = "var(--muted)";
+    td2.appendChild(el("span","", st.username));
+    if (!st.pw_set) td2.appendChild(el("span","statechip shut","No password yet"));
+    if (st.reset_req) td2.appendChild(el("span","statechip open","Reset asked"));
     const td3 = el("td");
     const ed = el("button","btn-ghost iconbtn","\u270E"); ed.title = "Edit " + st.display_name;
     const dl = el("button","btn-ghost iconbtn","\u{1F5D1}"); dl.title = "Delete " + st.display_name; dl.style.marginLeft = "6px";
@@ -325,11 +362,13 @@ $("addOneBtn").addEventListener("click", () => {
     modalTitle(box, "Add a student to " + cls);
     const d = fieldRow(box, "Display name", "text", "");
     const u = fieldRow(box, "Username", "text", "");
-    const p = pwField(box, "Password");
+    const p = pwField(box, "Password (leave empty \u2014 recommended)");
+    box.appendChild(el("p","subnote","Leave the password empty and the student picks their own the first time they sign in. Only set one here if you need to."));
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Add student");
     go.addEventListener("click", async () => {
-      if (!u.value.trim() || p.value.length < 4){ msg.textContent = "Username and a password of at least 4 characters are needed."; return; }
+      if (!u.value.trim()){ msg.textContent = "A username is needed."; return; }
+      if (p.value && p.value.length < 4){ msg.textContent = "A password set here must be at least 4 characters."; return; }
       msg.textContent = "Adding\u2026";
       try{
         const r = await fetch(API + "/api/teacher/students", { method:"POST", headers: HJ(),
@@ -345,21 +384,25 @@ $("addOneBtn").addEventListener("click", () => {
 $("addManyBtn").addEventListener("click", () => {
   openModal(box => {
     modalTitle(box, "Add many to " + cls);
-    box.appendChild(el("p","modal-text","One student per line: username, password, display name. Re-adding an existing username resets their password."));
-    const ta = el("textarea"); ta.rows = 8; ta.placeholder = "jsmith, otter42, Jamie Smith"; ta.style.width = "100%";
+    box.appendChild(el("p","modal-text","One student per line: username, display name \u2014 they choose their own password at first sign-in. (You can still use username, password, display name if you want to set one.)"));
+    const ta = el("textarea"); ta.rows = 8; ta.placeholder = "jsmith, Jamie Smith\nlkhan, Layla Khan"; ta.style.width = "100%";
     box.appendChild(ta);
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Add students");
     go.addEventListener("click", async () => {
       const rows = ta.value.split("\n").map(l => l.split(",").map(x => x.trim())).filter(p2 => p2[0]);
-      const list = rows.map(p2 => ({ group: cls, username: p2[0], password: p2[1] || "", displayName: p2[2] || p2[0] }));
+      /* Two columns = username + display name (no password, they pick their own).
+         Three columns = username, password, display name. */
+      const list = rows.map(p2 => p2.length >= 3
+        ? { group: cls, username: p2[0], password: p2[1] || "", displayName: p2[2] || p2[0] }
+        : { group: cls, username: p2[0], password: "", displayName: p2[1] || p2[0] });
       if (!list.length){ msg.textContent = "Nothing to add yet."; return; }
       msg.textContent = "Adding\u2026";
       try{
         const r = await fetch(API + "/api/teacher/students", { method:"POST", headers: HJ(), body: JSON.stringify({ students: list }) });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "Could not add.");
-        msg.textContent = "Added " + j.added + (j.skipped ? " \u00b7 skipped " + j.skipped + " (missing name or password under 4 characters)" : "");
+        msg.textContent = "Added " + j.added + (j.skipped ? " \u00b7 skipped " + j.skipped + " (missing username, or a password under 4 characters)" : "");
         loadStudents(); refreshGroups();
       }catch(e){ msg.textContent = e.message; }
     });
@@ -367,37 +410,174 @@ $("addManyBtn").addEventListener("click", () => {
   });
 });
 
-/* ---------- lessons + release ---------- */
+/* ---------- catalogue: units + which lessons are published ---------- */
+let cat = { units: [], lessons: [] };     // from the database
+let fileLessons = [];                     // from lessons/index.json
+let unit = "";                            // the unit being managed
+
+async function loadCatalogue(){
+  if (!fileLessons.length){
+    const d = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
+    fileLessons = d.units ? d.units.flatMap(u => u.lessons) : d;
+  }
+  const r = await fetch(API + "/api/catalog", { headers: H(), cache: "no-store" });
+  cat = await r.json();
+}
+const catOf = (id) => (cat.lessons || []).find(l => l.lesson_id === id) || { unit: "", published: 0, position: 0 };
+const titleOf = (id) => { const l = fileLessons.find(x => x.id === id); return l ? l.title : id; };
+async function catPost(payload){
+  const r = await fetch(API + "/api/catalog", { method: "POST", headers: HJ(), body: JSON.stringify(payload) });
+  if (!r.ok) throw new Error((await r.json()).error || "Could not save.");
+  await loadCatalogue();
+}
+
 $("openLessons").addEventListener("click", async () => {
-  show("lessonsView");
-  $("lessonDetail").hidden = true;
-  lessonId = "";
-  if (!lessons.length) await loadLessonIndex();
+  show("unitsView");
+  $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
+  try{ await loadCatalogue(); paintUnits(); }
+  catch(e){ $("unitGrid").innerHTML = '<p class="hint">' + e.message + '</p>'; }
 });
-async function loadLessonIndex(){
-  const d = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
-  lessons = d.units ? d.units.flatMap(u => u.lessons) : d;
-  $("lessonSel").innerHTML = "";
-  const ph = el("option","","Choose lesson"); ph.value = ""; ph.disabled = true; ph.selected = true;
-  $("lessonSel").appendChild(ph);
-  lessons.forEach(l => {
-    const o = el("option","", l.title + (l.assessment ? " (assessment)" : ""));
-    o.value = l.id; $("lessonSel").appendChild(o);
+$("backUnits").addEventListener("click", () => { show("unitsView"); paintUnits(); });
+
+function paintUnits(){
+  const g = $("unitGrid"); g.innerHTML = "";
+  const names = (cat.units || []).map(u => u.name);
+  const unfiled = (cat.lessons || []).filter(l => !l.unit).length;
+  names.forEach(n => {
+    const inUnit = (cat.lessons || []).filter(l => l.unit === n);
+    const live = inUnit.filter(l => l.published).length;
+    const t = el("button","classtile");
+    t.appendChild(el("b","", n));
+    t.appendChild(el("span","", inUnit.length + " lesson" + (inUnit.length === 1 ? "" : "s") +
+      (live ? " \u00b7 " + live + " published" : " \u00b7 none published")));
+    t.addEventListener("click", () => openUnit(n));
+    g.appendChild(t);
+  });
+  if (unfiled){
+    const t = el("button","classtile");
+    t.appendChild(el("b","","Not in a unit"));
+    t.appendChild(el("span","", unfiled + " lesson" + (unfiled === 1 ? "" : "s")));
+    t.addEventListener("click", () => openUnit(""));
+    g.appendChild(t);
+  }
+  const add = el("button","classtile");
+  add.appendChild(el("b","","+ New unit"));
+  add.appendChild(el("span","","Group a term's lessons together"));
+  add.addEventListener("click", () => {
+    openModal(box => {
+      modalTitle(box, "New unit");
+      const i = fieldRow(box, "Unit name (e.g. Unit 1 \u2014 Cybersecurity)", "text", "");
+      const msg = el("p","hint","");
+      const go = el("button","btn-primary modal-cta","Create unit");
+      go.addEventListener("click", async () => {
+        const v = i.value.trim(); if (!v) return;
+        msg.textContent = "Creating\u2026";
+        try{ await catPost({ op:"add-unit", name: v, position: (cat.units || []).length + 1 });
+             closeModal(); paintUnits(); }
+        catch(e){ msg.textContent = e.message; }
+      });
+      box.appendChild(go); box.appendChild(msg);
+    });
+  });
+  g.appendChild(add);
+}
+
+function openUnit(name){
+  unit = name;
+  $("unitName").textContent = name || "Not in a unit";
+  $("renameUnitBtn").hidden = !name;
+  $("deleteUnitBtn").hidden = !name;
+  show("lessonsView");
+  paintLessonGrid();
+}
+$("renameUnitBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Rename unit");
+    const i = fieldRow(box, "Unit name", "text", unit);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Rename");
+    go.addEventListener("click", async () => {
+      const to = i.value.trim(); if (!to || to === unit){ closeModal(); return; }
+      msg.textContent = "Renaming\u2026";
+      try{ await catPost({ op:"rename-unit", from: unit, to }); closeModal(); openUnit(to); }
+      catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+});
+$("deleteUnitBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Delete " + unit + "?");
+    box.appendChild(el("p","modal-text","The lessons are kept \u2014 they just stop belonging to a unit. Nothing students have done is affected."));
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Delete unit"); go.style.background = "var(--red)";
+    const no = el("button","btn-ghost modal-stay","Cancel"); no.addEventListener("click", closeModal);
+    go.addEventListener("click", async () => {
+      msg.textContent = "Deleting\u2026";
+      try{ await catPost({ op:"delete-unit", name: unit }); closeModal(); show("unitsView"); paintUnits(); }
+      catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
+  });
+});
+$("addLessonBtn").addEventListener("click", () => {
+  const spare = fileLessons.filter(l => (catOf(l.id).unit || "") !== unit);
+  openModal(box => {
+    modalTitle(box, "Add a lesson to " + (unit || "no unit"));
+    if (!spare.length){ box.appendChild(el("p","modal-text","Every lesson is already in this unit.")); }
+    const msg = el("p","hint","");
+    spare.forEach(l => {
+      const row = el("button","ov-row");
+      row.appendChild(el("span","t", l.title));
+      const where = catOf(l.id).unit;
+      row.appendChild(el("span","p", where ? "currently in " + where : "not in a unit"));
+      row.appendChild(el("span","edit","Add \u2192"));
+      row.addEventListener("click", async () => {
+        msg.textContent = "Adding\u2026";
+        try{ await catPost({ op:"set-lesson", id: l.id, unit }); closeModal(); paintLessonGrid(); }
+        catch(e){ msg.textContent = e.message; }
+      });
+      box.appendChild(row);
+    });
+    const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
+    box.appendChild(done); box.appendChild(msg);
+  });
+});
+
+function paintLessonGrid(){
+  const g = $("lessonGrid"); g.innerHTML = "";
+  const mine = (cat.lessons || []).filter(l => (l.unit || "") === unit && fileLessons.some(f => f.id === l.lesson_id));
+  if (!mine.length){ g.appendChild(el("p","hint","No lessons in this unit yet \u2014 add one above.")); return; }
+  mine.sort((a, b) => (a.position || 0) - (b.position || 0));
+  mine.forEach(l => {
+    const card = el("div","lessonpill");
+    const head = el("div","lp-head");
+    head.appendChild(el("b","", titleOf(l.lesson_id)));
+    head.appendChild(el("span","statechip " + (l.published ? "open" : "shut"), l.published ? "Published" : "Draft"));
+    card.appendChild(head);
+    if (lessonLocks[l.lesson_id]) card.appendChild(el("p","lp-note","\u{1F512} Locked for " + cls));
+    const acts = el("div","lp-acts");
+    const pub = el("button", l.published ? "btn-ghost" : "btn-primary", l.published ? "Unpublish" : "Publish");
+    pub.addEventListener("click", async () => {
+      pub.textContent = "\u2026";
+      try{ await catPost({ op:"set-lesson", id: l.lesson_id, published: !l.published }); paintLessonGrid(); }
+      catch(e){ alert(e.message); paintLessonGrid(); }
+    });
+    const workBtn = el("button","btn-ghost","View Student Work");
+    workBtn.addEventListener("click", () => pickStudentWork(l.lesson_id));
+    const man = el("button","btn-ghost","Manage");
+    man.addEventListener("click", () => manageLesson(l.lesson_id));
+    acts.appendChild(pub); acts.appendChild(workBtn); acts.appendChild(man);
+    card.appendChild(acts);
+    g.appendChild(card);
   });
 }
-$("lessonSel").addEventListener("change", () => { $("lessonDetail").hidden = true; lessonId = ""; });
-$("loadLessonBtn").addEventListener("click", loadLesson);
-async function loadLesson(){
-  const chosen = $("lessonSel").value;
-  if (!chosen) return;
-  lessonId = chosen;
-  workCache = { key: "", rows: [], t: 0 };
-  lessonJson = await (await fetch("lessons/" + lessonId + ".json", { cache: "no-store" })).json();
-  $("lessonDetail").hidden = false;
-  await refreshRelease();
-}
-/* Same default the students use: a lesson opens only up to its first real
-   task; an assessment opens fully. */
+
+/* ---------- managing one lesson (big pop-up) ---------- */
+let lessonLocks = {};        // lesson_id -> whole-lesson lock for this class
+let locks = new Set();       // task locks for the lesson being managed
+let usingDefaults = false;
+
 function defaultLocks(){
   const out = new Set();
   if (!lessonJson || lessonJson.assessment) return out;
@@ -408,7 +588,57 @@ function defaultLocks(){
   for (let i = firstDo + 1; i < b.length; i++) out.add(i);
   return out;
 }
-let usingDefaults = false;
+async function loadClassLocks(){
+  try{
+    const r = await fetch(API + "/api/release?all=1&group=" + encodeURIComponent(cls) + "&t=" + Date.now(), { headers: H(), cache: "no-store" });
+    const d = await r.json();
+    lessonLocks = {};
+    (d.rows || []).forEach(row => { lessonLocks[row.lesson] = !!row.lessonLocked; });
+    setOnline(true);
+  }catch(e){ setOnline(false); }
+}
+async function manageLesson(id){
+  lessonId = id;
+  workCache = { key: "", rows: [], t: 0 };
+  lessonJson = await (await fetch("lessons/" + id + ".json", { cache: "no-store" })).json();
+  await refreshRelease();
+  openManage();
+}
+function openManage(){
+  openModal(box => {
+    box.classList.add("wide");
+    modalTitle(box, titleOf(lessonId));
+    const bar = el("div","toolrow");
+    const lockBtn = el("button", lessonLocks[lessonId] ? "btn-primary" : "btn-ghost",
+      lessonLocks[lessonId] ? "\u{1F513} Unlock whole lesson" : "\u{1F512} Lock whole lesson");
+    lockBtn.addEventListener("click", async () => {
+      lockBtn.textContent = "\u2026";
+      try{
+        const r = await fetch(API + "/api/release", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ lesson: lessonId, group: cls, lessonLocked: !lessonLocks[lessonId] }) });
+        if (!r.ok) throw new Error((await r.json()).error || "Could not update.");
+        lessonLocks[lessonId] = !lessonLocks[lessonId];
+        closeModal(); paintLessonGrid(); openManage();
+      }catch(e){ alert(e.message); }
+    });
+    const workBtn = el("button","btn-ghost","View Student Work");
+    workBtn.addEventListener("click", () => pickStudentWork(lessonId));
+    const prog = el("button","btn-primary","View Student Progress");
+    prog.addEventListener("click", showProgress);
+    bar.appendChild(prog); bar.appendChild(workBtn); bar.appendChild(lockBtn);
+    box.appendChild(bar);
+    const tools = el("div","toolrow");
+    const oa = el("button","btn-ghost","Open all tasks"); oa.addEventListener("click", () => postLocks(new Set()));
+    const la = el("button","btn-ghost","Lock all tasks"); la.addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i))));
+    tools.appendChild(oa); tools.appendChild(la);
+    box.appendChild(tools);
+    box.appendChild(el("p","hint","")).id = "relMsg";
+    const list = el("div"); list.id = "taskList"; box.appendChild(list);
+    const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
+    box.appendChild(done);
+    paintTasks();
+  });
+}
 async function refreshRelease(){
   if (!lessonId) return;
   try{
@@ -421,23 +651,22 @@ async function refreshRelease(){
       for (let i = d.released; i < (lessonJson ? lessonJson.blocks.length : 0); i++) locks.add(i);
       usingDefaults = false;
     } else { locks = new Set(); usingDefaults = false; }
+    lessonLocks[lessonId] = !!d.lessonLocked;
     setOnline(true);
   }catch(e){ setOnline(false); }
   paintTasks();
 }
 async function postLocks(next){
-  $("relMsg").textContent = "Updating\u2026";
+  const msg = $("relMsg"); if (msg) msg.textContent = "Updating\u2026";
   try{
     const r = await fetch(API + "/api/release", { method:"POST", headers: HJ(),
       body: JSON.stringify({ lesson: lessonId, group: cls, locks: [...next].sort((a,b)=>a-b) }) });
     if (!r.ok) throw new Error((await r.json()).error || "Could not update.");
     locks = next; usingDefaults = false;
-    $("relMsg").textContent = "";
-  }catch(e){ $("relMsg").textContent = e.message; }
+    if (msg) msg.textContent = "";
+  }catch(e){ if (msg) msg.textContent = e.message; }
   paintTasks();
 }
-$("openAll").addEventListener("click", () => postLocks(new Set()));
-$("lockAll").addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i))));
 function stepTitle(b, i){
   const named = stripTags(b.title || b.prompt || b.task || "");
   if (named) return named;
@@ -452,14 +681,15 @@ function stepTitle(b, i){
   return friendly[b.type] || b.type;
 }
 function paintTasks(){
-  const list = $("taskList"); list.innerHTML = "";
-  if (!lessonJson) return;
-  const base = locks.size === 0
-    ? "Every task is open for " + cls + "."
-    : locks.size === lessonJson.blocks.length
-      ? "Every task is locked for " + cls + "."
+  const list = $("taskList"); if (!list || !lessonJson) return;
+  list.innerHTML = "";
+  const msg = $("relMsg");
+  if (msg){
+    const base = locks.size === 0 ? "Every task is open for " + cls + "."
+      : locks.size === lessonJson.blocks.length ? "Every task is locked for " + cls + "."
       : locks.size + " task" + (locks.size === 1 ? "" : "s") + " locked for " + cls + ".";
-  $("relMsg").textContent = usingDefaults ? base + " (starting pattern \u2014 unlock as you teach)" : base;
+    msg.textContent = usingDefaults ? base + " (starting pattern \u2014 unlock as you teach)" : base;
+  }
   lessonJson.blocks.forEach((b, i) => {
     const open = !locks.has(i);
     const row = el("div","taskrow" + (open ? "" : " shut"));
@@ -486,7 +716,7 @@ function paintTasks(){
   });
 }
 
-/* ---------- progress + who's done (from the same work snapshots) ---------- */
+/* ---------- student work: view on screen or print to PDF ---------- */
 async function getWorkRows(){
   const key = lessonId + "\u0000" + cls;
   if (workCache.key === key && Date.now() - workCache.t < 15000) return workCache.rows;
@@ -510,21 +740,63 @@ function nonEmpty(v){
   if (typeof v === "object") return Object.keys(v).length > 0;
   return true;
 }
-function inspect(row, stepIdx){
-  localStorage.setItem("hub_inspect", JSON.stringify({ lesson: lessonId, name: row.display_name, data: row.data }));
+/* Hands the whole class to the viewer so the teacher can flick between them. */
+function handOff(rows, idx){
+  localStorage.setItem("hub_inspect", JSON.stringify({
+    lesson: lessonId, idx: idx,
+    list: rows.map(r => ({ name: r.display_name, username: r.username, data: r.data }))
+  }));
+}
+function inspect(rows, idx, stepIdx){
+  handOff(rows, idx);
   window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1" + (stepIdx !== undefined ? "&step=" + stepIdx : ""), "_blank");
 }
-$("progressBtn").addEventListener("click", async () => {
+function printWork(rows, idx){
+  handOff(rows, idx);
+  window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&print=1", "_blank");
+}
+async function pickStudentWork(id){
+  if (id && id !== lessonId){
+    lessonId = id; workCache = { key: "", rows: [], t: 0 };
+    lessonJson = await (await fetch("lessons/" + id + ".json", { cache: "no-store" })).json();
+  }
+  openModal(async (box) => {
+    modalTitle(box, "Student work \u2014 " + titleOf(lessonId));
+    const holder = el("div"); box.appendChild(holder);
+    holder.appendChild(el("p","hint","Loading\u2026"));
+    try{
+      const rows = await getWorkRows();
+      holder.innerHTML = "";
+      if (!rows.length){ holder.appendChild(el("p","hint","Nobody in " + cls + " has saved any work for this lesson yet.")); }
+      rows.forEach((r, i) => {
+        const line = el("div","who-row");
+        line.appendChild(el("span","nm", r.display_name));
+        line.appendChild(el("span","st " + (r.data && r.data.__done ? "yes" : "no"),
+          r.data && r.data.__done ? "Completed \u2713" : "In progress"));
+        const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View their work";
+        v.addEventListener("click", () => inspect(rows, i));
+        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "Printable copy (save as PDF)";
+        p.addEventListener("click", () => printWork(rows, i));
+        line.appendChild(v); line.appendChild(p);
+        holder.appendChild(line);
+      });
+    }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
+    const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+}
+function showProgress(){
   openModal(async (box) => {
     modalTitle(box, "Progress \u2014 " + cls);
     const holder = el("div"); box.appendChild(holder);
     holder.appendChild(el("p","hint","Loading\u2026"));
     try{
-      const [roster, rows] = [await getRoster(), await getWorkRows()];
+      const roster = await getRoster(), rows = await getWorkRows();
       holder.innerHTML = "";
       const total = lessonJson.blocks.length;
       roster.forEach(st => {
-        const row = rows.find(w => w.username === st.username);
+        const idx = rows.findIndex(w => w.username === st.username);
+        const row = rows[idx];
         const line = el("div","who-row");
         line.appendChild(el("span","nm", st.display_name));
         let status, cl = "no";
@@ -536,8 +808,10 @@ $("progressBtn").addEventListener("click", async () => {
         }
         line.appendChild(el("span","st " + cl, status));
         const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View their work";
-        if (row) v.addEventListener("click", () => inspect(row)); else v.disabled = true;
-        line.appendChild(v);
+        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "Printable copy (save as PDF)";
+        if (row){ v.addEventListener("click", () => inspect(rows, idx)); p.addEventListener("click", () => printWork(rows, idx)); }
+        else { v.disabled = true; p.disabled = true; }
+        line.appendChild(v); line.appendChild(p);
         holder.appendChild(line);
       });
       if (!roster.length) holder.appendChild(el("p","hint","No students in this class yet."));
@@ -545,7 +819,7 @@ $("progressBtn").addEventListener("click", async () => {
     const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
     box.appendChild(done);
   });
-});
+}
 async function whoDone(i, b){
   openModal(async (box) => {
     modalTitle(box, "Task " + (i+1) + " \u2014 who's done it?");
@@ -553,18 +827,21 @@ async function whoDone(i, b){
     const holder = el("div"); box.appendChild(holder);
     holder.appendChild(el("p","hint","Loading\u2026"));
     try{
-      const [roster, rows] = [await getRoster(), await getWorkRows()];
+      const roster = await getRoster(), rows = await getWorkRows();
       holder.innerHTML = "";
       roster.forEach(st => {
-        const row = rows.find(w => w.username === st.username);
+        const idx = rows.findIndex(w => w.username === st.username);
+        const row = rows[idx];
         const d = row && row.data;
         const done = !!(d && (d.__done || (d.__step || 0) > i || nonEmpty(d[b.id])));
         const line = el("div","who-row");
         line.appendChild(el("span","nm", st.display_name));
         line.appendChild(el("span","st " + (done ? "yes" : "no"), done ? "Done \u2713" : "Not yet"));
         const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View at this task";
-        if (row) v.addEventListener("click", () => inspect(row, i)); else v.disabled = true;
-        line.appendChild(v);
+        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "Printable copy (save as PDF)";
+        if (row){ v.addEventListener("click", () => inspect(rows, idx, i)); p.addEventListener("click", () => printWork(rows, idx)); }
+        else { v.disabled = true; p.disabled = true; }
+        line.appendChild(v); line.appendChild(p);
         holder.appendChild(line);
       });
     }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }

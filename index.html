@@ -31,8 +31,10 @@
     </div>
     <div class="row" style="margin-top:16px">
       <button class="btn-primary" id="loginBtn">Sign in</button>
+      <button class="crumb" id="forgotBtn" style="margin-left:14px">Forgot password?</button>
       <span class="err" id="loginErr" role="alert"></span>
     </div>
+    <p class="hint" id="loginNote" style="margin:12px 0 0">First time? Leave the password box empty and press Sign in.</p>
   </section>
 
   <div class="tabs">
@@ -40,12 +42,28 @@
     <button id="tabResults">My results</button>
   </div>
   <div id="view-lessons">
+    <div class="subtabs">
+      <button class="on" id="tabActive">Active</button>
+      <button id="tabDone">Completed</button>
+    </div>
     <div id="lessonList"><p class="hint">Loading…</p></div>
   </div>
   <div id="view-results" hidden>
     <div id="resultList"><p class="hint">Sign in to see your results.</p></div>
   </div>
 
+</div>
+
+<div class="modal-back no-print" id="pwModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 style="margin-top:0">Choose your password</h2>
+    <p class="modal-text" id="pwWho"></p>
+    <div class="field"><label for="np1">New password (12–25 characters)</label><input type="password" id="np1" autocomplete="new-password"></div>
+    <div class="field"><label for="np2">Type it again</label><input type="password" id="np2" autocomplete="new-password"></div>
+    <p class="subnote">Tip: three random words joined together — like <b>otter-lamp-window</b> — is long, strong and easy to remember. Keep it to yourself.</p>
+    <button class="btn-primary modal-cta" id="npGo">Save my password</button>
+    <p class="hint" id="npMsg" style="margin-top:10px"></p>
+  </div>
 </div>
 
 <script>
@@ -93,6 +111,8 @@ $("loginBtn").addEventListener("click", async () => {
     localStorage.setItem("hub_name", d.name);
     localStorage.setItem("hub_group", d.group || "");
     renderAuth();
+    if (d.mustSet) forcePassword(d.name);
+    else loadLessons();
   }catch(e){ $("loginErr").textContent = e.message; }
 });
 $("p").addEventListener("keydown", (e) => { if (e.key === "Enter") $("loginBtn").click(); });
@@ -116,20 +136,83 @@ function pruneStorage(validIds){
 }
 
 let lessonTitles = {};
-fetch("lessons/index.json").then(r => r.json()).then(data => {
-  const units = data.units || [{ name: "", lessons: data }];
-  const flat = units.flatMap(u => u.lessons);
-  flat.forEach(l => { lessonTitles[l.id] = l.title; });
-  try{ pruneStorage(flat.map(l => l.id)); }catch(e){}
+let catalogue = null;      // what the teacher has published, and in which unit
+let lockedLessons = new Set();
+let doneLessons = new Set();
+let showing = "active";
+
+/* The lesson FILES stay on GitHub Pages (titles, descriptions, tasks); the
+   database only says which are published, which unit they belong to and what
+   is locked for this class. */
+async function loadLessons(){
+  const box = $("lessonList");
+  box.innerHTML = '<p class="hint">Loading…</p>';
+  const token = localStorage.getItem("hub_token");
+  const group = localStorage.getItem("hub_group") || "";
+  try{
+    const file = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
+    const units = file.units || [{ name: "", lessons: file }];
+    const flat = units.flatMap(u => u.lessons);
+    flat.forEach(l => { lessonTitles[l.id] = l.title; });
+    try{ pruneStorage(flat.map(l => l.id)); }catch(e){}
+    const byId = {}; flat.forEach(l => { byId[l.id] = l; });
+
+    catalogue = ready ? await (await fetch(API + "/api/catalog", { cache: "no-store" })).json() : { units: [], lessons: [] };
+
+    lockedLessons = new Set();
+    if (ready && token && group){
+      try{
+        const rel = await (await fetch(API + "/api/release?all=1&group=" + encodeURIComponent(group), { cache: "no-store" })).json();
+        (rel.rows || []).forEach(r => { if (r.lessonLocked) lockedLessons.add(r.lesson); });
+      }catch(e){}
+    }
+
+    doneLessons = new Set();
+    flat.forEach(l => {                       // this machine's own record
+      try{ const w = JSON.parse(localStorage.getItem("hub_work_" + l.id) || "null"); if (w && w.__done) doneLessons.add(l.id); }catch(e){}
+    });
+    if (ready && token){                      // and the authoritative one
+      try{
+        const d = await (await fetch(API + "/api/work?done=1", { headers: { Authorization: "Bearer " + token }, cache: "no-store" })).json();
+        (d.done || []).forEach(id => doneLessons.add(id));
+      }catch(e){}
+    }
+    paintLessons(byId);
+  }catch(e){ box.innerHTML = '<p class="hint">Could not load the lesson list.</p>'; }
+}
+
+function paintLessons(byId){
   const box = $("lessonList"); box.innerHTML = "";
-  units.forEach(u => {
-    if (u.name){ const h = document.createElement("p"); h.className = "unit-head"; h.textContent = u.name; box.appendChild(h); }
+  const cat = (catalogue && catalogue.lessons) || [];
+  // published, not locked for this class, and known in the lesson files
+  let visible = cat.filter(c => c.published && byId[c.lesson_id] && !lockedLessons.has(c.lesson_id));
+  visible = visible.filter(c => showing === "done" ? doneLessons.has(c.lesson_id) : !doneLessons.has(c.lesson_id));
+
+  if (!visible.length){
+    box.innerHTML = '<p class="hint">' + (showing === "done"
+      ? "Nothing finished yet — completed lessons will appear here."
+      : (cat.length ? "No lessons are open right now. Your teacher will publish them when you need them."
+                    : "No lessons have been published yet.")) + '</p>';
+    return;
+  }
+
+  // group by unit, in the teacher's unit order
+  const unitOrder = ((catalogue && catalogue.units) || []).map(u => u.name);
+  const groups = {};
+  visible.forEach(c => { (groups[c.unit || ""] = groups[c.unit || ""] || []).push(c); });
+  const names = Object.keys(groups).sort((a, b) => {
+    const ia = unitOrder.indexOf(a), ib = unitOrder.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
+  });
+
+  names.forEach(unit => {
+    if (unit){ const h = document.createElement("p"); h.className = "unit-head"; h.textContent = unit; box.appendChild(h); }
     const wrap = document.createElement("div"); wrap.className = "lessons";
-    u.lessons.forEach((l, i) => {
+    groups[unit].sort((a, b) => (a.position || 0) - (b.position || 0)).forEach((c, i) => {
+      const l = byId[c.lesson_id];
       const a = document.createElement("a");
       a.className = "lessonCard"; a.href = "lesson.html?id=" + encodeURIComponent(l.id);
-      let done = false;
-      try{ const w = JSON.parse(localStorage.getItem("hub_work_" + l.id) || "null"); done = !!(w && w.__done); }catch(e){}
+      const done = doneLessons.has(l.id);
       a.innerHTML = '<span class="num">' + String(i+1).padStart(2,"0") + '</span>' +
                     '<span class="body"><b></b><span></span></span>' +
                     (done ? '<span class="badge badge-done">\u2713 Complete</span>' : '') +
@@ -141,7 +224,16 @@ fetch("lessons/index.json").then(r => r.json()).then(data => {
     });
     box.appendChild(wrap);
   });
-}).catch(() => { $("lessonList").innerHTML = '<p class="hint">Could not load the lesson list.</p>'; });
+}
+
+$("tabActive").addEventListener("click", () => { showing = "active"; paintSub(); });
+$("tabDone").addEventListener("click", () => { showing = "done"; paintSub(); });
+function paintSub(){
+  $("tabActive").classList.toggle("on", showing === "active");
+  $("tabDone").classList.toggle("on", showing === "done");
+  loadLessons();
+}
+loadLessons();
 
 /* ---- My results tab ---- */
 $("tabLessons").addEventListener("click", () => switchTab("lessons"));
@@ -164,6 +256,42 @@ function clearStudentCache(){
     doomed.forEach(k => localStorage.removeItem(k));   // display settings are kept
   }catch(e){}
 }
+
+/* ---- first sign-in (or after a teacher approves a reset): choose a password ---- */
+function forcePassword(name){
+  $("pwWho").textContent = "Hello " + String(name || "").split(" ")[0] + " — before you start, pick a password only you know.";
+  $("pwModal").hidden = false;
+  $("np1").focus();
+}
+$("npGo").addEventListener("click", async () => {
+  const a = $("np1").value, b = $("np2").value;
+  if (a.length < 12 || a.length > 25){ $("npMsg").textContent = "It must be 12 to 25 characters long."; return; }
+  if (a !== b){ $("npMsg").textContent = "The two boxes don't match."; return; }
+  $("npMsg").textContent = "Saving…";
+  try{
+    const r = await fetch(API + "/api/login", { method:"POST",
+      headers:{ "Content-Type":"application/json", Authorization: "Bearer " + localStorage.getItem("hub_token") },
+      body: JSON.stringify({ action:"set-password", newPassword: a }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not save it.");
+    $("pwModal").hidden = true;
+    $("np1").value = $("np2").value = "";
+    loadLessons();
+  }catch(e){ $("npMsg").textContent = e.message; }
+});
+
+/* ---- forgot password: asks the teacher, tells them nothing about accounts ---- */
+$("forgotBtn").addEventListener("click", async () => {
+  const u = $("u").value.trim();
+  if (!u){ $("loginErr").textContent = "Type your username first, then press Forgot password?"; return; }
+  $("loginErr").textContent = "";
+  $("loginNote").textContent = "Asking your teacher…";
+  try{
+    await fetch(API + "/api/login", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ action:"reset-request", username: u }) });
+  }catch(e){}
+  $("loginNote").textContent = "Your teacher has been asked. Once they say yes, sign in with an empty password box and pick a new one.";
+});
 
 async function loadResults(){
   const token = localStorage.getItem("hub_token");
