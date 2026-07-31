@@ -18,6 +18,8 @@
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
+<nav class="crumbbar" id="crumbBar" hidden></nav>
+
 <div class="page">
 
   <!-- ============ key ============ -->
@@ -93,7 +95,8 @@
       <button class="btn-ghost iconbtn" id="deleteUnitBtn" title="Delete unit">&#128465;</button>
     </div>
     <div class="toolrow">
-      <button class="btn-ghost" id="addLessonBtn">+ Add a lesson to this unit</button>
+      <button class="btn-ghost" id="addLessonBtn">+ Add an existing lesson</button>
+      <button class="btn-primary" id="newLessonBtn">+ Build a new lesson</button>
     </div>
     <div class="lessongrid" id="lessonGrid"></div>
   </div>
@@ -136,11 +139,46 @@ async function heartbeat(){
   }catch(e){ setOnline(false); }
 }
 
+/* ---------- where am I? ---------- */
+function crumbs(trail){
+  const bar = $("crumbBar");
+  if (!trail || !trail.length){ bar.hidden = true; return; }
+  bar.hidden = false; bar.innerHTML = "";
+  trail.forEach((step, i) => {
+    if (i) bar.appendChild(el("span","crumb-sep","\u203A"));
+    if (step.go){
+      const a = el("button","crumb-link", step.name);
+      a.addEventListener("click", step.go);
+      bar.appendChild(a);
+    } else {
+      bar.appendChild(el("span","crumb-here", step.name));
+    }
+  });
+}
+const toClasses = () => { refreshGroups(); show("classesView"); paintCrumbs(); };
+const toClass   = () => openClass(cls);
+const toUnits   = () => { show("unitsView"); paintUnits(); };
+const toUnit    = () => openUnit(unit);
+function paintCrumbs(){
+  const v = VIEWS.find(x => !$(x).hidden);
+  if (v === "keyView"){ crumbs(null); return; }
+  const home = { name:"Classes", go: v === "classesView" ? null : toClasses };
+  if (v === "classesView") return crumbs([home]);
+  if (v === "pwView") return crumbs([{ name:"Classes", go: toClasses }, { name:"Password updates" }]);
+  if (v === "classView") return crumbs([home, { name: cls }]);
+  if (v === "studentsView") return crumbs([home, { name: cls, go: toClass }, { name:"Students" }]);
+  if (v === "unitsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units" }]);
+  if (v === "lessonsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
+                                          { name: unit || "Not in a unit" }]);
+  crumbs([home]);
+}
+
 /* ---------- view switching ---------- */
 const VIEWS = ["keyView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
 function show(view){
   VIEWS.forEach(v => { $(v).hidden = v !== view; });
   clearInterval(relTimer);
+  paintCrumbs();
 }
 
 /* ---------- modal ---------- */
@@ -153,6 +191,15 @@ function openModal(build){
 function closeModal(){ $("tmodal").hidden = true; }
 $("tmodal").addEventListener("mousedown", (e) => { if (e.target === $("tmodal")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+function say(title, message){
+  openModal(box => {
+    box.appendChild(el("h2","", title));
+    if (message) box.appendChild(el("p","modal-text", message));
+    const ok = el("button","btn-primary modal-cta","OK");
+    ok.addEventListener("click", closeModal);
+    box.appendChild(ok);
+  });
+}
 function modalTitle(box, text){ const h = el("h2","",text); h.style.marginTop = "0"; box.appendChild(h); }
 function fieldRow(box, label, type, value){
   const w = el("div","field");
@@ -426,10 +473,21 @@ let fileLessons = [];                     // from lessons/index.json
 let unit = "";                            // the unit being managed
 
 async function loadCatalogue(){
-  if (!fileLessons.length){
+  fileLessons = [];
+  try{
     const d = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
-    fileLessons = d.units ? d.units.flatMap(u => u.lessons) : d;
-  }
+    fileLessons = (d.units ? d.units.flatMap(u => u.lessons) : d) || [];
+  }catch(e){}
+  // lessons built in the builder live in the database, not in the file
+  try{
+    const r2 = await fetch(API + "/api/teacher/lessons", { headers: H(), cache: "no-store" });
+    const d2 = await r2.json();
+    (d2.lessons || []).forEach(l => {
+      const seen = fileLessons.find(f => f.id === l.id);
+      if (seen){ seen.title = l.title || seen.title; seen.unit = l.unit || seen.unit; }
+      else fileLessons.push({ id: l.id, title: l.title || l.id, unit: l.unit || "", fromDb: true });
+    });
+  }catch(e){}
   const r = await fetch(API + "/api/catalog", { headers: H(), cache: "no-store" });
   cat = await r.json();
 }
@@ -527,27 +585,59 @@ $("deleteUnitBtn").addEventListener("click", () => {
     box.appendChild(go); box.appendChild(no); box.appendChild(msg);
   });
 });
+$("newLessonBtn").addEventListener("click", () => {
+  window.open("author.html?unit=" + encodeURIComponent(unit || ""), "_blank");
+});
+
 $("addLessonBtn").addEventListener("click", () => {
-  const spare = fileLessons.filter(l => (catOf(l.id).unit || "") !== unit);
+  let showAll = false, term = "";
   openModal(box => {
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", closeModal); box.appendChild(x);
     modalTitle(box, "Add a lesson to " + (unit || "no unit"));
-    if (!spare.length){ box.appendChild(el("p","modal-text","Every lesson is already in this unit.")); }
-    const msg = el("p","hint","");
-    spare.forEach(l => {
-      const row = el("button","ov-row");
-      row.appendChild(el("span","t", l.title));
-      const where = catOf(l.id).unit;
-      row.appendChild(el("span","p", where ? "currently in " + where : "not in a unit"));
-      row.appendChild(el("span","edit","Add \u2192"));
-      row.addEventListener("click", async () => {
-        msg.textContent = "Adding\u2026";
-        try{ await catPost({ op:"set-lesson", id: l.id, unit }); closeModal(); paintLessonGrid(); }
-        catch(e){ msg.textContent = e.message; }
+    const tools = el("div","toolrow");
+    const search = el("input"); search.placeholder = "Search lessons\u2026"; search.style.flex = "1";
+    const toggle = el("button","btn-ghost","Show every lesson");
+    tools.appendChild(search); tools.appendChild(toggle);
+    box.appendChild(tools);
+    const holder = el("div"); box.appendChild(holder);
+    const msg = el("p","hint",""); box.appendChild(msg);
+
+    /* A lesson "belongs" to this unit if its own file says so — that is what
+       the builder writes — even before it has been filed here. */
+    function paint(){
+      holder.innerHTML = "";
+      const t = term.trim().toLowerCase();
+      const rows = fileLessons.filter(l => {
+        if ((catOf(l.id).unit || "") === unit) return false;          // already here
+        if (t && !(l.title || l.id).toLowerCase().includes(t)) return false;
+        if (showAll) return true;
+        return (l.unit || "") === unit;                                // suggested by the lesson itself
       });
-      box.appendChild(row);
-    });
-    const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
-    box.appendChild(done); box.appendChild(msg);
+      toggle.textContent = showAll ? "Only lessons for this unit" : "Show every lesson";
+      if (!rows.length){
+        holder.appendChild(el("p","modal-text", showAll
+          ? "No other lessons match."
+          : "No lessons name this unit yet \u2014 press \u201cShow every lesson\u201d, or build a new one."));
+      }
+      rows.forEach(l => {
+        const row = el("button","ov-row");
+        row.appendChild(el("span","t", l.title || l.id));
+        const where = catOf(l.id).unit;
+        row.appendChild(el("span","p", where ? "currently in " + where
+                                             : (l.unit ? "made for " + l.unit : "not in a unit")));
+        row.appendChild(el("span","edit","Add \u2192"));
+        row.addEventListener("click", async () => {
+          msg.textContent = "Adding\u2026";
+          try{ await catPost({ op:"set-lesson", id: l.id, unit }); closeModal(); paintLessonGrid(); }
+          catch(e){ msg.textContent = e.message; }
+        });
+        holder.appendChild(row);
+      });
+    }
+    search.addEventListener("input", () => { term = search.value; paint(); });
+    toggle.addEventListener("click", () => { showAll = !showAll; paint(); });
+    paint();
   });
 });
 
@@ -568,16 +658,30 @@ function paintLessonGrid(){
     pub.addEventListener("click", async () => {
       pub.textContent = "\u2026";
       try{ await catPost({ op:"set-lesson", id: l.lesson_id, published: !l.published }); paintLessonGrid(); }
-      catch(e){ alert(e.message); paintLessonGrid(); }
+      catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
     });
     const workBtn = el("button","btn-ghost","View Student Work");
     workBtn.addEventListener("click", () => pickStudentWork(l.lesson_id));
     const man = el("button","btn-ghost","Manage");
     man.addEventListener("click", () => manageLesson(l.lesson_id));
-    acts.appendChild(pub); acts.appendChild(workBtn); acts.appendChild(man);
+    const edit = el("button","btn-ghost","Edit");
+    edit.title = "Open in the lesson builder";
+    edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
+    acts.appendChild(pub); acts.appendChild(workBtn); acts.appendChild(man); acts.appendChild(edit);
     card.appendChild(acts);
     g.appendChild(card);
   });
+}
+
+async function fetchLesson(id){
+  try{
+    const r = await fetch("lessons/" + id + ".json", { cache: "no-store" });
+    if (r.ok) return await r.json();
+  }catch(e){}
+  const r2 = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(id), { headers: H(), cache: "no-store" });
+  const d = await r2.json();
+  if (!r2.ok) throw new Error(d.error || "Could not open that lesson.");
+  return d.lesson;
 }
 
 /* ---------- managing one lesson (big pop-up) ---------- */
@@ -607,7 +711,7 @@ async function loadClassLocks(){
 async function manageLesson(id){
   lessonId = id;
   workCache = { key: "", rows: [], t: 0 };
-  lessonJson = await (await fetch("lessons/" + id + ".json", { cache: "no-store" })).json();
+  lessonJson = await fetchLesson(id);
   await refreshRelease();
   openManage();
 }
@@ -626,7 +730,7 @@ function openManage(){
       try{
         await catPost({ op:"set-lesson", id: lessonId, published: !isLive });
         closeModal(); paintLessonGrid(); openManage();
-      }catch(e){ alert(e.message); }
+      }catch(e){ say("Could not change that", e.message); }
     });
     const workBtn = el("button","btn-ghost","View Student Work");
     workBtn.addEventListener("click", () => pickStudentWork(lessonId));
@@ -763,7 +867,7 @@ function printWork(rows, idx){
 async function pickStudentWork(id){
   if (id && id !== lessonId){
     lessonId = id; workCache = { key: "", rows: [], t: 0 };
-    lessonJson = await (await fetch("lessons/" + id + ".json", { cache: "no-store" })).json();
+    lessonJson = await fetchLesson(id);
   }
   openModal(async (box) => {
     modalTitle(box, "Student work \u2014 " + titleOf(lessonId));

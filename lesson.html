@@ -188,6 +188,19 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
    failing that we let them through. A network blip must never strand a class. */
 const API = (window.HUB && window.HUB.API) || "";
 const apiReady = API && API.indexOf("PASTE_") !== 0;
+
+/* Lessons written in the builder are saved straight to the database, so a
+   missing file is normal rather than an error. */
+async function dbLesson(){
+  if (!apiReady) throw new Error("missing");
+  const key = localStorage.getItem("hub_tkey");
+  const r = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(lessonId),
+                        { headers: key ? { "x-teacher-key": key } : {}, cache:"no-store" });
+  if (!r.ok) throw new Error("missing");
+  const d = await r.json();
+  if (!d.lesson) throw new Error("missing");
+  return { ok:true, json: async () => d.lesson };
+}
 const token = localStorage.getItem("hub_token") || "";
 const group = localStorage.getItem("hub_group") || "";
 const RELEASE_KEY = "hub_rel_" + lessonId;
@@ -297,7 +310,9 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
        if (!raw) throw new Error("missing");
        return JSON.parse(raw);
      } })
-   : fetch("lessons/" + encodeURIComponent(lessonId) + ".json"))
+   : fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
+       .then(r => r.ok ? r : dbLesson())      // not a file? ask the database
+       .catch(() => dbLesson()))
   .then(r => { if (!r.ok) throw new Error("missing"); return r.json().catch(() => { throw new Error("badjson"); }); })
   .then(async (l) => {
     lesson = l;
@@ -312,6 +327,13 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
         // inside the builder: no banner, and nowhere to wander off to
         const home = $("homeLink");
         if (home){ home.hidden = true; }
+        hideLoader();
+        if (!steps.length){
+          $("briefTitle").textContent = "Nothing to preview yet";
+          $("briefText").textContent = "Add a task on the left and it appears here.";
+          $("dock").classList.add("gone");
+          return;
+        }
         showStep(Math.min(Math.max(parseInt(stepParam, 10) || 0, 0), steps.length - 1));
         return;
       }
@@ -373,16 +395,32 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     hideLoader("Checking with your teacher\u2026");
     await fetchRelease();      // know the state before we show anything
     hideLoader();
+    if (!steps.length){
+      $("briefTitle").textContent = "This lesson is empty";
+      $("briefText").textContent = "There are no tasks in it yet.";
+      $("dock").classList.add("gone");
+      return;
+    }
     showStep(step);
   })
   .catch((e) => {
     hideLoader();
-    $("blocks").innerHTML = '<section class="station"><p class="err">' + (
-      e.message === "missing" ? "Could not find this lesson. Check the lesson id in the address bar."
-      : e.message === "badjson" ? "This lesson file has a typo in it and could not be read."
-      : "Something went wrong displaying this lesson. Please tell your teacher.") + '</p></section>';
-    $("briefTitle").textContent = "This lesson could not open";
-    $("nextBtn").disabled = true;
+    const forTeacher = builderParam !== null || previewParam !== null || viewParam !== null;
+    const why = e.message === "missing" ? "missing" : e.message === "badjson" ? "badjson" : "other";
+    const msg = forTeacher
+      ? { missing: "There is no lesson with this id yet. Save it from the builder first.",
+          badjson: "This lesson file has a mistake in it \u2014 check the JSON.",
+          other:   "This lesson could not be built: " + e.message }[why]
+      : { missing: "This lesson could not be found. Tell your teacher.",
+          badjson: "This lesson could not be opened. Tell your teacher.",
+          other:   "Something went wrong displaying this lesson. Please tell your teacher." }[why];
+    $("briefTitle").textContent = forTeacher ? "Preview problem" : "This lesson could not open";
+    $("briefText").textContent = "";
+    const box = el("section","station");
+    box.appendChild(el("p","err", msg));
+    $("blocks").innerHTML = "";
+    $("blocks").appendChild(box);
+    $("dock").classList.add("gone");
   });
 
 async function loadSaved(){
@@ -1080,8 +1118,19 @@ function rIDE(b){
     out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
   });
   resetBtn.addEventListener("click", () => {
-    if (ta.value !== (b.starter || "") && !confirm("Put the code back to how it started? Your changes will be lost.")) return;
-    ta.value = b.starter || ""; repaint(); markDirty();
+    if (ta.value === (b.starter || "")) return;
+    const back = el("div","modal-back");
+    const box = el("div","modal");
+    box.appendChild(el("h2","","Start this code again?"));
+    box.appendChild(el("p","modal-text","Your changes to this program will be lost."));
+    const yes = el("button","btn-primary modal-cta","Start again");
+    yes.addEventListener("click", () => { ta.value = b.starter || ""; repaint(); markDirty(); back.remove(); });
+    const no = el("button","btn-ghost modal-stay","Keep my code");
+    no.addEventListener("click", () => back.remove());
+    box.appendChild(yes); box.appendChild(no);
+    back.appendChild(box);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
   });
 
   fields[b.id] = {

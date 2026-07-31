@@ -1018,3 +1018,16 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .pg-h{font-family:var(--display); font-size:20px; font-weight:800; margin:0 0 4px}
 .pg-t{color:var(--muted); font-size:16px; margin:0 0 12px}
 .pg-item section{margin:0}
+
+
+/* teacher console: where am I */
+.crumbbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 24px;
+  background:var(--panel-2); border-bottom:1px solid var(--line); font-size:14.5px}
+.crumb-link{background:none; border:none; color:var(--amber-dark); font-weight:700; cursor:pointer;
+  font-size:14.5px; padding:2px 0; font-family:var(--body)}
+.crumb-link:hover{text-decoration:underline}
+.crumb-sep{color:var(--dim)}
+.crumb-here{font-weight:800; color:var(--text)}
+
+/* builder: unit box sits with the titles */
+.build-titles #lUnit{max-width:190px}

@@ -6,6 +6,7 @@
 <title>Lesson builder — Prince Henry's Computing KS3</title>
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<script src="config.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -25,12 +26,15 @@
   <div class="build-titles">
     <input id="lTitle" placeholder="Lesson title, e.g. Python 1 — Output" autocomplete="off">
     <input id="lIntro" placeholder="One line for the home page" autocomplete="off">
+    <input id="lUnit" placeholder="Unit (required)" autocomplete="off" list="unitList">
+    <datalist id="unitList"></datalist>
   </div>
   <div class="build-actions">
     <button class="btn-ghost" id="importBtn">Paste a Trinket page</button>
     <button class="btn-ghost" id="jsonBtn">JSON</button>
     <button class="btn-ghost" id="dlBtn">Save file</button>
-    <button class="btn-primary" id="prevBtn">Refresh preview</button>
+    <button class="btn-ghost" id="prevBtn">Refresh preview</button>
+    <button class="btn-primary" id="saveSite">Save to the site</button>
   </div>
 </div>
 
@@ -39,7 +43,6 @@
     <div id="palLesson">
       <p class="pal-head">Pages</p>
       <button class="pal strong" data-add="page"><b>Page of tasks</b><span>Several tasks on one screen</span></button>
-      <button class="pal strong" data-add="pypage"><b>Python page</b><span>Explanation, code, questions</span></button>
       <p class="pal-head">Single tasks</p>
       <button class="pal" data-add="text"><b>Reading</b><span>Explain something</span></button>
       <button class="pal" data-add="ide"><b>Python task</b><span>Editor, console, turtle</span></button>
@@ -88,7 +91,7 @@ function el(tag, cls, text){
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
 /* ---------------- the lesson being built ---------------- */
-let lesson = { title:"", intro:"", assessment:false, topics:{}, blocks:[] };
+let lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:[] };
 
 const BLANK = {
   text:     () => ({ type:"text", heading:"", body:"" }),
@@ -162,6 +165,7 @@ function compileBlock(b, id){
 function compile(){
   const out = { title: lesson.title || "Untitled lesson", blocks: [] };
   if (lesson.intro) out.intro = lesson.intro;
+  if (lesson.unit) out.unit = lesson.unit;
   if (lesson.assessment){
     out.assessment = true;
     const topics = {};
@@ -473,6 +477,22 @@ function card(b, i, arr){
 }
 
 /* our own confirmation, rather than the browser's grey box */
+function say(title, message, opts){
+  const o = opts || {};
+  openModal(box => {
+    box.appendChild(el("h2","", title));
+    if (message) box.appendChild(el("p","modal-text", message));
+    const ok = el("button","btn-primary modal-cta", o.okText || "OK");
+    ok.addEventListener("click", () => { closeModal(); if (o.then) o.then(); });
+    box.appendChild(ok);
+    if (o.cancel){
+      const no = el("button","btn-ghost modal-stay","Cancel");
+      no.addEventListener("click", closeModal);
+      box.appendChild(no);
+    }
+  });
+}
+
 function askDelete(what, done){
   openModal(box => {
     box.appendChild(el("h2","","Delete this " + String(what || "task").toLowerCase() + "?"));
@@ -545,18 +565,6 @@ $("topicsBtn").addEventListener("click", () => {
 document.querySelectorAll(".pal[data-add]").forEach(btn => {
   btn.addEventListener("click", () => {
     const kind = btn.dataset.add;
-    if (kind === "pypage"){
-      lesson.blocks.push({ type:"page", title:"Output a message to the screen",
-        task:"Read the explanation, run the code, then answer the questions.",
-        blocks:[ { type:"text", heading:"", body:"" },
-                 { type:"ide", title:"Investigate", task:"", starter:'print("Hello World!")', turtle:false, expect:"" },
-                 { type:"question", prompt:"", minWords:20 } ] });
-      render(); schedulePreview();
-      const cards = $("list").querySelectorAll(".bcard");
-      const last = cards[cards.length - 1];
-      if (last && last.scrollIntoView) last.scrollIntoView({ behavior:"smooth", block:"center" });
-      return;
-    }
     lesson.blocks.push(BLANK[kind]());
     render(); schedulePreview();
     const cards = $("list").querySelectorAll(".bcard");
@@ -566,6 +574,7 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
 });
 $("lTitle").addEventListener("input", () => { lesson.title = $("lTitle").value; saveDraft(); schedulePreview(); });
 $("lIntro").addEventListener("input", () => { lesson.intro = $("lIntro").value; saveDraft(); schedulePreview(); });
+$("lUnit").addEventListener("input", () => { lesson.unit = $("lUnit").value; saveDraft(); });
 
 /* ---------------- live preview ---------------- */
 let prevTimer = null;
@@ -608,6 +617,118 @@ $("jsonBtn").addEventListener("click", () => {
     box.appendChild(copy);
   });
 });
+/* ---------- publishing straight to the site ----------
+   The lesson goes into the school database through the teacher API, so there
+   are no files to upload. It arrives as a draft; publishing to classes still
+   happens in the teacher console. */
+function teacherKey(){ return localStorage.getItem("hub_tkey") || ""; }
+function askForKey(then){
+  openModal(box => {
+    box.appendChild(el("h2","","Teacher key"));
+    box.appendChild(el("p","modal-text","Type the teacher key once and this browser will remember it."));
+    const w = el("div","bfield");
+    const inp = el("input"); inp.type = "password"; inp.autocomplete = "off";
+    w.appendChild(inp); box.appendChild(w);
+    const go = el("button","btn-primary modal-cta","Save key");
+    go.addEventListener("click", () => {
+      const v = inp.value.trim();
+      if (!v) return;
+      localStorage.setItem("hub_tkey", v);
+      closeModal(); then();
+    });
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(go); box.appendChild(no);
+  });
+}
+function lessonId(){
+  return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50);
+}
+async function saveToSite(){
+  const API = (window.HUB && window.HUB.API) || "";
+  if (!API){ say("Not connected", "This copy of the site has no server address in config.js, so it can't save lessons."); return; }
+  if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
+  if (!lesson.unit.trim()){ say("Which unit?", "Every lesson belongs to a unit. Fill in the Unit box at the top."); return; }
+  if (!teacherKey()){ askForKey(saveToSite); return; }
+  const btn = $("saveSite");
+  btn.disabled = true; btn.textContent = "Saving\u2026";
+  try{
+    const r = await fetch(API + "/api/teacher/save-lesson", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "x-teacher-key": teacherKey() },
+      body: JSON.stringify({ id: lessonId(), title: lesson.title, unit: lesson.unit, data: compile() })
+    });
+    const d = await r.json();
+    if (r.status === 403){ localStorage.removeItem("hub_tkey"); throw new Error("That teacher key was not accepted."); }
+    if (!r.ok) throw new Error(d.error || "Could not save it.");
+    lesson.savedAs = d.id; saveDraft();
+    say(d.published ? "Saved \u2014 it's live" : "Saved to the site",
+        d.published
+          ? "Students in classes that already have this lesson will see the new version straight away."
+          : "It's in your teacher console under " + lesson.unit + ". Press Publish there when a class should see it.");
+  }catch(e){ say("Could not save", e.message); }
+  finally{ btn.disabled = false; btn.textContent = "Save to the site"; }
+}
+$("saveSite").addEventListener("click", saveToSite);
+
+/* offer the units that already exist, and load a lesson if asked to edit one */
+async function loadUnitsAndMaybeLesson(){
+  const API = (window.HUB && window.HUB.API) || "";
+  if (!API) return;
+  try{
+    const r = await fetch(API + "/api/catalog", { cache:"no-store" });
+    const d = await r.json();
+    const dl = $("unitList"); dl.innerHTML = "";
+    (d.units || []).forEach(u => { const o = document.createElement("option"); o.value = u.name; dl.appendChild(o); });
+  }catch(e){}
+  const editId = new URLSearchParams(location.search).get("edit");
+  const wantUnit = new URLSearchParams(location.search).get("unit");
+  if (wantUnit && !lesson.unit){ lesson.unit = wantUnit; $("lUnit").value = wantUnit; saveDraft(); }
+  if (!editId) return;
+  if (!teacherKey()){ askForKey(loadUnitsAndMaybeLesson); return; }
+  try{
+    const r = await fetch(API + "/api/teacher/get-lesson?id=" + encodeURIComponent(editId),
+                          { headers:{ "x-teacher-key": teacherKey() }, cache:"no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not open that lesson.");
+    const data = JSON.parse(d.lesson.data);
+    lesson = fromCompiled(data, d.lesson);
+    $("lTitle").value = lesson.title; $("lIntro").value = lesson.intro || "";
+    $("lUnit").value = lesson.unit || "";
+    setMode(!!lesson.assessment);
+    render(); refreshPreview();
+  }catch(e){ say("Could not open that lesson", e.message); }
+}
+
+/* turn a saved lesson file back into editable cards */
+function fromCompiled(data, meta){
+  const out = { title: data.title || (meta && meta.title) || "", intro: data.intro || "",
+                unit: data.unit || (meta && meta.unit) || "", assessment: !!data.assessment,
+                topics: data.topics || {}, blocks: [] };
+  const back = (b) => {
+    if (b.type === "page") return { type:"page", title:b.title || "", task:b.task || "", blocks:(b.blocks || []).map(back) };
+    if (b.type === "text"){
+      const h = /<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(b.html || "");
+      const body = String(b.html || "").replace(/<h2[\s\S]*?<\/h2>/i, "")
+        .replace(/<li>/gi, "- ").replace(/<\/li>/gi, "\n")
+        .replace(/<\/p>/gi, "\n\n").replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]+>/g, "").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&").trim();
+      return { type:"text", heading: h ? h[1].replace(/<[^>]+>/g,"") : "", body };
+    }
+    if (b.type === "quiz") return { type:"quiz", questions:(b.questions || []).map(q => ({
+      q:q.q || "", options:q.options || ["",""], answer:q.answer || 0, hint:q.hint || "" })) };
+    if (b.type === "short") return { type:"short", prompt:b.prompt || "",
+      keywords:(b.keywords || []).map(g => g.join(", ")).join("; "), model:b.model || "", topic:b.topic || "" };
+    if (b.type === "blanks") return { type:"blanks", prompt:b.prompt || "", text:b.text || "",
+      distractors:(b.distractors || []).join(", "), topic:b.topic || "" };
+    const copy = JSON.parse(JSON.stringify(b));
+    delete copy.id;
+    return copy;
+  };
+  out.blocks = (data.blocks || []).map(back);
+  return out;
+}
+
 $("dlBtn").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(compile(), null, 2)], { type:"application/json" });
   const a = document.createElement("a");
@@ -665,7 +786,9 @@ loadDraft();
 if (!lesson.topics) lesson.topics = {};
 $("lTitle").value = lesson.title || "";
 $("lIntro").value = lesson.intro || "";
+$("lUnit").value = lesson.unit || "";
 setMode(!!lesson.assessment);
+loadUnitsAndMaybeLesson();
 render();
 refreshPreview();
 if (window.initSettings) initSettings($("setBtn"));

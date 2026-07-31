@@ -54,6 +54,14 @@
 
 </div>
 
+<div class="modal-back no-print" id="sayModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 id="sayTitle" style="margin-top:0"></h2>
+    <p class="modal-text" id="sayText"></p>
+    <button class="btn-primary modal-cta" id="sayOk">OK</button>
+  </div>
+</div>
+
 <div class="modal-back no-print" id="resetModal" hidden>
   <div class="modal" role="dialog" aria-modal="true">
     <div id="rsStep1">
@@ -302,6 +310,16 @@ $("npGo").addEventListener("click", async () => {
   }catch(e){ $("npMsg").textContent = e.message; }
 });
 
+/* our own message box — never the browser's grey pop-up */
+function say(title, text, then){
+  $("sayTitle").textContent = title;
+  $("sayText").textContent = text || "";
+  $("sayModal").hidden = false;
+  $("sayOk").onclick = () => { $("sayModal").hidden = true; if (then) then(); };
+  $("sayOk").focus();
+}
+$("sayModal").addEventListener("mousedown", (e) => { if (e.target === $("sayModal")) $("sayModal").hidden = true; });
+
 /* ---- forgot password ----
    Check the username, let them choose the new password there and then, and
    hold it until their teacher approves it — no emails, no teacher typing. */
@@ -319,7 +337,8 @@ $("forgotBtn").addEventListener("click", async () => {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Could not check that.");
     if (!d.exists){
-      alert("We can't find the username \"" + u + "\".\n\nCheck the spelling and try again — your teacher can tell you your exact username.");
+      say("We can't find that username",
+          "There's no account called \u201c" + u + "\u201d. Check the spelling and try again \u2014 your teacher can tell you your exact username.");
       return;
     }
     rsUser = u;
@@ -363,7 +382,7 @@ async function pollReset(){
   tickCountdown();
   if (Date.now() > rsDeadline){
     stopReset();
-    alert("Teacher did not approve your password quick enough. Please try reset your password again.");
+    say("Time ran out", "Teacher did not approve your password quick enough. Please try reset your password again.");
     return;
   }
   try{
@@ -381,10 +400,10 @@ async function pollReset(){
       loadLessons();
     } else if (d.status === "denied"){
       stopReset();
-      alert("Your teacher did not approve this password change. Ask them why, then try again.");
+      say("Not approved", "Your teacher did not approve this password change. Ask them why, then try again.");
     } else if (d.status === "expired"){
       stopReset();
-      alert("That request is no longer valid. Please try reset your password again.");
+      say("That request expired", "Please try to reset your password again.");
     }
   }catch(e){ /* a blip: keep polling until the deadline */ }
 }
