@@ -89,7 +89,8 @@ const previewParam = qs.get("preview");
 const viewParam = qs.get("view");
 const stepParam = qs.get("step");
 const pdfParam = qs.get("pdf");                                  // teacher wants the PDF view
-const spectate = previewParam !== null || viewParam !== null || pdfParam !== null;
+const builderParam = qs.get("builder");                          // preview inside the lesson builder
+const spectate = previewParam !== null || viewParam !== null || pdfParam !== null || builderParam !== null;
 let inspectName = "";
 let inspectList = null, inspectIdx = 0;
 const lessonId = qs.get("id") || "demo";
@@ -307,6 +308,13 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     await loadSaved();
     if (spectate){
       $("saveBtn").hidden = true; $("signinHint").hidden = true;
+      if (builderParam !== null){
+        // inside the builder: no banner, and nowhere to wander off to
+        const home = $("homeLink");
+        if (home){ home.hidden = true; }
+        showStep(Math.min(Math.max(parseInt(stepParam, 10) || 0, 0), steps.length - 1));
+        return;
+      }
       if (document.body.classList) document.body.classList.add("spectating");
       const vb = el("div","viewbar");
       const backBit = el("button","vb-back", viewParam !== null
@@ -602,30 +610,69 @@ function askBypass(){
 
 /* ---------- renderers: { section, check, brief } ---------- */
 let qCounter = 0;
-function renderBlock(b, i){
-  // Blocks without an id in the lesson file (e.g. videos) still need somewhere
-  // to store their state, or they silently fail to restore. Give them one.
+/* Builds one activity without putting it on the page — used both for ordinary
+   steps and for the several activities that share a "page". */
+function buildBlock(b, i){
   if (!b.id) b.id = b.type + "_" + i;
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
-              mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE }[b.type];
-  if (!R){ console.warn("Unknown block type:", b.type); return; }
-  let built;
-  try { built = R(b); }
+              mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage }[b.type];
+  if (!R){ console.warn("Unknown block type:", b.type); return null; }
+  try { return R(b); }
   catch (err){
     console.error("Block " + (i+1) + " (" + b.type + ") failed:", err);
     const s = el("section","station");
     s.appendChild(el("p","err","This activity could not be displayed. Continue and tell your teacher."));
-    built = { section:s, check:() => ({ ok:true }), brief:{ eyebrow:"Notice", title:"Activity unavailable", text:"" } };
+    return { section:s, check:() => ({ ok:true }), brief:{ eyebrow:"Notice", title:"Activity unavailable", text:"" } };
   }
+}
+
+/* A page: several activities stacked together, one Continue at the end.
+   This is how a Trinket-style page works — explanation, code, then questions. */
+function rPage(b){
+  const s = el("section","pagegroup");
+  const kids = [];
+  (b.blocks || []).forEach((child, j) => {
+    if (!child.id) child.id = b.id + "_" + j;
+    const built = buildBlock(child, j);
+    if (!built) return;
+    const item = el("div","pg-item");
+    const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
+    if (child.type !== "text"){
+      if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
+      if (bb.text) item.appendChild(el("p","pg-t", bb.text));
+    }
+    built.section.hidden = false;
+    item.appendChild(built.section);
+    s.appendChild(item);
+    kids.push(built);
+  });
+  return {
+    section: s,
+    check: () => {
+      for (const k of kids){ const r = k.check(); if (!r.ok) return r; }
+      return { ok:true };
+    },
+    soft: () => {
+      for (const k of kids){ if (k.soft && !k.soft().ok) return { ok:false }; }
+      return { ok:true };
+    },
+    brief: { eyebrow:"Tasks", title: b.title || "Tasks", text: b.task || "" }
+  };
+}
+
+function renderBlock(b, i){
+  const built = buildBlock(b, i);
+  if (!built) return;
+  let final = built;
   if (lesson && lesson.assessment && ["mc","order","blanks","short"].includes(b.type)){
     qCounter++;
-    built.brief = { ...built.brief, title: qCounter + ". " + built.brief.title };
+    final.brief = { ...final.brief, title: qCounter + ". " + final.brief.title };
   }
-  built = applyLock(b, built);
-  built.section.hidden = true;
-  $("blocks").appendChild(built.section);
-  steps.push(built);
+  final = applyLock(b, final);
+  final.section.hidden = true;
+  $("blocks").appendChild(final.section);
+  steps.push(final);
 }
 
 /* text: the html is the content; the brief carries the heading */
@@ -1071,13 +1118,15 @@ function rQuiz(b){
   row.appendChild(btn);
   s.appendChild(head); s.appendChild(qtext); s.appendChild(opts); s.appendChild(fb); s.appendChild(row);
 
-  const n = b.questions.length;
+  const qs = b.questions || [];
+  const n = qs.length;
   const chosen = new Array(n).fill(null);
   const solved = new Array(n).fill(false);
   let qi = 0;
 
   function draw(){
-    const q = b.questions[qi];
+    const q = qs[qi];
+    if (!q){ head.textContent = ""; qtext.textContent = "No questions yet."; opts.innerHTML = ""; return; }
     head.textContent = "Question " + (qi+1) + " of " + n;
     qtext.innerHTML = q.q;
     opts.innerHTML = "";
@@ -1100,7 +1149,8 @@ function rQuiz(b){
     if (solved[qi]) reveal(true, false);
   }
   function reveal(ok, animate){
-    const q = b.questions[qi];
+    const q = qs[qi];
+    if (!q){ head.textContent = ""; qtext.textContent = "No questions yet."; opts.innerHTML = ""; return; }
     Array.from(opts.children).forEach((c, k) => {
       c.classList.toggle("right", ok && k === chosen[qi]);
       c.classList.toggle("wrong", !ok && k === chosen[qi]);
@@ -1135,7 +1185,7 @@ function rQuiz(b){
   };
   draw();
   return { section:s,
-           check:() => solved.every(Boolean) ? { ok:true } : { ok:false, message:"Answer all " + n + " questions correctly (" + solved.filter(Boolean).length + "/" + n + ")" },
+           check:() => !n || solved.every(Boolean) ? { ok:true } : { ok:false, message:"Answer all " + n + " questions correctly (" + solved.filter(Boolean).length + "/" + n + ")" },
            brief:{ eyebrow:"Quiz", title:stripTags(b.title) || "Quiz", text:b.note || "Choose an answer, then press Check answer. If it's wrong you can try again." } };
 }
 
@@ -1404,7 +1454,7 @@ function rMC(b){
   const s = el("section");
   const opts = el("div","opts");
   let chosen = null;
-  b.options.forEach((text, j) => {
+  (b.options || []).forEach((text, j) => {
     const lab = el("label","opt");
     const radio = el("input"); radio.type = "radio"; radio.name = b.id;
     radio.addEventListener("change", () => {
@@ -1423,8 +1473,8 @@ function rMC(b){
     Array.from(opts.children).forEach((c,k)=>c.classList.toggle("chosen", k===v));
   }};
   return { section:s,
-           check:() => chosen !== null ? { ok:true } : { ok:false, message:"Choose an answer" },
-           brief:{ eyebrow:"Question", title:stripTags(b.prompt), text:b.note || "" } };
+           check:() => (!(b.options || []).length || chosen !== null) ? { ok:true } : { ok:false, message:"Choose an answer" },
+           brief:{ eyebrow:"Question", title:stripTags(b.prompt) || "Question", text:b.note || "" } };
 }
 
 /* Ordering (drag and drop, with arrow buttons as the keyboard fallback). */
@@ -1434,7 +1484,8 @@ function rOrder(b){
   s.appendChild(list);
 
   // deterministic shuffle so a reload shows the same starting order
-  let arrangement = b.items.map((_, i) => i);
+  const items = b.items || [];
+  let arrangement = items.map((_, i) => i);
   for (let i = arrangement.length - 1; i > 0; i--){
     const j = (strHash(b.id + ":" + i) % (i + 1));
     [arrangement[i], arrangement[j]] = [arrangement[j], arrangement[i]];
@@ -1446,7 +1497,7 @@ function rOrder(b){
       const row = el("div","order-item");
       row.draggable = true;
       row.appendChild(el("span","grip","&#9776;"));
-      row.appendChild(el("span","txt", b.items[itemIdx]));
+      row.appendChild(el("span","txt", items[itemIdx]));
       const mv = el("span","mv");
       const up = el("button","btn-ghost","&#8593;"); const dn = el("button","btn-ghost","&#8595;");
       up.type = "button"; dn.type = "button";
@@ -1475,10 +1526,10 @@ function rOrder(b){
   redraw();
 
   fields[b.id] = { get:() => arrangement.slice(),
-                   set:(v) => { if (Array.isArray(v) && v.length === b.items.length){ arrangement = v.slice(); redraw(); } } };
+                   set:(v) => { if (Array.isArray(v) && v.length === items.length){ arrangement = v.slice(); redraw(); } } };
   return { section:s,
            check:() => ({ ok:true }),   // any order can be submitted, like a Form
-           brief:{ eyebrow:"Put in order", title:stripTags(b.prompt), text:b.note || "Drag the steps, or use the arrows." } };
+           brief:{ eyebrow:"Put in order", title:stripTags(b.prompt) || "Put these in order", text:b.note || "Drag the steps, or use the arrows." } };
 }
 
 /* Fill in the blanks — a dropdown per gap. The choices are every gap's
@@ -1488,14 +1539,14 @@ function rBlanks(b){
   const s = el("section");
   const p = el("p","blanks");
   const gaps = [];
-  String(b.text).replace(/\[\[(.*?)\]\]/g, (_, g) => { gaps.push(g.split("|")[0]); return ""; });
+  String(b.text || "").replace(/\[\[(.*?)\]\]/g, (_, g) => { gaps.push(g.split("|")[0]); return ""; });
   let pool = [...new Set(gaps.concat(b.distractors || []))];
   for (let i = pool.length - 1; i > 0; i--){
     const j = strHash(b.id + ":" + i) % (i + 1);
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const selects = [];
-  String(b.text).split(/(\[\[.*?\]\])/).forEach(part => {
+  String(b.text || "").split(/(\[\[.*?\]\])/).forEach(part => {
     const m = /^\[\[(.*?)\]\]$/.exec(part);
     if (m){
       const sel = el("select","blank-select");
@@ -1519,7 +1570,7 @@ function rBlanks(b){
                        sel.value = x;
                      }); } };
   return { section:s,
-           check:() => selects.every(x => x.value) ? { ok:true } : { ok:false, message:"Choose a word for every gap" },
+           check:() => (!selects.length || selects.every(x => x.value)) ? { ok:true } : { ok:false, message:"Choose a word for every gap" },
            brief:{ eyebrow:"Fill in the blanks", title:stripTags(b.prompt) || "Complete the sentences", text:b.note || "" } };
 }
 
@@ -1532,7 +1583,7 @@ function rShort(b){
   fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; } };
   return { section:s,
            check:() => ta.value.trim() ? { ok:true } : { ok:false, message:"Write an answer" },
-           brief:{ eyebrow:"Short answer", title:stripTags(b.prompt), text:b.note || "" } };
+           brief:{ eyebrow:"Short answer", title:stripTags(b.prompt) || "Short answer", text:b.note || "" } };
 }
 
 /* ---------- marking ---------- */

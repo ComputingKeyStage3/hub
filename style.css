@@ -996,3 +996,25 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .jsonbox{max-height:46vh; overflow:auto; white-space:pre-wrap; word-break:break-word;
   background:#20242E; color:#D8DEE9; border-radius:12px; padding:14px; font-family:var(--mono);
   font-size:12.5px; text-align:left; margin:0 0 14px}
+
+
+/* builder: mode tabs, nested pages, quiz sub-cards */
+.modeswitch{display:flex; gap:6px; padding:10px 24px 0; background:var(--bar)}
+.modeswitch button{background:transparent; border:1.5px solid transparent; border-bottom:none;
+  color:var(--muted); font-size:15.5px; font-weight:800; padding:9px 22px; border-radius:12px 12px 0 0}
+.modeswitch button.on{background:var(--panel); border-color:var(--line); color:var(--text)}
+.pal.strong{border-color:var(--amber); background:var(--panel-2)}
+.pagekids{margin:6px 0 10px; padding:10px 0 2px 12px; border-left:3px solid var(--line-2)}
+.pagekids .bcard{background:var(--panel-2)}
+.pageadd{display:flex; gap:6px; flex-wrap:wrap; padding-left:12px}
+.qsub{border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:0 0 10px; background:var(--panel-2)}
+.qsub-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:9px}
+.bhelp.warn{color:var(--amber-dark); font-weight:700}
+
+/* a page of tasks on the student side */
+.pagegroup{display:block}
+.pg-item{padding:0 0 22px; margin:0 0 22px; border-bottom:1px solid var(--line)}
+.pg-item:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0}
+.pg-h{font-family:var(--display); font-size:20px; font-weight:800; margin:0 0 4px}
+.pg-t{color:var(--muted); font-size:16px; margin:0 0 12px}
+.pg-item section{margin:0}

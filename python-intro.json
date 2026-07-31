@@ -3,49 +3,77 @@
   "intro": "Your first Python program, running right here in the browser.",
   "blocks": [
     {
-      "type": "text",
-      "id": "text1",
-      "html": "<h2>Output a message to the screen</h2><p>To output something to the screen in Python, we use the <code>print()</code> function.</p><p>For example: <code>print(\"Hello World!\")</code> will output the message Hello World!</p>"
+      "type": "page",
+      "id": "page1",
+      "title": "Output a message to the screen",
+      "task": "Read the explanation, run the code, then answer the questions underneath.",
+      "blocks": [
+        {
+          "type": "text",
+          "id": "page1_1",
+          "html": "<p>To output something to the screen in Python, we use the <code>print()</code> function.</p><p>For example: <code>print(\"Hello World!\")</code> will output the message Hello World!</p>"
+        },
+        {
+          "type": "ide",
+          "id": "page1_2",
+          "title": "Investigate",
+          "task": "Run the code below, then add your own output message on line 3 to say \"Learning to program\".",
+          "starter": "print(\"Hello World!\")\nprint(\"KS3 Computing\")\n",
+          "expect": "Learning to program"
+        },
+        {
+          "type": "question",
+          "id": "page1_3",
+          "prompt": "What is the purpose of the print function?",
+          "minWords": 20
+        },
+        {
+          "type": "question",
+          "id": "page1_4",
+          "prompt": "How do you think you could get the user to type in something?",
+          "minWords": 20
+        }
+      ]
     },
     {
-      "type": "ide",
-      "id": "ide2",
-      "title": "Investigate",
-      "task": "Run the following code, then add your own output message on line 3 to say \"Learning to program\".",
-      "starter": "print(\"Hello World!\")\nprint(\"KS3 Computing\")\n",
-      "expect": "Learning to program"
+      "type": "page",
+      "id": "page2",
+      "title": "Asking the user a question",
+      "task": "Run this one — the console will ask you for a name. Type it and press Enter.",
+      "blocks": [
+        {
+          "type": "ide",
+          "id": "page2_1",
+          "title": "Try it",
+          "starter": "name = input(\"What is your name? \")\nprint(\"Hello \" + name)\n"
+        },
+        {
+          "type": "question",
+          "id": "page2_2",
+          "prompt": "What is the difference between print and input?",
+          "minWords": 20
+        }
+      ]
     },
     {
-      "type": "question",
-      "id": "question3",
-      "prompt": "What is the purpose of the print function?",
-      "minWords": 20
-    },
-    {
-      "type": "question",
-      "id": "question4",
-      "prompt": "How do you think you could get the user to type in something?",
-      "minWords": 20
-    },
-    {
-      "type": "ide",
-      "id": "ide5",
-      "title": "Asking a question",
-      "task": "Run this one. The console will ask you for a name — type it and press Enter.",
-      "starter": "name = input(\"What is your name? \")\nprint(\"Hello \" + name)\n"
-    },
-    {
-      "type": "ide",
-      "id": "ide6",
+      "type": "page",
+      "id": "page3",
       "title": "Drawing with code",
-      "turtle": true,
-      "task": "Run it, then change the numbers to draw a triangle instead.",
-      "starter": "import turtle\nt = turtle.Turtle()\nt.color(\"blue\")\n\nfor side in range(4):\n    t.forward(100)\n    t.right(90)\n"
-    },
-    {
-      "type": "image",
-      "id": "image7",
-      "task": "Take a screenshot of your finished drawing and paste it here."
+      "task": "Change the numbers to draw a triangle instead of a square.",
+      "blocks": [
+        {
+          "type": "ide",
+          "id": "page3_1",
+          "title": "Turtle",
+          "turtle": true,
+          "starter": "import turtle\nt = turtle.Turtle()\nt.color(\"blue\")\n\nfor side in range(4):\n    t.forward(100)\n    t.right(90)\n"
+        },
+        {
+          "type": "image",
+          "id": "page3_2",
+          "task": "Take a screenshot of your finished drawing and paste it here."
+        }
+      ]
     }
   ]
 }
