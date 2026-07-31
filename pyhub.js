@@ -328,17 +328,19 @@ def _hub_set_inputs(lines):
     global _hub_queue
     _hub_queue = [x for x in (lines or [])]
 
+class HubNeedsInput(Exception):
+    def __init__(self, prompt):
+        Exception.__init__(self, prompt)
+        self.prompt = prompt
+
 def _hub_input(prompt=""):
     text = str(prompt)
     if _hub_queue:
         value = str(_hub_queue.pop(0))
         print(text + value)
         return value
-    answer = js.prompt(text if text else "Your program is asking for input:")
-    if answer is None:
-        raise KeyboardInterrupt("You cancelled the input box, so the program stopped.")
-    print(text + str(answer))
-    return str(answer)
+    # nothing left to answer with: hand control back so the console can ask
+    raise HubNeedsInput(text)
 
 builtins.input = _hub_input
 
@@ -388,6 +390,10 @@ def _hub_run(source, seconds=10.0):
         code = compile(source, "your program", "exec")
         sys.settrace(_hub_guard)
         exec(code, {"__name__": "__main__"})
+    except HubNeedsInput as ask:
+        sys.settrace(None)
+        sys.stdout, sys.stderr = old_out, old_err
+        return json.dumps({"status": "input", "out": buf.getvalue(), "prompt": ask.prompt})
     except HubTooLong as stop:
         ok = False
         print("")
@@ -411,6 +417,6 @@ def _hub_run(source, seconds=10.0):
     finally:
         sys.settrace(None)
         sys.stdout, sys.stderr = old_out, old_err
-    return json.dumps({"out": buf.getvalue(), "ok": ok})
+    return json.dumps({"status": "done", "out": buf.getvalue(), "ok": ok})
 `;
 })();

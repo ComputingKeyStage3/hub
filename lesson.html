@@ -716,38 +716,160 @@ function rPython(b){
 let pyBooted = false;
 async function ensureHubPython(status){
   const py = await ensurePyodide(status);
-  if (!pyBooted){
-    py.runPython(window.HUB_PY_BOOT);
-    pyBooted = true;
-  }
+  if (!pyBooted){ py.runPython(window.HUB_PY_BOOT); pyBooted = true; }
   return py;
 }
+
+/* ---------- colouring the code ---------- */
+const PY_KW = new Set(("and as assert break class continue def del elif else except finally for from global " +
+  "if import in is lambda None nonlocal not or pass raise return True False try while with yield").split(" "));
+const PY_FN = new Set(("print input int str float len range list dict set tuple bool abs min max sum round sorted " +
+  "open type enumerate zip map filter reversed any all chr ord format").split(" "));
+function escHtml(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+const TRIPLES = ["'''", '"""'];
+function hlLine(line, state){
+  let out = "", i = 0;
+  if (state.triple){                                  // still inside a long string
+    const close = line.indexOf(state.triple);
+    if (close < 0) return { html: '<span class="t-str">' + escHtml(line) + "</span>" };
+    out += '<span class="t-str">' + escHtml(line.slice(0, close + 3)) + "</span>";
+    i = close + 3; state.triple = null;
+  }
+  while (i < line.length){
+    const rest = line.slice(i);
+    let m;
+    if (rest[0] === "#"){ out += '<span class="t-com">' + escHtml(rest) + "</span>"; break; }
+    const trip = TRIPLES.find(q => rest.slice(0, 3) === q);
+    if (trip){
+      const close = rest.indexOf(trip, 3);
+      if (close < 0){ state.triple = trip; out += '<span class="t-str">' + escHtml(rest) + "</span>"; break; }
+      out += '<span class="t-str">' + escHtml(rest.slice(0, close + 3)) + "</span>";
+      i += close + 3; continue;
+    }
+    if ((m = /^("(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?)/.exec(rest))){
+      out += '<span class="t-str">' + escHtml(m[0]) + "</span>"; i += m[0].length; continue;
+    }
+    if ((m = /^\d+\.?\d*/.exec(rest))){ out += '<span class="t-num">' + m[0] + "</span>"; i += m[0].length; continue; }
+    if ((m = /^[A-Za-z_]\w*/.exec(rest))){
+      const w = m[0];
+      const call = /^\s*\(/.test(rest.slice(w.length));
+      const cls = PY_KW.has(w) ? "t-kw" : (PY_FN.has(w) ? "t-fn" : (call ? "t-call" : ""));
+      out += cls ? '<span class="' + cls + '">' + w + "</span>" : escHtml(w);
+      i += w.length; continue;
+    }
+    if ((m = /^[+\-*\/%=<>!&|^~]+/.exec(rest))){ out += '<span class="t-op">' + escHtml(m[0]) + "</span>"; i += m[0].length; continue; }
+    out += escHtml(rest[0]); i++;
+  }
+  return { html: out || "&nbsp;" };
+}
+
+/* ---------- spotting mistakes before the code is even run ---------- */
+function bare(line){                                   // strings and comments blanked out
+  return line.replace(/(["'])(?:\\.|(?!\1).)*\1?/g, '""').replace(/#.*/, "");
+}
+function checkPython(code){
+  const issues = [], lines = code.split("\n");
+  const opens = { "(": ")", "[": "]", "{": "}" };
+  const stack = [];
+  lines.forEach((raw, n) => {
+    const t = bare(raw);
+    if (!t.trim()) return;
+    for (const ch of t){
+      if (opens[ch]) stack.push({ ch, n });
+      else if (ch === ")" || ch === "]" || ch === "}"){
+        if (!stack.pop()) issues.push({ line:n, msg:"There is a closing bracket here with nothing to close." });
+      }
+    }
+    const dq = (raw.replace(/\\./g, "").match(/"/g) || []).length;
+    const sq = (raw.replace(/\\./g, "").match(/'/g) || []).length;
+    if (dq % 2 || sq % 2) issues.push({ line:n, msg:"A quote mark is missing from this line." });
+
+    const p2 = /^(\s*)print\s+(?!\()(.+)$/.exec(raw);
+    if (p2) issues.push({ line:n, msg:"In Python 3, print needs brackets around what it prints.",
+                          fix:() => p2[1] + 'print(' + p2[2].trim() + ')' });
+
+    const opener = /^\s*(if|elif|else|for|while|def|class|try|except|finally|with)\b/.exec(t);
+    if (opener && !/:\s*$/.test(t.trim())){
+      issues.push({ line:n, msg:'Lines starting with "' + opener[1] + '" need a colon (:) at the end.',
+                    fix:() => raw.replace(/\s*$/, "") + ":" });
+    }
+    if (/^\s*(if|elif|while)\b/.test(t) && /[^=!<>+\-*\/%]=[^=]/.test(t.replace(/^\s*\w+/, ""))){
+      issues.push({ line:n, msg:"Use == to compare two things. A single = puts a value into a variable.",
+                    fix:() => raw.replace(/([^=!<>+\-*\/%])=([^=])/, "$1==$2") });
+    }
+    const typo = /\b(pirnt|prnit|Print|inptu|inupt|Input|rang|whlie|improt|fro|esle|retrun)\b/.exec(t);
+    if (typo){
+      const right = { pirnt:"print", prnit:"print", Print:"print", inptu:"input", inupt:"input",
+                      Input:"input", rang:"range", whlie:"while", improt:"import", fro:"for",
+                      esle:"else", retrun:"return" }[typo[1]];
+      issues.push({ line:n, msg:'Did you mean "' + right + '"?',
+                    fix:() => raw.replace(new RegExp("\\b" + typo[1] + "\\b"), right) });
+    }
+    if (/^\t+ +| +\t/.test(raw)) issues.push({ line:n, msg:"This line mixes tabs and spaces. Use spaces only." });
+  });
+  stack.forEach(o => issues.push({ line:o.n, msg:"This " + o.ch + " is never closed." }));
+  return issues;
+}
+
+/* ---------- the IDE ---------- */
+function idePrefs(){ try{ return JSON.parse(localStorage.getItem("hub_ide") || "{}"); }catch(e){ return {}; } }
+function saveIdePrefs(p){ try{ localStorage.setItem("hub_ide", JSON.stringify(p)); }catch(e){} }
 
 function rIDE(b){
   const s = el("section","ide");
   const wrap = el("div","ide-wrap" + (b.turtle ? " has-canvas" : ""));
 
-  /* ---- editor with line numbers ---- */
+  /* --- editor --- */
   const pane = el("div","ide-pane");
   const bar = el("div","ide-bar");
-  bar.appendChild(el("span","ide-file", (b.filename || "main.py")));
+  bar.appendChild(el("span","ide-file", b.filename || "main.py"));
+  const gearBtn = el("button","ide-small","\u2699"); gearBtn.title = "Editor settings";
+  const resetBtn = el("button","ide-small","Reset");
   const runBtn = el("button","btn-primary ide-run","\u25B6 Run");
-  const resetBtn = el("button","btn-ghost ide-small","Reset");
-  bar.appendChild(resetBtn); bar.appendChild(runBtn);
+  bar.appendChild(gearBtn); bar.appendChild(resetBtn); bar.appendChild(runBtn);
   pane.appendChild(bar);
+
+  const settings = el("div","ide-settings"); settings.hidden = true;
+  settings.appendChild(el("span","ide-setlabel","Colours"));
+  const themes = el("div","ide-setrow");
+  [["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(pair => {
+    const t = el("button","ide-chip", pair[1]);
+    t.dataset.theme = pair[0];
+    t.addEventListener("click", () => setTheme(pair[0]));
+    themes.appendChild(t);
+  });
+  settings.appendChild(themes);
+  settings.appendChild(el("span","ide-setlabel","Text size"));
+  const sizes = el("div","ide-setrow");
+  [["s","Small"],["m","Medium"],["l","Large"],["xl","Extra large"]].forEach(pair => {
+    const t = el("button","ide-chip", pair[1]);
+    t.dataset.size = pair[0];
+    t.addEventListener("click", () => setSize(pair[0]));
+    sizes.appendChild(t);
+  });
+  settings.appendChild(sizes);
+  pane.appendChild(settings);
+  gearBtn.addEventListener("click", () => { settings.hidden = !settings.hidden; });
 
   const editor = el("div","ide-editor");
   const gutter = el("div","ide-gutter");
+  const codeWrap = el("div","ide-codewrap");
+  const hl = el("div","ide-hl"); hl.setAttribute("aria-hidden", "true");
   const ta = el("textarea","ide-code");
-  ta.spellcheck = false; ta.autocapitalize = "off"; ta.autocomplete = "off";
+  ta.spellcheck = false; ta.autocapitalize = "off"; ta.autocomplete = "off"; ta.wrap = "off";
   ta.value = b.starter || "";
   if (b.readOnly) ta.readOnly = true;
   if (b.height) editor.style.height = b.height + "px";
-  editor.appendChild(gutter); editor.appendChild(ta);
+  codeWrap.appendChild(hl); codeWrap.appendChild(ta);
+  editor.appendChild(gutter); editor.appendChild(codeWrap);
   pane.appendChild(editor);
+
+  const probs = el("div","ide-probs"); probs.hidden = true;
+  pane.appendChild(probs);
   wrap.appendChild(pane);
 
-  /* ---- output (and the turtle canvas, when asked for) ---- */
+  /* --- output side --- */
   const side = el("div","ide-side");
   if (b.turtle){
     const cwrap = el("div","ide-canvaswrap");
@@ -758,48 +880,84 @@ function rIDE(b){
     b._canvas = canvas;
   }
   const outBar = el("div","ide-bar ide-outbar");
-  outBar.appendChild(el("span","ide-file","Output"));
-  const clearBtn = el("button","btn-ghost ide-small","Clear");
+  outBar.appendChild(el("span","ide-file","Console"));
+  const clearBtn = el("button","ide-small","Clear");
   outBar.appendChild(clearBtn);
   side.appendChild(outBar);
+  const consoleBox = el("div","ide-console");
   const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
-  side.appendChild(out);
+  const askRow = el("div","ide-ask"); askRow.hidden = true;
+  const askText = el("span","ide-askprompt");
+  const askIn = el("input","ide-askin");
+  askIn.type = "text"; askIn.autocomplete = "off"; askIn.spellcheck = false;
+  askRow.appendChild(askText); askRow.appendChild(askIn);
+  consoleBox.appendChild(out); consoleBox.appendChild(askRow);
+  side.appendChild(consoleBox);
   wrap.appendChild(side);
   s.appendChild(wrap);
-
-  /* ---- inputs the program will be fed (so input() doesn't need pop-ups) ---- */
-  let inputBox = null;
-  if (b.inputs !== false){
-    const det = el("div","ide-inputs");
-    det.appendChild(el("label","","Answers for any input() questions — one per line (optional)"));
-    inputBox = el("textarea","ide-inputbox"); inputBox.rows = 2;
-    inputBox.value = (typeof b.inputs === "string") ? b.inputs : "";
-    inputBox.addEventListener("input", markDirty);
-    det.appendChild(inputBox);
-    s.appendChild(det);
-  }
 
   const note = el("p","ide-note"); note.hidden = true;
   s.appendChild(note);
 
-  /* ---- line numbers + friendly typing ---- */
-  function paintGutter(){
-    const n = ta.value.split("\n").length;
-    let html = "";
-    for (let i = 1; i <= n; i++) html += i + "\n";
-    gutter.textContent = html;
+  /* --- appearance --- */
+  function setTheme(k){
+    s.dataset.idetheme = k;
+    Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
+    const p = idePrefs(); p.theme = k; saveIdePrefs(p);
   }
-  ta.addEventListener("input", () => { paintGutter(); markDirty(); });
-  ta.addEventListener("scroll", () => { gutter.scrollTop = ta.scrollTop; });
+  function setSize(k){
+    s.dataset.idesize = k;
+    Array.from(sizes.children).forEach(c => c.classList.toggle("on", c.dataset.size === k));
+    const p = idePrefs(); p.size = k; saveIdePrefs(p);
+  }
+  const pref = idePrefs();
+  setTheme(pref.theme || "dark");
+  setSize(pref.size || "m");
+
+  /* --- painting --- */
+  let issues = [];
+  function repaint(){
+    const lines = ta.value.split("\n");
+    issues = checkPython(ta.value);
+    const bad = new Set(issues.map(x => x.line));
+    const state = { triple: null };
+    hl.innerHTML = lines.map((l, n) =>
+      '<div class="hl-line' + (bad.has(n) ? " bad" : "") + '">' + hlLine(l, state).html + "</div>").join("");
+    gutter.innerHTML = lines.map((_, n) =>
+      '<div class="gl' + (bad.has(n) ? " bad" : "") + '">' + (n + 1) + "</div>").join("");
+    probs.innerHTML = "";
+    if (issues.length){
+      probs.hidden = false;
+      issues.slice(0, 4).forEach(iss => {
+        const row = el("div","ide-prob");
+        row.appendChild(el("span","ide-probline","Line " + (iss.line + 1)));
+        row.appendChild(el("span","ide-probmsg", iss.msg));
+        if (iss.fix){
+          const fixBtn = el("button","ide-chip","Fix it");
+          fixBtn.addEventListener("click", () => {
+            const ls = ta.value.split("\n");
+            ls[iss.line] = iss.fix();
+            ta.value = ls.join("\n");
+            repaint(); markDirty();
+          });
+          row.appendChild(fixBtn);
+        }
+        probs.appendChild(row);
+      });
+    } else { probs.hidden = true; }
+  }
+  ta.addEventListener("input", () => { repaint(); markDirty(); });
+  ta.addEventListener("scroll", () => {
+    hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop;
+  });
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Tab"){
       e.preventDefault();
       const st = ta.selectionStart, en = ta.selectionEnd;
       ta.value = ta.value.slice(0, st) + "    " + ta.value.slice(en);
       ta.selectionStart = ta.selectionEnd = st + 4;
-      paintGutter(); markDirty();
+      repaint(); markDirty();
     } else if (e.key === "Enter"){
-      // keep the indent, and add one after a colon — like a real editor
       const st = ta.selectionStart;
       const line = ta.value.slice(0, st).split("\n").pop();
       const indent = (line.match(/^[ \t]*/) || [""])[0];
@@ -809,70 +967,85 @@ function rIDE(b){
         const ins = "\n" + indent + extra;
         ta.value = ta.value.slice(0, st) + ins + ta.value.slice(ta.selectionEnd);
         ta.selectionStart = ta.selectionEnd = st + ins.length;
-        paintGutter(); markDirty();
+        repaint(); markDirty();
       }
     }
   });
-  paintGutter();
+  repaint();
 
-  /* ---- running ---- */
-  let ran = false, lastOut = "";
+  /* --- running: the console asks for input, exactly like a terminal --- */
+  let ran = false, lastOut = "", answers = [];
+  async function execute(){
+    const py = await ensureHubPython(out);
+    py.globals.set("_hub_next_inputs", answers.join("\u0000"));
+    py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
+    py.globals.set("_hub_src", ta.value);
+    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
+    lastOut = res.out || "";
+    out.textContent = lastOut;
+    out.classList.toggle("has-error", res.status === "done" && !res.ok);
+    if (res.status === "input"){
+      askText.textContent = res.prompt || ">";
+      askRow.hidden = false; askIn.value = ""; askIn.focus();
+      return false;
+    }
+    askRow.hidden = true;
+    if (!lastOut) out.textContent = "(your program printed nothing)";
+    ran = true;
+    if (b.expect && res.ok){
+      const good = lastOut.toLowerCase().includes(String(b.expect).toLowerCase());
+      note.hidden = false;
+      note.className = "ide-note " + (good ? "ok" : "no");
+      note.textContent = good ? "That's the output we were looking for \u2713" : "Not quite yet \u2014 keep going.";
+    }
+    markDirty();
+    return true;
+  }
   async function run(){
     runBtn.disabled = true;
-    const wasLabel = runBtn.textContent;
+    const label = runBtn.textContent;
     runBtn.textContent = "Running\u2026";
     note.hidden = true;
+    answers = [];
     out.textContent = "";
     try{
-      if (b.turtle && window.hubTurtleAttach) window.hubTurtleAttach(b._canvas);
-      else if (window.hubTurtleAttach) window.hubTurtleAttach(null);
-      const py = await ensureHubPython(out);
-      const lines = inputBox ? inputBox.value.split("\n").filter(x => x !== "") : [];
-      py.globals.set("_hub_next_inputs", lines.join("\u0000"));
-      py.runPython("_hub_set_inputs([x for x in _hub_next_inputs.split(chr(0)) if x != ''])");
-      py.globals.set("_hub_src", ta.value);
-      const raw = py.runPython("_hub_run(_hub_src, 10.0)");
-      const res = JSON.parse(raw);
-      lastOut = res.out || "";
-      out.textContent = lastOut || "(your program printed nothing)";
-      out.classList.toggle("has-error", !res.ok);
-      ran = true;
-      if (b.expect && res.ok){
-        const good = lastOut.toLowerCase().includes(String(b.expect).toLowerCase());
-        note.hidden = false;
-        note.className = "ide-note " + (good ? "ok" : "no");
-        note.textContent = good ? "That's the output we were looking for \u2713"
-                                : "Not quite yet \u2014 keep going.";
-      }
-      markDirty();
+      if (window.hubTurtleAttach) window.hubTurtleAttach(b.turtle ? b._canvas : null);
+      await execute();
     }catch(e){
       out.textContent = "";
       note.hidden = false; note.className = "ide-note no";
-      note.textContent = "Python could not start here: " + (e.message || "unknown problem") +
-                         ". Check the internet connection and try again.";
+      note.textContent = "Python could not start here: " + (e.message || "unknown problem") + ".";
     }finally{
-      runBtn.disabled = false;
-      runBtn.textContent = wasLabel;
+      runBtn.disabled = false; runBtn.textContent = label;
     }
   }
+  askIn.addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    answers.push(askIn.value);
+    askRow.hidden = true;
+    try{
+      if (window.hubTurtleAttach) window.hubTurtleAttach(b.turtle ? b._canvas : null);
+      await execute();
+    }catch(err){ askRow.hidden = true; }
+  });
   runBtn.addEventListener("click", run);
-  clearBtn.addEventListener("click", () => { out.textContent = ""; out.classList.remove("has-error"); });
+  clearBtn.addEventListener("click", () => {
+    out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
+  });
   resetBtn.addEventListener("click", () => {
     if (ta.value !== (b.starter || "") && !confirm("Put the code back to how it started? Your changes will be lost.")) return;
-    ta.value = b.starter || "";
-    paintGutter(); markDirty();
+    ta.value = b.starter || ""; repaint(); markDirty();
   });
 
   fields[b.id] = {
-    get:() => ({ code: ta.value, inputs: inputBox ? inputBox.value : "", out: lastOut.slice(0, 4000), ran }),
+    get:() => ({ code: ta.value, out: lastOut.slice(0, 4000), ran: ran }),
     set:(v) => {
       if (!v) return;
-      if (typeof v === "string"){ ta.value = v; paintGutter(); return; }   // older saves
+      if (typeof v === "string"){ ta.value = v; repaint(); return; }
       if (typeof v.code === "string") ta.value = v.code;
-      if (inputBox && typeof v.inputs === "string") inputBox.value = v.inputs;
       if (typeof v.out === "string" && v.out){ lastOut = v.out; out.textContent = v.out; }
       ran = !!v.ran;
-      paintGutter();
+      repaint();
     }
   };
 

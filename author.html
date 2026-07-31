@@ -3,343 +3,451 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Worksheet converter — Prince Henry's Computing KS3</title>
+<title>Lesson builder — Prince Henry's Computing KS3</title>
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="settings.js"></script>
-<style>
-  .authwrap{display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start}
-  @media (max-width:1000px){ .authwrap{grid-template-columns:1fr} }
-  .authwrap textarea{width:100%; height:62vh; font-family:var(--mono); font-size:14px; line-height:1.55}
-  #jsonOut{height:62vh; overflow:auto; white-space:pre; font-family:var(--mono); font-size:12.5px;
-    background:#20242E; color:#D8DEE9; border-radius:14px; padding:16px; margin:0}
-  .authbar{display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin:14px 0}
-  .cheat{font-size:15px; line-height:1.7}
-  .cheat code{font-family:var(--mono); font-size:13.5px; background:var(--panel-2); padding:2px 7px;
-    border-radius:6px; border:1px solid var(--line)}
-  details.cheatbox{background:var(--panel); border:1.5px solid var(--line); border-radius:14px; padding:16px 20px; margin-bottom:18px}
-  details.cheatbox summary{font-weight:800; font-size:17px; cursor:pointer}
-</style>
 </head>
 <body>
 
 <div class="homebar">
-  <div class="title">Worksheet converter</div>
+  <div class="title">Lesson builder</div>
   <a class="crumb" href="index.html" style="margin-right:10px">&larr; Home</a>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
-<div class="page">
-  <div class="masthead">
-    <h1 style="margin-bottom:6px">Turn a worksheet into a lesson</h1>
-    <p>Paste your worksheet on the left using the simple marks below, press <b>Convert</b>, then
-       <b>Preview</b> to try it exactly as a student would. When it's right, copy the JSON into
-       <code>lessons/your-lesson-id.json</code> and add the lesson to <code>lessons/index.json</code>.</p>
+<div class="build-top">
+  <div class="build-titles">
+    <input id="lTitle" placeholder="Lesson title, e.g. Python 1 — Output" autocomplete="off">
+    <input id="lIntro" placeholder="One line for the home page" autocomplete="off">
   </div>
-
-  <details class="cheatbox">
-    <summary>The marks you can use</summary>
-    <div class="cheat">
-      <p><code># Title</code> — the lesson title (first line).<br>
-      <code>&gt; One sentence</code> — the description shown on the home page.</p>
-      <p><code>## A heading</code> — starts a <b>reading page</b>. Plain lines under it become paragraphs,
-      and lines starting with <code>-</code> become bullet points.</p>
-      <p><code>[write] Explain what a variable is</code> — a <b>written answer</b> box.
-      Add <code>(30 words)</code> at the end to set how much you'd like.</p>
-      <p><code>[code] Fixing the greeting</code> — a <b>Python IDE</b> task. Put the starter code in a fenced
-      block straight after, between lines of <code>```</code>. Options on the same line:
-      <code>+turtle</code> (adds the drawing canvas), <code>+inputs: Ada, 12</code> (answers for
-      <code>input()</code>), <code>+expect: Hello</code> (what the output should contain).</p>
-      <p><code>[quiz] Which one is a loop?</code> then option lines: <code>* correct</code> and <code>- wrong</code>.
-      Add <code>? a hint</code> under the options to give a hint.</p>
-      <p><code>[mc] …</code>, <code>[blanks] The [[cat]] sat</code>, <code>[order] a | b | c</code>,
-      <code>[short] … +keywords: loop, repeat</code> — assessment questions.</p>
-      <p><code>[screenshot] Show your program running</code> — a screenshot upload.<br>
-      <code>[video] https://…</code> — an embedded video.<br>
-      <code>[link] https://… | Trinket</code> — a link out.</p>
-      <p>Add <code>+lock: HAWK</code> to any task line to keep it shut until you give the class a code.</p>
-    </div>
-  </details>
-
-  <div class="authwrap">
-    <div>
-      <b>Your worksheet</b>
-      <textarea id="src" spellcheck="false"></textarea>
-      <div class="authbar">
-        <button class="btn-primary" id="convert">Convert</button>
-        <button class="btn-ghost" id="preview">Preview as a student</button>
-        <button class="btn-ghost" id="sample">Load an example</button>
-        <span class="hint" id="msg"></span>
-      </div>
-    </div>
-    <div>
-      <b>Lesson JSON</b>
-      <pre id="jsonOut">Press Convert and the lesson file appears here.</pre>
-      <div class="authbar">
-        <button class="btn-ghost" id="copy">Copy JSON</button>
-        <button class="btn-ghost" id="download">Save as a file</button>
-        <span class="hint" id="idHint"></span>
-      </div>
-    </div>
+  <div class="build-actions">
+    <button class="btn-ghost" id="importBtn">Paste a Trinket page</button>
+    <button class="btn-ghost" id="jsonBtn">JSON</button>
+    <button class="btn-ghost" id="dlBtn">Save file</button>
+    <button class="btn-primary" id="prevBtn">Refresh preview</button>
   </div>
+</div>
+
+<div class="build">
+  <aside class="build-palette">
+    <p class="pal-head">Add a task</p>
+    <button class="pal" data-add="text"><b>Reading</b><span>Explain something</span></button>
+    <button class="pal" data-add="ide"><b>Python task</b><span>Editor, console, turtle</span></button>
+    <button class="pal" data-add="question"><b>Written answer</b><span>They type a response</span></button>
+    <button class="pal" data-add="quiz"><b>Quiz</b><span>Multiple choice with hints</span></button>
+    <button class="pal" data-add="image"><b>Screenshot</b><span>Paste a picture</span></button>
+    <button class="pal" data-add="embed"><b>Video</b><span>Embed a clip</span></button>
+    <button class="pal" data-add="link"><b>Link</b><span>Send them to a site</span></button>
+    <p class="pal-head">Assessment questions</p>
+    <button class="pal" data-add="mc"><b>Multiple choice</b><span>Marked automatically</span></button>
+    <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
+    <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
+    <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
+    <p class="pal-note">Drag a card by its handle to reorder. Everything saves in this browser as you type.</p>
+  </aside>
+
+  <main class="build-list" id="list"></main>
+
+  <section class="build-preview">
+    <div class="prev-head">
+      <b>Live preview</b>
+      <span class="hint" id="prevMsg"></span>
+    </div>
+    <iframe id="prev" title="Lesson preview"></iframe>
+  </section>
+</div>
+
+<div class="modal-back no-print" id="mBack" hidden>
+  <div class="modal wide" id="mBox"></div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
-let lastLesson = null;
-
-/* ---------------- the converter ----------------
-   Deliberately forgiving: anything it doesn't recognise becomes ordinary
-   reading text, so a pasted worksheet is never silently lost. */
-function convert(text){
-  const lines = String(text).replace(/\r/g, "").split("\n");
-  const lesson = { title: "Untitled lesson", intro: "", blocks: [] };
-  let i = 0, n = 0;
-  let readingTitle = null, readingBody = [];
-
-  const nextId = (p) => p + (++n);
-
-  function flushReading(){
-    if (readingTitle === null && !readingBody.length) return;
-    let html = readingTitle ? "<h2>" + esc(readingTitle) + "</h2>" : "";
-    let bullets = [];
-    readingBody.forEach(l => {
-      if (/^\s*[-*]\s+/.test(l)){ bullets.push(l.replace(/^\s*[-*]\s+/, "")); return; }
-      if (bullets.length){ html += "<ul>" + bullets.map(b => "<li>" + inline(b) + "</li>").join("") + "</ul>"; bullets = []; }
-      if (l.trim()) html += "<p>" + inline(l) + "</p>";
-    });
-    if (bullets.length) html += "<ul>" + bullets.map(b => "<li>" + inline(b) + "</li>").join("") + "</ul>";
-    readingTitle = null; readingBody = [];
-    if (!html.trim()) return;              // blank lines between tasks are not a reading page
-    lesson.blocks.push({ type: "text", id: nextId("read"), html });
-  }
-  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-  function inline(s){
-    return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
-                 .replace(/(^|[^`])`([^`]+)`/g, "$1<code>$2</code>");
-  }
-  /* pull "+key: value" options off the end of a marker line */
-  function opts(rest){
-    const o = { text: rest, flags: {} };
-    o.text = rest.replace(/\+(\w+)\s*:\s*([^+]+)/g, (m, k, v) => { o.flags[k.toLowerCase()] = v.trim(); return ""; })
-                 .replace(/\+(\w+)\b/g, (m, k) => { o.flags[k.toLowerCase()] = true; return ""; })
-                 .trim();
-    return o;
-  }
-  function fenced(){
-    // collect a ``` block sitting under the current line
-    if (i < lines.length && /^\s*```/.test(lines[i])){
-      i++;
-      const buf = [];
-      while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]);
-      i++;                                   // closing fence
-      return buf.join("\n");
-    }
-    return "";
-  }
-  function bulletsUnder(){
-    const got = [];
-    while (i < lines.length && /^\s*[-*?]\s+/.test(lines[i])) got.push(lines[i++]);
-    return got;
-  }
-  function addLock(block, flags){
-    if (flags.lock && typeof flags.lock === "string"){
-      block.lockCode = djb2(flags.lock.trim().toUpperCase());
-      block.lockTitle = "Wait for your teacher";
-      block.lockHint = "Your teacher will give you the code.";
-    }
-    return block;
-  }
-
-  while (i < lines.length){
-    const line = lines[i];
-    const t = line.trim();
-
-    if (/^#\s+/.test(t) && !/^##/.test(t)){ flushReading(); lesson.title = t.replace(/^#\s+/, ""); i++; continue; }
-    if (/^>\s+/.test(t)){ flushReading(); lesson.intro = t.replace(/^>\s+/, ""); i++; continue; }
-    if (/^##\s+/.test(t)){ flushReading(); readingTitle = t.replace(/^##\s+/, ""); i++; continue; }
-
-    const m = /^\[(\w+)\]\s*(.*)$/.exec(t);
-    if (!m){ readingBody.push(line); i++; continue; }
-
-    flushReading();
-    const kind = m[1].toLowerCase();
-    const o = opts(m[2]);
-    i++;
-
-    if (kind === "code" || kind === "ide" || kind === "python"){
-      const starter = fenced();
-      const blk = { type: "ide", id: nextId("code"), title: o.text || "Python", task: o.flags.task || o.text || "Write your code, then press Run.", starter };
-      if (o.flags.turtle) blk.turtle = true;
-      if (typeof o.flags.inputs === "string") blk.inputs = o.flags.inputs.split(/\s*,\s*/).join("\n");
-      if (typeof o.flags.expect === "string") blk.expect = o.flags.expect;
-      if (o.flags.readonly) blk.readOnly = true;
-      lesson.blocks.push(addLock(blk, o.flags));
-      continue;
-    }
-    if (kind === "write" || kind === "question"){
-      const wm = /\((\d+)\s*words?\)/i.exec(o.text);
-      const blk = { type: "question", id: nextId("q"),
-                    prompt: o.text.replace(/\((\d+)\s*words?\)/i, "").trim(),
-                    minWords: wm ? parseInt(wm[1], 10) : 20 };
-      lesson.blocks.push(addLock(blk, o.flags));
-      continue;
-    }
-    if (kind === "quiz"){
-      const rows = bulletsUnder();
-      const options = [], hints = [];
-      let answer = 0;
-      rows.forEach(r => {
-        const rt = r.trim();
-        if (/^\?\s+/.test(rt)){ hints.push(rt.replace(/^\?\s+/, "")); return; }
-        if (/^\*\s+/.test(rt)){ answer = options.length; options.push(rt.replace(/^\*\s+/, "")); return; }
-        options.push(rt.replace(/^-\s+/, ""));
-      });
-      lesson.blocks.push(addLock({ type: "quiz", id: nextId("quiz"), title: "Check your understanding",
-        questions: [{ q: o.text, options, answer, hint: hints[0] || "", why: hints[1] || "" }] }, o.flags));
-      continue;
-    }
-    if (kind === "mc"){
-      const rows = bulletsUnder();
-      const options = []; let answer = 0;
-      rows.forEach(r => {
-        const rt = r.trim();
-        if (/^\*\s+/.test(rt)){ answer = options.length; options.push(rt.replace(/^\*\s+/, "")); return; }
-        options.push(rt.replace(/^-\s+/, ""));
-      });
-      lesson.blocks.push(addLock({ type: "mc", id: nextId("mc"), prompt: o.text, options, answer,
-        topic: o.flags.topic || undefined }, o.flags));
-      continue;
-    }
-    if (kind === "blanks"){
-      lesson.blocks.push(addLock({ type: "blanks", id: nextId("gap"), prompt: o.flags.prompt || "Fill in the gaps",
-        text: o.text, distractors: typeof o.flags.extra === "string" ? o.flags.extra.split(/\s*,\s*/) : undefined,
-        topic: o.flags.topic || undefined }, o.flags));
-      continue;
-    }
-    if (kind === "order"){
-      lesson.blocks.push(addLock({ type: "order", id: nextId("ord"),
-        prompt: o.flags.prompt || "Put these in the right order",
-        items: o.text.split("|").map(x => x.trim()).filter(Boolean),
-        topic: o.flags.topic || undefined }, o.flags));
-      continue;
-    }
-    if (kind === "short"){
-      lesson.blocks.push(addLock({ type: "short", id: nextId("sa"), prompt: o.text,
-        keywords: typeof o.flags.keywords === "string"
-          ? o.flags.keywords.split(";").map(g => g.split(/\s*,\s*/).map(x => x.trim()).filter(Boolean)).filter(g => g.length)
-          : [],
-        model: o.flags.model || "", topic: o.flags.topic || undefined }, o.flags));
-      continue;
-    }
-    if (kind === "screenshot" || kind === "image"){
-      lesson.blocks.push(addLock({ type: "image", id: nextId("shot"),
-        task: o.text || "Take a screenshot and paste it here." }, o.flags));
-      continue;
-    }
-    if (kind === "video" || kind === "embed"){
-      const url = (o.text.split("|")[0] || "").trim();
-      lesson.blocks.push(addLock({ type: "embed", id: nextId("vid"), url,
-        title: (o.text.split("|")[1] || "Watch this").trim() }, o.flags));
-      continue;
-    }
-    if (kind === "link"){
-      const parts = o.text.split("|");
-      lesson.blocks.push(addLock({ type: "link", id: nextId("link"), url: (parts[0] || "").trim(),
-        title: (parts[1] || "Open this").trim(), task: o.flags.task || "" }, o.flags));
-      continue;
-    }
-    // unknown marker: keep the words rather than lose them
-    readingBody.push(line);
-  }
-  flushReading();
-  if (!lesson.intro) delete lesson.intro;
-  return lesson;
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
 }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
-/* the same tiny hash the lesson page uses for teacher codes */
-function djb2(str){
-  let h = 5381;
-  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
-  return h;
-}
+/* ---------------- the lesson being built ---------------- */
+let lesson = { title:"", intro:"", blocks:[] };
 
-$("convert").addEventListener("click", () => {
+const BLANK = {
+  text:     () => ({ type:"text", heading:"", body:"" }),
+  ide:      () => ({ type:"ide", title:"", task:"", starter:'print("Hello World!")', turtle:false, expect:"" }),
+  question: () => ({ type:"question", prompt:"", minWords:20 }),
+  quiz:     () => ({ type:"quiz", q:"", options:["",""], answer:0, hint:"" }),
+  image:    () => ({ type:"image", task:"Take a screenshot and paste it here." }),
+  embed:    () => ({ type:"embed", url:"", title:"Watch this" }),
+  link:     () => ({ type:"link", url:"", title:"", task:"" }),
+  mc:       () => ({ type:"mc", prompt:"", options:["",""], answer:0, topic:"" }),
+  blanks:   () => ({ type:"blanks", prompt:"Fill in the gaps", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
+  order:    () => ({ type:"order", prompt:"Put these in order", items:["","",""], topic:"" }),
+  short:    () => ({ type:"short", prompt:"", keywords:"", model:"", topic:"" })
+};
+const LABEL = { text:"Reading", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
+                embed:"Video", link:"Link", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
+                short:"Short answer" };
+
+/* ---------------- the draft lives in this browser ---------------- */
+function saveDraft(){ try{ localStorage.setItem("hub_builder", JSON.stringify(lesson)); }catch(e){} }
+function loadDraft(){
   try{
-    lastLesson = convert($("src").value);
-    $("jsonOut").textContent = JSON.stringify(lastLesson, null, 2);
-    const tasks = lastLesson.blocks.length;
-    $("msg").textContent = "Converted \u2014 " + tasks + " task" + (tasks === 1 ? "" : "s") + ".";
-    $("idHint").textContent = "Suggested file name: " +
-      lastLesson.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) + ".json";
-  }catch(e){ $("msg").textContent = "Could not convert that: " + e.message; }
+    const d = JSON.parse(localStorage.getItem("hub_builder") || "null");
+    if (d && Array.isArray(d.blocks)) lesson = d;
+  }catch(e){}
+}
+
+/* ---------------- cards -> a real lesson file ---------------- */
+function inline(s){
+  return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+function clean(o){
+  Object.keys(o).forEach(k => {
+    const v = o[k];
+    if (v === "" || v === undefined || (Array.isArray(v) && !v.length)) delete o[k];
+  });
+  return o;
+}
+function compile(){
+  const out = { title: lesson.title || "Untitled lesson", blocks: [] };
+  if (lesson.intro) out.intro = lesson.intro;
+  lesson.blocks.forEach((b, i) => {
+    const id = b.type + (i + 1);
+    if (b.type === "text"){
+      let html = b.heading ? "<h2>" + esc(b.heading) + "</h2>" : "";
+      /* Walk the lines, gathering runs of bullets and runs of prose. Teachers
+         write a sentence and then bullets underneath with no blank line, so
+         each run has to be emitted on its own. */
+      let prose = [], bullets = [];
+      const flushProse = () => { if (prose.length){ html += "<p>" + inline(prose.join(" ")) + "</p>"; prose = []; } };
+      const flushBullets = () => {
+        if (bullets.length){
+          html += "<ul>" + bullets.map(x => "<li>" + inline(x) + "</li>").join("") + "</ul>";
+          bullets = [];
+        }
+      };
+      String(b.body || "").split("\n").forEach(line => {
+        if (!line.trim()){ flushBullets(); flushProse(); return; }
+        if (/^\s*[-*]\s+/.test(line)){ flushProse(); bullets.push(line.replace(/^\s*[-*]\s+/, "")); return; }
+        flushBullets(); prose.push(line.trim());
+      });
+      flushBullets(); flushProse();
+      out.blocks.push({ type:"text", id, html });
+    }
+    else if (b.type === "ide"){
+      const blk = { type:"ide", id, title: b.title || "Python",
+                    task: b.task || "Write your code, then press Run.", starter: b.starter || "" };
+      if (b.turtle) blk.turtle = true;
+      if (b.expect) blk.expect = b.expect;
+      out.blocks.push(blk);
+    }
+    else if (b.type === "question")
+      out.blocks.push({ type:"question", id, prompt: b.prompt || "Write your answer.",
+                        minWords: Number(b.minWords) || 20 });
+    else if (b.type === "quiz")
+      out.blocks.push({ type:"quiz", id, title:"Check your understanding",
+        questions:[{ q: b.q || "", options: b.options.filter(x => x !== ""),
+                     answer: Number(b.answer) || 0, hint: b.hint || "" }] });
+    else if (b.type === "image")
+      out.blocks.push({ type:"image", id, task: b.task || "Take a screenshot and paste it here." });
+    else if (b.type === "embed")
+      out.blocks.push({ type:"embed", id, url: b.url || "", title: b.title || "Watch this" });
+    else if (b.type === "link")
+      out.blocks.push({ type:"link", id, url: b.url || "", title: b.title || "Open this", task: b.task || "" });
+    else if (b.type === "mc")
+      out.blocks.push(clean({ type:"mc", id, prompt: b.prompt || "", options: b.options.filter(x => x !== ""),
+        answer: Number(b.answer) || 0, topic: b.topic }));
+    else if (b.type === "blanks")
+      out.blocks.push(clean({ type:"blanks", id, prompt: b.prompt || "Fill in the gaps", text: b.text || "",
+        distractors: (b.distractors || "").split(/\s*,\s*/).filter(Boolean), topic: b.topic }));
+    else if (b.type === "order")
+      out.blocks.push(clean({ type:"order", id, prompt: b.prompt || "Put these in order",
+        items: b.items.filter(x => x !== ""), topic: b.topic }));
+    else if (b.type === "short")
+      out.blocks.push(clean({ type:"short", id, prompt: b.prompt || "",
+        keywords: (b.keywords || "").split(";").map(g => g.split(/\s*,\s*/).map(x => x.trim()).filter(Boolean)).filter(g => g.length),
+        model: b.model || "", topic: b.topic }));
+  });
+  return out;
+}
+
+/* ---------------- drawing the cards ---------------- */
+let dragFrom = null;
+function render(){
+  const list = $("list"); list.innerHTML = "";
+  if (!lesson.blocks.length)
+    list.appendChild(el("p","hint","Nothing here yet — add a task from the left, or paste a Trinket page."));
+  lesson.blocks.forEach((b, i) => list.appendChild(card(b, i)));
+  saveDraft();
+}
+function move(i, d){
+  const j = i + d;
+  if (j < 0 || j >= lesson.blocks.length) return;
+  const moved = lesson.blocks.splice(i, 1)[0];
+  lesson.blocks.splice(j, 0, moved);
+  render(); schedulePreview();
+}
+function card(b, i){
+  const c = el("div","bcard");
+  c.draggable = false;
+
+  const head = el("div","bhead");
+  const grip = el("span","bgrip","\u2630"); grip.title = "Drag to move";
+  grip.addEventListener("mousedown", () => { c.draggable = true; });
+  grip.addEventListener("mouseup", () => { c.draggable = false; });
+  head.appendChild(grip);
+  head.appendChild(el("b","btype", (i + 1) + ". " + LABEL[b.type]));
+  const tools = el("span","btools");
+  const acts = [["\u2191","Move up", () => move(i, -1)],
+                ["\u2193","Move down", () => move(i, 1)],
+                ["\u29C9","Duplicate", () => { lesson.blocks.splice(i + 1, 0, JSON.parse(JSON.stringify(b))); render(); schedulePreview(); }],
+                ["\u2715","Delete", () => { if (confirm("Delete this task?")){ lesson.blocks.splice(i, 1); render(); schedulePreview(); } }]];
+  acts.forEach(a => {
+    const btn = el("button","btn-ghost bmini", a[0]); btn.title = a[1];
+    btn.addEventListener("click", a[2]);
+    tools.appendChild(btn);
+  });
+  head.appendChild(tools);
+  c.appendChild(head);
+
+  c.addEventListener("dragstart", (e) => {
+    dragFrom = i; c.classList.add("dragging");
+    if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); }
+  });
+  c.addEventListener("dragend", () => { c.classList.remove("dragging"); c.draggable = false; });
+  c.addEventListener("dragover", (e) => { e.preventDefault(); c.classList.add("over"); });
+  c.addEventListener("dragleave", () => c.classList.remove("over"));
+  c.addEventListener("drop", (e) => {
+    e.preventDefault(); c.classList.remove("over");
+    if (dragFrom === null || dragFrom === i) return;
+    const moved = lesson.blocks.splice(dragFrom, 1)[0];
+    lesson.blocks.splice(i, 0, moved);
+    dragFrom = null; render(); schedulePreview();
+  });
+
+  const body = el("div","bbody");
+  function F(label, key, opts){
+    const o = opts || {};
+    const w = el("div","bfield");
+    w.appendChild(el("label","", label));
+    const input = o.area ? el("textarea") : el("input");
+    if (o.area) input.rows = o.rows || 4;
+    if (o.mono) input.className = "mono";
+    if (o.placeholder) input.placeholder = o.placeholder;
+    input.value = b[key] === undefined ? "" : b[key];
+    input.addEventListener("input", () => {
+      b[key] = o.num ? Number(input.value) : input.value;
+      saveDraft(); schedulePreview();
+    });
+    w.appendChild(input);
+    if (o.help) w.appendChild(el("p","bhelp", o.help));
+    body.appendChild(w);
+  }
+  function listField(label, key, help){
+    const w = el("div","bfield");
+    w.appendChild(el("label","", label));
+    b[key].forEach((val, k) => {
+      const row = el("div","brow");
+      const input = el("input"); input.value = val;
+      input.addEventListener("input", () => { b[key][k] = input.value; saveDraft(); schedulePreview(); });
+      row.appendChild(input);
+      if (b.answer !== undefined){
+        const pick = el("button","btn-ghost bmini" + (Number(b.answer) === k ? " right" : ""), "\u2713");
+        pick.title = "This is the correct answer";
+        pick.addEventListener("click", () => { b.answer = k; render(); schedulePreview(); });
+        row.appendChild(pick);
+      }
+      const del = el("button","btn-ghost bmini","\u2715"); del.title = "Remove";
+      del.addEventListener("click", () => { b[key].splice(k, 1); render(); schedulePreview(); });
+      row.appendChild(del);
+      w.appendChild(row);
+    });
+    const add = el("button","btn-ghost bmini2","+ Add another");
+    add.addEventListener("click", () => { b[key].push(""); render(); });
+    w.appendChild(add);
+    if (help) w.appendChild(el("p","bhelp", help));
+    body.appendChild(w);
+  }
+
+  if (b.type === "text"){
+    F("Heading", "heading", { placeholder:"Output a message to the screen" });
+    F("Explanation", "body", { area:true, rows:6,
+      help:"A blank line starts a new paragraph. Lines beginning with - become bullets. **bold** and `code` work." });
+  }
+  if (b.type === "ide"){
+    F("Task title", "title", { placeholder:"Investigate" });
+    F("Instruction", "task", { area:true, rows:2, placeholder:"Run this, then add your own message on line 3." });
+    F("Starter code", "starter", { area:true, rows:7, mono:true });
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Options"));
+    const row = el("div","brow");
+    const tg = el("button","btn-ghost bmini2" + (b.turtle ? " right" : ""),
+                  b.turtle ? "Turtle canvas: on" : "Turtle canvas: off");
+    tg.addEventListener("click", () => { b.turtle = !b.turtle; render(); schedulePreview(); });
+    row.appendChild(tg);
+    w.appendChild(row);
+    body.appendChild(w);
+    F("Output must contain (optional)", "expect", { placeholder:"Learning to program",
+      help:"Leave empty unless you want Continue to wait for the right output." });
+  }
+  if (b.type === "question"){
+    F("Question", "prompt", { area:true, rows:2, placeholder:"What is the purpose of the print function?" });
+    F("Roughly how many words", "minWords", { num:true });
+  }
+  if (b.type === "quiz"){
+    F("Question", "q", { area:true, rows:2 });
+    listField("Options (tick the right one)", "options");
+    F("Hint if they get it wrong", "hint");
+  }
+  if (b.type === "image") F("What should they show?", "task", { area:true, rows:2 });
+  if (b.type === "embed"){
+    F("Embed address", "url", { placeholder:"https://www.youtube.com/embed/..." });
+    F("Title", "title");
+  }
+  if (b.type === "link"){
+    F("Address", "url", { placeholder:"https://..." });
+    F("Button label", "title");
+    F("What to do there", "task");
+  }
+  if (b.type === "mc"){
+    F("Question", "prompt", { area:true, rows:2 });
+    listField("Options (tick the right one)", "options");
+    F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
+  }
+  if (b.type === "blanks"){
+    F("Instruction", "prompt");
+    F("Sentence with gaps", "text", { area:true, rows:3,
+      help:"Put the answers in double brackets: The [[cat]] sat on the [[mat]]." });
+    F("Extra wrong words for the dropdowns", "distractors", { placeholder:"dog, hat" });
+    F("Topic tag", "topic");
+  }
+  if (b.type === "order"){
+    F("Instruction", "prompt");
+    listField("Items in the CORRECT order", "items", "Students see them shuffled.");
+    F("Topic tag", "topic");
+  }
+  if (b.type === "short"){
+    F("Question", "prompt", { area:true, rows:2 });
+    F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by , — e.g. loop, repeat; count" });
+    F("Model answer", "model", { area:true, rows:2 });
+    F("Topic tag", "topic");
+  }
+  c.appendChild(body);
+  return c;
+}
+
+document.querySelectorAll(".pal").forEach(btn => {
+  btn.addEventListener("click", () => {
+    lesson.blocks.push(BLANK[btn.dataset.add]());
+    render(); schedulePreview();
+    const cards = $("list").querySelectorAll(".bcard");
+    const last = cards[cards.length - 1];
+    if (last && last.scrollIntoView) last.scrollIntoView({ behavior:"smooth", block:"center" });
+  });
 });
-$("preview").addEventListener("click", () => {
-  if (!lastLesson){ $("convert").click(); }
-  if (!lastLesson) return;
-  localStorage.setItem("hub_preview", JSON.stringify(lastLesson));
-  window.open("lesson.html?id=__preview&preview=0", "_blank");
+$("lTitle").addEventListener("input", () => { lesson.title = $("lTitle").value; saveDraft(); schedulePreview(); });
+$("lIntro").addEventListener("input", () => { lesson.intro = $("lIntro").value; saveDraft(); schedulePreview(); });
+
+/* ---------------- live preview ---------------- */
+let prevTimer = null;
+function schedulePreview(){
+  clearTimeout(prevTimer);
+  $("prevMsg").textContent = "updating\u2026";
+  prevTimer = setTimeout(refreshPreview, 900);
+}
+function refreshPreview(){
+  try{
+    localStorage.setItem("hub_preview", JSON.stringify(compile()));
+    $("prev").src = "lesson.html?id=__preview&preview=0&t=" + Date.now();
+    $("prevMsg").textContent = "up to date";
+  }catch(e){ $("prevMsg").textContent = e.message; }
+}
+$("prevBtn").addEventListener("click", refreshPreview);
+
+/* ---------------- getting the file out ---------------- */
+function fileName(){
+  return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40) + ".json";
+}
+function openModal(build){ $("mBox").innerHTML = ""; build($("mBox")); $("mBack").hidden = false; }
+function closeModal(){ $("mBack").hidden = true; }
+$("mBack").addEventListener("mousedown", (e) => { if (e.target === $("mBack")) closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+$("jsonBtn").addEventListener("click", () => {
+  openModal(box => {
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", closeModal); box.appendChild(x);
+    box.appendChild(el("h2","","Lesson file"));
+    box.appendChild(el("p","hint","Save this as lessons/" + fileName() +
+      ", add it to lessons/index.json, then publish it in the teacher console."));
+    box.appendChild(el("pre","jsonbox", JSON.stringify(compile(), null, 2)));
+    const copy = el("button","btn-primary modal-cta","Copy to clipboard");
+    copy.addEventListener("click", async () => {
+      try{ await navigator.clipboard.writeText(JSON.stringify(compile(), null, 2)); copy.textContent = "Copied \u2713"; }
+      catch(e){ copy.textContent = "Select it and press Ctrl+C"; }
+    });
+    box.appendChild(copy);
+  });
 });
-$("copy").addEventListener("click", async () => {
-  if (!lastLesson) return;
-  try{ await navigator.clipboard.writeText(JSON.stringify(lastLesson, null, 2)); $("msg").textContent = "Copied."; }
-  catch(e){ $("msg").textContent = "Select the JSON and copy it with Ctrl+C."; }
-});
-$("download").addEventListener("click", () => {
-  if (!lastLesson) return;
-  const name = lastLesson.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) + ".json";
-  const blob = new Blob([JSON.stringify(lastLesson, null, 2)], { type: "application/json" });
+$("dlBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(compile(), null, 2)], { type:"application/json" });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  a.href = URL.createObjectURL(blob); a.download = fileName(); a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
-$("sample").addEventListener("click", () => { $("src").value = SAMPLE; $("convert").click(); });
 
-const SAMPLE = [
-"# Python 1 - Printing and variables",
-"> Your first Python program, straight in the browser.",
-"",
-"## What we are doing today",
-"Python is a language for telling a computer what to do.",
-"Today you will write your own program and make it say your name.",
-"- Everything runs in this page - nothing to install",
-"- Press **Run** to see what your code does",
-"",
-"[code] Say hello +expect: Hello",
-"```",
-"print(\"Hello\")",
-"```",
-"",
-"[write] What did the computer do when you pressed Run? (20 words)",
-"",
-"[code] Ask for a name +inputs: Ada",
-"```",
-"name = input(\"What is your name? \")",
-"print(\"Hello \" + name)",
-"```",
-"",
-"[quiz] What does print() do?",
-"* Shows something on the screen",
-"- Sends the code to a printer",
-"- Saves the file",
-"? Think about where the words appeared.",
-"",
-"## Drawing with code",
-"The turtle draws lines as it moves. Try changing the numbers.",
-"",
-"[code] Draw a square +turtle",
-"```",
-"import turtle",
-"t = turtle.Turtle()",
-"for side in range(4):",
-"    t.forward(100)",
-"    t.right(90)",
-"```",
-"",
-"[screenshot] Take a screenshot of your finished drawing.",
-""
-].join("\n");
+/* ---------------- paste a Trinket page ----------------
+   Trinket pages follow the same shape every time: explanation, starter code,
+   then questions. Fill in the parts and you get reading + Python + answers. */
+$("importBtn").addEventListener("click", () => {
+  openModal(box => {
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", closeModal); box.appendChild(x);
+    box.appendChild(el("h2","","Paste a Trinket page"));
+    box.appendChild(el("p","hint","Copy each part across. Leave anything blank if that page doesn't have it."));
+    function area(label, rows, ph, mono){
+      const w = el("div","bfield");
+      w.appendChild(el("label","", label));
+      const t = el("textarea"); t.rows = rows;
+      if (ph) t.placeholder = ph;
+      if (mono) t.className = "mono";
+      w.appendChild(t); box.appendChild(w);
+      return t;
+    }
+    const head = area("Heading", 1, "Output a message to the screen");
+    const expl = area("Explanation text", 5,
+      "To output something to the screen in Python, we use the `print()` function");
+    const inv  = area("Investigate / instruction", 2,
+      "Run the following code and add your own output message on line 3");
+    const code = area("Starter code", 6, 'print("Hello World!")', true);
+    const qs   = area("Questions to answer (one per line)", 4,
+      "What is the purpose of the print function?");
+    const go = el("button","btn-primary modal-cta","Add to the lesson");
+    go.addEventListener("click", () => {
+      if (head.value.trim() || expl.value.trim())
+        lesson.blocks.push({ type:"text", heading: head.value.trim(), body: expl.value.trim() });
+      if (code.value.trim() || inv.value.trim())
+        lesson.blocks.push({ type:"ide", title: head.value.trim() || "Investigate",
+                             task: inv.value.trim(), starter: code.value.replace(/\s+$/, ""),
+                             turtle:false, expect:"" });
+      qs.value.split("\n").map(x => x.replace(/^\s*[-*\u2022]\s*/, "").trim()).filter(Boolean)
+        .forEach(q => lesson.blocks.push({ type:"question", prompt: q, minWords: 20 }));
+      closeModal(); render(); refreshPreview();
+    });
+    box.appendChild(go);
+  });
+});
 
+/* ---------------- go ---------------- */
+loadDraft();
+$("lTitle").value = lesson.title || "";
+$("lIntro").value = lesson.intro || "";
+render();
+refreshPreview();
 if (window.initSettings) initSettings($("setBtn"));
 </script>
 </body>
