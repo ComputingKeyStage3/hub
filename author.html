@@ -23,6 +23,7 @@
 </div>
 
 <div class="build-top">
+  <p class="hint" id="ownerNote" hidden></p>
   <div class="build-titles">
     <input id="lTitle" placeholder="Lesson title, e.g. Python 1 — Output" autocomplete="off">
     <input id="lIntro" placeholder="One line for the home page" autocomplete="off">
@@ -35,6 +36,7 @@
     <button class="btn-ghost" id="dlBtn">Save file</button>
     <button class="btn-ghost" id="prevBtn">Refresh preview</button>
     <button class="btn-primary" id="saveSite">Save to the site</button>
+    <button class="btn-ghost" id="delLesson" hidden>Delete lesson</button>
   </div>
 </div>
 
@@ -51,6 +53,11 @@
       <button class="pal" data-add="image"><b>Screenshot</b><span>Paste a picture</span></button>
       <button class="pal" data-add="embed"><b>Video</b><span>Embed a clip</span></button>
       <button class="pal" data-add="link"><b>Link</b><span>Send them to a site</span></button>
+      <p class="pal-head">Marked questions</p>
+      <button class="pal" data-add="mc"><b>Multiple choice</b><span>One right answer</span></button>
+      <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
+      <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
+      <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
     </div>
     <div id="palAssess" hidden>
       <p class="pal-head">Questions</p>
@@ -426,7 +433,8 @@ function card(b, i, arr){
     b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
     body.appendChild(inner);
     const addRow = el("div","pageadd");
-    [["text","Reading"],["ide","Python task"],["question","Written answer"],["quiz","Quiz"],["image","Screenshot"],["embed","Video"]]
+    [["text","Reading"],["ide","Python task"],["question","Written answer"],["quiz","Quiz"],["image","Screenshot"],
+     ["embed","Video"],["mc","Multiple choice"],["blanks","Fill the gaps"],["order","Put in order"],["short","Short answer"]]
       .forEach(pair => {
         const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
         btn.addEventListener("click", () => { b.blocks.push(BLANK[pair[0]]()); render(); schedulePreview(); });
@@ -656,7 +664,8 @@ async function saveToSite(){
     const r = await fetch(API + "/api/teacher/save-lesson", {
       method:"POST",
       headers:{ "Content-Type":"application/json", "x-teacher-key": teacherKey() },
-      body: JSON.stringify({ id: lessonId(), title: lesson.title, unit: lesson.unit, data: compile() })
+      body: JSON.stringify({ id: lessonId(), title: lesson.title, unit: lesson.unit,
+                             owner: lesson.ownerGroup || "", data: compile() })
     });
     const d = await r.json();
     if (r.status === 403){ localStorage.removeItem("hub_tkey"); throw new Error("That teacher key was not accepted."); }
@@ -671,6 +680,54 @@ async function saveToSite(){
 }
 $("saveSite").addEventListener("click", saveToSite);
 
+/* deleting from here asks twice too — it is the same job as in the console */
+$("delLesson").addEventListener("click", () => {
+  const API = (window.HUB && window.HUB.API) || "";
+  const id = lesson.savedAs;
+  if (!id) return;
+  openModal(box => {
+    box.appendChild(el("h2","","Delete \u201c" + (lesson.title || id) + "\u201d?"));
+    box.appendChild(el("p","modal-text","It goes from the hub and from every class, together with all the work students have done on it."));
+    const yes = el("button","btn-primary modal-cta","Continue");
+    yes.style.background = "var(--red)";
+    yes.addEventListener("click", () => {
+      closeModal();
+      openModal(box2 => {
+        box2.appendChild(el("h2","","Really delete it?"));
+        box2.appendChild(el("p","modal-text","This cannot be undone. Type DELETE to confirm."));
+        const w = el("div","bfield");
+        const inp = el("input"); w.appendChild(inp); box2.appendChild(w);
+        const msg = el("p","hint","");
+        const go = el("button","btn-primary modal-cta","Delete for ever");
+        go.style.background = "var(--red)";
+        go.addEventListener("click", async () => {
+          if (inp.value.trim().toUpperCase() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; return; }
+          msg.textContent = "Deleting\u2026";
+          try{
+            const r = await fetch(API + "/api/teacher/delete-lesson", { method:"POST",
+              headers:{ "Content-Type":"application/json", "x-teacher-key": teacherKey() },
+              body: JSON.stringify({ id }) });
+            if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
+            closeModal();
+            lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:[] };
+            saveDraft();
+            $("lTitle").value = ""; $("lIntro").value = ""; $("lUnit").value = "";
+            $("delLesson").hidden = true;
+            render(); refreshPreview();
+            say("Deleted", "The lesson has been removed from the site.");
+          }catch(e){ msg.textContent = e.message; }
+        });
+        const no = el("button","btn-ghost modal-stay","Keep it");
+        no.addEventListener("click", closeModal);
+        box2.appendChild(go); box2.appendChild(no); box2.appendChild(msg);
+      });
+    });
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(yes); box.appendChild(no);
+  });
+});
+
 /* offer the units that already exist, and load a lesson if asked to edit one */
 async function loadUnitsAndMaybeLesson(){
   const API = (window.HUB && window.HUB.API) || "";
@@ -683,7 +740,13 @@ async function loadUnitsAndMaybeLesson(){
   }catch(e){}
   const editId = new URLSearchParams(location.search).get("edit");
   const wantUnit = new URLSearchParams(location.search).get("unit");
+  const wantClass = new URLSearchParams(location.search).get("class");
   if (wantUnit && !lesson.unit){ lesson.unit = wantUnit; $("lUnit").value = wantUnit; saveDraft(); }
+  if (wantClass){
+    lesson.ownerGroup = wantClass; saveDraft();
+    $("ownerNote").hidden = false;
+    $("ownerNote").textContent = "This lesson is being made for " + wantClass + " only.";
+  }
   if (!editId) return;
   if (!teacherKey()){ askForKey(loadUnitsAndMaybeLesson); return; }
   try{
@@ -693,6 +756,8 @@ async function loadUnitsAndMaybeLesson(){
     if (!r.ok) throw new Error(d.error || "Could not open that lesson.");
     const data = JSON.parse(d.lesson.data);
     lesson = fromCompiled(data, d.lesson);
+    lesson.savedAs = editId;
+    $("delLesson").hidden = false;
     $("lTitle").value = lesson.title; $("lIntro").value = lesson.intro || "";
     $("lUnit").value = lesson.unit || "";
     setMode(!!lesson.assessment);

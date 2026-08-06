@@ -187,7 +187,7 @@ async function loadLessons(){
     try{ pruneStorage(flat.map(l => l.id)); }catch(e){}
     const byId = {}; flat.forEach(l => { byId[l.id] = l; });
 
-    catalogue = ready ? await (await fetch(API + "/api/catalog", { cache: "no-store" })).json() : { units: [], lessons: [] };
+    catalogue = ready ? await (await fetch(API + "/api/catalog" + (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json() : { units: [], lessons: [] };
 
     lockedLessons = new Set();
     if (ready && token && group){
@@ -215,7 +215,7 @@ function paintLessons(byId){
   const box = $("lessonList"); box.innerHTML = "";
   const cat = (catalogue && catalogue.lessons) || [];
   // published, not locked for this class, and known in the lesson files
-  let visible = cat.filter(c => c.published && byId[c.lesson_id] && !lockedLessons.has(c.lesson_id));
+  let visible = cat.filter(c => byId[c.lesson_id] && !lockedLessons.has(c.lesson_id));   // the server already filtered by class
   visible = visible.filter(c => showing === "done" ? doneLessons.has(c.lesson_id) : !doneLessons.has(c.lesson_id));
 
   if (!visible.length){

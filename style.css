@@ -1031,3 +1031,10 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 
 /* builder: unit box sits with the titles */
 .build-titles #lUnit{max-width:190px}
+
+
+/* lesson hub */
+#hubList .unit-head{margin-top:26px}
+#hubList .lessongrid{margin-top:10px}
+.lp-acts button{flex:0 0 auto}
+#ownerNote{margin:8px 24px 0; font-weight:700; color:var(--amber-dark)}

@@ -34,6 +34,26 @@
   </div>
 
   <!-- ============ classes grid ============ -->
+  <div id="homeView" hidden>
+    <h2 style="margin:22px 0 4px">Teacher console</h2>
+    <p class="hint" style="margin:0">Everything you teach lives in the lesson hub. Classes decide who sees what.</p>
+    <div class="bigcards">
+      <button class="classtile" id="openHub"><b>&#128218; Lesson hub</b><span id="hubCount">All units and lessons</span></button>
+      <button class="classtile" id="openClasses"><b>&#128101; Classes</b><span id="clsCount">Publish, pace and mark</span></button>
+    </div>
+  </div>
+
+  <div id="hubView" hidden>
+    <h2 style="margin:22px 0 4px">Lesson hub</h2>
+    <p class="hint" style="margin:0">Every lesson in the school, by unit. Give them to classes from here.</p>
+    <div class="toolrow">
+      <input id="hubSearch" placeholder="Search lessons…" style="max-width:280px">
+      <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
+      <button class="btn-primary" id="hubNewLesson">+ Build a new lesson</button>
+    </div>
+    <div id="hubList"></div>
+  </div>
+
   <div id="classesView" hidden>
     <h2 style="margin:22px 0 4px">Your classes</h2>
     <p class="hint" style="margin:0">Choose a class to manage its students and lessons.</p>
@@ -155,6 +175,7 @@ function crumbs(trail){
     }
   });
 }
+const toHome    = () => { show("homeView"); };
 const toClasses = () => { refreshGroups(); show("classesView"); paintCrumbs(); };
 const toClass   = () => openClass(cls);
 const toUnits   = () => { show("unitsView"); paintUnits(); };
@@ -162,19 +183,22 @@ const toUnit    = () => openUnit(unit);
 function paintCrumbs(){
   const v = VIEWS.find(x => !$(x).hidden);
   if (v === "keyView"){ crumbs(null); return; }
-  const home = { name:"Classes", go: v === "classesView" ? null : toClasses };
-  if (v === "classesView") return crumbs([home]);
-  if (v === "pwView") return crumbs([{ name:"Classes", go: toClasses }, { name:"Password updates" }]);
-  if (v === "classView") return crumbs([home, { name: cls }]);
-  if (v === "studentsView") return crumbs([home, { name: cls, go: toClass }, { name:"Students" }]);
-  if (v === "unitsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units" }]);
-  if (v === "lessonsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
+  const top = { name:"Home", go: v === "homeView" ? null : toHome };
+  const home = { name:"Classes", go: toClasses };
+  if (v === "homeView") return crumbs([top]);
+  if (v === "hubView") return crumbs([top, { name:"Lesson hub" }]);
+  if (v === "classesView") return crumbs([top, { name:"Classes" }]);
+  if (v === "pwView") return crumbs([top, { name:"Password updates" }]);
+  if (v === "classView") return crumbs([top, home, { name: cls }]);
+  if (v === "studentsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Students" }]);
+  if (v === "unitsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units" }]);
+  if (v === "lessonsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
                                           { name: unit || "Not in a unit" }]);
-  crumbs([home]);
+  crumbs([top]);
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
+const VIEWS = ["keyView","homeView","hubView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
 function show(view){
   VIEWS.forEach(v => { $(v).hidden = v !== view; });
   clearInterval(relTimer);
@@ -224,7 +248,7 @@ async function tryKey(){
     $("topbar").hidden = false;
     clearInterval(beatTimer); beatTimer = setInterval(heartbeat, 25000);
     paintClasses();
-    show("classesView");
+    show("homeView");
   }catch(e){
     setOnline(false);
     $("keyMsg").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
@@ -262,6 +286,158 @@ async function refreshGroups(){
   }catch(e){}
 }
 
+/* ---------- the lesson hub ---------- */
+let assigns = [];            // which classes have which lessons
+const assignsFor = (id) => assigns.filter(a => a.lesson_id === id);
+$("openHub").addEventListener("click", async () => {
+  show("hubView");
+  $("hubList").innerHTML = '<p class="hint">Loading…</p>';
+  try{ await loadCatalogue(); paintHub(); }
+  catch(e){ $("hubList").innerHTML = ""; $("hubList").appendChild(el("p","hint", e.message)); }
+});
+$("hubSearch").addEventListener("input", paintHub);
+$("hubNewLesson").addEventListener("click", () => window.open("author.html", "_blank"));
+$("hubNewUnit").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "New unit");
+    const i = fieldRow(box, "Unit name (e.g. Unit 1 \u2014 Cybersecurity)", "text", "");
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Create unit");
+    go.addEventListener("click", async () => {
+      const v = i.value.trim(); if (!v) return;
+      msg.textContent = "Creating\u2026";
+      try{ await catPost({ op:"add-unit", name: v, position: (cat.units || []).length + 1 }); closeModal(); paintHub(); }
+      catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+});
+
+function paintHub(){
+  const box = $("hubList"); box.innerHTML = "";
+  const term = ($("hubSearch").value || "").trim().toLowerCase();
+  const rows = (cat.lessons || []).filter(l => {
+    const t = (titleOf(l.lesson_id) || l.lesson_id).toLowerCase();
+    return !term || t.includes(term) || (l.unit || "").toLowerCase().includes(term);
+  });
+  const byUnit = {};
+  rows.forEach(l => { (byUnit[l.unit || ""] = byUnit[l.unit || ""] || []).push(l); });
+  const order = (cat.units || []).map(u => u.name);
+  const names = Object.keys(byUnit).sort((a, b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
+  });
+  if (!rows.length){
+    box.appendChild(el("p","hint", term ? "Nothing matches that." : "No lessons yet — press Build a new lesson."));
+    return;
+  }
+  names.forEach(u => {
+    box.appendChild(el("p","unit-head", u || "Not in a unit"));
+    const grid = el("div","lessongrid");
+    byUnit[u].forEach(l => {
+      const card = el("div","lessonpill");
+      const head = el("div","lp-head");
+      head.appendChild(el("b","", titleOf(l.lesson_id)));
+      if (l.owner_group) head.appendChild(el("span","statechip shut", l.owner_group + " only"));
+      card.appendChild(head);
+      const mine = assignsFor(l.lesson_id);
+      const live = mine.filter(a => a.published).length;
+      card.appendChild(el("p","lp-note", mine.length
+        ? mine.length + " class" + (mine.length === 1 ? "" : "es") + " \u00b7 " + live + " published"
+        : "Not given to any class yet"));
+      const acts = el("div","lp-acts");
+      const give = el("button","btn-primary","Give to classes");
+      give.addEventListener("click", () => distribute(l.lesson_id));
+      const edit = el("button","btn-ghost","Edit");
+      edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
+      const del = el("button","btn-ghost","Delete");
+      del.addEventListener("click", () => deleteLesson(l.lesson_id));
+      acts.appendChild(give); acts.appendChild(edit); acts.appendChild(del);
+      card.appendChild(acts);
+      grid.appendChild(card);
+    });
+    box.appendChild(grid);
+  });
+}
+
+function distribute(id){
+  openModal(box => {
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", closeModal); box.appendChild(x);
+    modalTitle(box, "Give \u201c" + titleOf(id) + "\u201d to classes");
+    box.appendChild(el("p","hint","Every class you tick gets it as a draft. Publish it to them from the class page when they're ready."));
+    const has = {};
+    assignsFor(id).forEach(a => { has[a.group_name.toLowerCase()] = a; });
+    const picks = {};
+    (groups || []).forEach(g => {
+      const row = el("label","opt");
+      const cb = el("input"); cb.type = "checkbox";
+      const already = has[g.name.toLowerCase()];
+      cb.checked = !!already;
+      picks[g.name] = { cb: cb, already: !!already };
+      row.appendChild(cb);
+      row.appendChild(el("span","", g.name + (already ? (already.published ? " \u2014 published" : " \u2014 draft") : "")));
+      box.appendChild(row);
+    });
+    if (!groups.length) box.appendChild(el("p","modal-text","There are no classes yet."));
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Save");
+    go.addEventListener("click", async () => {
+      msg.textContent = "Saving\u2026";
+      try{
+        const add = Object.keys(picks).filter(n => picks[n].cb.checked && !picks[n].already);
+        const drop = Object.keys(picks).filter(n => !picks[n].cb.checked && picks[n].already);
+        if (add.length) await catPost({ op:"assign", id: id, groups: add });
+        for (const n of drop) await catPost({ op:"unassign", id: id, group: n });
+        await loadCatalogue();
+        closeModal(); paintHub();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+}
+
+/* Deleting is serious, so it asks twice and says exactly what goes. */
+function deleteLesson(id, then){
+  const mine = assignsFor(id);
+  openModal(box => {
+    modalTitle(box, "Delete \u201c" + titleOf(id) + "\u201d?");
+    box.appendChild(el("p","modal-text", "This removes the lesson from the hub" +
+      (mine.length ? " and from " + mine.length + " class" + (mine.length === 1 ? "" : "es") : "") +
+      ", along with every student's work and results for it."));
+    const yes = el("button","btn-primary modal-cta","Continue");
+    yes.style.background = "var(--red)";
+    yes.addEventListener("click", () => {
+      closeModal();
+      openModal(box2 => {
+        modalTitle(box2, "Really delete it?");
+        box2.appendChild(el("p","modal-text","This cannot be undone. Type the word DELETE to confirm."));
+        const inp = fieldRow(box2, "", "text", "");
+        const msg = el("p","hint","");
+        const go = el("button","btn-primary modal-cta","Delete for ever");
+        go.style.background = "var(--red)";
+        go.addEventListener("click", async () => {
+          if (inp.value.trim().toUpperCase() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; return; }
+          msg.textContent = "Deleting\u2026";
+          try{
+            const r = await fetch(API + "/api/teacher/delete-lesson", { method:"POST", headers: HJ(), body: JSON.stringify({ id }) });
+            if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
+            await loadCatalogue();
+            closeModal();
+            if (then) then(); else paintHub();
+          }catch(e){ msg.textContent = e.message; }
+        });
+        const no = el("button","btn-ghost modal-stay","Keep it");
+        no.addEventListener("click", closeModal);
+        box2.appendChild(go); box2.appendChild(no); box2.appendChild(msg);
+      });
+    });
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(yes); box.appendChild(no);
+  });
+}
+
 /* ---------- one class ---------- */
 async function openClass(name){
   cls = name;
@@ -273,6 +449,7 @@ async function openClass(name){
   show("classView");
 }
 $("backClasses").addEventListener("click", () => { refreshGroups(); show("classesView"); });
+$("openClasses").addEventListener("click", toClasses);
 $("backClass1").addEventListener("click", () => openClass(cls));
 $("backClass2").addEventListener("click", () => openClass(cls));
 
@@ -490,6 +667,7 @@ async function loadCatalogue(){
   }catch(e){}
   const r = await fetch(API + "/api/catalog", { headers: H(), cache: "no-store" });
   cat = await r.json();
+  assigns = cat.assignments || [];
 }
 const catOf = (id) => (cat.lessons || []).find(l => l.lesson_id === id) || { unit: "", published: 0, position: 0 };
 const titleOf = (id) => { const l = fileLessons.find(x => x.id === id); return l ? l.title : id; };
@@ -586,7 +764,21 @@ $("deleteUnitBtn").addEventListener("click", () => {
   });
 });
 $("newLessonBtn").addEventListener("click", () => {
-  window.open("author.html?unit=" + encodeURIComponent(unit || ""), "_blank");
+  openModal(box => {
+    modalTitle(box, "Build a new lesson");
+    box.appendChild(el("p","modal-text","Should everyone be able to use this lesson, or is it just for " + cls + "?"));
+    const shared = el("button","btn-primary modal-cta","For any class (goes in the hub)");
+    shared.addEventListener("click", () => {
+      closeModal();
+      window.open("author.html?unit=" + encodeURIComponent(unit || ""), "_blank");
+    });
+    const mineOnly = el("button","btn-ghost modal-stay","Just for " + cls);
+    mineOnly.addEventListener("click", () => {
+      closeModal();
+      window.open("author.html?unit=" + encodeURIComponent(unit || "") + "&class=" + encodeURIComponent(cls), "_blank");
+    });
+    box.appendChild(shared); box.appendChild(mineOnly);
+  });
 });
 
 $("addLessonBtn").addEventListener("click", () => {
@@ -609,7 +801,7 @@ $("addLessonBtn").addEventListener("click", () => {
       holder.innerHTML = "";
       const t = term.trim().toLowerCase();
       const rows = fileLessons.filter(l => {
-        if ((catOf(l.id).unit || "") === unit) return false;          // already here
+        if (assignOf(l.id)) return false;                              // this class already has it
         if (t && !(l.title || l.id).toLowerCase().includes(t)) return false;
         if (showAll) return true;
         return (l.unit || "") === unit;                                // suggested by the lesson itself
@@ -629,8 +821,12 @@ $("addLessonBtn").addEventListener("click", () => {
         row.appendChild(el("span","edit","Add \u2192"));
         row.addEventListener("click", async () => {
           msg.textContent = "Adding\u2026";
-          try{ await catPost({ op:"set-lesson", id: l.id, unit }); closeModal(); paintLessonGrid(); }
-          catch(e){ msg.textContent = e.message; }
+          try{
+            if ((catOf(l.id).unit || "") !== unit) await catPost({ op:"set-lesson", id: l.id, unit });
+            await catPost({ op:"assign", id: l.id, groups: [cls] });
+            await loadCatalogue();
+            closeModal(); paintLessonGrid();
+          }catch(e){ msg.textContent = e.message; }
         });
         holder.appendChild(row);
       });
@@ -641,24 +837,40 @@ $("addLessonBtn").addEventListener("click", () => {
   });
 });
 
+const assignOf = (id) => assigns.find(a => a.lesson_id === id && a.group_name.toLowerCase() === cls.toLowerCase());
 function paintLessonGrid(){
   const g = $("lessonGrid"); g.innerHTML = "";
-  const mine = (cat.lessons || []).filter(l => (l.unit || "") === unit && fileLessons.some(f => f.id === l.lesson_id));
-  if (!mine.length){ g.appendChild(el("p","hint","No lessons in this unit yet \u2014 add one above.")); return; }
+  /* only the lessons this class has been given (older setups, with nothing
+     assigned anywhere, still show what was published to everyone) */
+  const mine = (cat.lessons || []).filter(l => {
+    if ((l.unit || "") !== unit) return false;
+    const has = assignOf(l.lesson_id);
+    if (has) return true;
+    return !assigns.some(a => a.lesson_id === l.lesson_id) && l.published;
+  });
+  if (!mine.length){
+    g.appendChild(el("p","hint","No lessons here yet for " + cls + " \u2014 add one from the hub above."));
+    return;
+  }
   mine.sort((a, b) => (a.position || 0) - (b.position || 0));
   mine.forEach(l => {
+    const a = assignOf(l.lesson_id);
+    const live = a ? !!a.published : !!l.published;
     const card = el("div","lessonpill");
     const head = el("div","lp-head");
     head.appendChild(el("b","", titleOf(l.lesson_id)));
-    head.appendChild(el("span","statechip " + (l.published ? "open" : "shut"), l.published ? "Published" : "Draft"));
+    head.appendChild(el("span","statechip " + (live ? "open" : "shut"), live ? "Published" : "Draft"));
     card.appendChild(head);
+    if (l.owner_group) card.appendChild(el("p","lp-note", "Made for " + l.owner_group + " only"));
     if (lessonLocks[l.lesson_id]) card.appendChild(el("p","lp-note","\u{1F512} Locked for " + cls));
     const acts = el("div","lp-acts");
-    const pub = el("button", l.published ? "btn-ghost" : "btn-primary", l.published ? "Unpublish" : "Publish");
+    const pub = el("button", live ? "btn-ghost" : "btn-primary", live ? "Unpublish" : "Publish");
     pub.addEventListener("click", async () => {
       pub.textContent = "\u2026";
-      try{ await catPost({ op:"set-lesson", id: l.lesson_id, published: !l.published }); paintLessonGrid(); }
-      catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
+      try{
+        await catPost({ op:"class-publish", id: l.lesson_id, group: cls, published: !live });
+        await loadCatalogue(); paintLessonGrid();
+      }catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
     });
     const workBtn = el("button","btn-ghost","View Student Work");
     workBtn.addEventListener("click", () => pickStudentWork(l.lesson_id));
@@ -667,7 +879,10 @@ function paintLessonGrid(){
     const edit = el("button","btn-ghost","Edit");
     edit.title = "Open in the lesson builder";
     edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
-    acts.appendChild(pub); acts.appendChild(workBtn); acts.appendChild(man); acts.appendChild(edit);
+    const rem = el("button","btn-ghost","Remove");
+    rem.title = "Take it away from " + cls;
+    rem.addEventListener("click", () => removeFromClass(l));
+    acts.appendChild(pub); acts.appendChild(workBtn); acts.appendChild(man); acts.appendChild(edit); acts.appendChild(rem);
     card.appendChild(acts);
     g.appendChild(card);
   });
@@ -682,6 +897,43 @@ async function fetchLesson(id){
   const d = await r2.json();
   if (!r2.ok) throw new Error(d.error || "Could not open that lesson.");
   return d.lesson;
+}
+
+/* Taking a lesson away from a class leaves it in the hub — unless it was
+   built for this class alone, in which case there would be nothing left. */
+function removeFromClass(l){
+  const id = l.lesson_id;
+  const others = assigns.filter(a => a.lesson_id === id && a.group_name.toLowerCase() !== cls.toLowerCase());
+  const onlyHere = (l.owner_group && l.owner_group.toLowerCase() === cls.toLowerCase()) && !others.length;
+  openModal(box => {
+    modalTitle(box, "Remove \u201c" + titleOf(id) + "\u201d from " + cls + "?");
+    if (onlyHere){
+      box.appendChild(el("p","modal-text","This lesson was made for " + cls + " and no other class has it, so removing it here deletes it completely \u2014 including the students' work."));
+      const yes = el("button","btn-primary modal-cta","Delete it completely");
+      yes.style.background = "var(--red)";
+      yes.addEventListener("click", () => { closeModal(); deleteLesson(id, async () => { await loadCatalogue(); paintLessonGrid(); }); });
+      const no = el("button","btn-ghost modal-stay","Cancel");
+      no.addEventListener("click", closeModal);
+      box.appendChild(yes); box.appendChild(no);
+      return;
+    }
+    box.appendChild(el("p","modal-text","It stays in the lesson hub" +
+      (others.length ? " and with " + others.length + " other class" + (others.length === 1 ? "" : "es") : "") +
+      ". Work that " + cls + " has already done is kept, and comes back if you add the lesson again."));
+    const msg = el("p","hint","");
+    const yes = el("button","btn-primary modal-cta","Remove from " + cls);
+    yes.addEventListener("click", async () => {
+      msg.textContent = "Removing\u2026";
+      try{
+        await catPost({ op:"unassign", id: id, group: cls });
+        await loadCatalogue();
+        closeModal(); paintLessonGrid();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    const no = el("button","btn-ghost modal-stay","Keep it");
+    no.addEventListener("click", closeModal);
+    box.appendChild(yes); box.appendChild(no); box.appendChild(msg);
+  });
 }
 
 /* ---------- managing one lesson (big pop-up) ---------- */
