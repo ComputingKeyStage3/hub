@@ -180,14 +180,31 @@ async function loadLessons(){
   const token = localStorage.getItem("hub_token");
   const group = localStorage.getItem("hub_group") || "";
   try{
-    const file = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
-    const units = file.units || [{ name: "", lessons: file }];
-    const flat = units.flatMap(u => u.lessons);
-    flat.forEach(l => { lessonTitles[l.id] = l.title; });
-    try{ pruneStorage(flat.map(l => l.id)); }catch(e){}
-    const byId = {}; flat.forEach(l => { byId[l.id] = l; });
+    /* Lessons come from two places: the files in lessons/, and lessons built
+       in the lesson builder, which live in the database. Both must appear. */
+    let flat = [];
+    try{
+      const file = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
+      const units = file.units || [{ name: "", lessons: file }];
+      flat = units.flatMap(u => u.lessons);
+    }catch(e){ flat = []; }
+    const byId = {};
+    flat.forEach(l => { byId[l.id] = l; lessonTitles[l.id] = l.title; });
 
     catalogue = ready ? await (await fetch(API + "/api/catalog" + (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json() : { units: [], lessons: [] };
+
+    (catalogue.lessons || []).forEach(c => {
+      if (!byId[c.lesson_id]){
+        byId[c.lesson_id] = { id: c.lesson_id, title: c.title || c.lesson_id, description: c.description || "" };
+      } else {
+        if (c.title) byId[c.lesson_id].title = c.title;             // the database wins on naming
+        if (c.description) byId[c.lesson_id].description = c.description;
+      }
+      lessonTitles[c.lesson_id] = byId[c.lesson_id].title;
+    });
+    /* prune only once we know every valid id, or work on builder-made lessons
+       would be thrown away here */
+    try{ pruneStorage(Object.keys(byId)); }catch(e){}
 
     lockedLessons = new Set();
     if (ready && token && group){
@@ -208,7 +225,7 @@ async function loadLessons(){
       }catch(e){}
     }
     paintLessons(byId);
-  }catch(e){ box.innerHTML = '<p class="hint">Could not load the lesson list.</p>'; }
+  }catch(e){ console.error("lesson list failed:", e); box.innerHTML = '<p class="hint">Could not load the lesson list.</p>'; }
 }
 
 function paintLessons(byId){
@@ -240,16 +257,37 @@ function paintLessons(byId){
     const wrap = document.createElement("div"); wrap.className = "lessons";
     groups[unit].sort((a, b) => (a.position || 0) - (b.position || 0)).forEach((c, i) => {
       const l = byId[c.lesson_id];
-      const a = document.createElement("a");
-      a.className = "lessonCard"; a.href = "lesson.html?id=" + encodeURIComponent(l.id);
       const done = doneLessons.has(l.id);
-      a.innerHTML = '<span class="num">' + String(i+1).padStart(2,"0") + '</span>' +
-                    '<span class="body"><b></b><span></span></span>' +
-                    (done ? '<span class="badge badge-done">\u2713 Complete</span>' : '') +
-                    (l.assessment ? '<span class="badge">Assessment</span>' : '') +
-                    '<span class="go">&rarr;</span>';
-      a.querySelector("b").textContent = l.title;
-      a.querySelector(".body span").textContent = l.description || "";
+      const a = document.createElement("a");
+      a.className = "lessonCard";
+      a.href = "lesson.html?id=" + encodeURIComponent(l.id);
+
+      const num = document.createElement("span");
+      num.className = "num"; num.textContent = String(i + 1).padStart(2, "0");
+      a.appendChild(num);
+
+      const bodyEl = document.createElement("span");
+      bodyEl.className = "body";
+      const nameEl = document.createElement("b");
+      nameEl.textContent = l.title || l.id;
+      const descEl = document.createElement("span");
+      descEl.textContent = l.description || "";
+      bodyEl.appendChild(nameEl); bodyEl.appendChild(descEl);
+      a.appendChild(bodyEl);
+
+      if (done){
+        const badge = document.createElement("span");
+        badge.className = "badge badge-done"; badge.textContent = "\u2713 Complete";
+        a.appendChild(badge);
+      }
+      if (l.assessment || c.assessment){
+        const badge = document.createElement("span");
+        badge.className = "badge"; badge.textContent = "Assessment";
+        a.appendChild(badge);
+      }
+      const go = document.createElement("span");
+      go.className = "go"; go.textContent = "\u2192";
+      a.appendChild(go);
       wrap.appendChild(a);
     });
     box.appendChild(wrap);
