@@ -3,8 +3,8 @@
    Choices persist per device in localStorage under hub_prefs. */
 (function(){
   const BGS = [
-    ["","Beige","#F3ECDD"], ["blue","Soft blue","#EAF1F7"], ["green","Soft green","#ECF3EA"],
-    ["peach","Peach","#FAEFE5"], ["yellow","Soft yellow","#FAF3D8"], ["dark","Dark","#23262E"]
+    ["","Beige","#F3ECDD"], ["blue","Soft blue","#E2EDF7"], ["green","Soft green","#DDEDD5"],
+    ["peach","Peach","#FAEADC"], ["yellow","Soft yellow","#F9F0CB"], ["dark","Dark","#23262E"]
   ];
   const FONTS = [
     ["","Lexend \u2014 the standard font","'Lexend'"],

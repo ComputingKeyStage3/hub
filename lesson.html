@@ -8,6 +8,8 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="pyhub.js"></script>
+<script src="webhub.js"></script>
+<script src="webhub.js"></script>
 <script src="config.js"></script>
 <script src="settings.js"></script>
 </head>
@@ -105,7 +107,13 @@ let restoredData = null;       // last saved data we restored (responses re-appl
 let wasDone = false;           // the saved copy says this lesson was completed
 let lockedSet = new Set();     // task indexes the teacher has locked shut
 let relManaged = false;
-if (!localStorage.getItem("hub_token")) { document.addEventListener("DOMContentLoaded", () => { const h = document.getElementById("signinHint"); if (h) h.hidden = false; }); }
+if (!localStorage.getItem("hub_token") && location.search.indexOf("builder=") < 0
+    && location.search.indexOf("preview=") < 0 && location.search.indexOf("view=") < 0) {
+  document.addEventListener("DOMContentLoaded", () => {
+    const h = (typeof builderParam !== "undefined" && builderParam !== null) ? null : document.getElementById("signinHint");
+    if (h) h.hidden = false;
+  });
+}
 let restoredWork = false;      // did we put MEANINGFUL saved work back on the page?
 function hasContent(v){
   if (v === null || v === undefined || v === "") return false;
@@ -669,7 +677,7 @@ function buildBlock(b, i){
   if (!b.id) b.id = b.type + "_" + i;
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
-              picture:rPicture, pastelink:rPasteLink, frame:rFrame,
+              picture:rPicture, pastelink:rPasteLink, frame:rFrame, web:rWeb, web:rWeb,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
@@ -892,7 +900,7 @@ function rPasteLink(b){
   return { section:s,
            check:() => /^https?:\/\/\S+\.\S+/.test(inp.value.trim())
              ? { ok:true } : { ok:false, message:"Paste a link starting with https://" },
-           brief:{ eyebrow:"Hand in", title:b.heading || stripTags(b.prompt) || "", text:b.task || "" } };
+           brief:{ eyebrow:"Hand in", title:b.heading || "", text:b.task || "" } };
 }
 
 function rPython(b){
@@ -1157,15 +1165,26 @@ function rIDE(b){
   outBar.appendChild(clearBtn);
   side.appendChild(outBar);
   const helpBox = el("div","ide-help"); helpBox.hidden = true;
-  (function(){
-    helpBox.appendChild(el("p","ide-helplead","Words you will meet in Python. Click any coloured word in your code to see this again."));
-    Object.keys(PY_HELP).sort().forEach(word => {
+  const helpSearch = el("input","ide-helpsearch");
+  helpSearch.type = "search"; helpSearch.placeholder = "Search for a word or what it does\u2026";
+  helpBox.appendChild(helpSearch);
+  const helpList = el("div","ide-helplist");
+  helpBox.appendChild(helpList);
+  function paintHelp(){
+    const term = (helpSearch.value || "").trim().toLowerCase();
+    helpList.innerHTML = "";
+    const words = Object.keys(PY_HELP).sort().filter(w =>
+      !term || w.toLowerCase().includes(term) || PY_HELP[w].toLowerCase().includes(term));
+    if (!words.length){ helpList.appendChild(el("p","ide-helplead","Nothing matches that word.")); return; }
+    words.forEach(word => {
       const row = el("div","ide-helprow");
       row.appendChild(el("code","ide-helpword", word + (PY_FN.has(word) ? "()" : "")));
       row.appendChild(el("span","ide-helptext", PY_HELP[word]));
-      helpBox.appendChild(row);
+      helpList.appendChild(row);
     });
-  })();
+  }
+  helpSearch.addEventListener("input", paintHelp);
+  paintHelp();
   const consoleBox = el("div","ide-console");
   const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
   const askRow = el("div","ide-ask"); askRow.hidden = true;
@@ -1405,7 +1424,366 @@ function rIDE(b){
            brief:{ eyebrow:"Code", title:b.title || "", text:b.task || "" } };
 }
 
-/* ---- QUIZ: one question at a time, instant marking, retry on wrong ---- */
+/* ======================================================================
+   BUILT-IN WEB EDITOR — HTML, CSS and JavaScript
+   {"type":"web", "title":"...", "task":"...",
+    "html":"<p>Hello</p>", "css":"p{color:red}", "js":"console.log(1)",
+    "files":["html","css","js"], "run":true, "edit":true, "help":true,
+    "tooltips":true, "height":340}
+   Everything happens in the browser: the preview is built from what the
+   student typed and shown in a sandboxed frame.
+   ====================================================================== */
+function rWeb(b){
+  const canRun = b.run !== false;
+  const canEdit = b.edit !== false;
+  const wantHelp = b.help !== false;
+  const wantTips = b.tooltips !== false;
+  const files = (b.files && b.files.length) ? b.files : ["html","css","js"];
+  const NAMES = { html:"index.html", css:"style.css", js:"script.js" };
+
+  const s = el("section","ide web");
+  const wrap = el("div","ide-wrap" + (canRun ? "" : " no-console"));
+
+  /* ---------- editor side ---------- */
+  const pane = el("div","ide-pane");
+  const bar = el("div","ide-bar");
+  const fileTabs = el("span","web-files");
+  bar.appendChild(fileTabs);
+  const gearBtn = el("button","ide-small","\u2699"); gearBtn.title = "Editor settings";
+  const resetBtn = el("button","ide-small","Reset");
+  const runBtn = el("button","btn-primary ide-run","\u25B6 Run");
+  bar.appendChild(gearBtn);
+  if (canEdit) bar.appendChild(resetBtn);
+  if (canRun) bar.appendChild(runBtn);
+  if (!canEdit) bar.appendChild(el("span","ide-tag","Read only"));
+  pane.appendChild(bar);
+
+  const settings = el("div","ide-settings"); settings.hidden = true;
+  settings.appendChild(el("span","ide-setlabel","Colours"));
+  const themes = el("div","ide-setrow");
+  [["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(p => {
+    const t = el("button","ide-chip", p[1]); t.dataset.theme = p[0];
+    t.addEventListener("click", () => setTheme(p[0]));
+    themes.appendChild(t);
+  });
+  settings.appendChild(themes);
+  settings.appendChild(el("span","ide-setlabel","Text size"));
+  const sizes = el("div","ide-setrow");
+  [["s","Small"],["m","Medium"],["l","Large"],["xl","Extra large"]].forEach(p => {
+    const t = el("button","ide-chip", p[1]); t.dataset.size = p[0];
+    t.addEventListener("click", () => setSize(p[0]));
+    sizes.appendChild(t);
+  });
+  settings.appendChild(sizes);
+  pane.appendChild(settings);
+  gearBtn.addEventListener("click", () => { settings.hidden = !settings.hidden; });
+
+  const editor = el("div","ide-editor");
+  const gutter = el("div","ide-gutter");
+  const codeWrap = el("div","ide-codewrap");
+  const hl = el("div","ide-hl"); hl.setAttribute("aria-hidden","true");
+  const ta = el("textarea","ide-code");
+  ta.spellcheck = false; ta.autocapitalize = "off"; ta.autocomplete = "off"; ta.wrap = "off";
+  if (!canEdit) ta.readOnly = true;
+  if (b.height) editor.style.height = b.height + "px";
+  codeWrap.appendChild(hl); codeWrap.appendChild(ta);
+  editor.appendChild(gutter); editor.appendChild(codeWrap);
+  pane.appendChild(editor);
+
+  const probs = el("div","ide-probs"); probs.hidden = true;
+  pane.appendChild(probs);
+  wrap.appendChild(pane);
+
+  /* ---------- preview side ---------- */
+  const side = el("div","ide-side");
+  if (!canRun) side.hidden = true;
+  const outBar = el("div","ide-bar ide-outbar");
+  const tabPreview = el("button","ide-tab on","Preview");
+  const tabConsole = el("button","ide-tab","Console");
+  const tabHelp = el("button","ide-tab","Help");
+  outBar.appendChild(tabPreview); outBar.appendChild(tabConsole);
+  if (wantHelp) outBar.appendChild(tabHelp);
+  outBar.appendChild(el("span","ide-file",""));
+  const clearBtn = el("button","ide-small","Clear");
+  outBar.appendChild(clearBtn);
+  side.appendChild(outBar);
+
+  const frame = el("iframe","web-preview");
+  frame.setAttribute("sandbox","allow-scripts allow-forms allow-modals");
+  frame.title = "What your page looks like";
+  const consoleBox = el("div","ide-console"); consoleBox.hidden = true;
+  const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
+  consoleBox.appendChild(out);
+  const helpBox = el("div","ide-help"); helpBox.hidden = true;
+  side.appendChild(frame); side.appendChild(consoleBox); side.appendChild(helpBox);
+  wrap.appendChild(side);
+  s.appendChild(wrap);
+
+  const note = el("p","ide-note"); note.hidden = true;
+  s.appendChild(note);
+
+  /* ---------- help, with a search box ---------- */
+  const helpSearch = el("input","ide-helpsearch");
+  helpSearch.type = "text"; helpSearch.placeholder = "Search\u2026"; helpSearch.autocomplete = "off";
+  const helpList = el("div","ide-helplist");
+  helpBox.appendChild(helpSearch);
+  helpBox.appendChild(helpList);
+  function paintHelp(){
+    const term = (helpSearch.value || "").trim().toLowerCase();
+    helpList.innerHTML = "";
+    let shown = 0;
+    files.forEach(kind => {
+      const dict = window.WEB_HELP[kind] || {};
+      const rows = Object.keys(dict).sort().filter(w =>
+        !term || w.toLowerCase().includes(term) || dict[w].toLowerCase().includes(term));
+      if (!rows.length) return;
+      helpList.appendChild(el("p","ide-helphead", kind === "js" ? "JavaScript" : kind.toUpperCase()));
+      rows.forEach(w => {
+        shown++;
+        const row = el("div","ide-helprow");
+        row.appendChild(el("code","ide-helpword", kind === "html" ? "<" + w + ">" : w));
+        row.appendChild(el("span","ide-helptext", dict[w]));
+        helpList.appendChild(row);
+      });
+    });
+    if (!shown) helpList.appendChild(el("p","ide-helplead","Nothing matches \u201c" + helpSearch.value + "\u201d."));
+  }
+  helpSearch.addEventListener("input", paintHelp);
+  paintHelp();
+
+  function showTab(which){
+    const isPrev = which === "preview", isCon = which === "console", isHelp = which === "help";
+    frame.hidden = !isPrev;
+    consoleBox.hidden = !isCon;
+    helpBox.hidden = !isHelp;
+    tabPreview.classList.toggle("on", isPrev);
+    tabConsole.classList.toggle("on", isCon);
+    tabHelp.classList.toggle("on", isHelp);
+  }
+  tabPreview.addEventListener("click", () => showTab("preview"));
+  tabConsole.addEventListener("click", () => showTab("console"));
+  tabHelp.addEventListener("click", () => showTab("help"));
+  clearBtn.addEventListener("click", () => { out.textContent = ""; });
+
+  /* ---------- the three files ---------- */
+  const code = { html: b.html || "", css: b.css || "", js: b.js || "" };
+  const starters = { html: b.html || "", css: b.css || "", js: b.js || "" };
+  let current = files[0];
+
+  files.forEach(kind => {
+    const t = el("button","web-file" + (kind === current ? " on" : ""), NAMES[kind]);
+    t.dataset.kind = kind;
+    t.addEventListener("click", () => {
+      code[current] = ta.value;
+      current = kind;
+      Array.from(fileTabs.children).forEach(c => c.classList.toggle("on", c.dataset.kind === kind));
+      ta.value = code[kind];
+      repaint();
+    });
+    fileTabs.appendChild(t);
+  });
+  ta.value = code[current];
+
+  /* ---------- appearance ---------- */
+  function setTheme(k){
+    s.dataset.idetheme = k;
+    Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
+    const p = idePrefs(); p.theme = k; saveIdePrefs(p);
+  }
+  function setSize(k){
+    s.dataset.idesize = k;
+    Array.from(sizes.children).forEach(c => c.classList.toggle("on", c.dataset.size === k));
+    const p = idePrefs(); p.size = k; saveIdePrefs(p);
+  }
+  const pref = idePrefs();
+  setTheme(pref.theme || "dark");
+  setSize(pref.size || "m");
+
+  /* ---------- painting ---------- */
+  let issues = [];
+  function repaint(){
+    const lines = ta.value.split("\n");
+    issues = window.webCheck ? window.webCheck(current, ta.value) : [];
+    const bad = new Set(issues.map(i => i.line));
+    const state = { block: false };
+    hl.innerHTML = lines.map((l, n) => {
+      const painted = window.webHighlight ? window.webHighlight(current, l, state) : l;
+      return '<div class="hl-line' + (bad.has(n) ? " bad" : "") + '">' +
+             (wantTips ? painted : painted.replace(/ t-help/g, "")) + "</div>";
+    }).join("");
+    gutter.innerHTML = lines.map((_, n) =>
+      '<div class="gl' + (bad.has(n) ? " bad" : "") + '">' + (n + 1) + "</div>").join("");
+    probs.innerHTML = "";
+    if (issues.length){
+      probs.hidden = false;
+      issues.slice(0, 4).forEach(iss => {
+        const row = el("div","ide-prob");
+        row.appendChild(el("span","ide-probline","Line " + (iss.line + 1)));
+        row.appendChild(el("span","ide-probmsg", iss.msg));
+        if (iss.fix){
+          const fixBtn = el("button","ide-chip","Fix it");
+          fixBtn.addEventListener("click", () => {
+            const ls = ta.value.split("\n");
+            const fixed = iss.fix();
+            if (fixed !== null && fixed !== undefined){
+              ls[iss.line] = fixed;
+              ta.value = ls.join("\n");
+              code[current] = ta.value;
+              repaint(); markDirty();
+            }
+          });
+          row.appendChild(fixBtn);
+        }
+        probs.appendChild(row);
+      });
+    } else { probs.hidden = true; }
+  }
+  ta.addEventListener("input", () => { code[current] = ta.value; repaint(); markDirty(); });
+  ta.addEventListener("scroll", () => {
+    hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop;
+  });
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Tab"){
+      e.preventDefault();
+      const st = ta.selectionStart, en = ta.selectionEnd;
+      ta.value = ta.value.slice(0, st) + "  " + ta.value.slice(en);
+      ta.selectionStart = ta.selectionEnd = st + 2;
+      code[current] = ta.value; repaint(); markDirty();
+    } else if (e.key === "Enter"){
+      const st = ta.selectionStart;
+      const line = ta.value.slice(0, st).split("\n").pop();
+      const indent = (line.match(/^[ \t]*/) || [""])[0];
+      const extra = /[{>]\s*$/.test(line) ? "  " : "";
+      if (indent || extra){
+        e.preventDefault();
+        const ins = "\n" + indent + extra;
+        ta.value = ta.value.slice(0, st) + ins + ta.value.slice(ta.selectionEnd);
+        ta.selectionStart = ta.selectionEnd = st + ins.length;
+        code[current] = ta.value; repaint(); markDirty();
+      }
+    }
+  });
+  repaint();
+
+  /* ---------- word explanations ---------- */
+  const tip = el("div","ide-tip"); tip.hidden = true;
+  codeWrap.appendChild(tip);
+  function wordAt(text, pos){
+    if (pos < 0 || pos > text.length) return null;
+    const isWord = (ch) => /[A-Za-z_$0-9-]/.test(ch);
+    let a = pos, z = pos;
+    while (a > 0 && isWord(text[a - 1])) a--;
+    while (z < text.length && isWord(text[z])) z++;
+    if (a === z) return null;
+    return { word: text.slice(a, z), start: a };
+  }
+  function showTip(){
+    if (!wantTips){ tip.hidden = true; return; }
+    const found = wordAt(ta.value, ta.selectionStart);
+    const dict = (window.WEB_HELP && window.WEB_HELP[current]) || {};
+    if (!found || !Object.prototype.hasOwnProperty.call(dict, found.word)){ tip.hidden = true; return; }
+    tip.innerHTML = "";
+    tip.appendChild(el("b","", current === "html" ? "<" + found.word + ">" : found.word));
+    tip.appendChild(el("span","", dict[found.word]));
+    const before = ta.value.slice(0, found.start);
+    const line = before.split("\n").length - 1;
+    const col = found.start - (before.lastIndexOf("\n") + 1);
+    const size = parseFloat((window.getComputedStyle ? getComputedStyle(ta).fontSize : "") || "14") || 14;
+    tip.style.top = ((line + 1) * size * 1.55 + 16 - (ta.scrollTop || 0)) + "px";
+    tip.style.left = Math.max(6, Math.min(col * size * 0.6 - 12 - (ta.scrollLeft || 0), 260)) + "px";
+    tip.hidden = false;
+  }
+  ta.addEventListener("click", showTip);
+  ta.addEventListener("keyup", (e) => {
+    if (e.key === "Escape"){ tip.hidden = true; return; }
+    if (e.key && e.key.indexOf("Arrow") === 0) showTip(); else tip.hidden = true;
+  });
+  ta.addEventListener("scroll", () => { tip.hidden = true; });
+  tip.addEventListener("mousedown", (e) => { e.preventDefault(); tip.hidden = true; });
+
+  /* ---------- running ---------- */
+  let ran = false, lastOut = "";
+  function logLine(kind, text){
+    lastOut += (lastOut ? "\n" : "") + text;
+    const row = el("div","con-" + (kind === "error" ? "err" : kind === "warn" ? "warn" : "log"), text);
+    out.appendChild(row);
+    if (kind === "error"){
+      tabConsole.classList.add("shout");
+    }
+  }
+  if (typeof window !== "undefined" && window.addEventListener){
+    window.addEventListener("message", (e) => {
+      const d = e && e.data;
+      if (!d || !d.hubConsole) return;
+      if (frame.contentWindow && e.source !== frame.contentWindow) return;
+      logLine(d.kind, d.text);
+    });
+  }
+  function run(){
+    code[current] = ta.value;
+    out.innerHTML = ""; lastOut = "";
+    tabConsole.classList.remove("shout");
+    showTab("preview");
+    const page = window.webAssemble
+      ? window.webAssemble(code.html, files.indexOf("css") >= 0 ? code.css : "",
+                           files.indexOf("js") >= 0 ? code.js : "")
+      : code.html;
+    frame.srcdoc = page;
+    ran = true;
+    if (b.expect){
+      const good = (code.html + code.css + code.js).toLowerCase().includes(String(b.expect).toLowerCase());
+      note.hidden = false;
+      note.className = "ide-note " + (good ? "ok" : "no");
+      note.textContent = good ? "That looks right \u2713" : "Not quite yet \u2014 keep going.";
+    }
+    markDirty();
+  }
+  runBtn.addEventListener("click", run);
+  resetBtn.addEventListener("click", () => {
+    if (ta.value === starters[current]) return;
+    const back = el("div","modal-back");
+    const box = el("div","modal");
+    box.appendChild(el("h2","","Start this file again?"));
+    box.appendChild(el("p","modal-text","Your changes to " + NAMES[current] + " will be lost."));
+    const yes = el("button","btn-primary modal-cta","Start again");
+    yes.addEventListener("click", () => {
+      code[current] = starters[current]; ta.value = starters[current];
+      repaint(); markDirty(); back.remove();
+    });
+    const no = el("button","btn-ghost modal-stay","Keep my code");
+    no.addEventListener("click", () => back.remove());
+    box.appendChild(yes); box.appendChild(no);
+    back.appendChild(box);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
+  });
+  if (canRun) setTimeout(run, 60);           // show something straight away
+
+  fields[b.id] = {
+    get:() => { code[current] = ta.value; return { html:code.html, css:code.css, js:code.js, ran:ran }; },
+    set:(v) => {
+      if (!v) return;
+      if (typeof v === "string"){ code.html = v; }
+      else {
+        if (typeof v.html === "string") code.html = v.html;
+        if (typeof v.css === "string") code.css = v.css;
+        if (typeof v.js === "string") code.js = v.js;
+        ran = !!v.ran;
+      }
+      ta.value = code[current];
+      repaint();
+      if (canRun) run();
+    }
+  };
+
+  return { section:s,
+           check:() => {
+             if (!canRun) return { ok:true };
+             if (!ran) return { ok:false, message:"Press Run to see your page" };
+             return { ok:true };
+           },
+           brief:{ eyebrow:"Code", title:b.title || "", text:b.task || "" } };
+}
 function rQuiz(b){
   const s = el("section");
   const qs = b.questions || [];
@@ -1774,6 +2152,12 @@ function rImage(b){
    like a Microsoft Form — but marked instantly on screen.
    ===================================================================== */
 
+/* "a, b and c" — reads better than a list of ticks */
+function joinWords(list){
+  if (list.length === 1) return list[0];
+  return list.slice(0, -1).join(", ") + " and " + list[list.length - 1];
+}
+
 function normAns(x){
   return String(x || "").toLowerCase().trim().replace(/\s+/g, " ").replace(/[.,!?;:'"]+$/g, "");
 }
@@ -1928,7 +2312,7 @@ function rShort(b){
       const groups = b.keywords || [];
       const hits = groups.map((g, i) => ({
         ok: g.some(k => ans.includes(normAns(k))),
-        label: (b.keywordLabels && b.keywordLabels[i]) || ("idea " + (i + 1))
+        label: (b.keywordLabels && b.keywordLabels[i]) || ""
       }));
       const ok = hits.length ? hits.every(h => h.ok) : true;
       checked = true;
@@ -1936,10 +2320,18 @@ function rShort(b){
       fb.dataset.verdict = ok ? "correct" : "incorrect";
       fb.innerHTML = "";
       fb.appendChild(el("b","", ok ? "That covers it" : "Not quite yet"));
-      if (hits.length){
-        fb.appendChild(el("span","", hits.map(h => (h.ok ? "\u2713 " : "\u2717 ") + h.label).join("   ")));
+      if (ok){
+        fb.appendChild(el("span","", "You have mentioned everything we were looking for."));
+      } else {
+        const missing = hits.filter(h => !h.ok).map(h => h.label);
+        const got = hits.filter(h => h.ok).map(h => h.label);
+        if (got.length) fb.appendChild(el("span","", "Good so far: you have " + joinWords(got) + "."));
+        if (missing.length && b.keywordLabels)
+          fb.appendChild(el("span","", "Still to add: " + joinWords(missing) + "."));
+        else if (missing.length)
+          fb.appendChild(el("span","", "There is still something missing \u2014 try to say a bit more."));
+        if (b.model) fb.appendChild(el("span","", "A good answer mentions: " + b.model));
       }
-      if (!ok && b.model) fb.appendChild(el("span","", "A good answer mentions: " + b.model));
       markDirty();
     });
     ta.addEventListener("input", () => { fb.hidden = true; });

@@ -33,10 +33,10 @@
   --r:16px;
 }
 /* background choices (Settings on the home page) */
-html[data-bg=blue]{--bg:#EAF1F7; --bar:#DCE8F1; --panel:#FFFFFF; --panel-2:#F4F9FC; --line:#D4E1EB; --line-2:#B9CDDD}
-html[data-bg=green]{--bg:#ECF3EA; --bar:#DEEADA; --panel:#FFFFFF; --panel-2:#F5FAF3; --line:#D6E4D2; --line-2:#BCD3B7}
-html[data-bg=peach]{--bg:#FAEFE5; --bar:#F2E1D0; --panel:#FFFFFF; --panel-2:#FDF6F0; --line:#EFD9C7; --line-2:#DEC0A6}
-html[data-bg=yellow]{--bg:#FAF3D8; --bar:#F0E6BB; --panel:#FFFFFF; --panel-2:#FCF8E9; --line:#E9DDAF; --line-2:#D6C588}
+html[data-bg=blue]{--bg:#E2EDF7; --bar:#D0E2F0; --panel:#FFFFFF; --panel-2:#F4F9FC; --line:#D4E1EB; --line-2:#B9CDDD}
+html[data-bg=green]{--bg:#DDEDD5; --bar:#CBE2C0; --panel:#FFFFFF; --panel-2:#F2F8EF; --line:#CBDEC4; --line-2:#AECBA4}
+html[data-bg=peach]{--bg:#FAEADC; --bar:#F1DCC6; --panel:#FFFFFF; --panel-2:#FDF6F0; --line:#EFD9C7; --line-2:#DEC0A6}
+html[data-bg=yellow]{--bg:#F9F0CB; --bar:#EDE0AC; --panel:#FFFFFF; --panel-2:#FCF8E9; --line:#E9DDAF; --line-2:#D6C588}
 html[data-bg=dark]{--bg:#23262E; --bar:#2C303A; --panel:#2C303A; --panel-2:#333846; --line:#3D434F; --line-2:#4C5464;
   --text:#EAEBEF; --muted:#A9AFBC; --dim:#7E8595; --amber:#E39B52; --amber-ink:#221A0F;
   --mint:#5BBE94; --mint-dim:#2C5847; --red:#DE7C74; --red-dim:#54312E}
@@ -47,6 +47,7 @@ html[data-font=atkinson]{--display:'Atkinson Hyperlegible',sans-serif; --body:'A
 [hidden]{display:none !important}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+html{background:var(--bg)}
 body{
   background:var(--bg); color:var(--text);
   font-family:var(--body); font-size:18px; line-height:1.6;
@@ -1118,3 +1119,53 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 
 /* an embedded page inside a lesson */
 .framed{width:100%; height:520px; border:1.5px solid var(--line-2); border-radius:14px; background:#fff; display:block}
+
+
+/* web editor: preview, messages, colouring */
+.web-preview{background:#fff; min-height:300px; display:flex; flex-direction:column}
+.web-frame{flex:1; width:100%; min-height:300px; border:none; background:#fff}
+.web-log{margin:0; max-height:150px; overflow:auto; padding:10px 14px; background:var(--ed-bg);
+  color:var(--ed-fg); font-family:var(--mono); font-size:13px; white-space:pre-wrap;
+  border-top:1px solid var(--ed-line)}
+.w-tag{color:var(--t-fn); font-weight:700}
+.w-attr{color:var(--t-call)}
+.w-str{color:var(--t-str)}
+.w-com{color:var(--t-com); font-style:italic}
+.w-punc{color:var(--t-op)}
+.w-prop{color:var(--t-fn)}
+.w-sel{color:var(--t-kw); font-weight:700}
+.w-num{color:var(--t-num)}
+.w-kw{color:var(--t-kw); font-weight:700}
+.w-fn{color:var(--t-fn)}
+.w-help{text-decoration:underline dotted currentColor; text-underline-offset:3px; text-decoration-thickness:1px}
+
+/* help search */
+.ide-helpsearch{width:100%; margin:0 0 12px; font-family:var(--body) !important; font-size:14px !important;
+  padding:8px 12px !important; background:var(--ed-bar) !important; color:var(--ed-fg) !important;
+  border:1px solid var(--ed-line) !important; border-radius:9px !important}
+.ide-helpsearch:focus{border-color:var(--amber) !important; outline:none}
+.ide-helpgroup{margin:14px 0 6px; font-size:12px; font-weight:800; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ed-gut)}
+.ide-helpgroup:first-child{margin-top:0}
+.ide-helplist{display:block}
+
+
+/* web editor: file tabs, preview, console lines, help search */
+.web-files{display:flex; gap:4px; flex:1}
+.web-file{font-family:var(--mono); font-size:12.5px; font-weight:700; padding:5px 11px;
+  border-radius:8px; border:1px solid transparent; background:transparent; color:var(--ed-gut); cursor:pointer}
+.web-file.on{background:var(--ed-bg); color:var(--ed-fg); border-color:var(--ed-line)}
+.web-preview{width:100%; height:340px; border:none; background:#fff; display:block}
+.ide-tab.shout{color:var(--red)}
+.con-log{padding:2px 0}
+.con-warn{padding:2px 0; color:#E8B45A}
+.con-err{padding:2px 0; color:#F0A6A1}
+.ide-helpsearch{width:100%; margin:0 0 10px; font-size:14px !important; padding:8px 11px !important;
+  background:var(--ed-bar) !important; border:1px solid var(--ed-line) !important; color:var(--ed-fg) !important}
+.ide-helphead{margin:12px 0 6px; font-size:12px; font-weight:800; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--t-fn)}
+.ide-helphead:first-child{margin-top:0}
+.t-tag{color:var(--t-fn); font-weight:700}
+.t-attr{color:var(--t-call)}
+.t-prop{color:var(--t-fn)}
+.t-sel{color:var(--t-kw); font-weight:700}

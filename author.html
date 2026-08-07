@@ -48,7 +48,7 @@
       <p class="pal-head">Add to the open page</p>
       <button class="pal" data-add="text"><b>Paragraph</b><span>Words, with formatting</span></button>
       <button class="pal" data-add="picture"><b>Image</b><span>Show a picture from a link</span></button>
-      <button class="pal" data-add="ide"><b>Python task</b><span>Editor, console, turtle</span></button>
+      <button class="pal" data-add="code"><b>Coding task</b><span>Python, or HTML + CSS + JS</span></button>
       <button class="pal" data-add="question"><b>Written answer</b><span>They type a response</span></button>
       <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
       <button class="pal" data-add="image"><b>Screenshot</b><span>They paste a picture</span></button>
@@ -103,25 +103,31 @@ let lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:
 
 const BLANK = {
   text:     () => ({ type:"text", heading:"", html:"" }),
-  picture:  () => ({ type:"picture", title:"", url:"", caption:"", note:"" }),
-  pastelink:() => ({ type:"pastelink", heading:"", task:"", note:"" }),
-  ide:      () => ({ type:"ide", title:"", task:"", starter:'print("Hello World!")', turtle:false, expect:"",
-                     run:true, edit:true }),
-  question: () => ({ type:"question", heading:"", context:"", prompt:"", minWords:20 }),
-  quiz:     () => ({ type:"quiz", questions:[{ q:"", options:["",""], answers:[0], hint:"" }] }),
+  picture:  () => ({ type:"picture", title:"Have a look at this", url:"", caption:"", note:"" }),
+  pastelink:() => ({ type:"pastelink", heading:"Paste your link", task:"", note:"" }),
+  code:     () => ({ type:"code", lang:"" }),        // they pick Python or web next
+  ide:      () => ({ type:"ide", title:"Python", task:"Write your code, then press Run.",
+                     starter:'print("Hello World!")', turtle:false, expect:"", run:true, edit:true }),
+  web:      () => ({ type:"web", title:"Build a web page", task:"Edit the files, then press Run.",
+                     html:'<h1>My page</h1>\n<p>Hello!</p>',
+                     css:'h1 {\n  color: navy;\n}',
+                     js:'console.log("Ready");',
+                     run:true, edit:true, help:true, tooltips:true, expect:"" }),
+  question: () => ({ type:"question", heading:"Write your answer", context:"", prompt:"", minWords:20 }),
+  quiz:     () => ({ type:"quiz", title:"Check your understanding", questions:[{ q:"", options:["",""], answers:[0], hint:"" }] }),
   page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
-  image:    () => ({ type:"image", task:"Take a screenshot and paste it here." }),
-  embed:    () => ({ type:"embed", url:"", title:"", note:"", confirm:false }),
-  frame:    () => ({ type:"frame", url:"", heading:"", task:"", width:"100%", height:520, confirm:false }),
-  link:     () => ({ type:"link", url:"", title:"", heading:"", task:"", confirm:false }),
+  image:    () => ({ type:"image", title:"Add your screenshot", task:"Take a screenshot and paste it here." }),
+  embed:    () => ({ type:"embed", url:"", title:"Watch this", note:"Watch it all the way through.", confirm:false }),
+  frame:    () => ({ type:"frame", url:"", heading:"Have a go", task:"", width:"100%", height:520, confirm:false }),
+  link:     () => ({ type:"link", url:"", title:"Open this", heading:"Have a look at this site", task:"", confirm:false }),
   mc:       () => ({ type:"mc", prompt:"", options:["",""], answer:0, topic:"" }),
-  blanks:   () => ({ type:"blanks", prompt:"", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
-  order:    () => ({ type:"order", prompt:"", items:["","",""], topic:"" }),
-  short:    () => ({ type:"short", prompt:"", keywords:"", model:"", topic:"" })
+  blanks:   () => ({ type:"blanks", prompt:"Fill in the gaps", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
+  order:    () => ({ type:"order", prompt:"Put these in order", items:["","",""], topic:"" }),
+  short:    () => ({ type:"short", prompt:"", keywords:"", keywordLabels:"", model:"", why:"", topic:"" })
 };
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", frame:"Embedded page" };
+                short:"Short answer", page:"Page", frame:"Embedded page", code:"Coding task", web:"Web page" };
 
 /* A YouTube address in any of its usual shapes -> the embeddable one. */
 function toEmbed(raw){
@@ -271,6 +277,31 @@ function compileOne(b, id, target){
              context: b.context ? (window.cleanRichText ? window.cleanRichText(b.context) : b.context) : "",
              prompt: b.prompt || "",
              minWords: Number(b.minWords) || 20 }));
+    else if (b.type === "web"){
+      const blk = { type:"web", id, html: b.html || "", css: b.css || "", js: b.js || "" };
+      if (b.title) blk.title = b.title;
+      if (b.task) blk.task = b.task;
+      if (b.expect) blk.expect = b.expect;
+      if (b.run === false) blk.run = false;
+      if (b.edit === false) blk.edit = false;
+      if (b.help === false) blk.help = false;
+      if (b.tooltips === false) blk.tooltips = false;
+      push(blk);
+    }
+    else if (b.type === "code"){ /* not chosen yet — nothing to show students */ }
+    else if (b.type === "web"){
+      const blk = { type:"web", id, html: b.html || "", css: b.css || "", js: b.js || "",
+                    files: (b.files && b.files.length) ? b.files : ["html","css","js"] };
+      if (b.title) blk.title = b.title;
+      if (b.task) blk.task = b.task;
+      if (b.expect) blk.expect = b.expect;
+      if (b.run === false) blk.run = false;
+      if (b.edit === false) blk.edit = false;
+      if (b.help === false) blk.help = false;
+      if (b.tooltips === false) blk.tooltips = false;
+      push(blk);
+    }
+    else if (b.type === "code"){ /* not chosen yet — nothing to build */ }
     else if (b.type === "picture")
       push(keepArrays({ type:"picture", id, title: b.title || "", url: b.url || "",
              caption: b.caption || "", note: b.note || "" }));
@@ -288,7 +319,7 @@ function compileOne(b, id, target){
                      answers: answers.length ? answers : [0], hint: q.hint || "" };
           }) });
     else if (b.type === "image")
-      push(keepArrays({ type:"image", id, task: b.task || "" }));
+      push(keepArrays({ type:"image", id, title: b.title || "", task: b.task || "" }));
     else if (b.type === "embed")
       push(keepArrays({ type:"embed", id, url: toEmbed(b.url), title: b.title || "",
              note: b.note || "", confirm: b.confirm === true }));
@@ -311,6 +342,7 @@ function compileOne(b, id, target){
     else if (b.type === "short")
       push(keepArrays({ type:"short", id, prompt: b.prompt || "",
         keywords: (b.keywords || "").split(";").map(g => g.split(/\s*,\s*/).map(x => x.trim()).filter(Boolean)).filter(g => g.length),
+        keywordLabels: (b.keywordLabels || "").split(";").map(x => x.trim()).filter(Boolean),
         model: b.model || "", topic: lesson.assessment ? b.topic : "" }));
   }
 }
@@ -554,6 +586,54 @@ function card(b, i, arr){
     F("Heading (optional)", "heading", { placeholder:"Paste your link" });
     F("What should they paste?", "task", { area:true, rows:2, placeholder:"Paste the link to your finished Scratch project." });
   }
+  if (b.type === "code"){
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Which kind of code?"));
+    const row = el("div","brow");
+    const py = el("button","btn-primary bmini2","Python");
+    py.addEventListener("click", () => {
+      const made = BLANK.ide();
+      Object.keys(b).forEach(k => delete b[k]);
+      Object.assign(b, made);
+      render(); schedulePreview();
+    });
+    const web = el("button","btn-primary bmini2","HTML, CSS and JavaScript");
+    web.addEventListener("click", () => {
+      const made = BLANK.web();
+      Object.keys(b).forEach(k => delete b[k]);
+      Object.assign(b, made);
+      render(); schedulePreview();
+    });
+    row.appendChild(py); row.appendChild(web);
+    w.appendChild(row);
+    w.appendChild(el("p","bhelp","Pick one and the right options appear. You can delete the task and start again if you change your mind."));
+    body.appendChild(w);
+  }
+  if (b.type === "web"){
+    F("Heading (optional)", "title", { placeholder:"Build a page" });
+    F("Subheading (optional)", "task", { area:true, rows:2 });
+    const fw = el("div","bfield");
+    fw.appendChild(el("label","","Which files can they use?"));
+    const frow = el("div","brow");
+    if (!b.files) b.files = ["html","css","js"];
+    [["html","index.html"],["css","style.css"],["js","script.js"]].forEach(pair => {
+      const on = b.files.indexOf(pair[0]) >= 0;
+      const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""), pair[1] + ": " + (on ? "on" : "off"));
+      btn.addEventListener("click", () => {
+        if (on){ if (b.files.length > 1) b.files = b.files.filter(x => x !== pair[0]); }
+        else b.files = ["html","css","js"].filter(x => x === pair[0] || b.files.indexOf(x) >= 0);
+        render(); schedulePreview();
+      });
+      frow.appendChild(btn);
+    });
+    fw.appendChild(frow); body.appendChild(fw);
+    if (b.files.indexOf("html") >= 0) F("Starting HTML", "html", { area:true, rows:6, mono:true });
+    if (b.files.indexOf("css") >= 0) F("Starting CSS", "css", { area:true, rows:5, mono:true });
+    if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
+    toggleRow([["run","Running", true], ["edit","Editing", true],
+               ["help","Help", true], ["tooltips","Tooltips", true]]);
+    F("Code must contain (optional)", "expect", { placeholder:"<h1>" });
+  }
   if (b.type === "ide"){
     F("Heading (optional)", "title", { placeholder:"Investigate" });
     F("Subheading (optional)", "task", { area:true, rows:2, placeholder:"Run this, then add your own message on line 3." });
@@ -634,6 +714,36 @@ function card(b, i, arr){
     addQ.addEventListener("click", () => { b.questions.push({ q:"", options:["",""], answer:0, hint:"" }); render(); schedulePreview(); });
     body.appendChild(addQ);
   }
+  if (b.type === "code"){
+    body.appendChild(el("p","bhelp","Which kind of coding is this?"));
+    const pick = el("div","brow");
+    const py = el("button","btn-primary bmini2","Python");
+    py.addEventListener("click", () => {
+      const made = BLANK.ide();
+      Object.keys(b).forEach(k => delete b[k]);
+      Object.assign(b, made);
+      render(); schedulePreview();
+    });
+    const web = el("button","btn-primary bmini2","HTML + CSS + JavaScript");
+    web.addEventListener("click", () => {
+      const made = BLANK.web();
+      Object.keys(b).forEach(k => delete b[k]);
+      Object.assign(b, made);
+      render(); schedulePreview();
+    });
+    pick.appendChild(py); pick.appendChild(web);
+    body.appendChild(pick);
+  }
+  if (b.type === "web"){
+    F("Heading (optional)", "title", { placeholder:"Build a web page" });
+    F("Subheading (optional)", "task", { area:true, rows:2 });
+    F("index.html", "html", { area:true, rows:7, mono:true });
+    F("style.css", "css", { area:true, rows:6, mono:true });
+    F("script.js", "js", { area:true, rows:5, mono:true });
+    toggleRow([["run","Running", true], ["edit","Editing", true],
+               ["help","Help", true], ["tooltips","Tooltips", true]]);
+    F("Their code must contain (optional)", "expect", { placeholder:"<h1>" });
+  }
   if (b.type === "page"){
     F("Title", "title", { placeholder:"Output a message to the screen" });
     F("Subtitle", "task", { area:true, rows:2, placeholder:"Read the explanation, run the code, then answer the questions." });
@@ -658,7 +768,7 @@ function card(b, i, arr){
     const kinds = lesson.assessment
       ? [["text","Paragraph"],["picture","Image"],["mc","Multiple choice"],["blanks","Fill the gaps"],
          ["order","Put in order"],["short","Short answer"]]
-      : [["text","Paragraph"],["picture","Image"],["ide","Python task"],["question","Written answer"],
+      : [["text","Paragraph"],["picture","Image"],["code","Coding task"],["question","Written answer"],
          ["quiz","Quiz"],["image","Screenshot"],["embed","Video"],["link","Link to a site"],
          ["pastelink","Paste a link"],["blanks","Fill the gaps"],["order","Put in order"],["short","Short answer"]];
     kinds.forEach(pair => {
@@ -668,7 +778,7 @@ function card(b, i, arr){
     });
     body.appendChild(addRow);
   }
-  if (b.type === "image") F("Instruction (optional)", "task", { area:true, rows:2 });
+  if (b.type === "image"){ F("Heading (optional)", "title"); F("Instruction (optional)", "task", { area:true, rows:2 }); }
   if (b.type === "frame"){
     F("Heading (optional)", "heading");
     F("Address of the page", "url", { placeholder:"https://…" });
@@ -715,6 +825,8 @@ function card(b, i, arr){
   if (b.type === "short"){
     F("Question", "prompt", { area:true, rows:2 });
     F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by , — e.g. loop, repeat; count" });
+    F("What each group means", "keywordLabels", { placeholder:"says it repeats; says what is counted",
+      help:"One phrase per group, separated by ; — students see these when they check their answer." });
     F("Model answer", "model", { area:true, rows:2 });
     if (lesson.assessment) F("Topic tag", "topic");
   }
