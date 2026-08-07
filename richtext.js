@@ -8,7 +8,7 @@
 (function(){
   "use strict";
 
-  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1 };
+  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1 };
   const COLOURS = [
     ["Normal", ""],
     ["Red", "#C0392B"],
@@ -32,7 +32,14 @@
           while (holder.firstChild) to.appendChild(holder.firstChild);
           return;
         }
-        const keep = document.createElement(tag === "STRONG" ? "b" : tag === "EM" ? "i" : tag.toLowerCase());
+        /* browsers still write <font color> for a colour change, so it is
+           turned into a span that carries the colour as a style */
+        const asTag = tag === "STRONG" ? "b" : tag === "EM" ? "i" : tag === "FONT" ? "span" : tag.toLowerCase();
+        const keep = document.createElement(asTag);
+        if (tag === "FONT"){
+          const colour = n.getAttribute("color") || (n.style && n.style.color);
+          if (colour) keep.style.color = colour;
+        }
         if (tag === "SPAN" || tag === "A"){
           const colour = n.style && n.style.color;
           if (colour) keep.style.color = colour;

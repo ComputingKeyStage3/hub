@@ -14,7 +14,7 @@
 
 <div class="homebar">
   <div class="title">Lesson builder</div>
-  <a class="crumb" href="index.html" style="margin-right:10px">&larr; Home</a>
+  <a class="crumb" href="admin.html" style="margin-right:10px">&larr; Teacher console</a>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
@@ -142,15 +142,22 @@ function toEmbed(raw){
 }
 
 /* ---------------- the draft lives in this browser ---------------- */
-function saveDraft(){ try{ localStorage.setItem("hub_builder", JSON.stringify(lesson)); }catch(e){} }
-function loadDraft(){
-  try{
-    const d = JSON.parse(localStorage.getItem("hub_builder") || "null");
-    if (d && Array.isArray(d.blocks)) lesson = d;
-    migrate(lesson.blocks);
-    tidyIntoPages();
-  }catch(e){}
-}
+/* Nothing is kept in the browser: opening the builder always starts clean,
+   or with the lesson you asked to edit. Instead, the tab warns before it is
+   closed with work that has not been saved to the site. */
+let dirty = false;
+function saveDraft(){ dirty = true; }
+function loadDraft(){ /* deliberately empty — see the note above */ }
+try{
+  window.addEventListener("beforeunload", (e) => {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = "";        // browsers show their own wording
+    return "";
+  });
+}catch(e){}
+/* clear any draft left by an older version */
+try{ localStorage.removeItem("hub_builder"); }catch(e){}
 /* Older drafts kept tasks loose at the top level, and quizzes had a single
    answer. Bring both up to date so nothing is lost. */
 function tidyIntoPages(){
@@ -237,7 +244,9 @@ function compileOne(b, id, target){
       // written with the formatting buttons, so it is already HTML
       let html = b.heading ? "<h2>" + esc(b.heading) + "</h2>" : "";
       if (b.html !== undefined){
-        push({ type:"text", id, html: html + (window.cleanRichText ? window.cleanRichText(b.html) : b.html) });
+        push({ type:"text", id,
+               heading: b.heading || "",
+               html: (window.cleanRichText ? window.cleanRichText(b.html) : b.html) });
         return;
       }
       /* Walk the lines, gathering runs of bullets and runs of prose. Teachers
@@ -278,20 +287,9 @@ function compileOne(b, id, target){
              prompt: b.prompt || "",
              minWords: Number(b.minWords) || 20 }));
     else if (b.type === "web"){
-      const blk = { type:"web", id, html: b.html || "", css: b.css || "", js: b.js || "" };
-      if (b.title) blk.title = b.title;
-      if (b.task) blk.task = b.task;
-      if (b.expect) blk.expect = b.expect;
-      if (b.run === false) blk.run = false;
-      if (b.edit === false) blk.edit = false;
-      if (b.help === false) blk.help = false;
-      if (b.tooltips === false) blk.tooltips = false;
-      push(blk);
-    }
-    else if (b.type === "code"){ /* not chosen yet — nothing to show students */ }
-    else if (b.type === "web"){
       const blk = { type:"web", id, html: b.html || "", css: b.css || "", js: b.js || "",
                     files: (b.files && b.files.length) ? b.files : ["html","css","js"] };
+      if (b.addFiles === true) blk.addFiles = true;
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
       if (b.expect) blk.expect = b.expect;
@@ -567,6 +565,7 @@ function card(b, i, arr){
   }
 
   if (b.type === "text"){
+    F("Heading (optional)", "heading", { placeholder:"Leave empty for no heading" });
     R("Paragraph", "html", { rows:5, placeholder:"Type here. Use the buttons above to make words bold, italic or coloured." });
   }
   if (b.type === "picture"){
@@ -631,8 +630,9 @@ function card(b, i, arr){
     if (b.files.indexOf("css") >= 0) F("Starting CSS", "css", { area:true, rows:5, mono:true });
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
     toggleRow([["run","Running", true], ["edit","Editing", true],
-               ["help","Help", true], ["tooltips","Tooltips", true]]);
-    F("Code must contain (optional)", "expect", { placeholder:"<h1>" });
+               ["help","Help", true], ["tooltips","Tooltips", true],
+               ["addFiles","Students can add files", false]]);
+    F("Code must contain (optional)", "expect", { placeholder:"h1" });
   }
   if (b.type === "ide"){
     F("Heading (optional)", "title", { placeholder:"Investigate" });
@@ -1047,7 +1047,8 @@ async function saveToSite(){
     const d = await r.json();
     if (r.status === 403){ localStorage.removeItem("hub_tkey"); throw new Error("That teacher key was not accepted."); }
     if (!r.ok) throw new Error(d.error || "Could not save it.");
-    lesson.savedAs = d.id; saveDraft();
+    lesson.savedAs = d.id;
+    dirty = false;                       // saved, and nothing changed since
     say(d.published ? "Saved \u2014 it's live" : "Saved to the site",
         d.published
           ? "Students in classes that already have this lesson will see the new version straight away."
@@ -1087,7 +1088,7 @@ $("delLesson").addEventListener("click", () => {
             if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
             closeModal();
             lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:[] };
-            saveDraft();
+            dirty = false;
             $("lTitle").value = ""; $("lIntro").value = ""; $("lUnit").value = "";
             $("delLesson").hidden = true;
             render(); refreshPreview();
@@ -1134,6 +1135,8 @@ async function loadUnitsAndMaybeLesson(){
     const data = JSON.parse(d.lesson.data);
     lesson = fromCompiled(data, d.lesson);
     lesson.savedAs = editId;
+    migrate(lesson.blocks); tidyIntoPages();
+    dirty = false;
     $("delLesson").hidden = false;
     $("lTitle").value = lesson.title; $("lIntro").value = lesson.intro || "";
     $("lUnit").value = lesson.unit || "";

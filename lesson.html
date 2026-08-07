@@ -142,6 +142,10 @@ function hideLoader(msg){
   if (el2.classList) el2.classList.add("gone");
 }
 function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!==undefined)e.innerHTML=html; return e; }
+/* Same, but the words are shown exactly as written — so "<h1>" appears as
+   "<h1>" instead of turning into a heading. Used for anything that talks
+   ABOUT code: error messages, help entries, tooltips. */
+function tel(tag, cls, text){ const e=document.createElement(tag); if(cls)e.className=cls; if(text!==undefined)e.textContent=text; return e; }
 /* Saving is deliberately silent. Any badge — even a warning — made students
    think their work was safe somewhere. The PDF is the only hand-in, and the
    finish pop-up says so plainly. The one exception is a genuine storage
@@ -700,7 +704,7 @@ function rPage(b){
     if (!built) return;
     const item = el("div","pg-item");
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
-    if (child.type !== "text" && child.type !== "picture"){
+    if (child.type !== "picture"){
       if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
       if (bb.text) item.appendChild(el("p","pg-t", bb.text));
     }
@@ -742,11 +746,13 @@ function rText(b){
   const s = el("section");
   const div = el("div","prose", b.html || "");
   const h = div.querySelector("h2");
-  const title = h ? h.textContent : (b.title || "Read this");
+  /* older lessons kept the heading inside the html; newer ones store it
+     separately so it can be left out entirely */
+  let title = b.heading !== undefined ? b.heading : (h ? h.textContent : (b.title || ""));
   if (h) h.remove();
   s.appendChild(div);
   return { section:s, check:() => ({ ok:true }),
-           brief:{ eyebrow:"Read", title, text:"" } };
+           brief:{ eyebrow:"Read", title:title || "", text:"" } };
 }
 
 /* A picture the teacher has linked to. Nothing is uploaded or stored. */
@@ -1178,8 +1184,8 @@ function rIDE(b){
     if (!words.length){ helpList.appendChild(el("p","ide-helplead","Nothing matches that word.")); return; }
     words.forEach(word => {
       const row = el("div","ide-helprow");
-      row.appendChild(el("code","ide-helpword", word + (PY_FN.has(word) ? "()" : "")));
-      row.appendChild(el("span","ide-helptext", PY_HELP[word]));
+      row.appendChild(tel("code","ide-helpword", word + (PY_FN.has(word) ? "()" : "")));
+      row.appendChild(tel("span","ide-helptext", PY_HELP[word]));
       helpList.appendChild(row);
     });
   }
@@ -1243,7 +1249,7 @@ function rIDE(b){
       issues.slice(0, 4).forEach(iss => {
         const row = el("div","ide-prob");
         row.appendChild(el("span","ide-probline","Line " + (iss.line + 1)));
-        row.appendChild(el("span","ide-probmsg", iss.msg));
+        row.appendChild(tel("span","ide-probmsg", iss.msg));
         if (iss.fix){
           const fixBtn = el("button","ide-chip","Fix it");
           fixBtn.addEventListener("click", () => {
@@ -1394,7 +1400,7 @@ function rIDE(b){
     if (!found || !Object.prototype.hasOwnProperty.call(PY_HELP, found.word)){ tip.hidden = true; return; }
     tip.innerHTML = "";
     tip.appendChild(el("b","", found.word + "()".slice(0, PY_FN.has(found.word) ? 2 : 0)));
-    tip.appendChild(el("span","", PY_HELP[found.word]));
+    tip.appendChild(tel("span","", PY_HELP[found.word]));
     // place it just under the line the word is on
     const before = text.slice(0, found.start);
     const line = before.split("\n").length - 1;
@@ -1509,6 +1515,7 @@ function rWeb(b){
   side.appendChild(outBar);
 
   const frame = el("iframe","web-preview");
+  frame.setAttribute("scrolling","auto");
   frame.setAttribute("sandbox","allow-scripts allow-forms allow-modals");
   frame.title = "What your page looks like";
   const consoleBox = el("div","ide-console"); consoleBox.hidden = true;
@@ -1541,12 +1548,12 @@ function rWeb(b){
       rows.forEach(w => {
         shown++;
         const row = el("div","ide-helprow");
-        row.appendChild(el("code","ide-helpword", kind === "html" ? "<" + w + ">" : w));
-        row.appendChild(el("span","ide-helptext", dict[w]));
+        row.appendChild(tel("code","ide-helpword", kind === "html" ? "<" + w + ">" : w));
+        row.appendChild(tel("span","ide-helptext", dict[w]));
         helpList.appendChild(row);
       });
     });
-    if (!shown) helpList.appendChild(el("p","ide-helplead","Nothing matches \u201c" + helpSearch.value + "\u201d."));
+    if (!shown) helpList.appendChild(tel("p","ide-helplead","Nothing matches \u201c" + helpSearch.value + "\u201d."));
   }
   helpSearch.addEventListener("input", paintHelp);
   paintHelp();
@@ -1565,23 +1572,113 @@ function rWeb(b){
   tabHelp.addEventListener("click", () => showTab("help"));
   clearBtn.addEventListener("click", () => { out.textContent = ""; });
 
-  /* ---------- the three files ---------- */
-  const code = { html: b.html || "", css: b.css || "", js: b.js || "" };
-  const starters = { html: b.html || "", css: b.css || "", js: b.js || "" };
-  let current = files[0];
-
+  /* ---------- the files ----------
+     There are always the ones the teacher set up. If they allowed it,
+     students can add more, and those are saved with their work. */
+  const canAddFiles = b.addFiles === true;
+  const code = {};            // name -> what is in it
+  const kindOf = {};          // name -> html / css / js
+  const starters = {};
+  const order = [];
   files.forEach(kind => {
-    const t = el("button","web-file" + (kind === current ? " on" : ""), NAMES[kind]);
-    t.dataset.kind = kind;
-    t.addEventListener("click", () => {
-      code[current] = ta.value;
-      current = kind;
-      Array.from(fileTabs.children).forEach(c => c.classList.toggle("on", c.dataset.kind === kind));
-      ta.value = code[kind];
-      repaint();
-    });
-    fileTabs.appendChild(t);
+    const name = NAMES[kind];
+    code[name] = b[kind] || "";
+    starters[name] = b[kind] || "";
+    kindOf[name] = kind;
+    order.push(name);
   });
+  let current = order[0];
+
+  function paintFiles(){
+    fileTabs.innerHTML = "";
+    order.forEach(name => {
+      const t = tel("button","web-file" + (name === current ? " on" : ""), name);
+      t.dataset.file = name;
+      t.addEventListener("click", () => {
+        code[current] = ta.value;
+        current = name;
+        ta.value = code[name];
+        paintFiles(); repaint();
+      });
+      if (canAddFiles && !starters.hasOwnProperty(name)){
+        const x = tel("span","web-x","\u00d7");
+        x.title = "Delete " + name;
+        x.addEventListener("click", (e) => {
+          e.stopPropagation();
+          askDeleteFile(name);
+        });
+        t.appendChild(x);
+      }
+      fileTabs.appendChild(t);
+    });
+    if (canAddFiles){
+      const add = tel("button","web-add","+ New file");
+      add.title = "Add another file";
+      add.addEventListener("click", newFile);
+      fileTabs.appendChild(add);
+    }
+  }
+  function uniqueName(name){
+    let out = name, n = 2;
+    while (code.hasOwnProperty(out)){
+      const dot = name.lastIndexOf(".");
+      out = name.slice(0, dot) + n + name.slice(dot);
+      n++;
+    }
+    return out;
+  }
+  function newFile(){
+    const back = el("div","modal-back");
+    const box = el("div","modal");
+    box.appendChild(tel("h2","","Add a file"));
+    const row = el("div","filekinds");
+    [["html",".html page"],["css",".css stylesheet"],["js",".js script"]].forEach(p => {
+      const btn = tel("button","btn-ghost bmini2", p[1]);
+      btn.addEventListener("click", () => {
+        const base = p[0] === "html" ? "page.html" : p[0] === "css" ? "styles.css" : "script2.js";
+        const name = uniqueName(base);
+        code[name] = p[0] === "html" ? "<h1>New page</h1>" : "";
+        kindOf[name] = p[0];
+        order.push(name);
+        code[current] = ta.value;
+        current = name;
+        ta.value = code[name];
+        paintFiles(); repaint(); markDirty();
+        back.remove();
+      });
+      row.appendChild(btn);
+    });
+    box.appendChild(row);
+    box.appendChild(tel("p","hint","Link a new page from your HTML with a link, and a stylesheet with <link>."));
+    const no = tel("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", () => back.remove());
+    box.appendChild(no);
+    back.appendChild(box);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
+  }
+  function askDeleteFile(name){
+    const back = el("div","modal-back");
+    const box = el("div","modal");
+    box.appendChild(tel("h2","","Delete " + name + "?"));
+    box.appendChild(tel("p","modal-text","Everything in that file will be lost."));
+    const yes = tel("button","btn-primary modal-cta","Delete");
+    yes.style.background = "var(--red)";
+    yes.addEventListener("click", () => {
+      delete code[name]; delete kindOf[name];
+      order.splice(order.indexOf(name), 1);
+      if (current === name){ current = order[0]; ta.value = code[current]; }
+      paintFiles(); repaint(); markDirty();
+      back.remove();
+    });
+    const no = tel("button","btn-ghost modal-stay","Keep it");
+    no.addEventListener("click", () => back.remove());
+    box.appendChild(yes); box.appendChild(no);
+    back.appendChild(box);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
+  }
+  paintFiles();
   ta.value = code[current];
 
   /* ---------- appearance ---------- */
@@ -1603,11 +1700,11 @@ function rWeb(b){
   let issues = [];
   function repaint(){
     const lines = ta.value.split("\n");
-    issues = window.webCheck ? window.webCheck(current, ta.value) : [];
+    issues = window.webCheck ? window.webCheck(kindOf[current] || "html", ta.value) : [];
     const bad = new Set(issues.map(i => i.line));
     const state = { block: false };
     hl.innerHTML = lines.map((l, n) => {
-      const painted = window.webHighlight ? window.webHighlight(current, l, state) : l;
+      const painted = window.webHighlight ? window.webHighlight(kindOf[current] || "html", l, state) : l;
       return '<div class="hl-line' + (bad.has(n) ? " bad" : "") + '">' +
              (wantTips ? painted : painted.replace(/ t-help/g, "")) + "</div>";
     }).join("");
@@ -1619,7 +1716,7 @@ function rWeb(b){
       issues.slice(0, 4).forEach(iss => {
         const row = el("div","ide-prob");
         row.appendChild(el("span","ide-probline","Line " + (iss.line + 1)));
-        row.appendChild(el("span","ide-probmsg", iss.msg));
+        row.appendChild(tel("span","ide-probmsg", iss.msg));
         if (iss.fix){
           const fixBtn = el("button","ide-chip","Fix it");
           fixBtn.addEventListener("click", () => {
@@ -1680,11 +1777,11 @@ function rWeb(b){
   function showTip(){
     if (!wantTips){ tip.hidden = true; return; }
     const found = wordAt(ta.value, ta.selectionStart);
-    const dict = (window.WEB_HELP && window.WEB_HELP[current]) || {};
+    const dict = (window.WEB_HELP && window.WEB_HELP[kindOf[current] || "html"]) || {};
     if (!found || !Object.prototype.hasOwnProperty.call(dict, found.word)){ tip.hidden = true; return; }
     tip.innerHTML = "";
-    tip.appendChild(el("b","", current === "html" ? "<" + found.word + ">" : found.word));
-    tip.appendChild(el("span","", dict[found.word]));
+    tip.appendChild(tel("b","", (kindOf[current] === "html") ? "<" + found.word + ">" : found.word));
+    tip.appendChild(tel("span","", dict[found.word]));
     const before = ta.value.slice(0, found.start);
     const line = before.split("\n").length - 1;
     const col = found.start - (before.lastIndexOf("\n") + 1);
@@ -1705,7 +1802,7 @@ function rWeb(b){
   let ran = false, lastOut = "";
   function logLine(kind, text){
     lastOut += (lastOut ? "\n" : "") + text;
-    const row = el("div","con-" + (kind === "error" ? "err" : kind === "warn" ? "warn" : "log"), text);
+    const row = tel("div","con-" + (kind === "error" ? "err" : kind === "warn" ? "warn" : "log"), text);
     out.appendChild(row);
     if (kind === "error"){
       tabConsole.classList.add("shout");
@@ -1724,10 +1821,13 @@ function rWeb(b){
     out.innerHTML = ""; lastOut = "";
     tabConsole.classList.remove("shout");
     showTab("preview");
+    /* the main page, plus every stylesheet and script the student has */
+    const mainName = order.find(n => kindOf[n] === "html") || order[0];
+    const allCss = order.filter(n => kindOf[n] === "css").map(n => code[n]).join("\n");
+    const allJs = order.filter(n => kindOf[n] === "js").map(n => code[n]).join("\n;\n");
     const page = window.webAssemble
-      ? window.webAssemble(code.html, files.indexOf("css") >= 0 ? code.css : "",
-                           files.indexOf("js") >= 0 ? code.js : "")
-      : code.html;
+      ? window.webAssemble(code[mainName] || "", allCss, allJs)
+      : (code[mainName] || "");
     frame.srcdoc = page;
     ran = true;
     if (b.expect){
@@ -1740,14 +1840,14 @@ function rWeb(b){
   }
   runBtn.addEventListener("click", run);
   resetBtn.addEventListener("click", () => {
-    if (ta.value === starters[current]) return;
+    if (ta.value === (starters[current] || "")) return;
     const back = el("div","modal-back");
     const box = el("div","modal");
     box.appendChild(el("h2","","Start this file again?"));
-    box.appendChild(el("p","modal-text","Your changes to " + NAMES[current] + " will be lost."));
+    box.appendChild(tel("p","modal-text","Your changes to " + current + " will be lost."));
     const yes = el("button","btn-primary modal-cta","Start again");
     yes.addEventListener("click", () => {
-      code[current] = starters[current]; ta.value = starters[current];
+      code[current] = starters[current] || ""; ta.value = code[current];
       repaint(); markDirty(); back.remove();
     });
     const no = el("button","btn-ghost modal-stay","Keep my code");
@@ -1760,18 +1860,32 @@ function rWeb(b){
   if (canRun) setTimeout(run, 60);           // show something straight away
 
   fields[b.id] = {
-    get:() => { code[current] = ta.value; return { html:code.html, css:code.css, js:code.js, ran:ran }; },
+    get:() => {
+      code[current] = ta.value;
+      const extra = {};
+      order.forEach(n => { if (!starters.hasOwnProperty(n)) extra[n] = { kind:kindOf[n], code:code[n] }; });
+      return { html: code[NAMES.html] || "", css: code[NAMES.css] || "", js: code[NAMES.js] || "",
+               extra: extra, ran: ran };
+    },
     set:(v) => {
       if (!v) return;
-      if (typeof v === "string"){ code.html = v; }
+      if (typeof v === "string"){ code[NAMES.html] = v; }
       else {
-        if (typeof v.html === "string") code.html = v.html;
-        if (typeof v.css === "string") code.css = v.css;
-        if (typeof v.js === "string") code.js = v.js;
+        if (typeof v.html === "string" && code.hasOwnProperty(NAMES.html)) code[NAMES.html] = v.html;
+        if (typeof v.css === "string" && code.hasOwnProperty(NAMES.css)) code[NAMES.css] = v.css;
+        if (typeof v.js === "string" && code.hasOwnProperty(NAMES.js)) code[NAMES.js] = v.js;
+        if (v.extra && canAddFiles){
+          Object.keys(v.extra).forEach(n => {
+            if (order.indexOf(n) < 0) order.push(n);
+            kindOf[n] = v.extra[n].kind || "html";
+            code[n] = v.extra[n].code || "";
+          });
+        }
         ran = !!v.ran;
       }
+      if (!code.hasOwnProperty(current)) current = order[0];
       ta.value = code[current];
-      repaint();
+      paintFiles(); repaint();
       if (canRun) run();
     }
   };

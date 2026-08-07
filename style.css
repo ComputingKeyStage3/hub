@@ -1155,7 +1155,9 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .web-file{font-family:var(--mono); font-size:12.5px; font-weight:700; padding:5px 11px;
   border-radius:8px; border:1px solid transparent; background:transparent; color:var(--ed-gut); cursor:pointer}
 .web-file.on{background:var(--ed-bg); color:var(--ed-fg); border-color:var(--ed-line)}
-.web-preview{width:100%; height:340px; border:none; background:#fff; display:block}
+.web-preview{width:100%; height:100%; min-height:340px; border:none; background:#fff; display:block; flex:1}
+.ide-side:has(.web-preview){display:flex; flex-direction:column}
+.ide-side .web-preview{border-radius:0 0 12px 12px}
 .ide-tab.shout{color:var(--red)}
 .con-log{padding:2px 0}
 .con-warn{padding:2px 0; color:#E8B45A}
@@ -1169,3 +1171,32 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .t-attr{color:var(--t-call)}
 .t-prop{color:var(--t-fn)}
 .t-sel{color:var(--t-kw); font-weight:700}
+
+
+/* web editor: file tabs students can add to */
+.web-add{font-family:var(--body); font-size:12.5px; font-weight:700; padding:5px 10px; border-radius:8px;
+  border:1px dashed var(--ed-line); background:transparent; color:var(--ed-gut); cursor:pointer}
+.web-add:hover{border-color:var(--amber); color:var(--amber)}
+.web-x{margin-left:7px; opacity:.6; font-weight:800}
+.web-x:hover{opacity:1; color:var(--red)}
+.filekinds{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0}
+
+
+/* every task heading is the same size */
+.pg-h,.q-ask{font-family:var(--display); font-size:20px; font-weight:800; line-height:1.35}
+.q-ask{margin:0 0 14px; padding:12px 16px; background:var(--panel-2);
+  border-left:4px solid var(--amber); border-radius:0 12px 12px 0}
+.pg-h{margin:0 0 4px; padding:0; background:none; border:none}
+
+/* Lexend needs more weight before bold reads as bold */
+.prose b,.prose strong,.q-context b,.q-context strong,.rt-box b,.rt-box strong{font-weight:900}
+
+/* teacher console: search box that matches the buttons beside it */
+.searchbox{display:inline-flex; align-items:center; gap:8px; padding:0 14px;
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px; height:42px; max-width:300px}
+.searchbox:focus-within{border-color:var(--amber)}
+.searchicon{font-size:14px; opacity:.6; line-height:1}
+.searchbox input{border:none !important; background:transparent !important; padding:0 !important;
+  height:100%; font-size:15px; box-shadow:none !important; min-width:0}
+.searchbox input:focus{outline:none; border:none !important; box-shadow:none !important}
+.refresh{margin-left:8px; font-size:16px}

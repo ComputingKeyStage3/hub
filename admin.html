@@ -13,7 +13,6 @@
 
 <div class="homebar" id="topbar" hidden>
   <div class="title">Prince Henry's Computing KS3 — Teacher console</div>
-  <span class="online-pill off" id="pill"><span class="odot"></span><span id="pillTxt">Offline</span></span>
   <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
@@ -47,7 +46,7 @@
     <h2 style="margin:22px 0 4px">Lesson hub</h2>
     <p class="hint" style="margin:0">Every lesson in the school, by unit. Give them to classes from here.</p>
     <div class="toolrow">
-      <input id="hubSearch" placeholder="Search lessons…" style="max-width:280px">
+      <span class="searchbox"><span class="searchicon">&#128269;</span><input id="hubSearch" placeholder="Search lessons"></span>
       <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
       <button class="btn-primary" id="hubNewLesson">+ Build a new lesson</button>
     </div>
@@ -55,7 +54,8 @@
   </div>
 
   <div id="classesView" hidden>
-    <h2 style="margin:22px 0 4px">Your classes</h2>
+    <button class="crumb" id="backHome">&larr; Home</button>
+    <h2 style="margin:14px 0 4px">Your classes</h2>
     <p class="hint" style="margin:0">Choose a class to manage its students and lessons.</p>
     <div class="toolrow"><button class="btn-ghost" id="newClassBtn">+ New class</button></div>
     <div class="classgrid" id="classGrid"></div>
@@ -70,13 +70,14 @@
     </div>
     <div class="bigcards">
       <button class="classtile" id="openLessons"><b>&#128218; Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
-      <button class="classtile" id="openStudents"><b>&#128101; Students</b><span id="stuCount"></span></button>
+      <button class="classtile" id="openStudents"><b>&#128101; Students</b><span>Add, edit and reset logins</span></button>
     </div>
   </div>
 
   <!-- ============ students ============ -->
   <div id="studentsView" hidden>
     <button class="crumb" id="backClass1">&larr; <span class="bk"></span></button>
+    <button class="btn-ghost iconbtn refresh" id="refStudents" title="Refresh">&#8635;</button>
     <h2 style="margin:14px 0 6px">Students</h2>
     <div class="toolrow">
       <button class="btn-primary" id="addOneBtn">+ Add student</button>
@@ -101,6 +102,7 @@
 
   <div id="unitsView" hidden>
     <button class="crumb" id="backClass2">&larr; <span class="bk"></span></button>
+    <button class="btn-ghost iconbtn refresh" id="refUnits" title="Refresh">&#8635;</button>
     <h2 style="margin:14px 0 4px">Units</h2>
     <p class="hint" style="margin:0">Lessons live inside units. Choose one to publish and pace its lessons.</p>
     <div class="toolrow"><button class="btn-ghost" id="newUnitBtn">+ New unit</button></div>
@@ -109,6 +111,7 @@
 
   <div id="lessonsView" hidden>
     <button class="crumb" id="backUnits">&larr; Units</button>
+    <button class="btn-ghost iconbtn refresh" id="refLessons" title="Refresh">&#8635;</button>
     <div class="classhead">
       <h2 id="unitName"></h2>
       <button class="btn-ghost iconbtn" id="renameUnitBtn" title="Rename unit">&#9998;</button>
@@ -142,22 +145,12 @@ function esc(s){ return String(s); }
 
 let KEY = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
 let workCache = { key: "", rows: [], t: 0 };
-let relTimer = null, beatTimer = null;
+let relTimer = null;
 
 const H = () => ({ "x-teacher-key": KEY });
 const HJ = () => ({ "x-teacher-key": KEY, "Content-Type": "application/json" });
 
 /* ---------- online pill ---------- */
-function setOnline(on){
-  $("pill").classList.toggle("off", !on);
-  $("pillTxt").textContent = on ? "Online" : "Offline";
-}
-async function heartbeat(){
-  try{
-    const r = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
-    setOnline(r.ok);
-  }catch(e){ setOnline(false); }
-}
 
 /* ---------- where am I? ---------- */
 function crumbs(trail){
@@ -244,13 +237,10 @@ async function tryKey(){
     if (!r.ok) throw new Error(d.error || "That key was not accepted.");
     localStorage.setItem("hub_tkey", KEY);
     groups = d.groups || [];
-    setOnline(true);
     $("topbar").hidden = false;
-    clearInterval(beatTimer); beatTimer = setInterval(heartbeat, 25000);
     paintClasses();
     show("homeView");
   }catch(e){
-    setOnline(false);
     $("keyMsg").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
   }
 }
@@ -444,12 +434,21 @@ async function openClass(name){
   try{ await loadClassLocks(); }catch(e){}
   $("clsName").textContent = cls;
   document.querySelectorAll(".bk").forEach(b => b.textContent = cls);
-  const gr = groups.find(g => g.name === cls);
-  $("stuCount").textContent = gr ? (gr.students + " on the roll \u2014 add, edit or remove") : "Add the first students";
   show("classView");
 }
 $("backClasses").addEventListener("click", () => { refreshGroups(); show("classesView"); });
 $("openClasses").addEventListener("click", toClasses);
+$("backHome").addEventListener("click", toHome);
+$("refStudents").addEventListener("click", () => { students = []; workCache = { key:"", rows:[], t:0 }; loadStudents(); });
+$("refUnits").addEventListener("click", async () => {
+  $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
+  try{ await loadCatalogue(); paintUnits(); }catch(e){ $("unitGrid").innerHTML = ""; $("unitGrid").appendChild(el("p","hint", e.message)); }
+});
+$("refLessons").addEventListener("click", async () => {
+  $("lessonGrid").innerHTML = '<p class="hint">Loading…</p>';
+  try{ await loadCatalogue(); await loadClassLocks(); paintLessonGrid(); }
+  catch(e){ $("lessonGrid").innerHTML = ""; $("lessonGrid").appendChild(el("p","hint", e.message)); }
+});
 $("backClass1").addEventListener("click", () => openClass(cls));
 $("backClass2").addEventListener("click", () => openClass(cls));
 
@@ -690,12 +689,8 @@ function paintUnits(){
   const names = (cat.units || []).map(u => u.name);
   const unfiled = (cat.lessons || []).filter(l => !l.unit).length;
   names.forEach(n => {
-    const inUnit = (cat.lessons || []).filter(l => l.unit === n);
-    const live = inUnit.filter(l => l.published).length;
     const t = el("button","classtile");
     t.appendChild(el("b","", n));
-    t.appendChild(el("span","", inUnit.length + " lesson" + (inUnit.length === 1 ? "" : "s") +
-      (live ? " \u00b7 " + live + " published" : " \u00b7 none published")));
     t.addEventListener("click", () => openUnit(n));
     g.appendChild(t);
   });
@@ -962,7 +957,6 @@ async function loadClassLocks(){
     const d = await r.json();
     lessonLocks = {};
     (d.rows || []).forEach(row => { lessonLocks[row.lesson] = !!row.lessonLocked; });
-    setOnline(true);
   }catch(e){ setOnline(false); }
 }
 async function manageLesson(id){
@@ -980,17 +974,19 @@ function openManage(){
     x.addEventListener("click", closeModal);
     box.appendChild(x);
     const bar = el("div","toolrow");
-    const isLive = !!catOf(lessonId).published;
+    const mine = assigns.find(a => a.lesson_id === lessonId && a.group_name.toLowerCase() === cls.toLowerCase());
+    const isLive = mine ? !!mine.published : !!catOf(lessonId).published;
     const pubBtn = el("button", isLive ? "btn-ghost" : "btn-primary", isLive ? "Unpublish" : "Publish");
     pubBtn.addEventListener("click", async () => {
       pubBtn.textContent = "\u2026";
       try{
-        await catPost({ op:"set-lesson", id: lessonId, published: !isLive });
+        await catPost({ op:"class-publish", id: lessonId, group: cls, published: !isLive });
+        await loadCatalogue();
         closeModal(); paintLessonGrid(); openManage();
       }catch(e){ say("Could not change that", e.message); }
     });
     const workBtn = el("button","btn-ghost","View Student Work");
-    workBtn.addEventListener("click", () => pickStudentWork(lessonId));
+    workBtn.addEventListener("click", () => pickStudentWork(lessonId, true));
     bar.appendChild(pubBtn); bar.appendChild(workBtn);
     box.appendChild(bar);
     const tools = el("div","toolrow");
@@ -1018,7 +1014,6 @@ async function refreshRelease(){
       usingDefaults = false;
     } else { locks = new Set(); usingDefaults = false; }
     lessonLocks[lessonId] = !!d.lessonLocked;
-    setOnline(true);
   }catch(e){ setOnline(false); }
   paintTasks();
 }
@@ -1121,7 +1116,7 @@ function printWork(rows, idx){
   handOff(rows, idx);
   window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&pdf=1", "_blank");
 }
-async function pickStudentWork(id){
+async function pickStudentWork(id, backToManage){
   if (id && id !== lessonId){
     lessonId = id; workCache = { key: "", rows: [], t: 0 };
     lessonJson = await fetchLesson(id);
@@ -1160,7 +1155,8 @@ async function pickStudentWork(id){
         holder.appendChild(line);
       });
     }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
-    const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
+    const done = el("button","btn-ghost modal-stay","Close");
+    done.addEventListener("click", () => { closeModal(); if (backToManage) openManage(); });
     box.appendChild(done);
   });
 }
@@ -1264,7 +1260,6 @@ async function loadResetQueue(){
     const r = await fetch(API + "/api/teacher/resets", { headers: H(), cache: "no-store" });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Could not load requests.");
-    setOnline(true);
     const list = d.requests || [];
     $("pwCount").textContent = list.length;
     $("pwCount").hidden = !list.length;

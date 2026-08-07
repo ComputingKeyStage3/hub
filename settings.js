@@ -49,7 +49,10 @@
     }));
     const API = (window.HUB && window.HUB.API) || "";
     const grp = back.querySelector("#pwGroup");
-    if (localStorage.getItem("hub_token") && API) grp.hidden = false;
+    // only students have a password to change here
+    const isStudent = !!localStorage.getItem("hub_token");
+    const onConsole = /admin\.html|author\.html/.test(location.pathname);
+    if (isStudent && API && !onConsole) grp.hidden = false;
     back.querySelector("#pwGo").addEventListener("click", async () => {
       const msg = back.querySelector("#pwMsg");
       const next = back.querySelector("#pwNew").value, again = back.querySelector("#pwNew2").value;
