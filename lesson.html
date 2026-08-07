@@ -29,7 +29,7 @@
 </div>
 
 <div class="tracker" id="tracker" aria-hidden="true"></div>
-<div class="brief">
+<div class="brief" id="brief">
   <h2 id="briefTitle"></h2>
   <p id="briefText"></p>
 </div>
@@ -525,9 +525,13 @@ function showStep(i){
 
   const sb = steps[step].brief;
   const b = (typeof sb === "function") ? sb() : sb;
-  $("briefTitle").textContent = b.title || "";
-  $("briefText").textContent = b.text || "";
-  $("briefText").hidden = !b.text;
+  /* an empty heading or subtitle takes up no room at all */
+  const bt = b.title || "", bx = b.text || "";
+  $("briefTitle").textContent = bt;
+  $("briefTitle").hidden = !bt;
+  $("briefText").textContent = bx;
+  $("briefText").hidden = !bx;
+  $("brief").hidden = !bt && !bx;
 
   $("backBtn").disabled = step === 0;
   $("nextBtn").textContent = step === steps.length - 1 ? ((lesson && lesson.assessment) ? "Finish & see my score" : "Finish 🏁") : "Continue →";
@@ -665,7 +669,7 @@ function buildBlock(b, i){
   if (!b.id) b.id = b.type + "_" + i;
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
-              picture:rPicture, pastelink:rPasteLink,
+              picture:rPicture, pastelink:rPasteLink, frame:rFrame,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
@@ -753,7 +757,7 @@ function rPicture(b){
   if (b.caption) fig.appendChild(el("figcaption","piccap", b.caption));
   s.appendChild(fig);
   return { section:s, check:() => ({ ok:true }),
-           brief:{ eyebrow:"Look", title:b.title || "Have a look at this", text:b.note || "" } };
+           brief:{ eyebrow:"Look", title:b.title || "", text:b.note || "" } };
 }
 
 function rEmbed(b){
@@ -761,15 +765,47 @@ function rEmbed(b){
   const f = el("iframe","embed"); f.src = b.url; f.setAttribute("allowfullscreen","");
   f.title = b.title || "Video";
   s.appendChild(f);
-  const done = el("label","confirm");
-  const cb = el("input"); cb.type = "checkbox";
-  cb.addEventListener("change", markDirty);
-  done.appendChild(cb); done.appendChild(el("span","","I have watched the whole video"));
-  s.appendChild(done);
-  if (b.id) fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; } };
+  const wantTick = b.confirm === true;          // off unless the teacher asks
+  let cb = null;
+  if (wantTick){
+    const done = el("label","confirm");
+    cb = el("input"); cb.type = "checkbox";
+    cb.addEventListener("change", markDirty);
+    done.appendChild(cb);
+    done.appendChild(el("span","", b.confirmLabel || "I have watched the whole video"));
+    s.appendChild(done);
+    if (b.id) fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; } };
+  }
   return { section:s,
-           check:() => cb.checked ? { ok:true } : { ok:false, message:"Tick the box once you have watched it" },
-           brief:{ eyebrow:"Watch", title:stripTags(b.title) || "Watch the video", text:b.note || "Headphones on. Watch it all, then tick the box below." } };
+           check:() => (!wantTick || cb.checked)
+             ? { ok:true } : { ok:false, message:"Tick the box once you have watched it" },
+           brief:{ eyebrow:"Watch", title:stripTags(b.title) || "", text:b.note || "" } };
+}
+
+/* A window onto another site, sized by the teacher. */
+function rFrame(b){
+  const s = el("section");
+  const f = el("iframe","framed");
+  f.src = b.url || "";
+  f.setAttribute("allowfullscreen","");
+  f.title = b.title || "Web page";
+  if (b.height) f.style.height = (String(b.height).match(/[a-z%]/i) ? b.height : b.height + "px");
+  if (b.width) f.style.width = (String(b.width).match(/[a-z%]/i) ? b.width : b.width + "px");
+  s.appendChild(f);
+  const wantTick = b.confirm === true;
+  let cb = null;
+  if (wantTick){
+    const done = el("label","confirm");
+    cb = el("input"); cb.type = "checkbox";
+    cb.addEventListener("change", markDirty);
+    done.appendChild(cb);
+    done.appendChild(el("span","", b.confirmLabel || "I have finished with this"));
+    s.appendChild(done);
+    fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; } };
+  }
+  return { section:s,
+           check:() => (!wantTick || cb.checked) ? { ok:true } : { ok:false, message:"Tick the box when you have finished" },
+           brief:{ eyebrow:"Have a go", title:b.heading || "", text:b.task || "" } };
 }
 
 function rQuestion(b){
@@ -805,15 +841,20 @@ function rLink(b){
   a.target = "_blank"; a.rel = "noopener";
   s.appendChild(a);
   if (b.note) s.appendChild(el("p","hint", b.note));
-  const done = el("label","confirm");
-  const cb = el("input"); cb.type = "checkbox";
-  cb.addEventListener("change", markDirty);
-  done.appendChild(cb); done.appendChild(el("span","","I have been and had a look"));
-  s.appendChild(done);
-  fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; } };
+  const wantTick = b.confirm === true;
+  let cb = null;
+  if (wantTick){
+    const done = el("label","confirm");
+    cb = el("input"); cb.type = "checkbox";
+    cb.addEventListener("change", markDirty);
+    done.appendChild(cb);
+    done.appendChild(el("span","", b.confirmLabel || "I have been and had a look"));
+    s.appendChild(done);
+    fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; } };
+  }
   return { section:s,
-           check:() => cb.checked ? { ok:true } : { ok:false, message:"Tick the box once you have been" },
-           brief:{ eyebrow:"Go and look", title:b.heading || b.title || "Open this", text:b.task || "" } };
+           check:() => (!wantTick || cb.checked) ? { ok:true } : { ok:false, message:"Tick the box once you have been" },
+           brief:{ eyebrow:"Go and look", title:b.heading || "", text:b.task || "" } };
 }
 
 function rPasteLink(b){
@@ -851,8 +892,7 @@ function rPasteLink(b){
   return { section:s,
            check:() => /^https?:\/\/\S+\.\S+/.test(inp.value.trim())
              ? { ok:true } : { ok:false, message:"Paste a link starting with https://" },
-           brief:{ eyebrow:"Hand in", title:b.heading || stripTags(b.prompt) || "Paste your link",
-                   text:b.task || "" } };
+           brief:{ eyebrow:"Hand in", title:b.heading || stripTags(b.prompt) || "", text:b.task || "" } };
 }
 
 function rPython(b){
@@ -895,6 +935,7 @@ const PY_FN = new Set(("print input int str float len range list dict set tuple 
 function escHtml(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
 const TRIPLES = ["'''", '"""'];
+let tipsOn = true;          // set per editor before painting
 function hlLine(line, state){
   let out = "", i = 0;
   if (state.triple){                                  // still inside a long string
@@ -922,7 +963,7 @@ function hlLine(line, state){
       const w = m[0];
       const call = /^\s*\(/.test(rest.slice(w.length));
       const cls = PY_KW.has(w) ? "t-kw" : (PY_FN.has(w) ? "t-fn" : (call ? "t-call" : ""));
-      const helped = Object.prototype.hasOwnProperty.call(PY_HELP, w);
+      const helped = Object.prototype.hasOwnProperty.call(PY_HELP, w) && tipsOn;
       out += cls
         ? '<span class="' + cls + (helped ? " t-help" : "") + '"' + (helped ? ' data-word="' + w + '"' : "") + ">" + w + "</span>"
         : escHtml(w);
@@ -1038,6 +1079,8 @@ function saveIdePrefs(p){ try{ localStorage.setItem("hub_ide", JSON.stringify(p)
 function rIDE(b){
   const canRun = b.run !== false;           // teachers can turn running off
   const canEdit = b.edit !== false;         // and can make the code read-only
+  const wantHelp = b.help !== false;        // the reference tab
+  const wantTips = b.tooltips !== false;    // click-a-word explanations
   const s = el("section","ide");
   const wrap = el("div","ide-wrap" + (b.turtle ? " has-canvas" : "") + (b.run === false ? " no-console" : ""));
 
@@ -1105,10 +1148,24 @@ function rIDE(b){
     b._canvas = canvas;
   }
   const outBar = el("div","ide-bar ide-outbar");
-  outBar.appendChild(el("span","ide-file","Console"));
+  const tabConsole = el("button","ide-tab on","Console");
+  const tabHelp = el("button","ide-tab","Help");
+  outBar.appendChild(tabConsole);
+  if (wantHelp) outBar.appendChild(tabHelp);
+  outBar.appendChild(el("span","ide-file",""));      // pushes Clear to the right
   const clearBtn = el("button","ide-small","Clear");
   outBar.appendChild(clearBtn);
   side.appendChild(outBar);
+  const helpBox = el("div","ide-help"); helpBox.hidden = true;
+  (function(){
+    helpBox.appendChild(el("p","ide-helplead","Words you will meet in Python. Click any coloured word in your code to see this again."));
+    Object.keys(PY_HELP).sort().forEach(word => {
+      const row = el("div","ide-helprow");
+      row.appendChild(el("code","ide-helpword", word + (PY_FN.has(word) ? "()" : "")));
+      row.appendChild(el("span","ide-helptext", PY_HELP[word]));
+      helpBox.appendChild(row);
+    });
+  })();
   const consoleBox = el("div","ide-console");
   const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
   const askRow = el("div","ide-ask"); askRow.hidden = true;
@@ -1118,6 +1175,16 @@ function rIDE(b){
   askRow.appendChild(askText); askRow.appendChild(askIn);
   consoleBox.appendChild(out); consoleBox.appendChild(askRow);
   side.appendChild(consoleBox);
+  side.appendChild(helpBox);
+  function showTab(which){
+    const help = which === "help";
+    consoleBox.hidden = help;
+    helpBox.hidden = !help;
+    tabConsole.classList.toggle("on", !help);
+    tabHelp.classList.toggle("on", help);
+  }
+  tabConsole.addEventListener("click", () => showTab("console"));
+  tabHelp.addEventListener("click", () => showTab("help"));
   wrap.appendChild(side);
   s.appendChild(wrap);
 
@@ -1142,6 +1209,7 @@ function rIDE(b){
   /* --- painting --- */
   let issues = [];
   function repaint(){
+    tipsOn = wantTips;
     const lines = ta.value.split("\n");
     issues = checkPython(ta.value);
     const bad = new Set(issues.map(x => x.line));
@@ -1233,6 +1301,7 @@ function rIDE(b){
     note.hidden = true;
     answers = [];
     out.textContent = "";
+    showTab("console");
     try{
       if (window.hubTurtleAttach) window.hubTurtleAttach(b.turtle ? b._canvas : null);
       await execute();
@@ -1300,6 +1369,7 @@ function rIDE(b){
     return { word: text.slice(a, b2), start: a };
   }
   function showTip(){
+    if (!wantTips){ tip.hidden = true; return; }
     const text = ta.value;
     const found = wordAt(text, ta.selectionStart);
     if (!found || !Object.prototype.hasOwnProperty.call(PY_HELP, found.word)){ tip.hidden = true; return; }
@@ -1332,7 +1402,7 @@ function rIDE(b){
                return { ok:false, message:"Keep going until the output is right" };
              return { ok:true };
            },
-           brief:{ eyebrow:"Code", title:b.title || "Python", text:b.task || "Write your code, then press Run." } };
+           brief:{ eyebrow:"Code", title:b.title || "", text:b.task || "" } };
 }
 
 /* ---- QUIZ: one question at a time, instant marking, retry on wrong ---- */
@@ -1447,7 +1517,7 @@ function rQuiz(b){
   return { section:s,
            check:() => !n || solved.every(Boolean)
              ? { ok:true } : { ok:false, message:"Answer every question correctly to carry on" },
-           brief:{ eyebrow:"Quiz", title:b.title || "Check your understanding", text:b.note || "" } };
+           brief:{ eyebrow:"Quiz", title:b.title || "", text:b.note || "" } };
 }
 
 function rPassword(b){
@@ -1733,7 +1803,7 @@ function rMC(b){
   }};
   return { section:s,
            check:() => (!(b.options || []).length || chosen !== null) ? { ok:true } : { ok:false, message:"Choose an answer" },
-           brief:{ eyebrow:"Question", title:stripTags(b.prompt) || "Question", text:b.note || "" } };
+           brief:{ eyebrow:"Question", title:stripTags(b.prompt) || "", text:b.note || "" } };
 }
 
 /* Ordering (drag and drop, with arrow buttons as the keyboard fallback). */
@@ -1788,7 +1858,7 @@ function rOrder(b){
                    set:(v) => { if (Array.isArray(v) && v.length === items.length){ arrangement = v.slice(); redraw(); } } };
   return { section:s,
            check:() => ({ ok:true }),   // any order can be submitted, like a Form
-           brief:{ eyebrow:"Put in order", title:stripTags(b.prompt) || "Put these in order", text:b.note || "Drag the steps, or use the arrows." } };
+           brief:{ eyebrow:"Put in order", title:stripTags(b.prompt) || "", text:b.note || "" } };
 }
 
 /* Fill in the blanks — a dropdown per gap. The choices are every gap's
@@ -1830,7 +1900,7 @@ function rBlanks(b){
                      }); } };
   return { section:s,
            check:() => (!selects.length || selects.every(x => x.value)) ? { ok:true } : { ok:false, message:"Choose a word for every gap" },
-           brief:{ eyebrow:"Fill in the blanks", title:stripTags(b.prompt) || "Complete the sentences", text:b.note || "" } };
+           brief:{ eyebrow:"Fill in the blanks", title:stripTags(b.prompt) || "", text:b.note || "" } };
 }
 
 /* Short answer, auto-checked by keywords at the end. */
@@ -1839,10 +1909,47 @@ function rShort(b){
   const ta = el("textarea","answer"); ta.rows = 4; ta.placeholder = "Type your answer here\u2026";
   ta.addEventListener("input", markDirty);
   s.appendChild(ta);
+
+  /* In an assessment everything is marked at the end. In a lesson the student
+     can check their own answer here and try again. */
+  const inLesson = !(lesson && lesson.assessment);
+  let checked = false;
+  if (inLesson){
+    const fb = el("div","feedback"); fb.hidden = true;
+    const btn = el("button","btn-primary","Check answer");
+    btn.style.marginTop = "12px";
+    btn.addEventListener("click", () => {
+      const ans = normAns(ta.value);
+      if (!ans){ 
+        fb.hidden = false; fb.dataset.verdict = "incorrect";
+        fb.innerHTML = ""; fb.appendChild(el("b","","Write something first"));
+        return;
+      }
+      const groups = b.keywords || [];
+      const hits = groups.map((g, i) => ({
+        ok: g.some(k => ans.includes(normAns(k))),
+        label: (b.keywordLabels && b.keywordLabels[i]) || ("idea " + (i + 1))
+      }));
+      const ok = hits.length ? hits.every(h => h.ok) : true;
+      checked = true;
+      fb.hidden = false;
+      fb.dataset.verdict = ok ? "correct" : "incorrect";
+      fb.innerHTML = "";
+      fb.appendChild(el("b","", ok ? "That covers it" : "Not quite yet"));
+      if (hits.length){
+        fb.appendChild(el("span","", hits.map(h => (h.ok ? "\u2713 " : "\u2717 ") + h.label).join("   ")));
+      }
+      if (!ok && b.model) fb.appendChild(el("span","", "A good answer mentions: " + b.model));
+      markDirty();
+    });
+    ta.addEventListener("input", () => { fb.hidden = true; });
+    s.appendChild(btn); s.appendChild(fb);
+  }
+
   fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; } };
   return { section:s,
            check:() => ta.value.trim() ? { ok:true } : { ok:false, message:"Write an answer" },
-           brief:{ eyebrow:"Short answer", title:stripTags(b.prompt) || "Short answer", text:b.note || "" } };
+           brief:{ eyebrow:"Short answer", title:stripTags(b.prompt) || "", text:b.note || "" } };
 }
 
 /* ---------- marking ---------- */

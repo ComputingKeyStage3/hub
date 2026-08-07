@@ -37,11 +37,11 @@
     <p class="hint" id="loginNote" style="margin:12px 0 0">First time? Leave the password box empty and press Sign in.</p>
   </section>
 
-  <div class="tabs">
+  <div class="tabs" id="tabs" hidden>
     <button class="on" id="tabLessons">Lessons</button>
     <button id="tabResults">My results</button>
   </div>
-  <div id="view-lessons">
+  <div id="view-lessons" hidden>
     <div class="subtabs">
       <button class="on" id="tabActive">Active</button>
       <button id="tabDone">Completed</button>
@@ -101,6 +101,18 @@ const API = (window.HUB && window.HUB.API) || "";
 const ready = API && API.indexOf("PASTE_") !== 0;
 const $ = (id) => document.getElementById(id);
 
+/* Nothing about lessons is shown until a student has signed in. */
+function signedInView(inYet){
+  ["tabs","view-lessons","view-results"].forEach(id => {
+    const e = $(id);
+    if (e) e.hidden = !inYet;
+  });
+  if (!inYet){
+    const box = $("lessonList");
+    if (box) box.innerHTML = "";
+  }
+}
+
 function renderAuth(){
   const name = localStorage.getItem("hub_name");
   if (name && localStorage.getItem("hub_token")){
@@ -112,10 +124,12 @@ function renderAuth(){
     });
     $("loginCard").hidden = true;
     $("headline").textContent = "Pick a lesson, " + name.split(" ")[0];
+    signedInView(true);
   } else {
     $("auth").innerHTML = "";
     $("loginCard").hidden = false;
     $("headline").textContent = "Sign in";
+    signedInView(false);
   }
 }
 renderAuth();
@@ -176,8 +190,9 @@ let showing = "active";
    is locked for this class. */
 async function loadLessons(){
   const box = $("lessonList");
-  box.innerHTML = '<p class="hint">Loading…</p>';
   const token = localStorage.getItem("hub_token");
+  if (!token){ box.innerHTML = ""; return; }        // signing in comes first
+  box.innerHTML = '<p class="hint">Loading…</p>';
   const group = localStorage.getItem("hub_group") || "";
   try{
     /* Lessons come from two places: the files in lessons/, and lessons built

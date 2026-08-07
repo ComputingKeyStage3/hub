@@ -53,6 +53,7 @@
       <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
       <button class="pal" data-add="image"><b>Screenshot</b><span>They paste a picture</span></button>
       <button class="pal" data-add="embed"><b>Video</b><span>Embed a clip</span></button>
+      <button class="pal" data-add="frame"><b>Embedded page</b><span>A site inside the lesson</span></button>
       <button class="pal" data-add="link"><b>Link to a site</b><span>Send them somewhere</span></button>
       <button class="pal" data-add="pastelink"><b>Paste a link</b><span>They hand in a link</span></button>
       <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
@@ -103,23 +104,24 @@ let lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:
 const BLANK = {
   text:     () => ({ type:"text", heading:"", html:"" }),
   picture:  () => ({ type:"picture", title:"", url:"", caption:"", note:"" }),
-  pastelink:() => ({ type:"pastelink", heading:"Paste your link", task:"", note:"" }),
+  pastelink:() => ({ type:"pastelink", heading:"", task:"", note:"" }),
   ide:      () => ({ type:"ide", title:"", task:"", starter:'print("Hello World!")', turtle:false, expect:"",
                      run:true, edit:true }),
   question: () => ({ type:"question", heading:"", context:"", prompt:"", minWords:20 }),
   quiz:     () => ({ type:"quiz", questions:[{ q:"", options:["",""], answers:[0], hint:"" }] }),
   page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
   image:    () => ({ type:"image", task:"Take a screenshot and paste it here." }),
-  embed:    () => ({ type:"embed", url:"", title:"Watch this" }),
-  link:     () => ({ type:"link", url:"", title:"", task:"" }),
+  embed:    () => ({ type:"embed", url:"", title:"", note:"", confirm:false }),
+  frame:    () => ({ type:"frame", url:"", heading:"", task:"", width:"100%", height:520, confirm:false }),
+  link:     () => ({ type:"link", url:"", title:"", heading:"", task:"", confirm:false }),
   mc:       () => ({ type:"mc", prompt:"", options:["",""], answer:0, topic:"" }),
-  blanks:   () => ({ type:"blanks", prompt:"Fill in the gaps", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
-  order:    () => ({ type:"order", prompt:"Put these in order", items:["","",""], topic:"" }),
+  blanks:   () => ({ type:"blanks", prompt:"", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
+  order:    () => ({ type:"order", prompt:"", items:["","",""], topic:"" }),
   short:    () => ({ type:"short", prompt:"", keywords:"", model:"", topic:"" })
 };
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page" };
+                short:"Short answer", page:"Page", frame:"Embedded page" };
 
 /* A YouTube address in any of its usual shapes -> the embeddable one. */
 function toEmbed(raw){
@@ -211,6 +213,7 @@ function compile(){
     });
     if (Object.keys(topics).length) out.topics = topics;
   }
+  firstPageOpen();
   lesson.blocks.forEach((b, i) => compileOne(b, b.type + (i + 1), out.blocks));
   return out;
 }
@@ -251,12 +254,15 @@ function compileOne(b, id, target){
       push({ type:"text", id, html });
     }
     else if (b.type === "ide"){
-      const blk = { type:"ide", id, title: b.title || "Python",
-                    task: b.task || "Write your code, then press Run.", starter: b.starter || "" };
+      const blk = { type:"ide", id, starter: b.starter || "" };
+      if (b.title) blk.title = b.title;              // headings stay optional
+      if (b.task) blk.task = b.task;
       if (b.turtle) blk.turtle = true;
       if (b.expect) blk.expect = b.expect;
-      if (b.run === false) blk.run = false;      // console hidden
-      if (b.edit === false) blk.edit = false;    // read-only code
+      if (b.run === false) blk.run = false;        // console hidden
+      if (b.edit === false) blk.edit = false;      // read-only code
+      if (b.help === false) blk.help = false;      // no Help tab
+      if (b.tooltips === false) blk.tooltips = false;
       push(blk);
     }
     else if (b.type === "question")
@@ -272,7 +278,7 @@ function compileOne(b, id, target){
       push(keepArrays({ type:"pastelink", id, heading: b.heading || "Paste your link",
              task: b.task || "", note: b.note || "" }));
     else if (b.type === "quiz")
-      push({ type:"quiz", id, title: b.title || "Check your understanding",
+      push({ type:"quiz", id, title: b.title || "",
         questions: (b.questions || (b.q !== undefined
           ? [{ q:b.q, options:b.options, answers:[b.answer || 0], hint:b.hint }] : [])).map(q => {
             const opts = (q.options || []);
@@ -282,21 +288,25 @@ function compileOne(b, id, target){
                      answers: answers.length ? answers : [0], hint: q.hint || "" };
           }) });
     else if (b.type === "image")
-      push({ type:"image", id, task: b.task || "Take a screenshot and paste it here." });
+      push(keepArrays({ type:"image", id, task: b.task || "" }));
     else if (b.type === "embed")
-      push({ type:"embed", id, url: toEmbed(b.url), title: b.title || "Watch this" });
+      push(keepArrays({ type:"embed", id, url: toEmbed(b.url), title: b.title || "",
+             note: b.note || "", confirm: b.confirm === true }));
+    else if (b.type === "frame")
+      push(keepArrays({ type:"frame", id, url: b.url || "", heading: b.heading || "", task: b.task || "",
+             width: b.width || "100%", height: b.height || 520, confirm: b.confirm === true }));
     else if (b.type === "link")
-      push({ type:"link", id, url: b.url || "", title: b.title || "Open this",
-             heading: b.heading || "", task: b.task || "" });
+      push(keepArrays({ type:"link", id, url: b.url || "", title: b.title || "Open this",   // the button needs words
+             heading: b.heading || "", task: b.task || "", confirm: b.confirm === true }));
     else if (b.type === "mc")
       push(keepArrays({ type:"mc", id, prompt: b.prompt || "", options: (b.options || []).filter(x => x !== ""),
         answer: Number(b.answer) || 0, topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "blanks")
-      push(keepArrays({ type:"blanks", id, prompt: b.prompt || "Fill in the gaps", text: b.text || "",
+      push(keepArrays({ type:"blanks", id, prompt: b.prompt || "", text: b.text || "",
         distractors: (b.distractors || "").split(/\s*,\s*/).filter(Boolean),
         topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "order")
-      push(keepArrays({ type:"order", id, prompt: b.prompt || "Put these in order",
+      push(keepArrays({ type:"order", id, prompt: b.prompt || "",
         items: (b.items || []).filter(x => x !== ""), topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "short")
       push(keepArrays({ type:"short", id, prompt: b.prompt || "",
@@ -325,8 +335,13 @@ function wireList(){
     dropInto(lesson.blocks, -1);
   });
 }
+function firstPageOpen(){
+  const first = lesson.blocks.find(x => x.type === "page");
+  if (first) first.startLocked = false;
+}
 function render(){
   wireList();
+  firstPageOpen();
   const list = $("list"); list.innerHTML = "";
   if (!lesson.blocks.length)
     list.appendChild(el("p","hint", lesson.assessment
@@ -397,13 +412,22 @@ function card(b, i, arr){
   head.appendChild(el("b","btype", (i + 1) + ". " + LABEL[b.type]));
   const tools = el("span","btools");
   if (b.type === "page"){
+    const isFirst = lesson.blocks.indexOf(b) === 0;
+    if (isFirst) b.startLocked = false;     // students must be able to begin
     const locked = b.startLocked !== false;
     const lk = el("button","btn-ghost bmini lockbtn" + (locked ? "" : " open"), locked ? "\u{1F512}" : "\u{1F513}");
-    lk.title = locked ? "Starts locked when a class gets this lesson \u2014 click to start it unlocked"
+    lk.title = isFirst ? "The first page always starts unlocked"
+             : locked ? "Starts locked when a class gets this lesson \u2014 click to start it unlocked"
                       : "Starts unlocked \u2014 click to start it locked";
     lk.addEventListener("click", (e) => {
       e.stopPropagation();
-      b.startLocked = !locked;              // plain toggle
+      if (isFirst){
+        say("The first page stays unlocked",
+            "Students need somewhere to begin, so the first page of a lesson is always open. " +
+            "Move another page to the front if you want that one open instead.");
+        return;
+      }
+      b.startLocked = !locked;
       render(); schedulePreview();
     });
     tools.appendChild(lk);
@@ -469,6 +493,21 @@ function card(b, i, arr){
     if (o.help) w.appendChild(el("p","bhelp", o.help));
     body.appendChild(w);
   }
+  /* on/off buttons; each entry is [key, label, defaultOn] */
+  function toggleRow(defs, label){
+    const w = el("div","bfield");
+    w.appendChild(el("label","", label || "Options"));
+    const row = el("div","brow");
+    defs.forEach(d => {
+      const key = d[0], name = d[1], onByDefault = d[2] !== false;
+      const on = b[key] === undefined ? onByDefault : b[key] !== false && b[key] !== 0;
+      const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""), name + ": " + (on ? "on" : "off"));
+      btn.addEventListener("click", () => { b[key] = !on; render(); schedulePreview(); });
+      row.appendChild(btn);
+    });
+    w.appendChild(row);
+    body.appendChild(w);
+  }
   function listField(label, key, help){
     const w = el("div","bfield");
     w.appendChild(el("label","", label));
@@ -512,32 +551,15 @@ function card(b, i, arr){
     F("Instruction above it (optional)", "note");
   }
   if (b.type === "pastelink"){
-    F("Heading", "heading", { placeholder:"Paste your link" });
+    F("Heading (optional)", "heading", { placeholder:"Paste your link" });
     F("What should they paste?", "task", { area:true, rows:2, placeholder:"Paste the link to your finished Scratch project." });
   }
   if (b.type === "ide"){
-    F("Task title", "title", { placeholder:"Investigate" });
-    F("Instruction", "task", { area:true, rows:2, placeholder:"Run this, then add your own message on line 3." });
+    F("Heading (optional)", "title", { placeholder:"Investigate" });
+    F("Subheading (optional)", "task", { area:true, rows:2, placeholder:"Run this, then add your own message on line 3." });
     F("Starter code", "starter", { area:true, rows:7, mono:true });
-    const w = el("div","bfield");
-    w.appendChild(el("label","","Options"));
-    const row = el("div","brow");
-    const tg = el("button","btn-ghost bmini2" + (b.turtle ? " right" : ""),
-                  b.turtle ? "Turtle canvas: on" : "Turtle canvas: off");
-    tg.addEventListener("click", () => { b.turtle = !b.turtle; render(); schedulePreview(); });
-    row.appendChild(tg);
-    const canRun = b.run !== false, canEdit = b.edit !== false;
-    const runTg = el("button","btn-ghost bmini2" + (canRun ? " right" : ""),
-                     canRun ? "Running: on" : "Running: off");
-    runTg.title = "Turn off to hide the console and just show the code";
-    runTg.addEventListener("click", () => { b.run = !canRun; render(); schedulePreview(); });
-    const editTg = el("button","btn-ghost bmini2" + (canEdit ? " right" : ""),
-                      canEdit ? "Editing: on" : "Editing: off");
-    editTg.title = "Turn off to make the code read-only";
-    editTg.addEventListener("click", () => { b.edit = !canEdit; render(); schedulePreview(); });
-    row.appendChild(runTg); row.appendChild(editTg);
-    w.appendChild(row);
-    body.appendChild(w);
+    toggleRow([["turtle","Turtle canvas", false], ["run","Running", true],
+               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]);
     F("Output must contain (optional)", "expect", { placeholder:"Learning to program",
       help:"Leave empty unless you want Continue to wait for the right output." });
   }
@@ -646,7 +668,15 @@ function card(b, i, arr){
     });
     body.appendChild(addRow);
   }
-  if (b.type === "image") F("What should they show?", "task", { area:true, rows:2 });
+  if (b.type === "image") F("Instruction (optional)", "task", { area:true, rows:2 });
+  if (b.type === "frame"){
+    F("Heading (optional)", "heading");
+    F("Address of the page", "url", { placeholder:"https://…" });
+    F("Instruction (optional)", "task", { area:true, rows:2 });
+    F("Width", "width", { placeholder:"100%" , help:"A number of pixels, or something like 100%." });
+    F("Height", "height", { placeholder:"520" });
+    toggleRow([["confirm","Confirmation", false]]);
+  }
   if (b.type === "embed"){
     F("YouTube link, video id, or the whole embed code", "url", { area:true, rows:2,
       placeholder:"https://www.youtube.com/watch?v=xi_tJdq_YNY" });
@@ -654,13 +684,16 @@ function card(b, i, arr){
     const note = el("p","bhelp", shown ? "Will be embedded as: " + shown : "Paste any YouTube address \u2014 it gets tidied up automatically.");
     if (shown && !/youtube\.com\/embed\//.test(shown)) note.className = "bhelp warn";
     body.appendChild(note);
-    F("Title", "title");
+    F("Heading (optional)", "title");
+    F("Subheading (optional)", "note", { area:true, rows:2, placeholder:"Headphones on. Watch it all." });
+    toggleRow([["confirm","Confirmation", false]]);
   }
   if (b.type === "link"){
-    F("Heading", "heading", { placeholder:"Have a look at this site" });
+    F("Heading (optional)", "heading", { placeholder:"Have a look at this site" });
     F("Address", "url", { placeholder:"https://..." });
     F("Button label", "title", { placeholder:"Open BBC Bitesize" });
-    F("What to do there", "task", { area:true, rows:2 });
+    F("What to do there (optional)", "task", { area:true, rows:2 });
+    toggleRow([["confirm","Confirmation", false]]);
   }
   if (b.type === "mc"){
     F("Question", "prompt", { area:true, rows:2 });
@@ -668,14 +701,14 @@ function card(b, i, arr){
     if (lesson.assessment) F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
   }
   if (b.type === "blanks"){
-    F("Instruction", "prompt");
+    F("Instruction (optional)", "prompt");
     F("Sentence with gaps", "text", { area:true, rows:3,
       help:"Put the answers in double brackets: The [[cat]] sat on the [[mat]]." });
     F("Extra wrong words for the dropdowns", "distractors", { placeholder:"dog, hat" });
     if (lesson.assessment) F("Topic tag", "topic");
   }
   if (b.type === "order"){
-    F("Instruction", "prompt");
+    F("Instruction (optional)", "prompt");
     listField("Items in the CORRECT order", "items", "Students see them shuffled.");
     if (lesson.assessment) F("Topic tag", "topic");
   }

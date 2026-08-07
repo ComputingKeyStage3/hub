@@ -1103,3 +1103,18 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .build-list.over{background:rgba(220,138,62,.05)}
 .bhelp.dropzone{border:1.5px dashed var(--line-2); border-radius:10px; padding:14px; text-align:center; margin:0}
 .pagekids.over .bhelp.dropzone{border-color:var(--amber); color:var(--amber-dark)}
+
+
+/* IDE: console / help tabs and the reference list */
+.ide-tab{font-size:13.5px; font-weight:800; padding:6px 14px; border-radius:9px 9px 0 0;
+  border:none; background:transparent; color:var(--ed-gut); cursor:pointer}
+.ide-tab.on{background:var(--ed-bg); color:var(--ed-fg)}
+.ide-help{background:var(--ed-bg); max-height:340px; overflow-y:auto; padding:12px 14px}
+.ide-helplead{margin:0 0 12px; font-size:13.5px; color:var(--ed-gut); line-height:1.5}
+.ide-helprow{display:flex; gap:12px; align-items:baseline; padding:6px 0; border-top:1px solid var(--ed-line)}
+.ide-helprow:first-of-type{border-top:none}
+.ide-helpword{flex:none; min-width:96px; font-family:var(--mono); font-size:13px; color:var(--t-kw); font-weight:700}
+.ide-helptext{font-size:14px; line-height:1.45; color:var(--ed-fg); opacity:.92}
+
+/* an embedded page inside a lesson */
+.framed{width:100%; height:520px; border:1.5px solid var(--line-2); border-radius:14px; background:#fff; display:block}
