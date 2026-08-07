@@ -246,8 +246,18 @@ function defaultLocks(){
   const out = new Set();
   if (!lesson || lesson.assessment) return out;
   const blocks = lesson.blocks || [];
+  /* The teacher may have set this per page in the builder. */
+  const said = blocks.some(b => b.startLocked !== undefined);
+  if (said){
+    blocks.forEach((b, i) => { if (b.startLocked) out.add(i); });
+    return out;
+  }
   let firstDo = -1;
-  for (let i = 0; i < blocks.length; i++){ if (blocks[i].type !== "text"){ firstDo = i; break; } }
+  for (let i = 0; i < blocks.length; i++){
+    const t = blocks[i].type;
+    const reading = t === "text" || t === "picture";
+    if (!reading){ firstDo = i; break; }
+  }
   if (firstDo === -1) return out;                 // all reading: nothing to gate
   for (let i = firstDo + 1; i < blocks.length; i++) out.add(i);
   return out;
@@ -655,6 +665,7 @@ function buildBlock(b, i){
   if (!b.id) b.id = b.type + "_" + i;
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
+              picture:rPicture, pastelink:rPasteLink,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
@@ -717,13 +728,32 @@ function renderBlock(b, i){
 /* text: the html is the content; the brief carries the heading */
 function rText(b){
   const s = el("section");
-  const div = el("div","prose", b.html);
+  const div = el("div","prose", b.html || "");
   const h = div.querySelector("h2");
-  const title = h ? h.textContent : "Read this";
+  const title = h ? h.textContent : (b.title || "Read this");
   if (h) h.remove();
   s.appendChild(div);
   return { section:s, check:() => ({ ok:true }),
-           brief:{ eyebrow:"Read", title, text:"Read the page, then press Continue." } };
+           brief:{ eyebrow:"Read", title, text:"" } };
+}
+
+/* A picture the teacher has linked to. Nothing is uploaded or stored. */
+function rPicture(b){
+  const s = el("section","picture");
+  const fig = el("figure","picfig");
+  const img = el("img","picimg");
+  img.src = b.url || "";
+  img.alt = b.alt || b.caption || "Picture";
+  img.loading = "lazy";
+  img.addEventListener("error", () => {
+    fig.innerHTML = "";
+    fig.appendChild(el("p","hint","This picture could not be loaded. Tell your teacher the link may be broken."));
+  });
+  fig.appendChild(img);
+  if (b.caption) fig.appendChild(el("figcaption","piccap", b.caption));
+  s.appendChild(fig);
+  return { section:s, check:() => ({ ok:true }),
+           brief:{ eyebrow:"Look", title:b.title || "Have a look at this", text:b.note || "" } };
 }
 
 function rEmbed(b){
@@ -744,6 +774,12 @@ function rEmbed(b){
 
 function rQuestion(b){
   const s = el("section");
+  if (b.context){
+    const ctx = el("div","q-context");
+    ctx.innerHTML = b.context;
+    s.appendChild(ctx);
+  }
+  if (b.prompt) s.appendChild(el("p","q-ask", stripTags(b.prompt)));
   const min = b.minWords || 8;
   const ta = el("textarea","answer"); ta.rows = 6; ta.placeholder = "Type your answer here…";
   const counter = el("p","counter");
@@ -757,21 +793,67 @@ function rQuestion(b){
   fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; tick(); } };
   s.appendChild(ta); s.appendChild(counter); tick();
   return { section:s,
-           check:() => ({ ok:true }),   // Continue stays clickable; the nudge happens on click
+           check:() => ({ ok:true }),
            soft:() => ({ ok: wordCount(ta.value) >= min }),
-           brief:{ eyebrow:"Answer", title:"Write your answer", text:stripTags(b.prompt) } };
+           brief:{ eyebrow:"Answer", title:b.heading || "Write your answer",
+                   text:b.prompt && !b.context ? "" : stripTags(b.task || "") } };
 }
 
 function rLink(b){
   const s = el("section");
+  const a = el("a","btn-primary linkout", b.title || "Open this");
+  a.href = b.url || "#";
+  a.target = "_blank"; a.rel = "noopener";
+  s.appendChild(a);
+  if (b.note) s.appendChild(el("p","hint", b.note));
+  const done = el("label","confirm");
+  const cb = el("input"); cb.type = "checkbox";
+  cb.addEventListener("change", markDirty);
+  done.appendChild(cb); done.appendChild(el("span","","I have been and had a look"));
+  s.appendChild(done);
+  fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; } };
+  return { section:s,
+           check:() => cb.checked ? { ok:true } : { ok:false, message:"Tick the box once you have been" },
+           brief:{ eyebrow:"Go and look", title:b.heading || b.title || "Open this", text:b.task || "" } };
+}
+
+function rPasteLink(b){
+  const s = el("section");
   const inp = el("input"); inp.type = "text"; inp.placeholder = "https://…";
-  inp.addEventListener("input", markDirty);
-  fields[b.id] = { get:() => inp.value, set:(v) => { inp.value = v || ""; } };
+  const card = el("a","linkprev"); card.target = "_blank"; card.rel = "noopener"; card.hidden = true;
+  const icon = el("img","linkicon"); icon.alt = "";
+  const bits = el("span","linkbits");
+  const host = el("b","linkhost");
+  const full = el("span","linkurl");
+  bits.appendChild(host); bits.appendChild(full);
+  card.appendChild(icon); card.appendChild(bits);
+
+  function paint(){
+    const v = inp.value.trim();
+    let ok = false, url = null;
+    try{
+      url = new URL(v);
+      ok = (url.protocol === "http:" || url.protocol === "https:") && url.hostname.includes(".");
+    }catch(e){ ok = false; }
+    if (!ok){ card.hidden = true; return; }
+    card.hidden = false;
+    card.href = url.href;
+    host.textContent = url.hostname.replace(/^www\./, "");
+    full.textContent = url.pathname === "/" ? url.href : (url.pathname + url.search).slice(0, 70);
+    icon.src = url.origin + "/favicon.ico";
+    icon.onerror = () => { icon.style.visibility = "hidden"; };
+    icon.style.visibility = "visible";
+  }
+  inp.addEventListener("input", () => { paint(); markDirty(); });
+  fields[b.id] = { get:() => inp.value, set:(v) => { inp.value = v || ""; paint(); } };
   s.appendChild(inp);
+  s.appendChild(card);
   if (b.note) s.appendChild(el("p","hint", b.note));
   return { section:s,
-           check:() => /^https?:\/\/\S+\.\S+/.test(inp.value.trim()) ? { ok:true } : { ok:false, message:"Paste a link starting with https://" },
-           brief:{ eyebrow:"Hand in", title:stripTags(b.prompt) || "Paste your link", text:"" } };
+           check:() => /^https?:\/\/\S+\.\S+/.test(inp.value.trim())
+             ? { ok:true } : { ok:false, message:"Paste a link starting with https://" },
+           brief:{ eyebrow:"Hand in", title:b.heading || stripTags(b.prompt) || "Paste your link",
+                   text:b.task || "" } };
 }
 
 function rPython(b){
@@ -841,7 +923,10 @@ function hlLine(line, state){
       const w = m[0];
       const call = /^\s*\(/.test(rest.slice(w.length));
       const cls = PY_KW.has(w) ? "t-kw" : (PY_FN.has(w) ? "t-fn" : (call ? "t-call" : ""));
-      out += cls ? '<span class="' + cls + '">' + w + "</span>" : escHtml(w);
+      const helped = Object.prototype.hasOwnProperty.call(PY_HELP, w);
+      out += cls
+        ? '<span class="' + cls + (helped ? " t-help" : "") + '"' + (helped ? ' data-word="' + w + '"' : "") + ">" + w + "</span>"
+        : escHtml(w);
       i += w.length; continue;
     }
     if ((m = /^[+\-*\/%=<>!&|^~]+/.exec(rest))){ out += '<span class="t-op">' + escHtml(m[0]) + "</span>"; i += m[0].length; continue; }
@@ -849,6 +934,55 @@ function hlLine(line, state){
   }
   return { html: out || "&nbsp;" };
 }
+
+/* A one-line explanation for the words a beginner meets. Clicking a coloured
+   word in the editor shows the matching note. */
+const PY_HELP = {
+  print:"Shows something on the screen.",
+  input:"Waits for the person to type something, and gives back what they typed.",
+  int:"Turns something into a whole number, like \"7\" into 7.",
+  str:"Turns something into text.",
+  float:"Turns something into a decimal number, like 2.5.",
+  len:"Tells you how long something is \u2014 how many letters or items.",
+  range:"Makes a list of numbers to count through, like range(5) for 0 to 4.",
+  list:"Makes a list, which holds several things in order.",
+  dict:"Makes a dictionary, which stores pairs like name \u2192 value.",
+  round:"Rounds a decimal number to the nearest whole number.",
+  abs:"Gives a number without its minus sign.",
+  min:"Gives the smallest of the numbers.",
+  max:"Gives the biggest of the numbers.",
+  sum:"Adds up all the numbers in a list.",
+  sorted:"Puts a list in order.",
+  random:"A toolbox for picking things by chance.",
+  if:"Does something only when a condition is true.",
+  elif:"Another condition to try when the ones above were false.",
+  else:"What to do when none of the conditions above were true.",
+  for:"Repeats something once for each item, like every number in a range.",
+  while:"Keeps repeating for as long as a condition stays true.",
+  break:"Stops a loop straight away.",
+  continue:"Skips the rest of this time round the loop and starts the next one.",
+  def:"Makes your own command that you can use again later.",
+  return:"Sends a value back out of your own command.",
+  import:"Brings in extra tools, like turtle or random.",
+  from:"Brings in just part of a toolbox.",
+  in:"Checks whether something is inside a list or some text.",
+  not:"Flips true into false, and false into true.",
+  and:"True only when both things are true.",
+  or:"True when at least one of the things is true.",
+  True:"The value for yes.",
+  False:"The value for no.",
+  None:"Means nothing at all \u2014 no value yet.",
+  try:"Attempts something that might go wrong.",
+  except:"What to do if the code in try went wrong.",
+  class:"Makes a new kind of thing, with its own information and commands.",
+  pass:"Does nothing \u2014 a placeholder to keep the code valid.",
+  global:"Lets a command change a variable made outside it.",
+  lambda:"A tiny command written on one line.",
+  with:"Uses something and tidies it away afterwards.",
+  type:"Tells you what kind of thing something is.",
+  enumerate:"Counts as it goes through a list, giving position and item.",
+  zip:"Walks through two lists side by side."
+};
 
 /* ---------- spotting mistakes before the code is even run ---------- */
 function bare(line){                                   // strings and comments blanked out
@@ -903,8 +1037,10 @@ function idePrefs(){ try{ return JSON.parse(localStorage.getItem("hub_ide") || "
 function saveIdePrefs(p){ try{ localStorage.setItem("hub_ide", JSON.stringify(p)); }catch(e){} }
 
 function rIDE(b){
+  const canRun = b.run !== false;           // teachers can turn running off
+  const canEdit = b.edit !== false;         // and can make the code read-only
   const s = el("section","ide");
-  const wrap = el("div","ide-wrap" + (b.turtle ? " has-canvas" : ""));
+  const wrap = el("div","ide-wrap" + (b.turtle ? " has-canvas" : "") + (b.run === false ? " no-console" : ""));
 
   /* --- editor --- */
   const pane = el("div","ide-pane");
@@ -913,7 +1049,10 @@ function rIDE(b){
   const gearBtn = el("button","ide-small","\u2699"); gearBtn.title = "Editor settings";
   const resetBtn = el("button","ide-small","Reset");
   const runBtn = el("button","btn-primary ide-run","\u25B6 Run");
-  bar.appendChild(gearBtn); bar.appendChild(resetBtn); bar.appendChild(runBtn);
+  bar.appendChild(gearBtn);
+  if (canEdit) bar.appendChild(resetBtn);
+  if (canRun) bar.appendChild(runBtn);
+  if (!canEdit) bar.appendChild(el("span","ide-tag","Read only"));
   pane.appendChild(bar);
 
   const settings = el("div","ide-settings"); settings.hidden = true;
@@ -945,7 +1084,7 @@ function rIDE(b){
   const ta = el("textarea","ide-code");
   ta.spellcheck = false; ta.autocapitalize = "off"; ta.autocomplete = "off"; ta.wrap = "off";
   ta.value = b.starter || "";
-  if (b.readOnly) ta.readOnly = true;
+  if (b.readOnly || !canEdit) ta.readOnly = true;
   if (b.height) editor.style.height = b.height + "px";
   codeWrap.appendChild(hl); codeWrap.appendChild(ta);
   editor.appendChild(gutter); editor.appendChild(codeWrap);
@@ -957,6 +1096,7 @@ function rIDE(b){
 
   /* --- output side --- */
   const side = el("div","ide-side");
+  if (!canRun) side.hidden = true;          // no console when it cannot be run
   if (b.turtle){
     const cwrap = el("div","ide-canvaswrap");
     const canvas = el("canvas","ide-canvas");
@@ -1146,8 +1286,28 @@ function rIDE(b){
     }
   };
 
+  /* a click on a coloured word explains it */
+  const tip = el("div","ide-tip"); tip.hidden = true;
+  codeWrap.appendChild(tip);
+  hl.addEventListener("click", (e) => {
+    const word = e.target && e.target.dataset ? e.target.dataset.word : null;
+    if (!word || !PY_HELP[word]){ tip.hidden = true; return; }
+    tip.innerHTML = "";
+    tip.appendChild(el("b","", word));
+    tip.appendChild(el("span","", PY_HELP[word]));
+    tip.hidden = false;
+    if (e.target.offsetTop !== undefined){
+      tip.style.top = (e.target.offsetTop + 22 - (hl.scrollTop || 0)) + "px";
+      tip.style.left = Math.max(4, Math.min((e.target.offsetLeft || 0) - 10, 240)) + "px";
+    }
+  });
+  ta.addEventListener("scroll", () => { tip.hidden = true; });
+  ta.addEventListener("input", () => { tip.hidden = true; });
+  tip.addEventListener("click", () => { tip.hidden = true; });
+
   return { section:s,
            check:() => {
+             if (!canRun) return { ok:true };            // nothing to run, nothing to wait for
              if (!ran) return { ok:false, message:"Press Run to try your code" };
              if (b.expect && !lastOut.toLowerCase().includes(String(b.expect).toLowerCase()))
                return { ok:false, message:"Keep going until the output is right" };
@@ -1159,88 +1319,118 @@ function rIDE(b){
 /* ---- QUIZ: one question at a time, instant marking, retry on wrong ---- */
 function rQuiz(b){
   const s = el("section");
+  const qs = b.questions || [];
+  const n = qs.length;
   const head = el("p","qhead");
   const qtext = el("p","qtext");
   const opts = el("div","opts");
   const fb = el("div","feedback"); fb.hidden = true;
-  const row = el("div","row no-print"); row.style.marginTop = "18px";
   const btn = el("button","btn-primary","Check answer");
-  row.appendChild(btn);
-  s.appendChild(head); s.appendChild(qtext); s.appendChild(opts); s.appendChild(fb); s.appendChild(row);
+  s.appendChild(head); s.appendChild(qtext); s.appendChild(opts); s.appendChild(fb); s.appendChild(btn);
 
-  const qs = b.questions || [];
-  const n = qs.length;
-  const chosen = new Array(n).fill(null);
-  const solved = new Array(n).fill(false);
   let qi = 0;
+  const picked = qs.map(() => new Set());
+  const solved = new Array(n).fill(false);
+
+  const rightSet = (q) => new Set(Array.isArray(q.answers) ? q.answers
+                                 : (q.answer === undefined || q.answer === null ? [] : [q.answer]));
+  const multi = (q) => rightSet(q).size > 1;
 
   function draw(){
     const q = qs[qi];
     if (!q){ head.textContent = ""; qtext.textContent = "No questions yet."; opts.innerHTML = ""; return; }
-    head.textContent = "Question " + (qi+1) + " of " + n;
+    head.textContent = "Question " + (qi + 1) + " of " + n + (multi(q) ? " \u00b7 tick every right answer" : "");
     qtext.innerHTML = q.q;
     opts.innerHTML = "";
-    q.options.forEach((text, j) => {
+    (q.options || []).forEach((text, j) => {
       const lab = el("label","opt");
-      const radio = el("input"); radio.type = "radio"; radio.name = b.id + "-q" + qi;
-      radio.checked = chosen[qi] === j;
-      if (chosen[qi] === j) lab.classList.add("chosen");
-      radio.addEventListener("change", () => {
-        chosen[qi] = j;
-        Array.from(opts.children).forEach((c, k) => c.classList.toggle("chosen", k === j));
+      const box = el("input");
+      box.type = multi(q) ? "checkbox" : "radio";
+      box.name = b.id + "-q" + qi;
+      box.checked = picked[qi].has(j);
+      if (box.checked) lab.classList.add("chosen");
+      box.addEventListener("change", () => {
+        if (multi(q)){
+          if (box.checked) picked[qi].add(j); else picked[qi].delete(j);
+          Array.from(opts.children).forEach((c, k) => c.classList.toggle("chosen", picked[qi].has(k)));
+        } else {
+          picked[qi] = new Set([j]);
+          Array.from(opts.children).forEach((c, k) => c.classList.toggle("chosen", k === j));
+        }
         fb.hidden = true;
         markDirty();
       });
-      lab.appendChild(radio); lab.appendChild(el("span","", text));
+      lab.appendChild(box); lab.appendChild(el("span","", text));
       opts.appendChild(lab);
     });
     fb.hidden = true;
     btn.textContent = "Check answer";
-    if (solved[qi]) reveal(true, false);
+    if (solved[qi]) reveal(true);
   }
-  function reveal(ok, animate){
+
+  function reveal(ok){
     const q = qs[qi];
-    if (!q){ head.textContent = ""; qtext.textContent = "No questions yet."; opts.innerHTML = ""; return; }
+    if (!q) return;
+    const right = rightSet(q);
     Array.from(opts.children).forEach((c, k) => {
-      c.classList.toggle("right", ok && k === chosen[qi]);
-      c.classList.toggle("wrong", !ok && k === chosen[qi]);
+      const chose = picked[qi].has(k);
+      c.classList.toggle("right", ok && chose);
+      c.classList.toggle("wrong", !ok && chose && !right.has(k));
     });
     fb.hidden = false;
     fb.dataset.verdict = ok ? "correct" : "incorrect";
-    fb.innerHTML = "<b></b><span></span>";
-    fb.querySelector("b").textContent = ok ? "Correct" : "Not quite — try another answer";
-    fb.querySelector("span").textContent = ok ? (q.why || "") : (q.hint || "Read the question again and pick a different answer.");
+    fb.innerHTML = "";
+    const title = el("b","", ok ? "Correct" : "Not quite — try again");
+    const why = el("span","", ok ? (q.why || "")
+      : (q.hint || (multi(q) ? "Check you have ticked every right answer, and nothing else."
+                             : "Read the question again and pick a different answer.")));
+    fb.appendChild(title); fb.appendChild(why);
     if (ok && qi < n - 1) btn.textContent = "Next question →";
     else if (ok) btn.textContent = "All done ✓";
   }
+
   btn.addEventListener("click", () => {
     if (solved[qi] && qi < n - 1){ qi++; draw(); return; }
     if (solved[qi]) return;
-    if (chosen[qi] === null){ fb.hidden = false; fb.dataset.verdict = "incorrect"; fb.innerHTML = "<b>Choose an answer</b><span>Pick one of the options above, then check it.</span>"; return; }
-    const ok = chosen[qi] === b.questions[qi].answer;
+    const q = qs[qi];
+    if (!q) return;
+    if (!picked[qi].size){
+      fb.hidden = false; fb.dataset.verdict = "incorrect";
+      fb.innerHTML = "";
+      fb.appendChild(el("b","","Choose an answer"));
+      fb.appendChild(el("span","", multi(q) ? "Tick every answer you think is right."
+                                            : "Pick one of the options above, then check it."));
+      return;
+    }
+    const right = rightSet(q);
+    const ok = picked[qi].size === right.size && [...picked[qi]].every(x => right.has(x));
     solved[qi] = solved[qi] || ok;
-    reveal(ok, true);
+    reveal(ok);
     markDirty();
   });
 
   fields[b.id] = {
-    get: () => ({ chosen, solved, score: solved.filter(Boolean).length, outOf: n }),
-    set: (v) => {
-      if (!v || !Array.isArray(v.chosen)) return;
-      v.chosen.forEach((c, i) => { if (c !== null && c !== undefined) chosen[i] = c; });
+    get:() => ({ picked: picked.map(set => [...set]), solved: solved.slice() }),
+    set:(v) => {
+      if (!v) return;
+      if (Array.isArray(v.chosen)){                    // saves from the old one-answer quiz
+        v.chosen.forEach((x, i) => { if (x !== null && x !== undefined && picked[i]) picked[i] = new Set([x]); });
+      }
+      if (Array.isArray(v.picked)) v.picked.forEach((arr, i) => { if (picked[i]) picked[i] = new Set(arr || []); });
       if (Array.isArray(v.solved)) v.solved.forEach((x, i) => { solved[i] = !!x; });
-      qi = solved.findIndex(x => !x); if (qi === -1) qi = n - 1;
+      const firstUnsolved = solved.findIndex(x => !x);
+      qi = firstUnsolved === -1 ? Math.max(0, n - 1) : firstUnsolved;
       draw();
     }
   };
   draw();
+
   return { section:s,
-           check:() => !n || solved.every(Boolean) ? { ok:true } : { ok:false, message:"Answer all " + n + " questions correctly (" + solved.filter(Boolean).length + "/" + n + ")" },
-           brief:{ eyebrow:"Quiz", title:stripTags(b.title) || "Quiz", text:b.note || "Choose an answer, then press Check answer. If it's wrong you can try again." } };
+           check:() => !n || solved.every(Boolean)
+             ? { ok:true } : { ok:false, message:"Answer every question correctly to carry on" },
+           brief:{ eyebrow:"Quiz", title:b.title || "Check your understanding", text:b.note || "" } };
 }
 
-/* ---- PASSWORD: nothing typed here is saved or sent ---- */
-const COMMON_PW = ["password","123456","12345678","qwerty","abc123","letmein","monkey","football","iloveyou","admin","welcome","dragon","sunshine","princess","password1","liverpool","arsenal","chelsea","minecraft","fortnite"];
 function rPassword(b){
   const s = el("section");
   s.appendChild(el("p","warnline","🔒 Test made-up passwords only — never a real one. Nothing you type here is sent anywhere or saved."));

@@ -945,8 +945,13 @@ function defaultLocks(){
   const out = new Set();
   if (!lessonJson || lessonJson.assessment) return out;
   const b = lessonJson.blocks || [];
+  const said = b.some(x => x.startLocked !== undefined);
+  if (said){ b.forEach((x, i) => { if (x.startLocked) out.add(i); }); return out; }
   let firstDo = -1;
-  for (let i = 0; i < b.length; i++){ if (b[i].type !== "text"){ firstDo = i; break; } }
+  for (let i = 0; i < b.length; i++){
+    const t = b[i].type;
+    if (t !== "text" && t !== "picture"){ firstDo = i; break; }
+  }
   if (firstDo === -1) return out;
   for (let i = firstDo + 1; i < b.length; i++) out.add(i);
   return out;

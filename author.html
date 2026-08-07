@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
+<script src="richtext.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -43,18 +44,17 @@
 <div class="build">
   <aside class="build-palette">
     <div id="palLesson">
-      <p class="pal-head">Pages</p>
-      <button class="pal strong" data-add="page"><b>Page of tasks</b><span>Several tasks on one screen</span></button>
-      <p class="pal-head">Single tasks</p>
-      <button class="pal" data-add="text"><b>Reading</b><span>Explain something</span></button>
+      <button class="pal strong" data-add="page"><b>+ New page</b><span>Students see one page at a time</span></button>
+      <p class="pal-head">Add to the open page</p>
+      <button class="pal" data-add="text"><b>Paragraph</b><span>Words, with formatting</span></button>
+      <button class="pal" data-add="picture"><b>Image</b><span>Show a picture from a link</span></button>
       <button class="pal" data-add="ide"><b>Python task</b><span>Editor, console, turtle</span></button>
       <button class="pal" data-add="question"><b>Written answer</b><span>They type a response</span></button>
       <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
-      <button class="pal" data-add="image"><b>Screenshot</b><span>Paste a picture</span></button>
+      <button class="pal" data-add="image"><b>Screenshot</b><span>They paste a picture</span></button>
       <button class="pal" data-add="embed"><b>Video</b><span>Embed a clip</span></button>
-      <button class="pal" data-add="link"><b>Link</b><span>Send them to a site</span></button>
-      <p class="pal-head">Marked questions</p>
-      <button class="pal" data-add="mc"><b>Multiple choice</b><span>One right answer</span></button>
+      <button class="pal" data-add="link"><b>Link to a site</b><span>Send them somewhere</span></button>
+      <button class="pal" data-add="pastelink"><b>Paste a link</b><span>They hand in a link</span></button>
       <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
       <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
       <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
@@ -65,7 +65,7 @@
       <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
       <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
       <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
-      <button class="pal" data-add="text"><b>Instructions</b><span>A page of words</span></button>
+      <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
       <p class="pal-head">Feedback</p>
       <button class="pal" id="topicsBtn"><b>Strength &amp; Target</b><span>Sentences per topic</span></button>
     </div>
@@ -101,11 +101,14 @@ function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 let lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:[] };
 
 const BLANK = {
-  text:     () => ({ type:"text", heading:"", body:"" }),
-  ide:      () => ({ type:"ide", title:"", task:"", starter:'print("Hello World!")', turtle:false, expect:"" }),
-  question: () => ({ type:"question", prompt:"", minWords:20 }),
-  quiz:     () => ({ type:"quiz", questions:[{ q:"", options:["",""], answer:0, hint:"" }] }),
-  page:     () => ({ type:"page", title:"New page", task:"", blocks:[] }),
+  text:     () => ({ type:"text", heading:"", html:"" }),
+  picture:  () => ({ type:"picture", title:"", url:"", caption:"", note:"" }),
+  pastelink:() => ({ type:"pastelink", heading:"Paste your link", task:"", note:"" }),
+  ide:      () => ({ type:"ide", title:"", task:"", starter:'print("Hello World!")', turtle:false, expect:"",
+                     run:true, edit:true }),
+  question: () => ({ type:"question", heading:"Write your answer", context:"", prompt:"", minWords:20 }),
+  quiz:     () => ({ type:"quiz", questions:[{ q:"", options:["",""], answers:[0], hint:"" }] }),
+  page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
   image:    () => ({ type:"image", task:"Take a screenshot and paste it here." }),
   embed:    () => ({ type:"embed", url:"", title:"Watch this" }),
   link:     () => ({ type:"link", url:"", title:"", task:"" }),
@@ -114,9 +117,9 @@ const BLANK = {
   order:    () => ({ type:"order", prompt:"Put these in order", items:["","",""], topic:"" }),
   short:    () => ({ type:"short", prompt:"", keywords:"", model:"", topic:"" })
 };
-const LABEL = { text:"Reading", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
-                embed:"Video", link:"Link", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page of tasks" };
+const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
+                embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
+                short:"Short answer", page:"Page" };
 
 /* A YouTube address in any of its usual shapes -> the embeddable one. */
 function toEmbed(raw){
@@ -137,11 +140,37 @@ function loadDraft(){
     const d = JSON.parse(localStorage.getItem("hub_builder") || "null");
     if (d && Array.isArray(d.blocks)) lesson = d;
     migrate(lesson.blocks);
+    tidyIntoPages();
   }catch(e){}
 }
+/* Older drafts kept tasks loose at the top level, and quizzes had a single
+   answer. Bring both up to date so nothing is lost. */
+function tidyIntoPages(){
+  if (lesson.assessment) return;
+  if (!lesson.blocks.some(b => b.type !== "page")) return;
+  const out = [];
+  let current = null;
+  lesson.blocks.forEach(b => {
+    if (b.type === "page"){ out.push(b); current = null; return; }
+    if (!current){
+      current = { type:"page", title:"Page " + (out.length + 1), task:"", startLocked: out.length > 0, blocks:[] };
+      out.push(current);
+    }
+    current.blocks.push(b);
+  });
+  lesson.blocks = out;
+}
+
 /* Drafts written by the older builder had one question per quiz. */
 function migrate(arr){
   (arr || []).forEach(b => {
+      if (b.type === "quiz" && b.questions){
+      b.questions.forEach(q => { if (!q.answers) q.answers = [q.answer === undefined ? 0 : q.answer]; });
+    }
+    if (b.type === "text" && b.body !== undefined && b.html === undefined){
+      b.html = String(b.body || "").split(/\n{2,}/).map(p => "<p>" + p.replace(/\n/g, "<br>") + "</p>").join("");
+      delete b.body;
+    }
     if (b.type === "quiz" && !b.questions){
       b.questions = [{ q: b.q || "", options: b.options || ["",""], answer: b.answer || 0, hint: b.hint || "" }];
       delete b.q; delete b.options; delete b.answer; delete b.hint;
@@ -190,12 +219,18 @@ function compileOne(b, id, target){
   if (b.type === "page"){
     const kids = [];
     (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
-    push({ type:"page", id, title: b.title || "Tasks", task: b.task || "", blocks: kids });
+    push({ type:"page", id, title: b.title || "Tasks", task: b.task || "",
+           startLocked: b.startLocked !== false, blocks: kids });
     return;
   }
   {
     if (b.type === "text"){
+      // written with the formatting buttons, so it is already HTML
       let html = b.heading ? "<h2>" + esc(b.heading) + "</h2>" : "";
+      if (b.html !== undefined){
+        push({ type:"text", id, html: html + (window.cleanRichText ? window.cleanRichText(b.html) : b.html) });
+        return;
+      }
       /* Walk the lines, gathering runs of bullets and runs of prose. Teachers
          write a sentence and then bullets underneath with no blank line, so
          each run has to be emitted on its own. */
@@ -220,40 +255,59 @@ function compileOne(b, id, target){
                     task: b.task || "Write your code, then press Run.", starter: b.starter || "" };
       if (b.turtle) blk.turtle = true;
       if (b.expect) blk.expect = b.expect;
+      if (b.run === false) blk.run = false;      // console hidden
+      if (b.edit === false) blk.edit = false;    // read-only code
       push(blk);
     }
     else if (b.type === "question")
-      push({ type:"question", id, prompt: b.prompt || "Write your answer.",
-             minWords: Number(b.minWords) || 20 });
+      push(keepArrays({ type:"question", id,
+             heading: b.heading || "Write your answer",
+             context: b.context ? (window.cleanRichText ? window.cleanRichText(b.context) : b.context) : "",
+             prompt: b.prompt || "",
+             minWords: Number(b.minWords) || 20 }));
+    else if (b.type === "picture")
+      push(keepArrays({ type:"picture", id, title: b.title || "", url: b.url || "",
+             caption: b.caption || "", note: b.note || "" }));
+    else if (b.type === "pastelink")
+      push(keepArrays({ type:"pastelink", id, heading: b.heading || "Paste your link",
+             task: b.task || "", note: b.note || "" }));
     else if (b.type === "quiz")
-      push({ type:"quiz", id, title:"Check your understanding",
+      push({ type:"quiz", id, title: b.title || "Check your understanding",
         questions: (b.questions || (b.q !== undefined
-          ? [{ q:b.q, options:b.options, answer:b.answer, hint:b.hint }] : [])).map(q => ({ q: q.q || "", options: (q.options || []).filter(x => x !== ""),
-                                                   answer: Number(q.answer) || 0, hint: q.hint || "" })) });
+          ? [{ q:b.q, options:b.options, answers:[b.answer || 0], hint:b.hint }] : [])).map(q => {
+            const opts = (q.options || []);
+            const answers = (q.answers !== undefined ? q.answers : [q.answer || 0])
+              .map(Number).filter(x => !isNaN(x) && x >= 0 && x < opts.length);
+            return { q: q.q || "", options: opts.filter(x => x !== ""),
+                     answers: answers.length ? answers : [0], hint: q.hint || "" };
+          }) });
     else if (b.type === "image")
       push({ type:"image", id, task: b.task || "Take a screenshot and paste it here." });
     else if (b.type === "embed")
       push({ type:"embed", id, url: toEmbed(b.url), title: b.title || "Watch this" });
     else if (b.type === "link")
-      push({ type:"link", id, url: b.url || "", title: b.title || "Open this", task: b.task || "" });
+      push({ type:"link", id, url: b.url || "", title: b.title || "Open this",
+             heading: b.heading || "", task: b.task || "" });
     else if (b.type === "mc")
       push(keepArrays({ type:"mc", id, prompt: b.prompt || "", options: (b.options || []).filter(x => x !== ""),
-        answer: Number(b.answer) || 0, topic: b.topic }));
+        answer: Number(b.answer) || 0, topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "blanks")
       push(keepArrays({ type:"blanks", id, prompt: b.prompt || "Fill in the gaps", text: b.text || "",
-        distractors: (b.distractors || "").split(/\s*,\s*/).filter(Boolean), topic: b.topic }));
+        distractors: (b.distractors || "").split(/\s*,\s*/).filter(Boolean),
+        topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "order")
       push(keepArrays({ type:"order", id, prompt: b.prompt || "Put these in order",
-        items: (b.items || []).filter(x => x !== ""), topic: b.topic }));
+        items: (b.items || []).filter(x => x !== ""), topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "short")
       push(keepArrays({ type:"short", id, prompt: b.prompt || "",
         keywords: (b.keywords || "").split(";").map(g => g.split(/\s*,\s*/).map(x => x.trim()).filter(Boolean)).filter(g => g.length),
-        model: b.model || "", topic: b.topic }));
+        model: b.model || "", topic: lesson.assessment ? b.topic : "" }));
   }
 }
 
 /* ---------------- drawing the cards ---------------- */
 let dragFrom = null;
+let openPage = 0;          // the page new tasks join
 function render(){
   const list = $("list"); list.innerHTML = "";
   if (!lesson.blocks.length)
@@ -275,6 +329,14 @@ function card(b, i, arr){
   c.draggable = false;
 
   const head = el("div","bhead");
+  if (b.type === "page"){
+    const at = lesson.blocks.indexOf(b);
+    if (at === openPage) c.classList.add("open");
+    c.addEventListener("mousedown", () => {
+      const i2 = lesson.blocks.indexOf(b);
+      if (i2 >= 0 && i2 !== openPage){ openPage = i2; render(); }
+    });
+  }
   const grip = el("span","bgrip","\u2630"); grip.title = "Drag to move";
   grip.addEventListener("mousedown", () => { c.draggable = true; });
   grip.addEventListener("mouseup", () => { c.draggable = false; });
@@ -302,9 +364,17 @@ function card(b, i, arr){
   c.addEventListener("dragleave", () => c.classList.remove("over"));
   c.addEventListener("drop", (e) => {
     e.preventDefault(); c.classList.remove("over");
-    if (dragFrom === null || dragFrom.arr !== arr || dragFrom.i === i) return;
-    const moved = arr.splice(dragFrom.i, 1)[0];
-    arr.splice(i, 0, moved);
+    if (dragFrom === null) return;
+    if (dragFrom.arr === arr){
+      if (dragFrom.i === i) return;
+      const moved = arr.splice(dragFrom.i, 1)[0];
+      arr.splice(i, 0, moved);
+    } else {
+      // moved from another page: take it out of there and drop it in here
+      const moved = dragFrom.arr.splice(dragFrom.i, 1)[0];
+      if (moved.type === "page" && arr !== lesson.blocks){ dragFrom = null; render(); return; }
+      arr.splice(i, 0, moved);
+    }
     dragFrom = null; render(); schedulePreview();
   });
 
@@ -323,6 +393,16 @@ function card(b, i, arr){
       saveDraft(); schedulePreview();
     });
     w.appendChild(input);
+    if (o.help) w.appendChild(el("p","bhelp", o.help));
+    body.appendChild(w);
+  }
+  function R(label, key, opts){
+    const o = opts || {};
+    const w = el("div","bfield");
+    w.appendChild(el("label","", label));
+    const ed = window.richText(b[key] || "", (html) => { b[key] = html; saveDraft(); schedulePreview(); },
+                               { rows: o.rows || 4, placeholder: o.placeholder });
+    w.appendChild(ed);
     if (o.help) w.appendChild(el("p","bhelp", o.help));
     body.appendChild(w);
   }
@@ -353,9 +433,24 @@ function card(b, i, arr){
   }
 
   if (b.type === "text"){
-    F("Heading", "heading", { placeholder:"Output a message to the screen" });
-    F("Explanation", "body", { area:true, rows:6,
-      help:"A blank line starts a new paragraph. Lines beginning with - become bullets. **bold** and `code` work." });
+    R("Paragraph", "html", { rows:5, placeholder:"Type here. Use the buttons above to make words bold, italic or coloured." });
+  }
+  if (b.type === "picture"){
+    F("Address of the picture", "url", { placeholder:"https://…/diagram.png",
+      help:"Right-click a picture on the web and choose \u201cCopy image address\u201d." });
+    if (b.url){
+      const prev = el("div","bfield");
+      const img = el("img","bpreview"); img.src = b.url; img.alt = "";
+      img.addEventListener("error", () => { img.hidden = true; prev.appendChild(el("p","bhelp warn","That address did not load a picture.")); });
+      prev.appendChild(img);
+      body.appendChild(prev);
+    }
+    F("Caption underneath (optional)", "caption");
+    F("Instruction above it (optional)", "note");
+  }
+  if (b.type === "pastelink"){
+    F("Heading", "heading", { placeholder:"Paste your link" });
+    F("What should they paste?", "task", { area:true, rows:2, placeholder:"Paste the link to your finished Scratch project." });
   }
   if (b.type === "ide"){
     F("Task title", "title", { placeholder:"Investigate" });
@@ -368,13 +463,26 @@ function card(b, i, arr){
                   b.turtle ? "Turtle canvas: on" : "Turtle canvas: off");
     tg.addEventListener("click", () => { b.turtle = !b.turtle; render(); schedulePreview(); });
     row.appendChild(tg);
+    const canRun = b.run !== false, canEdit = b.edit !== false;
+    const runTg = el("button","btn-ghost bmini2" + (canRun ? " right" : ""),
+                     canRun ? "Running: on" : "Running: off");
+    runTg.title = "Turn off to hide the console and just show the code";
+    runTg.addEventListener("click", () => { b.run = !canRun; render(); schedulePreview(); });
+    const editTg = el("button","btn-ghost bmini2" + (canEdit ? " right" : ""),
+                      canEdit ? "Editing: on" : "Editing: off");
+    editTg.title = "Turn off to make the code read-only";
+    editTg.addEventListener("click", () => { b.edit = !canEdit; render(); schedulePreview(); });
+    row.appendChild(runTg); row.appendChild(editTg);
     w.appendChild(row);
     body.appendChild(w);
     F("Output must contain (optional)", "expect", { placeholder:"Learning to program",
       help:"Leave empty unless you want Continue to wait for the right output." });
   }
   if (b.type === "question"){
-    F("Question", "prompt", { area:true, rows:2, placeholder:"What is the purpose of the print function?" });
+    F("Heading", "heading", { placeholder:"Write your answer" });
+    R("Context (optional)", "context", { rows:3, placeholder:"Anything they need to know before the question." });
+    F("The question", "prompt", { area:true, rows:2, placeholder:"What is the purpose of the print function?",
+      help:"This is shown larger than the context, so it stands out." });
     F("Roughly how many words", "minWords", { num:true });
   }
   if (b.type === "quiz"){
@@ -394,22 +502,39 @@ function card(b, i, arr){
       const qt = el("textarea"); qt.rows = 2; qt.value = q.q || "";
       qt.addEventListener("input", () => { q.q = qt.value; saveDraft(); schedulePreview(); });
       qw.appendChild(qt); box.appendChild(qw);
+      if (!q.answers) q.answers = [q.answer === undefined ? 0 : q.answer];
       const ow = el("div","bfield");
-      ow.appendChild(el("label","","Options (tick the right one)"));
+      const many = q.answers.length > 1;
+      ow.appendChild(el("label","", many ? "Options (tick every right answer)" : "Options (tick the right one)"));
       (q.options || []).forEach((val, k) => {
         const row = el("div","brow");
         const inp = el("input"); inp.value = val;
         inp.addEventListener("input", () => { q.options[k] = inp.value; saveDraft(); schedulePreview(); });
         row.appendChild(inp);
-        const pick = el("button","btn-ghost bmini" + (Number(q.answer) === k ? " right" : ""), "\u2713");
-        pick.title = "This is the correct answer";
-        pick.addEventListener("click", () => { q.answer = k; render(); schedulePreview(); });
+        const isRight = q.answers.indexOf(k) >= 0;
+        const pick = el("button","btn-ghost bmini" + (isRight ? " right" : ""), "\u2713");
+        pick.title = isRight ? "A correct answer \u2014 click to unmark" : "Mark as a correct answer";
+        pick.addEventListener("click", () => {
+          const at = q.answers.indexOf(k);
+          if (at >= 0){ if (q.answers.length > 1) q.answers.splice(at, 1); }
+          else q.answers.push(k);
+          q.answers.sort((x, y) => x - y);
+          render(); schedulePreview();
+        });
         row.appendChild(pick);
         const del = el("button","btn-ghost bmini","\u2715");
-        del.addEventListener("click", () => { q.options.splice(k, 1); render(); schedulePreview(); });
+        del.addEventListener("click", () => {
+          q.options.splice(k, 1);
+          q.answers = q.answers.filter(a => a !== k).map(a => a > k ? a - 1 : a);
+          if (!q.answers.length) q.answers = [0];
+          render(); schedulePreview();
+        });
         row.appendChild(del);
         ow.appendChild(row);
       });
+      ow.appendChild(el("p","bhelp", q.answers.length > 1
+        ? "Students must tick all " + q.answers.length + " to get it right."
+        : "Tick a second option to make it a multiple-answer question."));
       const addOpt = el("button","btn-ghost bmini2","+ Add another option");
       addOpt.addEventListener("click", () => { q.options.push(""); render(); });
       ow.appendChild(addOpt); box.appendChild(ow);
@@ -425,21 +550,43 @@ function card(b, i, arr){
     body.appendChild(addQ);
   }
   if (b.type === "page"){
-    F("Page title", "title", { placeholder:"Output a message to the screen" });
-    F("Instruction under the title", "task", { area:true, rows:2 });
+    F("Title", "title", { placeholder:"Output a message to the screen" });
+    F("Subtitle", "task", { area:true, rows:2, placeholder:"Read the explanation, run the code, then answer the questions." });
+    const lockRow = el("div","bfield");
+    lockRow.appendChild(el("label","","When a class gets this lesson"));
+    const lockBtn = el("button","btn-ghost bmini2" + (b.startLocked === false ? " right" : ""),
+      b.startLocked === false ? "\u{1F513} Starts unlocked" : "\u{1F512} Starts locked");
+    lockBtn.addEventListener("click", () => { b.startLocked = !(b.startLocked === false); render(); schedulePreview(); });
+    lockRow.appendChild(lockBtn);
+    lockRow.appendChild(el("p","bhelp","Teachers can still lock and unlock pages for their own class at any time."));
+    body.appendChild(lockRow);
     const inner = el("div","pagekids");
     if (!b.blocks) b.blocks = [];
-    if (!b.blocks.length) inner.appendChild(el("p","bhelp","This page is empty — add tasks to it below."));
+    if (!b.blocks.length) inner.appendChild(el("p","bhelp","This page is empty — add tasks with the buttons below, or drag one here."));
     b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
+    inner.addEventListener("dragover", (e) => { e.preventDefault(); inner.classList.add("over"); });
+    inner.addEventListener("dragleave", () => inner.classList.remove("over"));
+    inner.addEventListener("drop", (e) => {
+      e.preventDefault(); e.stopPropagation(); inner.classList.remove("over");
+      if (dragFrom === null || dragFrom.arr === b.blocks) return;
+      const moved = dragFrom.arr.splice(dragFrom.i, 1)[0];
+      if (moved.type === "page"){ dragFrom = null; render(); return; }   // pages can't nest
+      b.blocks.push(moved);
+      dragFrom = null; render(); schedulePreview();
+    });
     body.appendChild(inner);
     const addRow = el("div","pageadd");
-    [["text","Reading"],["ide","Python task"],["question","Written answer"],["quiz","Quiz"],["image","Screenshot"],
-     ["embed","Video"],["mc","Multiple choice"],["blanks","Fill the gaps"],["order","Put in order"],["short","Short answer"]]
-      .forEach(pair => {
-        const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
-        btn.addEventListener("click", () => { b.blocks.push(BLANK[pair[0]]()); render(); schedulePreview(); });
-        addRow.appendChild(btn);
-      });
+    const kinds = lesson.assessment
+      ? [["text","Paragraph"],["picture","Image"],["mc","Multiple choice"],["blanks","Fill the gaps"],
+         ["order","Put in order"],["short","Short answer"]]
+      : [["text","Paragraph"],["picture","Image"],["ide","Python task"],["question","Written answer"],
+         ["quiz","Quiz"],["image","Screenshot"],["embed","Video"],["link","Link to a site"],
+         ["pastelink","Paste a link"],["blanks","Fill the gaps"],["order","Put in order"],["short","Short answer"]];
+    kinds.forEach(pair => {
+      const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
+      btn.addEventListener("click", () => { b.blocks.push(BLANK[pair[0]]()); render(); schedulePreview(); });
+      addRow.appendChild(btn);
+    });
     body.appendChild(addRow);
   }
   if (b.type === "image") F("What should they show?", "task", { area:true, rows:2 });
@@ -453,32 +600,33 @@ function card(b, i, arr){
     F("Title", "title");
   }
   if (b.type === "link"){
+    F("Heading", "heading", { placeholder:"Have a look at this site" });
     F("Address", "url", { placeholder:"https://..." });
-    F("Button label", "title");
-    F("What to do there", "task");
+    F("Button label", "title", { placeholder:"Open BBC Bitesize" });
+    F("What to do there", "task", { area:true, rows:2 });
   }
   if (b.type === "mc"){
     F("Question", "prompt", { area:true, rows:2 });
     listField("Options (tick the right one)", "options");
-    F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
+    if (lesson.assessment) F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
   }
   if (b.type === "blanks"){
     F("Instruction", "prompt");
     F("Sentence with gaps", "text", { area:true, rows:3,
       help:"Put the answers in double brackets: The [[cat]] sat on the [[mat]]." });
     F("Extra wrong words for the dropdowns", "distractors", { placeholder:"dog, hat" });
-    F("Topic tag", "topic");
+    if (lesson.assessment) F("Topic tag", "topic");
   }
   if (b.type === "order"){
     F("Instruction", "prompt");
     listField("Items in the CORRECT order", "items", "Students see them shuffled.");
-    F("Topic tag", "topic");
+    if (lesson.assessment) F("Topic tag", "topic");
   }
   if (b.type === "short"){
     F("Question", "prompt", { area:true, rows:2 });
     F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by , — e.g. loop, repeat; count" });
     F("Model answer", "model", { area:true, rows:2 });
-    F("Topic tag", "topic");
+    if (lesson.assessment) F("Topic tag", "topic");
   }
   c.appendChild(body);
   return c;
@@ -573,7 +721,26 @@ $("topicsBtn").addEventListener("click", () => {
 document.querySelectorAll(".pal[data-add]").forEach(btn => {
   btn.addEventListener("click", () => {
     const kind = btn.dataset.add;
-    lesson.blocks.push(BLANK[kind]());
+    if (kind === "page" || lesson.assessment){
+      lesson.blocks.push(BLANK[kind]());
+    } else {
+      /* Lessons are made of pages, so a task always goes on one. It joins the
+         page you last touched, or a new page if there isn't one yet. */
+      let page = lesson.blocks[openPage] && lesson.blocks[openPage].type === "page"
+        ? lesson.blocks[openPage] : null;
+      if (!page){
+        for (let i = lesson.blocks.length - 1; i >= 0; i--){
+          if (lesson.blocks[i].type === "page"){ page = lesson.blocks[i]; openPage = i; break; }
+        }
+      }
+      if (!page){
+        page = BLANK.page();
+        page.title = "New page";
+        lesson.blocks.push(page);
+        openPage = lesson.blocks.length - 1;
+      }
+      page.blocks.push(BLANK[kind]());
+    }
     render(); schedulePreview();
     const cards = $("list").querySelectorAll(".bcard");
     const last = cards[cards.length - 1];
