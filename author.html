@@ -106,7 +106,7 @@ const BLANK = {
   pastelink:() => ({ type:"pastelink", heading:"Paste your link", task:"", note:"" }),
   ide:      () => ({ type:"ide", title:"", task:"", starter:'print("Hello World!")', turtle:false, expect:"",
                      run:true, edit:true }),
-  question: () => ({ type:"question", heading:"Write your answer", context:"", prompt:"", minWords:20 }),
+  question: () => ({ type:"question", heading:"", context:"", prompt:"", minWords:20 }),
   quiz:     () => ({ type:"quiz", questions:[{ q:"", options:["",""], answers:[0], hint:"" }] }),
   page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
   image:    () => ({ type:"image", task:"Take a screenshot and paste it here." }),
@@ -261,7 +261,7 @@ function compileOne(b, id, target){
     }
     else if (b.type === "question")
       push(keepArrays({ type:"question", id,
-             heading: b.heading || "Write your answer",
+             heading: b.heading || "",
              context: b.context ? (window.cleanRichText ? window.cleanRichText(b.context) : b.context) : "",
              prompt: b.prompt || "",
              minWords: Number(b.minWords) || 20 }));
@@ -308,7 +308,25 @@ function compileOne(b, id, target){
 /* ---------------- drawing the cards ---------------- */
 let dragFrom = null;
 let openPage = 0;          // the page new tasks join
+let listWired = false;
+function wireList(){
+  if (listWired) return;
+  listWired = true;
+  const list = $("list");
+  list.addEventListener("dragover", (e) => {
+    if (!canDropOn(lesson.blocks)) return;
+    e.preventDefault();
+    list.classList.add("over");
+  });
+  list.addEventListener("dragleave", () => list.classList.remove("over"));
+  list.addEventListener("drop", (e) => {
+    e.preventDefault();
+    list.classList.remove("over");
+    dropInto(lesson.blocks, -1);
+  });
+}
 function render(){
+  wireList();
   const list = $("list"); list.innerHTML = "";
   if (!lesson.blocks.length)
     list.appendChild(el("p","hint", lesson.assessment
@@ -317,6 +335,41 @@ function render(){
   lesson.blocks.forEach((b, i) => list.appendChild(card(b, i, lesson.blocks)));
   saveDraft();
 }
+let newTask = null;          // a task being dragged in from the palette
+
+/* pages only live at the top; everything else only lives on a page */
+function canDropOn(arr){
+  const kind = newTask || (dragFrom && dragFrom.type);
+  if (!kind) return false;
+  if (kind === "page") return arr === lesson.blocks;
+  return lesson.assessment ? true : arr !== lesson.blocks;
+}
+/* put whatever is being dragged at position `at` in `arr` */
+function dropInto(arr, at){
+  if (!canDropOn(arr)){ dragFrom = null; newTask = null; return; }
+  if (newTask){
+    const made = BLANK[newTask]();
+    newTask = null;
+    arr.splice(at < 0 ? arr.length : at, 0, made);
+    render(); schedulePreview();
+    return;
+  }
+  if (!dragFrom) return;
+  const from = dragFrom; dragFrom = null;
+  const moved = from.arr[from.i];
+  if (!moved) { render(); return; }
+  if (from.arr === arr){
+    let to = at < 0 ? arr.length - 1 : at;
+    if (from.i === to){ render(); return; }
+    from.arr.splice(from.i, 1);
+    arr.splice(to, 0, moved);                 // it takes the place it was dropped on
+  } else {
+    from.arr.splice(from.i, 1);
+    arr.splice(at < 0 ? arr.length : at, 0, moved);
+  }
+  render(); schedulePreview();
+}
+
 function move(arr, i, d){
   const j = i + d;
   if (j < 0 || j >= arr.length) return;
@@ -343,6 +396,18 @@ function card(b, i, arr){
   head.appendChild(grip);
   head.appendChild(el("b","btype", (i + 1) + ". " + LABEL[b.type]));
   const tools = el("span","btools");
+  if (b.type === "page"){
+    const locked = b.startLocked !== false;
+    const lk = el("button","btn-ghost bmini lockbtn" + (locked ? "" : " open"), locked ? "\u{1F512}" : "\u{1F513}");
+    lk.title = locked ? "Starts locked when a class gets this lesson \u2014 click to start it unlocked"
+                      : "Starts unlocked \u2014 click to start it locked";
+    lk.addEventListener("click", (e) => {
+      e.stopPropagation();
+      b.startLocked = !locked;              // plain toggle
+      render(); schedulePreview();
+    });
+    tools.appendChild(lk);
+  }
   const acts = [["\u2191","Move up", () => move(arr, i, -1)],
                 ["\u2193","Move down", () => move(arr, i, 1)],
                 ["\u29C9","Duplicate", () => { arr.splice(i + 1, 0, JSON.parse(JSON.stringify(b))); render(); schedulePreview(); }],
@@ -356,26 +421,24 @@ function card(b, i, arr){
   c.appendChild(head);
 
   c.addEventListener("dragstart", (e) => {
-    dragFrom = { arr: arr, i: i }; c.classList.add("dragging");
-    if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); }
+    e.stopPropagation();                     // a task inside a page is not the page
+    dragFrom = { arr: arr, i: i, type: b.type };
+    newTask = null;
+    c.classList.add("dragging");
+    if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "task"); }
   });
-  c.addEventListener("dragend", () => { c.classList.remove("dragging"); c.draggable = false; });
-  c.addEventListener("dragover", (e) => { e.preventDefault(); c.classList.add("over"); });
+  c.addEventListener("dragend", () => { c.classList.remove("dragging"); c.draggable = false; dragFrom = null; });
+  c.addEventListener("dragover", (e) => {
+    if (!dragFrom && !newTask) return;
+    if (!canDropOn(arr)) return;
+    e.preventDefault(); e.stopPropagation();
+    c.classList.add("over");
+  });
   c.addEventListener("dragleave", () => c.classList.remove("over"));
   c.addEventListener("drop", (e) => {
-    e.preventDefault(); c.classList.remove("over");
-    if (dragFrom === null) return;
-    if (dragFrom.arr === arr){
-      if (dragFrom.i === i) return;
-      const moved = arr.splice(dragFrom.i, 1)[0];
-      arr.splice(i, 0, moved);
-    } else {
-      // moved from another page: take it out of there and drop it in here
-      const moved = dragFrom.arr.splice(dragFrom.i, 1)[0];
-      if (moved.type === "page" && arr !== lesson.blocks){ dragFrom = null; render(); return; }
-      arr.splice(i, 0, moved);
-    }
-    dragFrom = null; render(); schedulePreview();
+    e.preventDefault(); e.stopPropagation();
+    c.classList.remove("over");
+    dropInto(arr, i);
   });
 
   const body = el("div","bbody");
@@ -479,7 +542,7 @@ function card(b, i, arr){
       help:"Leave empty unless you want Continue to wait for the right output." });
   }
   if (b.type === "question"){
-    F("Heading", "heading", { placeholder:"Write your answer" });
+    F("Heading (optional)", "heading", { placeholder:"Leave empty for no heading" });
     R("Context (optional)", "context", { rows:3, placeholder:"Anything they need to know before the question." });
     F("The question", "prompt", { area:true, rows:2, placeholder:"What is the purpose of the print function?",
       help:"This is shown larger than the context, so it stands out." });
@@ -552,27 +615,21 @@ function card(b, i, arr){
   if (b.type === "page"){
     F("Title", "title", { placeholder:"Output a message to the screen" });
     F("Subtitle", "task", { area:true, rows:2, placeholder:"Read the explanation, run the code, then answer the questions." });
-    const lockRow = el("div","bfield");
-    lockRow.appendChild(el("label","","When a class gets this lesson"));
-    const lockBtn = el("button","btn-ghost bmini2" + (b.startLocked === false ? " right" : ""),
-      b.startLocked === false ? "\u{1F513} Starts unlocked" : "\u{1F512} Starts locked");
-    lockBtn.addEventListener("click", () => { b.startLocked = !(b.startLocked === false); render(); schedulePreview(); });
-    lockRow.appendChild(lockBtn);
-    lockRow.appendChild(el("p","bhelp","Teachers can still lock and unlock pages for their own class at any time."));
-    body.appendChild(lockRow);
+
     const inner = el("div","pagekids");
     if (!b.blocks) b.blocks = [];
-    if (!b.blocks.length) inner.appendChild(el("p","bhelp","This page is empty — add tasks with the buttons below, or drag one here."));
+    if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
     b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
-    inner.addEventListener("dragover", (e) => { e.preventDefault(); inner.classList.add("over"); });
+    inner.addEventListener("dragover", (e) => {
+      if (!canDropOn(b.blocks)) return;
+      e.preventDefault(); e.stopPropagation();
+      inner.classList.add("over");
+    });
     inner.addEventListener("dragleave", () => inner.classList.remove("over"));
     inner.addEventListener("drop", (e) => {
-      e.preventDefault(); e.stopPropagation(); inner.classList.remove("over");
-      if (dragFrom === null || dragFrom.arr === b.blocks) return;
-      const moved = dragFrom.arr.splice(dragFrom.i, 1)[0];
-      if (moved.type === "page"){ dragFrom = null; render(); return; }   // pages can't nest
-      b.blocks.push(moved);
-      dragFrom = null; render(); schedulePreview();
+      e.preventDefault(); e.stopPropagation();
+      inner.classList.remove("over");
+      dropInto(b.blocks, -1);              // -1 means "at the end"
     });
     body.appendChild(inner);
     const addRow = el("div","pageadd");
@@ -719,6 +776,14 @@ $("topicsBtn").addEventListener("click", () => {
 });
 
 document.querySelectorAll(".pal[data-add]").forEach(btn => {
+  btn.draggable = true;
+  btn.addEventListener("dragstart", (e) => {
+    newTask = btn.dataset.add;
+    dragFrom = null;
+    btn.classList.add("dragging");
+    if (e.dataTransfer){ e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", newTask); }
+  });
+  btn.addEventListener("dragend", () => { btn.classList.remove("dragging"); newTask = null; });
   btn.addEventListener("click", () => {
     const kind = btn.dataset.add;
     if (kind === "page" || lesson.assessment){

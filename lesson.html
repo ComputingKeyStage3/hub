@@ -688,7 +688,7 @@ function rPage(b){
     if (!built) return;
     const item = el("div","pg-item");
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
-    if (child.type !== "text"){
+    if (child.type !== "text" && child.type !== "picture"){
       if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
       if (bb.text) item.appendChild(el("p","pg-t", bb.text));
     }
@@ -795,8 +795,7 @@ function rQuestion(b){
   return { section:s,
            check:() => ({ ok:true }),
            soft:() => ({ ok: wordCount(ta.value) >= min }),
-           brief:{ eyebrow:"Answer", title:b.heading || "Write your answer",
-                   text:b.prompt && !b.context ? "" : stripTags(b.task || "") } };
+           brief:{ eyebrow:"Answer", title:b.heading || "", text:stripTags(b.task || "") } };
 }
 
 function rLink(b){
@@ -1286,24 +1285,44 @@ function rIDE(b){
     }
   };
 
-  /* a click on a coloured word explains it */
+  /* Clicking a word explains it. The colouring sits under the typing area, so
+     the word is worked out from where the cursor landed rather than from the
+     thing that was clicked. */
   const tip = el("div","ide-tip"); tip.hidden = true;
   codeWrap.appendChild(tip);
-  hl.addEventListener("click", (e) => {
-    const word = e.target && e.target.dataset ? e.target.dataset.word : null;
-    if (!word || !PY_HELP[word]){ tip.hidden = true; return; }
+  function wordAt(text, pos){
+    if (pos < 0 || pos > text.length) return null;
+    const isWord = (ch) => /[A-Za-z_0-9]/.test(ch);
+    let a = pos, b2 = pos;
+    while (a > 0 && isWord(text[a - 1])) a--;
+    while (b2 < text.length && isWord(text[b2])) b2++;
+    if (a === b2) return null;
+    return { word: text.slice(a, b2), start: a };
+  }
+  function showTip(){
+    const text = ta.value;
+    const found = wordAt(text, ta.selectionStart);
+    if (!found || !Object.prototype.hasOwnProperty.call(PY_HELP, found.word)){ tip.hidden = true; return; }
     tip.innerHTML = "";
-    tip.appendChild(el("b","", word));
-    tip.appendChild(el("span","", PY_HELP[word]));
+    tip.appendChild(el("b","", found.word + "()".slice(0, PY_FN.has(found.word) ? 2 : 0)));
+    tip.appendChild(el("span","", PY_HELP[found.word]));
+    // place it just under the line the word is on
+    const before = text.slice(0, found.start);
+    const line = before.split("\n").length - 1;
+    const col = found.start - (before.lastIndexOf("\n") + 1);
+    const size = parseFloat((window.getComputedStyle ? getComputedStyle(ta).fontSize : "") || "14") || 14;
+    tip.style.top = ((line + 1) * size * 1.55 + 16 - (ta.scrollTop || 0)) + "px";
+    tip.style.left = Math.max(6, Math.min(col * size * 0.6 - 12 - (ta.scrollLeft || 0), 260)) + "px";
     tip.hidden = false;
-    if (e.target.offsetTop !== undefined){
-      tip.style.top = (e.target.offsetTop + 22 - (hl.scrollTop || 0)) + "px";
-      tip.style.left = Math.max(4, Math.min((e.target.offsetLeft || 0) - 10, 240)) + "px";
-    }
+  }
+  ta.addEventListener("click", showTip);
+  ta.addEventListener("keyup", (e) => {
+    if (e.key === "Escape"){ tip.hidden = true; return; }
+    if (e.key && e.key.indexOf("Arrow") === 0) showTip(); else tip.hidden = true;
   });
   ta.addEventListener("scroll", () => { tip.hidden = true; });
-  ta.addEventListener("input", () => { tip.hidden = true; });
-  tip.addEventListener("click", () => { tip.hidden = true; });
+  ta.addEventListener("blur", () => { setTimeout(() => { tip.hidden = true; }, 120); });
+  tip.addEventListener("mousedown", (e) => { e.preventDefault(); tip.hidden = true; });
 
   return { section:s,
            check:() => {
