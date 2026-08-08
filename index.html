@@ -100,6 +100,12 @@
 const API = (window.HUB && window.HUB.API) || "";
 const ready = API && API.indexOf("PASTE_") !== 0;
 const $ = (id) => document.getElementById(id);
+/* wiring a button that isn't there should not stop the rest of the page */
+function on(id, ev, fn){
+  const e = document.getElementById(id);
+  if (!e){ console.warn("Nothing on the page with id:", id); return; }
+  e.addEventListener(ev, fn);
+}
 
 /* Nothing about lessons is shown until a student has signed in. */
 function signedInView(inYet){
@@ -118,7 +124,7 @@ function renderAuth(){
   if (name && localStorage.getItem("hub_token")){
     $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn">Sign out</button>';
     $("auth").querySelector("b").textContent = name;
-    $("outBtn").addEventListener("click", () => {
+    on("outBtn", "click", () => {
       ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
       renderAuth();
     });
@@ -134,7 +140,7 @@ function renderAuth(){
 }
 renderAuth();
 
-$("loginBtn").addEventListener("click", async () => {
+on("loginBtn", "click", async () => {
   $("loginErr").textContent = "";
   if (!ready){ $("loginErr").textContent = "Site not connected to its server yet (config.js)."; return; }
   try{
@@ -159,7 +165,7 @@ $("loginBtn").addEventListener("click", async () => {
     else loadLessons();
   }catch(e){ $("loginErr").textContent = e.message; }
 });
-$("p").addEventListener("keydown", (e) => { if (e.key === "Enter") $("loginBtn").click(); });
+on("p", "keydown", (e) => { if (e.key === "Enter") $("loginBtn").click(); });
 
 /* housekeeping: clear stored work for retired or stale lessons */
 const MAX_AGE_DAYS = 60;
@@ -309,8 +315,8 @@ function paintLessons(byId){
   });
 }
 
-$("tabActive").addEventListener("click", () => { showing = "active"; paintSub(); });
-$("tabDone").addEventListener("click", () => { showing = "done"; paintSub(); });
+on("tabActive", "click", () => { showing = "active"; paintSub(); });
+on("tabDone", "click", () => { showing = "done"; paintSub(); });
 function paintSub(){
   $("tabActive").classList.toggle("on", showing === "active");
   $("tabDone").classList.toggle("on", showing === "done");
@@ -319,8 +325,8 @@ function paintSub(){
 loadLessons();
 
 /* ---- My results tab ---- */
-$("tabLessons").addEventListener("click", () => switchTab("lessons"));
-$("tabResults").addEventListener("click", () => switchTab("results"));
+on("tabLessons", "click", () => switchTab("lessons"));
+on("tabResults", "click", () => switchTab("results"));
 let resultsLoaded = false;
 function switchTab(which){
   $("tabLessons").classList.toggle("on", which === "lessons");
@@ -346,7 +352,7 @@ function forcePassword(name){
   $("pwModal").hidden = false;
   $("np1").focus();
 }
-$("npGo").addEventListener("click", async () => {
+on("npGo", "click", async () => {
   const a = $("np1").value, b = $("np2").value;
   if (a.length < 12 || a.length > 25){ $("npMsg").textContent = "It must be 12 to 25 characters long."; return; }
   if (a !== b){ $("npMsg").textContent = "The two boxes don't match."; return; }
@@ -371,14 +377,14 @@ function say(title, text, then){
   $("sayOk").onclick = () => { $("sayModal").hidden = true; if (then) then(); };
   $("sayOk").focus();
 }
-$("sayModal").addEventListener("mousedown", (e) => { if (e.target === $("sayModal")) $("sayModal").hidden = true; });
+on("sayModal", "mousedown", (e) => { if (e.target === $("sayModal")) $("sayModal").hidden = true; });
 
 /* ---- forgot password ----
    Check the username, let them choose the new password there and then, and
    hold it until their teacher approves it — no emails, no teacher typing. */
 let rsUser = "", rsTicket = "", rsPoll = null, rsDeadline = 0;
 
-$("forgotBtn").addEventListener("click", async () => {
+on("forgotBtn", "click", async () => {
   const u = $("u").value.trim();
   if (!u){ $("loginErr").textContent = "Type your username first, then press Forgot password?"; return; }
   if (!ready){ $("loginErr").textContent = "Site not connected to its server yet (config.js)."; return; }
@@ -403,13 +409,13 @@ $("forgotBtn").addEventListener("click", async () => {
   }catch(e){ $("loginErr").textContent = e.message; }
   finally{ $("forgotBtn").textContent = "Forgot password?"; }
 });
-$("rsCancel").addEventListener("click", () => { $("resetModal").hidden = true; });
-$("rsGiveUp").addEventListener("click", stopReset);
+on("rsCancel", "click", () => { $("resetModal").hidden = true; });
+on("rsGiveUp", "click", stopReset);
 function stopReset(){
   clearInterval(rsPoll); rsPoll = null;
   $("resetModal").hidden = true;
 }
-$("rsGo").addEventListener("click", async () => {
+on("rsGo", "click", async () => {
   const a = $("rp1").value, b = $("rp2").value;
   if (a.length < 12 || a.length > 25){ $("rsMsg").textContent = "It must be 12 to 25 characters long."; return; }
   if (a !== b){ $("rsMsg").textContent = "The two boxes don't match."; return; }

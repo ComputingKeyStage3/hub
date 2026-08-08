@@ -92,6 +92,12 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+/* wiring a button that isn't there should not stop the rest of the page */
+function on(id, ev, fn){
+  const e = document.getElementById(id);
+  if (!e){ console.warn("Nothing on the page with id:", id); return; }
+  e.addEventListener(ev, fn);
+}
 function el(tag, cls, text){
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -898,7 +904,7 @@ function setMode(assess){
   $("lTitle").placeholder = assess ? "Assessment title, e.g. Unit 1 Assessment" : "Lesson title, e.g. Python 1 — Output";
   saveDraft(); render(); schedulePreview();
 }
-$("modeLesson").addEventListener("click", () => {
+on("modeLesson", "click", () => {
   if (lesson.assessment && lesson.blocks.length){
     openModal(box => {
       box.appendChild(el("h2","","Switch to a lesson?"));
@@ -910,10 +916,10 @@ $("modeLesson").addEventListener("click", () => {
     });
   } else setMode(false);
 });
-$("modeAssess").addEventListener("click", () => setMode(true));
+on("modeAssess", "click", () => setMode(true));
 
 /* ---------- the sentences behind Strength and Target ---------- */
-$("topicsBtn").addEventListener("click", () => {
+on("topicsBtn", "click", () => {
   const used = {};
   lesson.blocks.forEach(b => { if (b.topic) used[b.topic] = true; });
   Object.keys(lesson.topics || {}).forEach(k => { used[k] = true; });
@@ -947,7 +953,7 @@ $("topicsBtn").addEventListener("click", () => {
 /* ---------- response tasks ----------
    After an assessment, students are given the tasks that belong to their
    weakest topic. They are ordinary tasks, kept per topic. */
-$("responsesBtn").addEventListener("click", () => {
+on("responsesBtn", "click", () => {
   const used = {};
   lesson.blocks.forEach(b => {
     if (b.topic) used[b.topic] = true;
@@ -1061,9 +1067,9 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
     if (last && last.scrollIntoView) last.scrollIntoView({ behavior:"smooth", block:"center" });
   });
 });
-$("lTitle").addEventListener("input", () => { lesson.title = $("lTitle").value; saveDraft(); schedulePreview(); });
-$("lIntro").addEventListener("input", () => { lesson.intro = $("lIntro").value; saveDraft(); schedulePreview(); });
-$("lYear").addEventListener("change", async () => {
+on("lTitle", "input", () => { lesson.title = $("lTitle").value; saveDraft(); schedulePreview(); });
+on("lIntro", "input", () => { lesson.intro = $("lIntro").value; saveDraft(); schedulePreview(); });
+on("lYear", "change", async () => {
   const v = $("lYear").value;
   if (v === "__new"){
     const name = await askNew("New year group", "Name (e.g. Year 8)");
@@ -1077,7 +1083,7 @@ $("lYear").addEventListener("change", async () => {
   lesson.unit = "";                       // units belong to a year
   paintPickers(); saveDraft();
 });
-$("lUnit").addEventListener("change", async () => {
+on("lUnit", "change", async () => {
   const v = $("lUnit").value;
   if (v === "__new"){
     const name = await askNew("New unit", "Name (e.g. 8.1 Programming with Python)");
@@ -1160,7 +1166,7 @@ function refreshPreview(){
     $("prevMsg").textContent = "up to date";
   }catch(e){ $("prevMsg").textContent = e.message; }
 }
-$("prevBtn").addEventListener("click", refreshPreview);
+on("prevBtn", "click", refreshPreview);
 
 /* ---------------- getting the file out ---------------- */
 function fileName(){
@@ -1168,10 +1174,10 @@ function fileName(){
 }
 function openModal(build){ $("mBox").innerHTML = ""; build($("mBox")); $("mBack").hidden = false; }
 function closeModal(){ $("mBack").hidden = true; }
-$("mBack").addEventListener("mousedown", (e) => { if (e.target === $("mBack")) closeModal(); });
+on("mBack", "mousedown", (e) => { if (e.target === $("mBack")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
-$("jsonBtn").addEventListener("click", () => {
+on("jsonBtn", "click", () => {
   openModal(box => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);
@@ -1246,10 +1252,10 @@ async function saveToSite(){
   }catch(e){ say("Could not save", e.message); }
   finally{ btn.disabled = false; btn.textContent = "Save to the site"; }
 }
-$("saveSite").addEventListener("click", saveToSite);
+on("saveSite", "click", saveToSite);
 
 /* deleting from here asks twice too — it is the same job as in the console */
-$("copyLesson").addEventListener("click", () => {
+on("copyLesson", "click", () => {
   openModal(box => {
     box.appendChild(el("h2","","Save as a copy"));
     box.appendChild(el("p","modal-text","This makes a new lesson from what is on screen. The one you opened is left as it was, in whichever classes have it."));
@@ -1274,7 +1280,7 @@ $("copyLesson").addEventListener("click", () => {
   });
 });
 
-$("delLesson").addEventListener("click", () => {
+on("delLesson", "click", () => {
   const API = (window.HUB && window.HUB.API) || "";
   const id = lesson.savedAs;
   if (!id) return;
@@ -1399,7 +1405,7 @@ function fromCompiled(data, meta){
   return out;
 }
 
-$("dlBtn").addEventListener("click", () => {
+on("dlBtn", "click", () => {
   const blob = new Blob([JSON.stringify(compile(), null, 2)], { type:"application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = fileName(); a.click();
@@ -1409,7 +1415,7 @@ $("dlBtn").addEventListener("click", () => {
 /* ---------------- paste a Trinket page ----------------
    Trinket pages follow the same shape every time: explanation, starter code,
    then questions. Fill in the parts and you get reading + Python + answers. */
-$("importBtn").addEventListener("click", () => {
+on("importBtn", "click", () => {
   openModal(box => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);

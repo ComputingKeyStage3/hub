@@ -52,7 +52,7 @@
       <button class="btn-ghost" id="hubNewYear">+ New year group</button>
       <button class="btn-primary" id="hubNewLesson">+ Build a new lesson</button>
     </div>
-    <div class="classgrid" id="yearGrid"></div>
+    <div class="classgrid" id="hubYears"></div>
     <div id="hubSearchResults"></div>
   </div>
 
@@ -68,7 +68,20 @@
       <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
       <button class="btn-primary" id="hubNewLesson2">+ Build a new lesson</button>
     </div>
-    <div class="classgrid" id="hubUnitGrid"></div>
+    <div class="classgrid" id="hubUnits"></div>
+    <div id="unitSearchResults"></div>
+  </div>
+
+  <div id="hubLessonsView" hidden>
+    <button class="crumb" id="backHubUnits">&larr; <span id="backUnitYear"></span></button>
+    <div class="classhead">
+      <h2 id="hubUnitName"></h2>
+      <button class="btn-ghost iconbtn" id="renameHubUnitBtn" title="Rename unit">&#9998;</button>
+      <button class="btn-ghost iconbtn" id="deleteHubUnitBtn" title="Delete unit">&#128465;</button>
+    </div>
+    <div class="toolrow">
+      <button class="btn-primary" id="hubNewLesson3">+ Build a new lesson</button>
+    </div>
     <div id="hubList"></div>
   </div>
 
@@ -150,6 +163,14 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+/* Wiring a button that isn't on the page used to throw, and because that
+   happened while the page was setting itself up, everything after it stopped
+   working. Now a missing element is noted and skipped. */
+function on(id, ev, fn){
+  const e = document.getElementById(id);
+  if (!e){ console.warn("Nothing on the page with id:", id); return; }
+  e.addEventListener(ev, fn);
+}
 const API = (window.HUB && window.HUB.API) || "";
 function el(tag, cls, text){
   const e = document.createElement(tag);
@@ -224,7 +245,7 @@ function openModal(build){
   $("tmodal").hidden = false;
 }
 function closeModal(){ $("tmodal").hidden = true; }
-$("tmodal").addEventListener("mousedown", (e) => { if (e.target === $("tmodal")) closeModal(); });
+on("tmodal", "mousedown", (e) => { if (e.target === $("tmodal")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 function say(title, message){
   openModal(box => {
@@ -262,8 +283,8 @@ async function tryKey(){
     $("keyMsg").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
   }
 }
-$("keyGo").addEventListener("click", tryKey);
-$("keyIn").addEventListener("keydown", (e) => { if (e.key === "Enter") tryKey(); });
+on("keyGo", "click", tryKey);
+on("keyIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
 
 /* ---------- classes grid ---------- */
 function paintClasses(){
@@ -277,7 +298,7 @@ function paintClasses(){
     g.appendChild(t);
   });
 }
-$("newClassBtn").addEventListener("click", () => {
+on("newClassBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "New class");
     const i = fieldRow(box, "Class name (e.g. 8B)", "text", "");
@@ -301,15 +322,20 @@ const assignsFor = (id) => assigns.filter(a => a.lesson_id === id);
 const unitsOfYear = (y) => (cat.units || []).filter(u => (u.year || "") === y);
 const lessonsOfUnit = (u) => (cat.lessons || []).filter(l => (l.unit || "") === u);
 
-$("openHub").addEventListener("click", async () => {
+on("openHub", "click", async () => {
   show("hubView");
   $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
   try{ await loadCatalogue(); paintYears(); }
   catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
-$("hubHome").addEventListener("click", toHome);
-$("backYears").addEventListener("click", () => { show("hubView"); paintYears(); });
-$("backHubUnits").addEventListener("click", () => openYear(hubYear));
+on("hubHome", "click", toHome);
+on("refHub", "click", async () => {
+  $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
+  try{ await loadCatalogue(); paintYears(); }
+  catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
+});
+on("backYears", "click", () => { show("hubView"); paintYears(); });
+on("backHubUnits", "click", () => openYear(hubYear));
 
 function paintYears(){
   const g = $("hubYears"); g.innerHTML = "";
@@ -416,11 +442,11 @@ function runSearch(termBox, into){
   into.appendChild(holder);
   return true;
 }
-$("hubSearch").addEventListener("input", () => {
+on("hubSearch", "input", () => {
   const searching = runSearch($("hubSearch"), $("hubSearchResults"));
   $("hubYears").hidden = searching;
 });
-$("unitSearch").addEventListener("input", () => {
+on("unitSearch", "input", () => {
   const searching = runSearch($("unitSearch"), $("unitSearchResults"));
   $("hubUnits").hidden = searching;
 });
@@ -462,8 +488,8 @@ function newUnitPrompt(year, then){
     box.appendChild(go); box.appendChild(msg);
   });
 }
-$("hubNewYear").addEventListener("click", () => newYearPrompt());
-$("hubNewUnit").addEventListener("click", () => newUnitPrompt(hubYear));
+on("hubNewYear", "click", () => newYearPrompt());
+on("hubNewUnit", "click", () => newUnitPrompt(hubYear));
 [["hubNewLesson",""],["hubNewLesson2","year"],["hubNewLesson3","unit"]].forEach(pair => {
   const btn = $(pair[0]);
   if (!btn) return;
@@ -480,7 +506,7 @@ $("hubNewUnit").addEventListener("click", () => newUnitPrompt(hubYear));
   });
 });
 
-$("renameYearBtn").addEventListener("click", () => {
+on("renameYearBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Rename year group");
     const i = fieldRow(box, "Name", "text", hubYear);
@@ -495,7 +521,7 @@ $("renameYearBtn").addEventListener("click", () => {
     box.appendChild(go); box.appendChild(msg);
   });
 });
-$("deleteYearBtn").addEventListener("click", () => {
+on("deleteYearBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Delete " + hubYear + "?");
     box.appendChild(el("p","modal-text","The units inside it are kept — they just stop belonging to a year group. No lessons are deleted."));
@@ -510,7 +536,7 @@ $("deleteYearBtn").addEventListener("click", () => {
     box.appendChild(yes); box.appendChild(no);
   });
 });
-$("renameHubUnitBtn").addEventListener("click", () => {
+on("renameHubUnitBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Rename unit");
     const i = fieldRow(box, "Name", "text", hubUnit);
@@ -525,7 +551,7 @@ $("renameHubUnitBtn").addEventListener("click", () => {
     box.appendChild(go); box.appendChild(msg);
   });
 });
-$("deleteHubUnitBtn").addEventListener("click", () => {
+on("deleteHubUnitBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Delete " + hubUnit + "?");
     box.appendChild(el("p","modal-text","The lessons are kept — they just stop belonging to a unit. Nothing students have done is affected."));
@@ -627,24 +653,24 @@ async function openClass(name){
   document.querySelectorAll(".bk").forEach(b => b.textContent = cls);
   show("classView");
 }
-$("backClasses").addEventListener("click", () => { refreshGroups(); show("classesView"); });
-$("openClasses").addEventListener("click", toClasses);
-$("backHome").addEventListener("click", toHome);
-$("refStudents").addEventListener("click", () => { students = []; workCache = { key:"", rows:[], t:0 }; loadStudents(); });
-$("refUnits").addEventListener("click", async () => {
+on("backClasses", "click", () => { refreshGroups(); show("classesView"); });
+on("openClasses", "click", toClasses);
+on("backHome", "click", toHome);
+on("refStudents", "click", () => { students = []; workCache = { key:"", rows:[], t:0 }; loadStudents(); });
+on("refUnits", "click", async () => {
   $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
   try{ await loadCatalogue(); paintClassUnits(); }
   catch(e){ $("unitGrid").innerHTML = ""; $("unitGrid").appendChild(el("p","hint", e.message)); }
 });
-$("refLessons").addEventListener("click", async () => {
+on("refLessons", "click", async () => {
   $("lessonGrid").innerHTML = '<p class="hint">Loading…</p>';
   try{ await loadCatalogue(); await loadClassLocks(); paintLessonGrid(); }
   catch(e){ $("lessonGrid").innerHTML = ""; $("lessonGrid").appendChild(el("p","hint", e.message)); }
 });
-$("backClass1").addEventListener("click", () => openClass(cls));
-$("backClass2").addEventListener("click", () => openClass(cls));
+on("backClass1", "click", () => openClass(cls));
+on("backClass2", "click", () => openClass(cls));
 
-$("renameBtn").addEventListener("click", () => {
+on("renameBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Rename class");
     const i = fieldRow(box, "Class name", "text", cls);
@@ -665,7 +691,7 @@ $("renameBtn").addEventListener("click", () => {
 });
 
 /* ---------- students ---------- */
-$("openStudents").addEventListener("click", async () => { show("studentsView"); await loadStudents(); });
+on("openStudents", "click", async () => { show("studentsView"); await loadStudents(); });
 async function loadResets(){
   const box = $("resetBox"); box.innerHTML = "";
   try{
@@ -782,7 +808,7 @@ function confirmDelete(st){
     box.appendChild(go); box.appendChild(no); box.appendChild(msg);
   });
 }
-$("addOneBtn").addEventListener("click", () => {
+on("addOneBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Add a student to " + cls);
     const d = fieldRow(box, "Display name", "text", "");
@@ -806,7 +832,7 @@ $("addOneBtn").addEventListener("click", () => {
     box.appendChild(go); box.appendChild(msg);
   });
 });
-$("addManyBtn").addEventListener("click", () => {
+on("addManyBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Add many to " + cls);
     box.appendChild(el("p","modal-text","One student per line: username, display name \u2014 they choose their own password at first sign-in. (You can still use username, password, display name if you want to set one.)"));
@@ -868,7 +894,7 @@ async function catPost(payload){
   await loadCatalogue();
 }
 
-$("openLessons").addEventListener("click", async () => {
+on("openLessons", "click", async () => {
   show("unitsView");
   $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
   try{ await loadCatalogue(); paintClassUnits(); }
@@ -901,7 +927,7 @@ function paintClassUnits(){
   if (!names.length)
     g.appendChild(el("p","hint", cls + " has no lessons yet. Add some from the lesson hub, or with the button below."));
 }
-$("backUnits").addEventListener("click", () => { show("unitsView"); paintClassUnits(); });
+on("backUnits", "click", () => { show("unitsView"); paintClassUnits(); });
 
 async function openUnit(name){
   unit = name;
@@ -912,7 +938,7 @@ async function openUnit(name){
   loadClassLocks().then(paintLessonGrid).catch(() => {});
 }
 
-$("newLessonBtn").addEventListener("click", () => {
+on("newLessonBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Build a new lesson");
     box.appendChild(el("p","modal-text","Should everyone be able to use this lesson, or is it just for " + cls + "?"));
@@ -930,7 +956,7 @@ $("newLessonBtn").addEventListener("click", () => {
   });
 });
 
-$("addLessonBtn").addEventListener("click", () => {
+on("addLessonBtn", "click", () => {
   let showAll = false, term = "";
   openModal(box => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
@@ -1383,9 +1409,9 @@ function showPwView(){
   show("pwView");
   startPwPolling();
 }
-$("pwBtn").addEventListener("click", showPwView);
-$("backFromPw").addEventListener("click", () => { stopPwPolling(); show(pwFrom); });
-$("pwRefresh").addEventListener("click", startPwPolling);
+on("pwBtn", "click", showPwView);
+on("backFromPw", "click", () => { stopPwPolling(); show(pwFrom); });
+on("pwRefresh", "click", startPwPolling);
 function startPwPolling(){
   clearInterval(pwPoll);
   $("pwRefresh").hidden = true;
