@@ -210,6 +210,8 @@ const toHome    = () => { show("homeView"); };
 const toClasses = () => { refreshGroups(); show("classesView"); paintCrumbs(); };
 const toClass   = () => openClass(cls);
 const toUnits   = () => { show("unitsView"); paintClassUnits(); };
+const toHub     = () => { show("hubView"); paintYears(); };
+const toHubYear = () => openYear(hubYear);
 const toUnit    = () => openUnit(unit);
 function paintCrumbs(){
   const v = VIEWS.find(x => !$(x).hidden);
@@ -219,6 +221,9 @@ function paintCrumbs(){
   if (v === "homeView") return crumbs([top]);
   if (v === "hubView") return crumbs([top, { name:"Lesson hub" }]);
   if (v === "hubUnitsView") return crumbs([top, { name:"Lesson hub", go: toHub }, { name: hubYear || "Not in a year group" }]);
+  if (v === "hubLessonsView") return crumbs([top, { name:"Lesson hub", go: toHub },
+                                             { name: hubYear || "Not in a year group", go: toHubYear },
+                                             { name: hubUnit || "Not in a unit" }]);
   if (v === "classesView") return crumbs([top, { name:"Classes" }]);
   if (v === "pwView") return crumbs([top, { name:"Password updates" }]);
   if (v === "classView") return crumbs([top, home, { name: cls }]);
