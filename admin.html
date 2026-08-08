@@ -235,7 +235,7 @@ function paintCrumbs(){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","homeView","hubView","hubUnitsView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
+const VIEWS = ["keyView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
 function show(view){
   VIEWS.forEach(v => { $(v).hidden = v !== view; });
   clearInterval(relTimer);
