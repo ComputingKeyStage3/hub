@@ -105,6 +105,8 @@ function el(tag, cls, text){
   return e;
 }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+/* words only — used where a task's own text is shown as a summary */
+function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, "").trim(); }
 
 /* ---------------- the lesson being built ---------------- */
 let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, topics:{}, responses:{}, blocks:[] };
@@ -953,7 +955,8 @@ on("topicsBtn", "click", () => {
 /* ---------- response tasks ----------
    After an assessment, students are given the tasks that belong to their
    weakest topic. They are ordinary tasks, kept per topic. */
-on("responsesBtn", "click", () => {
+function openResponses(){
+  if (!lesson.responses) lesson.responses = {};
   const used = {};
   lesson.blocks.forEach(b => {
     if (b.topic) used[b.topic] = true;
@@ -987,12 +990,12 @@ on("responsesBtn", "click", () => {
           if (i === 0) return;
           const arr = lesson.responses[topic];
           arr.splice(i - 1, 0, arr.splice(i, 1)[0]);
-          closeModal(); saveDraft(); $("responsesBtn").click();
+          saveDraft(); openResponses();
         });
         const rm = el("button","btn-ghost bmini","\u2715");
         rm.addEventListener("click", () => {
           lesson.responses[topic].splice(i, 1);
-          saveDraft(); closeModal(); $("responsesBtn").click();
+          saveDraft(); schedulePreview(); openResponses();
         });
         row.appendChild(up); row.appendChild(rm);
         g.appendChild(row);
@@ -1003,7 +1006,8 @@ on("responsesBtn", "click", () => {
         const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
         btn.addEventListener("click", () => {
           lesson.responses[topic].push(BLANK[pair[0]]());
-          saveDraft(); closeModal(); $("responsesBtn").click();
+          saveDraft(); schedulePreview();
+          openResponses();                 // redraw with the new task in place
         });
         add.appendChild(btn);
       });
@@ -1019,7 +1023,8 @@ on("responsesBtn", "click", () => {
     done.addEventListener("click", closeModal);
     box.appendChild(done);
   });
-});
+}
+on("responsesBtn", "click", openResponses);
 
 /* the same cards as anywhere else, just for one topic's tasks */
 function editResponses(topic){
