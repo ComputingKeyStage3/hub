@@ -1200,3 +1200,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
   height:100%; font-size:15px; box-shadow:none !important; min-width:0}
 .searchbox input:focus{outline:none; border:none !important; box-shadow:none !important}
 .refresh{margin-left:8px; font-size:16px}
+
+
+/* builder: year and unit pickers */
+.build-titles select{font-size:15px; padding:9px 11px; max-width:200px; border-radius:12px}

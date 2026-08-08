@@ -28,8 +28,8 @@
   <div class="build-titles">
     <input id="lTitle" placeholder="Lesson title, e.g. Python 1 — Output" autocomplete="off">
     <input id="lIntro" placeholder="One line for the home page" autocomplete="off">
-    <input id="lUnit" placeholder="Unit (required)" autocomplete="off" list="unitList">
-    <datalist id="unitList"></datalist>
+    <select id="lYear" title="Year group"></select>
+    <select id="lUnit" title="Unit"></select>
   </div>
   <div class="build-actions">
     <button class="btn-ghost" id="importBtn">Paste a Trinket page</button>
@@ -37,6 +37,7 @@
     <button class="btn-ghost" id="dlBtn">Save file</button>
     <button class="btn-ghost" id="prevBtn">Refresh preview</button>
     <button class="btn-primary" id="saveSite">Save to the site</button>
+    <button class="btn-ghost" id="copyLesson" hidden>Save as a copy</button>
     <button class="btn-ghost" id="delLesson" hidden>Delete lesson</button>
   </div>
 </div>
@@ -69,6 +70,7 @@
       <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
       <p class="pal-head">Feedback</p>
       <button class="pal" id="topicsBtn"><b>Strength &amp; Target</b><span>Sentences per topic</span></button>
+      <button class="pal" id="responsesBtn"><b>Response tasks</b><span>What to do after the score</span></button>
     </div>
     <p class="pal-note">Drag a card by its handle to reorder. Everything saves in this browser as you type.</p>
   </aside>
@@ -99,7 +101,7 @@ function el(tag, cls, text){
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
 /* ---------------- the lesson being built ---------------- */
-let lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:[] };
+let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, topics:{}, responses:{}, blocks:[] };
 
 const BLANK = {
   text:     () => ({ type:"text", heading:"", html:"" }),
@@ -217,6 +219,8 @@ function compile(){
   const out = { title: lesson.title || "Untitled lesson", blocks: [] };
   if (lesson.intro) out.intro = lesson.intro;
   if (lesson.unit) out.unit = lesson.unit;
+  if (lesson.year) out.year = lesson.year;
+  if (lesson.year) out.year = lesson.year;
   if (lesson.assessment){
     out.assessment = true;
     const topics = {};
@@ -225,6 +229,13 @@ function compile(){
       if (t && (t.label || t.strength || t.target)) topics[k] = { label:t.label||k, strength:t.strength||"", target:t.target||"" };
     });
     if (Object.keys(topics).length) out.topics = topics;
+    const responses = {};
+    Object.keys(lesson.responses || {}).forEach(topic => {
+      const built = [];
+      (lesson.responses[topic] || []).forEach((task, i) => compileOne(task, "resp_" + topic + "_" + (i + 1), built));
+      if (built.length) responses[topic] = built;
+    });
+    if (Object.keys(responses).length) out.responses = responses;
   }
   firstPageOpen();
   lesson.blocks.forEach((b, i) => compileOne(b, b.type + (i + 1), out.blocks));
@@ -373,6 +384,19 @@ function render(){
   wireList();
   firstPageOpen();
   const list = $("list"); list.innerHTML = "";
+  if (respEditing){
+    const head = el("div","classhead");
+    head.appendChild(el("h2","", "Response tasks \u2014 " + respEditing));
+    const back = el("button","btn-ghost bmini2","Back to the assessment");
+    back.addEventListener("click", () => { respEditing = null; render(); schedulePreview(); });
+    head.appendChild(back);
+    list.appendChild(head);
+    const arr = lesson.responses[respEditing] || [];
+    if (!arr.length) list.appendChild(el("p","hint","No tasks for this topic yet — add some from the Response tasks button."));
+    arr.forEach((b, i) => list.appendChild(card(b, i, arr)));
+    saveDraft();
+    return;
+  }
   if (!lesson.blocks.length)
     list.appendChild(el("p","hint", lesson.assessment
       ? "No questions yet — add one from the left."
@@ -920,6 +944,86 @@ $("topicsBtn").addEventListener("click", () => {
   });
 });
 
+/* ---------- response tasks ----------
+   After an assessment, students are given the tasks that belong to their
+   weakest topic. They are ordinary tasks, kept per topic. */
+$("responsesBtn").addEventListener("click", () => {
+  const used = {};
+  lesson.blocks.forEach(b => {
+    if (b.topic) used[b.topic] = true;
+    (b.blocks || []).forEach(k => { if (k.topic) used[k.topic] = true; });
+  });
+  Object.keys(lesson.topics || {}).forEach(k => { used[k] = true; });
+  const names = Object.keys(used);
+  openModal(box => {
+    box.classList.add("wide");
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", closeModal); box.appendChild(x);
+    box.appendChild(el("h2","","Response tasks"));
+    box.appendChild(el("p","hint","Each student is given the tasks for the topic they did worst in. Two or three per topic keeps them busy."));
+    if (!names.length){
+      box.appendChild(el("p","modal-text","Add a topic tag to some questions first."));
+    }
+    names.forEach(topic => {
+      if (!lesson.responses[topic]) lesson.responses[topic] = [];
+      const g = el("div","qsub");
+      const head = el("div","qsub-head");
+      head.appendChild(el("b","", topic));
+      head.appendChild(el("span","hint", lesson.responses[topic].length + " task" +
+        (lesson.responses[topic].length === 1 ? "" : "s")));
+      g.appendChild(head);
+      lesson.responses[topic].forEach((task, i) => {
+        const row = el("div","ov-row");
+        row.appendChild(el("span","t", LABEL[task.type] || task.type));
+        row.appendChild(el("span","p", stripTags(task.prompt || task.title || task.q || "")));
+        const up = el("button","btn-ghost bmini","\u2191");
+        up.addEventListener("click", () => {
+          if (i === 0) return;
+          const arr = lesson.responses[topic];
+          arr.splice(i - 1, 0, arr.splice(i, 1)[0]);
+          closeModal(); saveDraft(); $("responsesBtn").click();
+        });
+        const rm = el("button","btn-ghost bmini","\u2715");
+        rm.addEventListener("click", () => {
+          lesson.responses[topic].splice(i, 1);
+          saveDraft(); closeModal(); $("responsesBtn").click();
+        });
+        row.appendChild(up); row.appendChild(rm);
+        g.appendChild(row);
+      });
+      const add = el("div","pageadd");
+      [["question","Written answer"],["quiz","Quiz"],["blanks","Fill the gaps"],
+       ["short","Short answer"],["text","Paragraph"],["ide","Python task"]].forEach(pair => {
+        const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
+        btn.addEventListener("click", () => {
+          lesson.responses[topic].push(BLANK[pair[0]]());
+          saveDraft(); closeModal(); $("responsesBtn").click();
+        });
+        add.appendChild(btn);
+      });
+      g.appendChild(add);
+      if (lesson.responses[topic].length){
+        const editBtn = el("button","btn-ghost bmini2","Edit these tasks");
+        editBtn.addEventListener("click", () => { closeModal(); editResponses(topic); });
+        g.appendChild(editBtn);
+      }
+      box.appendChild(g);
+    });
+    const done = el("button","btn-primary modal-cta","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+});
+
+/* the same cards as anywhere else, just for one topic's tasks */
+function editResponses(topic){
+  respEditing = topic;
+  render();
+  const list = $("list");
+  if (list.scrollIntoView) list.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+let respEditing = null;
+
 document.querySelectorAll(".pal[data-add]").forEach(btn => {
   btn.draggable = true;
   btn.addEventListener("dragstart", (e) => {
@@ -959,10 +1063,90 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
 });
 $("lTitle").addEventListener("input", () => { lesson.title = $("lTitle").value; saveDraft(); schedulePreview(); });
 $("lIntro").addEventListener("input", () => { lesson.intro = $("lIntro").value; saveDraft(); schedulePreview(); });
-$("lUnit").addEventListener("input", () => { lesson.unit = $("lUnit").value; saveDraft(); });
+$("lYear").addEventListener("change", async () => {
+  const v = $("lYear").value;
+  if (v === "__new"){
+    const name = await askNew("New year group", "Name (e.g. Year 8)");
+    if (!name){ $("lYear").value = lesson.year || ""; return; }
+    try{ await catPost({ op:"add-year", name: name }); }catch(e){ say("Could not create it", e.message); }
+    await loadUnitsAndYears();
+    lesson.year = name;
+  } else {
+    lesson.year = v;
+  }
+  lesson.unit = "";                       // units belong to a year
+  paintPickers(); saveDraft();
+});
+$("lUnit").addEventListener("change", async () => {
+  const v = $("lUnit").value;
+  if (v === "__new"){
+    const name = await askNew("New unit", "Name (e.g. 8.1 Programming with Python)");
+    if (!name){ paintPickers(); return; }
+    try{ await catPost({ op:"add-unit", name: name, year: lesson.year || "" }); }
+    catch(e){ say("Could not create it", e.message); }
+    await loadUnitsAndYears();
+    lesson.unit = name;
+  } else {
+    lesson.unit = v;
+  }
+  paintPickers(); saveDraft();
+});
+
+/* a small prompt that returns what was typed */
+function askNew(title, label){
+  return new Promise(resolve => {
+    openModal(box => {
+      box.appendChild(el("h2","", title));
+      const w = el("div","bfield");
+      w.appendChild(el("label","", label));
+      const inp = el("input"); w.appendChild(inp); box.appendChild(w);
+      const go = el("button","btn-primary modal-cta","Create");
+      go.addEventListener("click", () => { const v = inp.value.trim(); closeModal(); resolve(v || null); });
+      const no = el("button","btn-ghost modal-stay","Cancel");
+      no.addEventListener("click", () => { closeModal(); resolve(null); });
+      box.appendChild(go); box.appendChild(no);
+    });
+  });
+}
+async function catPost(payload){
+  const API = (window.HUB && window.HUB.API) || "";
+  const r = await fetch(API + "/api/catalog", { method:"POST",
+    headers:{ "Content-Type":"application/json", "x-teacher-key": teacherKey() },
+    body: JSON.stringify(payload) });
+  if (!r.ok) throw new Error((await r.json()).error || "Could not save.");
+}
+
+let cat = { units: [], years: [] };
+function paintPickers(){
+  const ys = $("lYear"), us = $("lUnit");
+  const years = (cat.years || []).map(y => y.name);
+  (cat.units || []).forEach(u => { if (u.year && years.indexOf(u.year) < 0) years.push(u.year); });
+  ys.innerHTML = "";
+  const y0 = document.createElement("option");
+  y0.value = ""; y0.textContent = "Year group…"; ys.appendChild(y0);
+  years.forEach(y => {
+    const o = document.createElement("option"); o.value = y; o.textContent = y;
+    if (y === lesson.year) o.selected = true;
+    ys.appendChild(o);
+  });
+  const yNew = document.createElement("option");
+  yNew.value = "__new"; yNew.textContent = "+ New year group"; ys.appendChild(yNew);
+
+  us.innerHTML = "";
+  const u0 = document.createElement("option");
+  u0.value = ""; u0.textContent = "Unit…"; us.appendChild(u0);
+  (cat.units || []).filter(u => !lesson.year || (u.year || "") === lesson.year).forEach(u => {
+    const o = document.createElement("option"); o.value = u.name; o.textContent = u.name;
+    if (u.name === lesson.unit) o.selected = true;
+    us.appendChild(o);
+  });
+  const uNew = document.createElement("option");
+  uNew.value = "__new"; uNew.textContent = "+ New unit"; us.appendChild(uNew);
+}
 
 /* ---------------- live preview ---------------- */
 let prevTimer = null;
+let previewReset = true;      // a freshly opened lesson starts at its first page
 function schedulePreview(){
   clearTimeout(prevTimer);
   $("prevMsg").textContent = "updating\u2026";
@@ -970,6 +1154,7 @@ function schedulePreview(){
 }
 function refreshPreview(){
   try{
+    if (previewReset){ try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){} previewReset = false; }
     localStorage.setItem("hub_preview", JSON.stringify(compile()));
     $("prev").src = "lesson.html?id=__preview&builder=1&t=" + Date.now();
     $("prevMsg").textContent = "up to date";
@@ -1027,13 +1212,18 @@ function askForKey(then){
   });
 }
 function lessonId(){
+  /* A lesson keeps the name it was saved under. Renaming it changes the
+     title, not which lesson it is — otherwise editing would quietly leave a
+     copy of the old one behind, still sitting in whichever classes had it. */
+  if (lesson.savedAs) return lesson.savedAs;
   return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50);
 }
 async function saveToSite(){
   const API = (window.HUB && window.HUB.API) || "";
   if (!API){ say("Not connected", "This copy of the site has no server address in config.js, so it can't save lessons."); return; }
   if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
-  if (!lesson.unit.trim()){ say("Which unit?", "Every lesson belongs to a unit. Fill in the Unit box at the top."); return; }
+  if (!lesson.year || !lesson.year.trim()){ say("Which year group?", "Choose a year group at the top, or make a new one."); return; }
+  if (!lesson.unit || !lesson.unit.trim()){ say("Which unit?", "Choose a unit at the top, or make a new one."); return; }
   if (!teacherKey()){ askForKey(saveToSite); return; }
   const btn = $("saveSite");
   btn.disabled = true; btn.textContent = "Saving\u2026";
@@ -1042,7 +1232,7 @@ async function saveToSite(){
       method:"POST",
       headers:{ "Content-Type":"application/json", "x-teacher-key": teacherKey() },
       body: JSON.stringify({ id: lessonId(), title: lesson.title, unit: lesson.unit,
-                             owner: lesson.ownerGroup || "", data: compile() })
+                             year: lesson.year || "", owner: lesson.ownerGroup || "", data: compile() })
     });
     const d = await r.json();
     if (r.status === 403){ localStorage.removeItem("hub_tkey"); throw new Error("That teacher key was not accepted."); }
@@ -1059,6 +1249,31 @@ async function saveToSite(){
 $("saveSite").addEventListener("click", saveToSite);
 
 /* deleting from here asks twice too — it is the same job as in the console */
+$("copyLesson").addEventListener("click", () => {
+  openModal(box => {
+    box.appendChild(el("h2","","Save as a copy"));
+    box.appendChild(el("p","modal-text","This makes a new lesson from what is on screen. The one you opened is left as it was, in whichever classes have it."));
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Name for the copy"));
+    const inp = el("input"); inp.value = (lesson.title || "") + " (copy)";
+    w.appendChild(inp); box.appendChild(w);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Make the copy");
+    go.addEventListener("click", async () => {
+      const name = inp.value.trim();
+      if (!name){ msg.textContent = "Give the copy a name."; return; }
+      lesson.title = name;
+      lesson.savedAs = null;                 // a new lesson, so a new name
+      $("lTitle").value = name;
+      closeModal();
+      await saveToSite();
+    });
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
+  });
+});
+
 $("delLesson").addEventListener("click", () => {
   const API = (window.HUB && window.HUB.API) || "";
   const id = lesson.savedAs;
@@ -1107,19 +1322,25 @@ $("delLesson").addEventListener("click", () => {
 });
 
 /* offer the units that already exist, and load a lesson if asked to edit one */
-async function loadUnitsAndMaybeLesson(){
+async function loadUnitsAndYears(){
   const API = (window.HUB && window.HUB.API) || "";
   if (!API) return;
   try{
-    const r = await fetch(API + "/api/catalog", { cache:"no-store" });
-    const d = await r.json();
-    const dl = $("unitList"); dl.innerHTML = "";
-    (d.units || []).forEach(u => { const o = document.createElement("option"); o.value = u.name; dl.appendChild(o); });
+    const r = await fetch(API + "/api/catalog", { headers: teacherKey() ? { "x-teacher-key": teacherKey() } : {}, cache:"no-store" });
+    cat = await r.json();
   }catch(e){}
+  paintPickers();
+}
+async function loadUnitsAndMaybeLesson(){
+  const API = (window.HUB && window.HUB.API) || "";
+  if (!API) return;
+  await loadUnitsAndYears();
   const editId = new URLSearchParams(location.search).get("edit");
-  const wantUnit = new URLSearchParams(location.search).get("unit");
-  const wantClass = new URLSearchParams(location.search).get("class");
-  if (wantUnit && !lesson.unit){ lesson.unit = wantUnit; $("lUnit").value = wantUnit; saveDraft(); }
+  const qs2 = new URLSearchParams(location.search);
+  const wantYear = qs2.get("year"), wantUnit = qs2.get("unit"), wantClass = qs2.get("class");
+  if (wantYear && !lesson.year) lesson.year = wantYear;
+  if (wantUnit && !lesson.unit) lesson.unit = wantUnit;
+  if (wantYear || wantUnit) paintPickers();
   if (wantClass){
     lesson.ownerGroup = wantClass; saveDraft();
     $("ownerNote").hidden = false;
@@ -1138,8 +1359,9 @@ async function loadUnitsAndMaybeLesson(){
     migrate(lesson.blocks); tidyIntoPages();
     dirty = false;
     $("delLesson").hidden = false;
+    $("copyLesson").hidden = false;
     $("lTitle").value = lesson.title; $("lIntro").value = lesson.intro || "";
-    $("lUnit").value = lesson.unit || "";
+    paintPickers();
     setMode(!!lesson.assessment);
     render(); refreshPreview();
   }catch(e){ say("Could not open that lesson", e.message); }
@@ -1148,8 +1370,8 @@ async function loadUnitsAndMaybeLesson(){
 /* turn a saved lesson file back into editable cards */
 function fromCompiled(data, meta){
   const out = { title: data.title || (meta && meta.title) || "", intro: data.intro || "",
-                unit: data.unit || (meta && meta.unit) || "", assessment: !!data.assessment,
-                topics: data.topics || {}, blocks: [] };
+                unit: data.unit || (meta && meta.unit) || "", year: data.year || "", assessment: !!data.assessment,
+                topics: data.topics || {}, responses: {}, blocks: [] };
   const back = (b) => {
     if (b.type === "page") return { type:"page", title:b.title || "", task:b.task || "", blocks:(b.blocks || []).map(back) };
     if (b.type === "text"){
@@ -1171,6 +1393,9 @@ function fromCompiled(data, meta){
     return copy;
   };
   out.blocks = (data.blocks || []).map(back);
+  Object.keys(data.responses || {}).forEach(topic => {
+    out.responses[topic] = (data.responses[topic] || []).map(back);
+  });
   return out;
 }
 
@@ -1231,7 +1456,7 @@ loadDraft();
 if (!lesson.topics) lesson.topics = {};
 $("lTitle").value = lesson.title || "";
 $("lIntro").value = lesson.intro || "";
-$("lUnit").value = lesson.unit || "";
+paintPickers();
 setMode(!!lesson.assessment);
 loadUnitsAndMaybeLesson();
 render();

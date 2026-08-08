@@ -15,6 +15,8 @@
   function apply(p){
     if (p.bg) document.documentElement.dataset.bg = p.bg; else delete document.documentElement.dataset.bg;
     if (p.font) document.documentElement.dataset.font = p.font; else delete document.documentElement.dataset.font;
+    /* editors on the page follow along */
+    try{ window.dispatchEvent(new Event("hubprefs")); }catch(e){}
   }
   function build(){
     const back = document.createElement("div");

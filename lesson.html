@@ -347,17 +347,27 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     if (spectate){
       $("saveBtn").hidden = true; $("signinHint").hidden = true;
       if (builderParam !== null){
+
         // inside the builder: no banner, and nowhere to wander off to
         const home = $("homeLink");
         if (home){ home.hidden = true; }
         hideLoader();
+        /* remember which page is being looked at, so a refresh while editing
+           does not throw the teacher back to page one */
+        try{
+          const keep = sessionStorage.getItem("hub_preview_step");
+          if (keep !== null && stepParam === null){
+            const n = parseInt(keep, 10);
+            if (!isNaN(n) && n >= 0 && n < steps.length) step = n;
+          }
+        }catch(e){}
         if (!steps.length){
           $("briefTitle").textContent = "Nothing to preview yet";
           $("briefText").textContent = "Add a task on the left and it appears here.";
           $("dock").classList.add("gone");
           return;
         }
-        showStep(Math.min(Math.max(parseInt(stepParam, 10) || 0, 0), steps.length - 1));
+        showStep(Math.min(Math.max(stepParam !== null ? parseInt(stepParam, 10) : step, 0), steps.length - 1));
         return;
       }
       if (document.body.classList) document.body.classList.add("spectating");
@@ -520,6 +530,11 @@ function buildTracker(){
   steps.forEach(() => t.appendChild(el("div","seg")));
 }
 function showStep(i){
+  /* inside the builder's preview, keep a note of the page so a refresh comes
+     back to it rather than jumping to the beginning */
+  if (builderParam !== null){
+    try{ sessionStorage.setItem("hub_preview_step", String(i)); }catch(e){}
+  }
   step = Math.min(Math.max(i, 0), steps.length - 1);
   // A restored position can be ahead of what the teacher has opened.
   if (isLocked(step)){
@@ -1088,6 +1103,27 @@ function checkPython(code){
 
 /* ---------- the IDE ---------- */
 function idePrefs(){ try{ return JSON.parse(localStorage.getItem("hub_ide") || "{}"); }catch(e){ return {}; } }
+/* Unless the student has chosen editor colours themselves, the editor follows
+   the site theme: dark for the dark background, light for all the others. */
+function themeFromSite(){
+  try{
+    const bg = document.documentElement.dataset.bg || "";
+    return bg === "dark" ? "dark" : "light";
+  }catch(e){ return "light"; }
+}
+const ideThemeWatchers = [];
+function watchSiteTheme(fn){
+  ideThemeWatchers.push(fn);
+  fn(themeFromSite());
+}
+try{
+  if (window.MutationObserver){
+    new MutationObserver(() => {
+      const t = themeFromSite();
+      ideThemeWatchers.forEach(fn => { try{ fn(t); }catch(e){} });
+    }).observe(document.documentElement, { attributes:true, attributeFilter:["data-bg"] });
+  }
+}catch(e){}
 function saveIdePrefs(p){ try{ localStorage.setItem("hub_ide", JSON.stringify(p)); }catch(e){} }
 
 function rIDE(b){
@@ -1228,7 +1264,8 @@ function rIDE(b){
     const p = idePrefs(); p.size = k; saveIdePrefs(p);
   }
   const pref = idePrefs();
-  setTheme(pref.theme || "dark");
+  if (pref.theme) setTheme(pref.theme);
+  else watchSiteTheme((t) => { if (!idePrefs().theme) setTheme(t); });
   setSize(pref.size || "m");
 
   /* --- painting --- */
@@ -1693,7 +1730,8 @@ function rWeb(b){
     const p = idePrefs(); p.size = k; saveIdePrefs(p);
   }
   const pref = idePrefs();
-  setTheme(pref.theme || "dark");
+  if (pref.theme) setTheme(pref.theme);
+  else watchSiteTheme((t) => { if (!idePrefs().theme) setTheme(t); });
   setSize(pref.size || "m");
 
   /* ---------- painting ---------- */

@@ -43,13 +43,32 @@
   </div>
 
   <div id="hubView" hidden>
-    <h2 style="margin:22px 0 4px">Lesson hub</h2>
-    <p class="hint" style="margin:0">Every lesson in the school, by unit. Give them to classes from here.</p>
+    <button class="crumb" id="hubHome">&larr; Home</button>
+    <button class="btn-ghost iconbtn refresh" id="refHub" title="Refresh">&#8635;</button>
+    <h2 style="margin:14px 0 4px">Lesson hub</h2>
+    <p class="hint" style="margin:0">Years hold units, and units hold lessons.</p>
     <div class="toolrow">
       <span class="searchbox"><span class="searchicon">&#128269;</span><input id="hubSearch" placeholder="Search lessons"></span>
-      <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
+      <button class="btn-ghost" id="hubNewYear">+ New year group</button>
       <button class="btn-primary" id="hubNewLesson">+ Build a new lesson</button>
     </div>
+    <div class="classgrid" id="yearGrid"></div>
+    <div id="hubSearchResults"></div>
+  </div>
+
+  <div id="hubUnitsView" hidden>
+    <button class="crumb" id="backYears">&larr; Lesson hub</button>
+    <div class="classhead">
+      <h2 id="yearName"></h2>
+      <button class="btn-ghost iconbtn" id="renameYearBtn" title="Rename year group">&#9998;</button>
+      <button class="btn-ghost iconbtn" id="deleteYearBtn" title="Delete year group">&#128465;</button>
+    </div>
+    <div class="toolrow">
+      <span class="searchbox"><span class="searchicon">&#128269;</span><input id="unitSearch" placeholder="Search lessons"></span>
+      <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
+      <button class="btn-primary" id="hubNewLesson2">+ Build a new lesson</button>
+    </div>
+    <div class="classgrid" id="hubUnitGrid"></div>
     <div id="hubList"></div>
   </div>
 
@@ -105,7 +124,6 @@
     <button class="btn-ghost iconbtn refresh" id="refUnits" title="Refresh">&#8635;</button>
     <h2 style="margin:14px 0 4px">Units</h2>
     <p class="hint" style="margin:0">Lessons live inside units. Choose one to publish and pace its lessons.</p>
-    <div class="toolrow"><button class="btn-ghost" id="newUnitBtn">+ New unit</button></div>
     <div class="classgrid" id="unitGrid"></div>
   </div>
 
@@ -114,8 +132,7 @@
     <button class="btn-ghost iconbtn refresh" id="refLessons" title="Refresh">&#8635;</button>
     <div class="classhead">
       <h2 id="unitName"></h2>
-      <button class="btn-ghost iconbtn" id="renameUnitBtn" title="Rename unit">&#9998;</button>
-      <button class="btn-ghost iconbtn" id="deleteUnitBtn" title="Delete unit">&#128465;</button>
+
     </div>
     <div class="toolrow">
       <button class="btn-ghost" id="addLessonBtn">+ Add an existing lesson</button>
@@ -171,7 +188,7 @@ function crumbs(trail){
 const toHome    = () => { show("homeView"); };
 const toClasses = () => { refreshGroups(); show("classesView"); paintCrumbs(); };
 const toClass   = () => openClass(cls);
-const toUnits   = () => { show("unitsView"); paintUnits(); };
+const toUnits   = () => { show("unitsView"); paintClassUnits(); };
 const toUnit    = () => openUnit(unit);
 function paintCrumbs(){
   const v = VIEWS.find(x => !$(x).hidden);
@@ -180,6 +197,7 @@ function paintCrumbs(){
   const home = { name:"Classes", go: toClasses };
   if (v === "homeView") return crumbs([top]);
   if (v === "hubView") return crumbs([top, { name:"Lesson hub" }]);
+  if (v === "hubUnitsView") return crumbs([top, { name:"Lesson hub", go: toHub }, { name: hubYear || "Not in a year group" }]);
   if (v === "classesView") return crumbs([top, { name:"Classes" }]);
   if (v === "pwView") return crumbs([top, { name:"Password updates" }]);
   if (v === "classView") return crumbs([top, home, { name: cls }]);
@@ -191,7 +209,7 @@ function paintCrumbs(){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","homeView","hubView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
+const VIEWS = ["keyView","homeView","hubView","hubUnitsView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
 function show(view){
   VIEWS.forEach(v => { $(v).hidden = v !== view; });
   clearInterval(relTimer);
@@ -276,86 +294,259 @@ async function refreshGroups(){
   }catch(e){}
 }
 
-/* ---------- the lesson hub ---------- */
-let assigns = [];            // which classes have which lessons
+/* ---------- the lesson hub: year groups, then units, then lessons ---------- */
+let assigns = [];
+let hubYear = "", hubUnit = "";
 const assignsFor = (id) => assigns.filter(a => a.lesson_id === id);
+const unitsOfYear = (y) => (cat.units || []).filter(u => (u.year || "") === y);
+const lessonsOfUnit = (u) => (cat.lessons || []).filter(l => (l.unit || "") === u);
+
 $("openHub").addEventListener("click", async () => {
   show("hubView");
-  $("hubList").innerHTML = '<p class="hint">Loading…</p>';
-  try{ await loadCatalogue(); paintHub(); }
-  catch(e){ $("hubList").innerHTML = ""; $("hubList").appendChild(el("p","hint", e.message)); }
+  $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
+  try{ await loadCatalogue(); paintYears(); }
+  catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
-$("hubSearch").addEventListener("input", paintHub);
-$("hubNewLesson").addEventListener("click", () => window.open("author.html", "_blank"));
-$("hubNewUnit").addEventListener("click", () => {
+$("hubHome").addEventListener("click", toHome);
+$("backYears").addEventListener("click", () => { show("hubView"); paintYears(); });
+$("backHubUnits").addEventListener("click", () => openYear(hubYear));
+
+function paintYears(){
+  const g = $("hubYears"); g.innerHTML = "";
+  $("hubSearchResults").innerHTML = "";
+  const years = (cat.years || []).map(y => y.name);
+  const unfiled = (cat.units || []).filter(u => !u.year).length;
+  years.forEach(y => {
+    const t = el("button","classtile");
+    t.appendChild(el("b","", y));
+    t.addEventListener("click", () => openYear(y));
+    g.appendChild(t);
+  });
+  if (unfiled){
+    const t = el("button","classtile");
+    t.appendChild(el("b","","Not in a year group"));
+    t.addEventListener("click", () => openYear(""));
+    g.appendChild(t);
+  }
+  if (!years.length && !unfiled)
+    g.appendChild(el("p","hint","No year groups yet — press “+ New year group”."));
+}
+
+function openYear(y){
+  hubYear = y;
+  $("yearName").textContent = y || "Not in a year group";
+  $("renameYearBtn").hidden = !y;
+  $("deleteYearBtn").hidden = !y;
+  show("hubUnitsView");
+  paintHubUnits();
+}
+function paintHubUnits(){
+  const g = $("hubUnits"); g.innerHTML = "";
+  $("unitSearchResults").innerHTML = "";
+  const units = unitsOfYear(hubYear).map(u => u.name);
+  units.forEach(u => {
+    const t = el("button","classtile");
+    t.appendChild(el("b","", u));
+    t.addEventListener("click", () => openHubUnit(u));
+    g.appendChild(t);
+  });
+  const unfiled = (cat.lessons || []).filter(l => !l.unit).length;
+  if (!hubYear && unfiled){
+    const t = el("button","classtile");
+    t.appendChild(el("b","","Not in a unit"));
+    t.addEventListener("click", () => openHubUnit(""));
+    g.appendChild(t);
+  }
+  if (!units.length && !(!hubYear && unfiled))
+    g.appendChild(el("p","hint","No units here yet — press “+ New unit”."));
+}
+
+function openHubUnit(u){
+  hubUnit = u;
+  $("hubUnitName").textContent = u || "Not in a unit";
+  $("backUnitYear").textContent = hubYear || "Lesson hub";
+  $("renameHubUnitBtn").hidden = !u;
+  $("deleteHubUnitBtn").hidden = !u;
+  show("hubLessonsView");
+  paintHub();
+}
+
+/* the lesson cards, used for a unit and for search results */
+function lessonCards(list, box){
+  box.innerHTML = "";
+  if (!list.length){ box.appendChild(el("p","hint","No lessons here yet — press “+ Build a new lesson”.")); return; }
+  const grid = el("div","lessongrid");
+  list.forEach(l => {
+    const card = el("div","lessonpill");
+    const head = el("div","lp-head");
+    head.appendChild(el("b","", titleOf(l.lesson_id)));
+    if (l.owner_group) head.appendChild(el("span","statechip shut", l.owner_group + " only"));
+    card.appendChild(head);
+    const mine = assignsFor(l.lesson_id);
+    card.appendChild(el("p","lp-note", mine.length
+      ? mine.length + " class" + (mine.length === 1 ? "" : "es")
+      : "Not given to any class yet"));
+    const acts = el("div","lp-acts");
+    const give = el("button","btn-primary","Give to classes");
+    give.addEventListener("click", () => distribute(l.lesson_id));
+    const edit = el("button","btn-ghost","Edit");
+    edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
+    const del = el("button","btn-ghost","Delete");
+    del.addEventListener("click", () => deleteLesson(l.lesson_id));
+    acts.appendChild(give); acts.appendChild(edit); acts.appendChild(del);
+    card.appendChild(acts);
+    grid.appendChild(card);
+  });
+  box.appendChild(grid);
+}
+function paintHub(){ lessonCards(lessonsOfUnit(hubUnit), $("hubList")); }
+
+/* searching looks across everything, from wherever you are */
+function runSearch(termBox, into){
+  const term = (termBox.value || "").trim().toLowerCase();
+  if (!term){ into.innerHTML = ""; return false; }
+  const found = (cat.lessons || []).filter(l =>
+    (titleOf(l.lesson_id) || "").toLowerCase().includes(term) ||
+    (l.unit || "").toLowerCase().includes(term));
+  into.innerHTML = "";
+  into.appendChild(el("p","unit-head", found.length + " lesson" + (found.length === 1 ? "" : "s") + " matching “" + termBox.value + "”"));
+  lessonCards(found, el("div"));
+  const holder = el("div");
+  lessonCards(found, holder);
+  into.appendChild(holder);
+  return true;
+}
+$("hubSearch").addEventListener("input", () => {
+  const searching = runSearch($("hubSearch"), $("hubSearchResults"));
+  $("hubYears").hidden = searching;
+});
+$("unitSearch").addEventListener("input", () => {
+  const searching = runSearch($("unitSearch"), $("unitSearchResults"));
+  $("hubUnits").hidden = searching;
+});
+
+/* ---------- making year groups and units ---------- */
+function newYearPrompt(then){
   openModal(box => {
-    modalTitle(box, "New unit");
-    const i = fieldRow(box, "Unit name (e.g. Unit 1 \u2014 Cybersecurity)", "text", "");
+    modalTitle(box, "New year group");
+    const i = fieldRow(box, "Name (e.g. Year 8)", "text", "");
     const msg = el("p","hint","");
-    const go = el("button","btn-primary modal-cta","Create unit");
+    const go = el("button","btn-primary modal-cta","Create");
     go.addEventListener("click", async () => {
       const v = i.value.trim(); if (!v) return;
-      msg.textContent = "Creating\u2026";
-      try{ await catPost({ op:"add-unit", name: v, position: (cat.units || []).length + 1 }); closeModal(); paintHub(); }
+      msg.textContent = "Creating…";
+      try{
+        await catPost({ op:"add-year", name: v, position: (cat.years || []).length + 1 });
+        closeModal();
+        if (then) then(v); else paintYears();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+}
+function newUnitPrompt(year, then){
+  openModal(box => {
+    modalTitle(box, "New unit" + (year ? " in " + year : ""));
+    const i = fieldRow(box, "Name (e.g. 8.1 Programming with Python)", "text", "");
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Create");
+    go.addEventListener("click", async () => {
+      const v = i.value.trim(); if (!v) return;
+      msg.textContent = "Creating…";
+      try{
+        await catPost({ op:"add-unit", name: v, year: year || "", position: (cat.units || []).length + 1 });
+        closeModal();
+        if (then) then(v); else paintHubUnits();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+}
+$("hubNewYear").addEventListener("click", () => newYearPrompt());
+$("hubNewUnit").addEventListener("click", () => newUnitPrompt(hubYear));
+[["hubNewLesson",""],["hubNewLesson2","year"],["hubNewLesson3","unit"]].forEach(pair => {
+  const btn = $(pair[0]);
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    let url = "author.html";
+    const bits = [];
+    if (pair[1] === "year" && hubYear) bits.push("year=" + encodeURIComponent(hubYear));
+    if (pair[1] === "unit"){
+      if (hubYear) bits.push("year=" + encodeURIComponent(hubYear));
+      if (hubUnit) bits.push("unit=" + encodeURIComponent(hubUnit));
+    }
+    if (bits.length) url += "?" + bits.join("&");
+    window.open(url, "_blank");
+  });
+});
+
+$("renameYearBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Rename year group");
+    const i = fieldRow(box, "Name", "text", hubYear);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Rename");
+    go.addEventListener("click", async () => {
+      const to = i.value.trim(); if (!to || to === hubYear){ closeModal(); return; }
+      msg.textContent = "Renaming…";
+      try{ await catPost({ op:"rename-year", from: hubYear, to }); closeModal(); openYear(to); }
       catch(e){ msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(msg);
   });
 });
-
-function paintHub(){
-  const box = $("hubList"); box.innerHTML = "";
-  const term = ($("hubSearch").value || "").trim().toLowerCase();
-  const rows = (cat.lessons || []).filter(l => {
-    const t = (titleOf(l.lesson_id) || l.lesson_id).toLowerCase();
-    return !term || t.includes(term) || (l.unit || "").toLowerCase().includes(term);
-  });
-  const byUnit = {};
-  rows.forEach(l => { (byUnit[l.unit || ""] = byUnit[l.unit || ""] || []).push(l); });
-  const order = (cat.units || []).map(u => u.name);
-  const names = Object.keys(byUnit).sort((a, b) => {
-    const ia = order.indexOf(a), ib = order.indexOf(b);
-    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
-  });
-  if (!rows.length){
-    box.appendChild(el("p","hint", term ? "Nothing matches that." : "No lessons yet — press Build a new lesson."));
-    return;
-  }
-  names.forEach(u => {
-    box.appendChild(el("p","unit-head", u || "Not in a unit"));
-    const grid = el("div","lessongrid");
-    byUnit[u].forEach(l => {
-      const card = el("div","lessonpill");
-      const head = el("div","lp-head");
-      head.appendChild(el("b","", titleOf(l.lesson_id)));
-      if (l.owner_group) head.appendChild(el("span","statechip shut", l.owner_group + " only"));
-      card.appendChild(head);
-      const mine = assignsFor(l.lesson_id);
-      const live = mine.filter(a => a.published).length;
-      card.appendChild(el("p","lp-note", mine.length
-        ? mine.length + " class" + (mine.length === 1 ? "" : "es") + " \u00b7 " + live + " published"
-        : "Not given to any class yet"));
-      const acts = el("div","lp-acts");
-      const give = el("button","btn-primary","Give to classes");
-      give.addEventListener("click", () => distribute(l.lesson_id));
-      const edit = el("button","btn-ghost","Edit");
-      edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
-      const del = el("button","btn-ghost","Delete");
-      del.addEventListener("click", () => deleteLesson(l.lesson_id));
-      acts.appendChild(give); acts.appendChild(edit); acts.appendChild(del);
-      card.appendChild(acts);
-      grid.appendChild(card);
+$("deleteYearBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Delete " + hubYear + "?");
+    box.appendChild(el("p","modal-text","The units inside it are kept — they just stop belonging to a year group. No lessons are deleted."));
+    const yes = el("button","btn-primary modal-cta","Delete year group");
+    yes.style.background = "var(--red)";
+    yes.addEventListener("click", async () => {
+      try{ await catPost({ op:"delete-year", name: hubYear }); closeModal(); show("hubView"); paintYears(); }
+      catch(e){ say("Could not delete that", e.message); }
     });
-    box.appendChild(grid);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(yes); box.appendChild(no);
   });
-}
+});
+$("renameHubUnitBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Rename unit");
+    const i = fieldRow(box, "Name", "text", hubUnit);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Rename");
+    go.addEventListener("click", async () => {
+      const to = i.value.trim(); if (!to || to === hubUnit){ closeModal(); return; }
+      msg.textContent = "Renaming…";
+      try{ await catPost({ op:"rename-unit", from: hubUnit, to }); closeModal(); openHubUnit(to); }
+      catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+});
+$("deleteHubUnitBtn").addEventListener("click", () => {
+  openModal(box => {
+    modalTitle(box, "Delete " + hubUnit + "?");
+    box.appendChild(el("p","modal-text","The lessons are kept — they just stop belonging to a unit. Nothing students have done is affected."));
+    const yes = el("button","btn-primary modal-cta","Delete unit");
+    yes.style.background = "var(--red)";
+    yes.addEventListener("click", async () => {
+      try{ await catPost({ op:"delete-unit", name: hubUnit }); closeModal(); openYear(hubYear); }
+      catch(e){ say("Could not delete that", e.message); }
+    });
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(yes); box.appendChild(no);
+  });
+});
 
 function distribute(id){
   openModal(box => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);
-    modalTitle(box, "Give \u201c" + titleOf(id) + "\u201d to classes");
-    box.appendChild(el("p","hint","Every class you tick gets it as a draft. Publish it to them from the class page when they're ready."));
+    modalTitle(box, "Give “" + titleOf(id) + "” to classes");
+    box.appendChild(el("p","hint","Every class you tick gets it as a draft. Publish it to them from the class page when they are ready."));
     const has = {};
     assignsFor(id).forEach(a => { has[a.group_name.toLowerCase()] = a; });
     const picks = {};
@@ -366,14 +557,14 @@ function distribute(id){
       cb.checked = !!already;
       picks[g.name] = { cb: cb, already: !!already };
       row.appendChild(cb);
-      row.appendChild(el("span","", g.name + (already ? (already.published ? " \u2014 published" : " \u2014 draft") : "")));
+      row.appendChild(el("span","", g.name + (already ? (already.published ? " — published" : " — draft") : "")));
       box.appendChild(row);
     });
     if (!groups.length) box.appendChild(el("p","modal-text","There are no classes yet."));
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Save");
     go.addEventListener("click", async () => {
-      msg.textContent = "Saving\u2026";
+      msg.textContent = "Saving…";
       try{
         const add = Object.keys(picks).filter(n => picks[n].cb.checked && !picks[n].already);
         const drop = Object.keys(picks).filter(n => !picks[n].cb.checked && picks[n].already);
@@ -387,11 +578,10 @@ function distribute(id){
   });
 }
 
-/* Deleting is serious, so it asks twice and says exactly what goes. */
 function deleteLesson(id, then){
   const mine = assignsFor(id);
   openModal(box => {
-    modalTitle(box, "Delete \u201c" + titleOf(id) + "\u201d?");
+    modalTitle(box, "Delete “" + titleOf(id) + "”?");
     box.appendChild(el("p","modal-text", "This removes the lesson from the hub" +
       (mine.length ? " and from " + mine.length + " class" + (mine.length === 1 ? "" : "es") : "") +
       ", along with every student's work and results for it."));
@@ -408,7 +598,7 @@ function deleteLesson(id, then){
         go.style.background = "var(--red)";
         go.addEventListener("click", async () => {
           if (inp.value.trim().toUpperCase() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; return; }
-          msg.textContent = "Deleting\u2026";
+          msg.textContent = "Deleting…";
           try{
             const r = await fetch(API + "/api/teacher/delete-lesson", { method:"POST", headers: HJ(), body: JSON.stringify({ id }) });
             if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
@@ -431,7 +621,8 @@ function deleteLesson(id, then){
 /* ---------- one class ---------- */
 async function openClass(name){
   cls = name;
-  try{ await loadClassLocks(); }catch(e){}
+  /* the lock information is only needed on the lessons grid, so it is
+     fetched there rather than every time a class is opened */
   $("clsName").textContent = cls;
   document.querySelectorAll(".bk").forEach(b => b.textContent = cls);
   show("classView");
@@ -442,7 +633,8 @@ $("backHome").addEventListener("click", toHome);
 $("refStudents").addEventListener("click", () => { students = []; workCache = { key:"", rows:[], t:0 }; loadStudents(); });
 $("refUnits").addEventListener("click", async () => {
   $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
-  try{ await loadCatalogue(); paintUnits(); }catch(e){ $("unitGrid").innerHTML = ""; $("unitGrid").appendChild(el("p","hint", e.message)); }
+  try{ await loadCatalogue(); paintClassUnits(); }
+  catch(e){ $("unitGrid").innerHTML = ""; $("unitGrid").appendChild(el("p","hint", e.message)); }
 });
 $("refLessons").addEventListener("click", async () => {
   $("lessonGrid").innerHTML = '<p class="hint">Loading…</p>';
@@ -679,85 +871,47 @@ async function catPost(payload){
 $("openLessons").addEventListener("click", async () => {
   show("unitsView");
   $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
-  try{ await loadCatalogue(); paintUnits(); }
+  try{ await loadCatalogue(); paintClassUnits(); }
   catch(e){ $("unitGrid").innerHTML = '<p class="hint">' + e.message + '</p>'; }
 });
-$("backUnits").addEventListener("click", () => { show("unitsView"); paintUnits(); });
 
-function paintUnits(){
+/* Only the units this class actually has lessons in. */
+function classLessons(){
+  return (cat.lessons || []).filter(l =>
+    assigns.some(a => a.lesson_id === l.lesson_id && a.group_name.toLowerCase() === cls.toLowerCase()));
+}
+function paintClassUnits(){
   const g = $("unitGrid"); g.innerHTML = "";
-  const names = (cat.units || []).map(u => u.name);
-  const unfiled = (cat.lessons || []).filter(l => !l.unit).length;
+  const mine = classLessons();
+  const names = [];
+  mine.forEach(l => { const u = l.unit || ""; if (names.indexOf(u) < 0) names.push(u); });
+  const order = (cat.units || []).map(u => u.name);
+  names.sort((a, b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
+  });
   names.forEach(n => {
+    const count = mine.filter(l => (l.unit || "") === n).length;
     const t = el("button","classtile");
-    t.appendChild(el("b","", n));
+    t.appendChild(el("b","", n || "Not in a unit"));
+    t.appendChild(el("span","", count + " lesson" + (count === 1 ? "" : "s")));
     t.addEventListener("click", () => openUnit(n));
     g.appendChild(t);
   });
-  if (unfiled){
-    const t = el("button","classtile");
-    t.appendChild(el("b","","Not in a unit"));
-    t.appendChild(el("span","", unfiled + " lesson" + (unfiled === 1 ? "" : "s")));
-    t.addEventListener("click", () => openUnit(""));
-    g.appendChild(t);
-  }
+  if (!names.length)
+    g.appendChild(el("p","hint", cls + " has no lessons yet. Add some from the lesson hub, or with the button below."));
 }
+$("backUnits").addEventListener("click", () => { show("unitsView"); paintClassUnits(); });
 
-$("newUnitBtn").addEventListener("click", () => {
-  openModal(box => {
-    modalTitle(box, "New unit");
-    const i = fieldRow(box, "Unit name (e.g. Unit 1 \u2014 Cybersecurity)", "text", "");
-    const msg = el("p","hint","");
-    const go = el("button","btn-primary modal-cta","Create unit");
-    go.addEventListener("click", async () => {
-      const v = i.value.trim(); if (!v) return;
-      msg.textContent = "Creating\u2026";
-      try{ await catPost({ op:"add-unit", name: v, position: (cat.units || []).length + 1 });
-           closeModal(); paintUnits(); }
-      catch(e){ msg.textContent = e.message; }
-    });
-    box.appendChild(go); box.appendChild(msg);
-  });
-});
-
-function openUnit(name){
+async function openUnit(name){
   unit = name;
   $("unitName").textContent = name || "Not in a unit";
-  $("renameUnitBtn").hidden = !name;
-  $("deleteUnitBtn").hidden = !name;
   show("lessonsView");
   paintLessonGrid();
+  /* the padlocks need the class's locks, but the page should not wait for them */
+  loadClassLocks().then(paintLessonGrid).catch(() => {});
 }
-$("renameUnitBtn").addEventListener("click", () => {
-  openModal(box => {
-    modalTitle(box, "Rename unit");
-    const i = fieldRow(box, "Unit name", "text", unit);
-    const msg = el("p","hint","");
-    const go = el("button","btn-primary modal-cta","Rename");
-    go.addEventListener("click", async () => {
-      const to = i.value.trim(); if (!to || to === unit){ closeModal(); return; }
-      msg.textContent = "Renaming\u2026";
-      try{ await catPost({ op:"rename-unit", from: unit, to }); closeModal(); openUnit(to); }
-      catch(e){ msg.textContent = e.message; }
-    });
-    box.appendChild(go); box.appendChild(msg);
-  });
-});
-$("deleteUnitBtn").addEventListener("click", () => {
-  openModal(box => {
-    modalTitle(box, "Delete " + unit + "?");
-    box.appendChild(el("p","modal-text","The lessons are kept \u2014 they just stop belonging to a unit. Nothing students have done is affected."));
-    const msg = el("p","hint","");
-    const go = el("button","btn-primary modal-cta","Delete unit"); go.style.background = "var(--red)";
-    const no = el("button","btn-ghost modal-stay","Cancel"); no.addEventListener("click", closeModal);
-    go.addEventListener("click", async () => {
-      msg.textContent = "Deleting\u2026";
-      try{ await catPost({ op:"delete-unit", name: unit }); closeModal(); show("unitsView"); paintUnits(); }
-      catch(e){ msg.textContent = e.message; }
-    });
-    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
-  });
-});
+
 $("newLessonBtn").addEventListener("click", () => {
   openModal(box => {
     modalTitle(box, "Build a new lesson");
@@ -837,12 +991,7 @@ function paintLessonGrid(){
   const g = $("lessonGrid"); g.innerHTML = "";
   /* only the lessons this class has been given (older setups, with nothing
      assigned anywhere, still show what was published to everyone) */
-  const mine = (cat.lessons || []).filter(l => {
-    if ((l.unit || "") !== unit) return false;
-    const has = assignOf(l.lesson_id);
-    if (has) return true;
-    return !assigns.some(a => a.lesson_id === l.lesson_id) && l.published;
-  });
+  const mine = (cat.lessons || []).filter(l => (l.unit || "") === unit && assignOf(l.lesson_id));
   if (!mine.length){
     g.appendChild(el("p","hint","No lessons here yet for " + cls + " \u2014 add one from the hub above."));
     return;
