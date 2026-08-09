@@ -1047,8 +1047,18 @@ function paintLessonGrid(){
         await loadCatalogue(); paintLessonGrid();
       }catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
     });
-    const workBtn = el("button","btn-ghost","View Student Work");
-    workBtn.addEventListener("click", () => pickStudentWork(l.lesson_id));
+    const isAssessment = !!l.assessment;
+    const workBtn = el("button", isAssessment ? "btn-primary" : "btn-ghost",
+                       isAssessment ? "Markbook" : "View Student Work");
+    workBtn.addEventListener("click", async () => {
+      if (!isAssessment){ pickStudentWork(l.lesson_id); return; }
+      lessonId = l.lesson_id;
+      workCache = { key: "", rows: [], t: 0 };
+      openModal(box => { box.classList.add("wide"); modalTitle(box, titleOf(l.lesson_id));
+                         box.appendChild(el("p","hint","Loading\u2026")); });
+      try{ lessonJson = await fetchLesson(l.lesson_id); openMarkbook(false); }
+      catch(e){ say("Could not open the markbook", e.message); }
+    });
     const man = el("button","btn-ghost","Manage");
     man.addEventListener("click", () => manageLesson(l.lesson_id));
     const edit = el("button","btn-ghost","Edit");
@@ -1142,9 +1152,24 @@ async function loadClassLocks(){
 async function manageLesson(id){
   lessonId = id;
   workCache = { key: "", rows: [], t: 0 };
-  lessonJson = await fetchLesson(id);
-  await refreshRelease();
-  openManage();
+  openModal(box => {                       // something to look at while it loads
+    box.classList.add("wide");
+    modalTitle(box, titleOf(id));
+    box.appendChild(el("p","hint","Loading\u2026"));
+  });
+  try{
+    lessonJson = await fetchLesson(id);
+    await refreshRelease();
+    openManage();
+  }catch(e){
+    openModal(box => {
+      modalTitle(box, "Could not open that lesson");
+      box.appendChild(el("p","modal-text", e.message));
+      const ok = el("button","btn-primary modal-cta","Close");
+      ok.addEventListener("click", closeModal);
+      box.appendChild(ok);
+    });
+  }
 }
 function openManage(){
   openModal(box => {
@@ -1175,9 +1200,11 @@ function openManage(){
     }
     box.appendChild(bar);
     const tools = el("div","toolrow");
-    const oa = el("button","btn-ghost","Open all tasks"); oa.addEventListener("click", () => postLocks(new Set()));
-    const la = el("button","btn-ghost","Lock all tasks"); la.addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i))));
-    tools.appendChild(oa); tools.appendChild(la);
+    if (!lessonJson.assessment){
+      const oa = el("button","btn-ghost","Open all tasks"); oa.addEventListener("click", () => postLocks(new Set()));
+      const la = el("button","btn-ghost","Lock all tasks"); la.addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i))));
+      tools.appendChild(oa); tools.appendChild(la);
+    }
     box.appendChild(tools);
     box.appendChild(el("p","hint","")).id = "relMsg";
     const list = el("div"); list.id = "taskList"; box.appendChild(list);
@@ -1188,6 +1215,7 @@ function openManage(){
 }
 async function refreshRelease(){
   if (!lessonId) return;
+  if (lessonJson && lessonJson.assessment){ locks = new Set(); paintTasks(); return; }
   try{
     const r = await fetch(API + "/api/release?lesson=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(cls) + "&t=" + Date.now(), { cache: "no-store" });
     const d = await r.json();
@@ -1237,12 +1265,13 @@ function paintTasks(){
     msg.textContent = usingDefaults ? base + " (starting pattern \u2014 unlock as you teach)" : base;
   }
   lessonJson.blocks.forEach((b, i) => {
-    const open = !locks.has(i);
+    const open = lessonJson.assessment ? true : !locks.has(i);
     const row = el("div","taskrow" + (open ? "" : " shut"));
     row.appendChild(el("span","tn", (i+1) + "."));
     const t = el("span","", stepTitle(b, i)); t.style.flex = "1"; row.appendChild(t);
     row.appendChild(el("span","statechip " + (open ? "open" : "shut"), open ? "Open" : "Locked"));
     const btns = el("span","taskbtns");
+    const canLock = !(lessonJson && lessonJson.assessment);   // questions stay open
     const lock = el("button","btn-ghost iconbtn", open ? "\u{1F513}" : "\u{1F512}");
     lock.title = open ? "Lock this task" : "Unlock this task";
     lock.addEventListener("click", () => {
@@ -1255,8 +1284,9 @@ function paintTasks(){
     eye.addEventListener("click", () => window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&preview=" + i, "_blank"));
     const who = el("button","btn-ghost iconbtn","\u{1F465}");
     who.title = "Who has done this task?";
-    who.addEventListener("click", () => whoDone(i, b));
-    btns.appendChild(lock); btns.appendChild(eye); btns.appendChild(who);
+    who.addEventListener("click", () => whoDone(i, b, true));
+    if (canLock) btns.appendChild(lock);
+    btns.appendChild(eye); btns.appendChild(who);
     row.appendChild(btns);
     list.appendChild(row);
   });
@@ -1273,10 +1303,10 @@ function responseTaskIds(){
   const out = [];
   const bank = (lessonJson && lessonJson.responses) || {};
   Object.keys(bank).forEach(topic => (bank[topic] || []).forEach(t => {
-    if (t.id) out.push({ id: t.id, label: topic + ": " + (stripTags(t.prompt || t.title || "") || t.type) });
+    if (t.id) out.push({ id: t.id, short: topic.slice(0, 8), label: topic + ": " + (stripTags(t.prompt || t.title || "") || t.type) });
   }));
   ((lessonJson && lessonJson.extensions) || []).forEach(t => {
-    if (t.id) out.push({ id: t.id, label: "Extension: " + (stripTags(t.prompt || t.title || "") || t.type) });
+    if (t.id) out.push({ id: t.id, short: "Ext", label: "Extension: " + (stripTags(t.prompt || t.title || "") || t.type) });
   });
   return out;
 }
@@ -1289,7 +1319,51 @@ function attempted(data, id){
   if (typeof v === "boolean") return v;
   return true;
 }
-let markbookRows = [], markbookTasks = [];
+let markbookRows = [], markbookTasks = [], markbookQs = [];
+let mbSort = { key:"name", dir:1 };
+
+/* Marking, the same way the lesson page does it, so a teacher sees per
+   question what each student got. */
+function normAns(x){
+  return String(x || "").toLowerCase().trim().replace(/\s+/g, " ").replace(/[.,!?;:'"]+$/g, "");
+}
+function markQuestion(b, v){
+  if (b.type === "mc") return { max:1, got: v === b.answer ? 1 : 0 };
+  if (b.type === "order"){
+    const ok = Array.isArray(v) && v.length === (b.items || []).length && v.every((x, i) => x === i);
+    return { max:1, got: ok ? 1 : 0 };
+  }
+  if (b.type === "blanks"){
+    const accepted = [];
+    String(b.text || "").replace(/\[\[(.*?)\]\]/g, (_, g) => { accepted.push(g.split("|")); return ""; });
+    let got = 0;
+    accepted.forEach((set, i) => {
+      const given = (v && v[i]) ? String(v[i]) : "";
+      if (set.map(normAns).includes(normAns(given))) got++;
+    });
+    return { max: accepted.length, got: got };
+  }
+  if (b.type === "short"){
+    const ans = normAns(v);
+    const groups = b.keywords || [];
+    const ok = groups.length ? groups.every(g => g.some(k => ans.includes(normAns(k)))) : false;
+    return { max:1, got: ok ? 1 : 0 };
+  }
+  return null;
+}
+function assessmentQuestions(){
+  const out = [];
+  let n = 0;
+  ((lessonJson && lessonJson.blocks) || []).forEach(b => {
+    if (["mc","order","blanks","short"].includes(b.type)){
+      n++;
+      out.push({ id: b.id, n: n, block: b,
+                 label: "Q" + n, title: stripTags(b.prompt || b.title || b.id) });
+    }
+  });
+  return out;
+}
+
 async function openMarkbook(backToManage){
   openModal(async (box) => {
     box.classList.add("wide");
@@ -1302,63 +1376,24 @@ async function openMarkbook(backToManage){
     try{
       const [roster, work, res] = [await getRoster(), await getWorkRows(), await getResults()];
       markbookTasks = responseTaskIds();
+      markbookQs = assessmentQuestions();
       markbookRows = roster.map(st => {
         const r = res.find(x => x.display_name === st.display_name) || null;
         const w = work.find(x => x.username === st.username) || null;
+        const marks = {};
+        markbookQs.forEach(q => {
+          const m = w ? markQuestion(q.block, w.data ? w.data[q.id] : null) : null;
+          marks[q.id] = (w && w.data && w.data.__done) ? m : null;
+        });
         return { name: st.display_name, username: st.username,
                  score: r ? r.score : null, outOf: r ? r.out_of : null,
+                 pct: r ? Math.round(100 * r.score / Math.max(1, r.out_of)) : null,
                  seconds: r ? (r.seconds || 0) : 0,
                  strength: r ? (r.strength || "") : "", target: r ? (r.target || "") : "",
-                 data: w ? w.data : null };
+                 marks: marks, data: w ? w.data : null };
       });
       holder.innerHTML = "";
-
-      /* the numbers at the top */
-      const done = markbookRows.filter(r => r.score !== null);
-      const pcts = done.map(r => Math.round(100 * r.score / Math.max(1, r.outOf)));
-      const times = done.filter(r => r.seconds > 0).map(r => r.seconds);
-      const avg = (a) => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0;
-      const stats = el("div","mbstats");
-      [["Finished", done.length + " of " + markbookRows.length],
-       ["Average", pcts.length ? avg(pcts) + "%" : "\u2014"],
-       ["Lowest", pcts.length ? Math.min.apply(null, pcts) + "%" : "\u2014"],
-       ["Highest", pcts.length ? Math.max.apply(null, pcts) + "%" : "\u2014"],
-       ["Average time", times.length ? niceTime(avg(times)) : "\u2014"]].forEach(p => {
-        const c = el("div","mbstat");
-        c.appendChild(el("b","", p[1]));
-        c.appendChild(el("span","", p[0]));
-        stats.appendChild(c);
-      });
-      holder.appendChild(stats);
-
-      /* one row per student */
-      const table = el("table","mbtable");
-      const head = el("tr");
-      ["Student","Mark","%","Time"].forEach(h => head.appendChild(el("th","", h)));
-      markbookTasks.forEach(t => {
-        const th = el("th","mbtask");
-        th.title = t.label;
-        th.appendChild(el("span","", t.label.split(":")[0]));
-        head.appendChild(th);
-      });
-      table.appendChild(head);
-      markbookRows.forEach(r => {
-        const tr = el("tr");
-        tr.appendChild(el("td","", r.name));
-        tr.appendChild(el("td","", r.score === null ? "\u2014" : r.score + " / " + r.outOf));
-        tr.appendChild(el("td","", r.score === null ? "\u2014" : Math.round(100 * r.score / Math.max(1, r.outOf)) + "%"));
-        tr.appendChild(el("td","", niceTime(r.seconds)));
-        markbookTasks.forEach(t => {
-          const td = el("td","mbtick");
-          const ok = attempted(r.data, t.id);
-          td.appendChild(el("span", ok ? "yes" : "no", ok ? "\u2713" : "\u2717"));
-          tr.appendChild(td);
-        });
-        table.appendChild(tr);
-      });
-      holder.appendChild(table);
-      if (!markbookTasks.length)
-        holder.appendChild(el("p","hint","This assessment has no response tasks yet, so there is nothing to tick."));
+      paintMarkbook(holder);
     }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
 
     const dl = el("button","btn-primary modal-cta","Save for Excel");
@@ -1369,6 +1404,121 @@ async function openMarkbook(backToManage){
     box.appendChild(done2);
   });
 }
+
+function sortRows(){
+  const k = mbSort.key, d = mbSort.dir;
+  markbookRows.sort((a, b) => {
+    let x, y;
+    if (k === "name"){ x = a.name.toLowerCase(); y = b.name.toLowerCase(); }
+    else if (k.indexOf("q:") === 0){
+      const id = k.slice(2);
+      x = a.marks[id] ? a.marks[id].got : -1;
+      y = b.marks[id] ? b.marks[id].got : -1;
+    }
+    else if (k.indexOf("t:") === 0){
+      const id = k.slice(2);
+      x = attempted(a.data, id) ? 1 : 0;
+      y = attempted(b.data, id) ? 1 : 0;
+    }
+    else { x = a[k] === null ? -1 : a[k]; y = b[k] === null ? -1 : b[k]; }
+    if (x < y) return -1 * d;
+    if (x > y) return 1 * d;
+    return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
+  });
+}
+function headCell(label, key, title){
+  const th = el("th","mbsort" + (mbSort.key === key ? " on" : ""));
+  th.appendChild(el("span","", label + (mbSort.key === key ? (mbSort.dir === 1 ? " \u2191" : " \u2193") : "")));
+  if (title) th.title = title;
+  th.addEventListener("click", () => {
+    if (mbSort.key === key) mbSort.dir = -mbSort.dir;
+    else { mbSort.key = key; mbSort.dir = key === "name" ? 1 : -1; }
+    const holder = th.parentNode && th.parentNode.parentNode ? th.parentNode.parentNode.parentNode : null;
+    const box = document.getElementById("mbHolder");
+    if (box){ box.innerHTML = ""; paintMarkbook(box); }
+  });
+  return th;
+}
+
+function paintMarkbook(holder){
+  holder.id = "mbHolder";
+  sortRows();
+  const done = markbookRows.filter(r => r.score !== null);
+  const pcts = done.map(r => r.pct);
+  const times = done.filter(r => r.seconds > 0).map(r => r.seconds);
+  const avg = (a) => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0;
+  const stats = el("div","mbstats");
+  [["Finished", done.length + " of " + markbookRows.length],
+   ["Average", pcts.length ? avg(pcts) + "%" : "\u2014"],
+   ["Lowest", pcts.length ? Math.min.apply(null, pcts) + "%" : "\u2014"],
+   ["Highest", pcts.length ? Math.max.apply(null, pcts) + "%" : "\u2014"],
+   ["Average time", times.length ? niceTime(avg(times)) : "\u2014"]].forEach(p => {
+    const c = el("div","mbstat");
+    c.appendChild(el("b","", p[1]));
+    c.appendChild(el("span","", p[0]));
+    stats.appendChild(c);
+  });
+  holder.appendChild(stats);
+
+  /* marks, question by question */
+  holder.appendChild(el("p","unit-head","Marks"));
+  const scroll = el("div","mbscroll");
+  const table = el("table","mbtable");
+  const head = el("tr");
+  head.appendChild(headCell("Student","name"));
+  head.appendChild(headCell("Mark","score"));
+  head.appendChild(headCell("%","pct"));
+  head.appendChild(headCell("Time","seconds"));
+  markbookQs.forEach(q => head.appendChild(headCell(q.label, "q:" + q.id, q.title)));
+  table.appendChild(head);
+  markbookRows.forEach(r => {
+    const tr = el("tr");
+    tr.appendChild(el("td","", r.name));
+    tr.appendChild(el("td","", r.score === null ? "\u2014" : r.score + " / " + r.outOf));
+    tr.appendChild(el("td","", r.pct === null ? "\u2014" : r.pct + "%"));
+    tr.appendChild(el("td","", niceTime(r.seconds)));
+    markbookQs.forEach(q => {
+      const m = r.marks[q.id];
+      const td = el("td","mbtick");
+      if (!m) td.appendChild(el("span","none","\u2014"));
+      else if (m.got === m.max) td.appendChild(el("span","yes", m.max > 1 ? m.got + "/" + m.max : "\u2713"));
+      else if (m.got > 0) td.appendChild(el("span","part", m.got + "/" + m.max));
+      else td.appendChild(el("span","no","\u2717"));
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+  scroll.appendChild(table);
+  holder.appendChild(scroll);
+  if (!markbookQs.length) holder.appendChild(el("p","hint","No marked questions in this assessment."));
+
+  /* response and extension tasks, on their own */
+  holder.appendChild(el("p","unit-head","Response and extension tasks"));
+  if (!markbookTasks.length){
+    holder.appendChild(el("p","hint","This assessment has no response tasks yet."));
+    return;
+  }
+  const scroll2 = el("div","mbscroll");
+  const t2 = el("table","mbtable");
+  const h2 = el("tr");
+  h2.appendChild(headCell("Student","name"));
+  markbookTasks.forEach(t => h2.appendChild(headCell(t.short, "t:" + t.id, t.label)));
+  t2.appendChild(h2);
+  markbookRows.forEach(r => {
+    const tr = el("tr");
+    tr.appendChild(el("td","", r.name));
+    markbookTasks.forEach(t => {
+      const td = el("td","mbtick");
+      const ok = attempted(r.data, t.id);
+      td.appendChild(el("span", ok ? "yes" : "no", ok ? "\u2713" : "\u2717"));
+      tr.appendChild(td);
+    });
+    t2.appendChild(tr);
+  });
+  scroll2.appendChild(t2);
+  holder.appendChild(scroll2);
+}
+
 async function getResults(){
   const r = await fetch(API + "/api/teacher/results?lesson=" + encodeURIComponent(lessonId) +
                         "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
@@ -1382,6 +1532,7 @@ function exportMarkbook(){
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   let html = "<table border='1'><tr><th>Student</th><th>Username</th><th>Mark</th><th>Out of</th>" +
              "<th>Percent</th><th>Time taken</th><th>Strength</th><th>Target</th>";
+  markbookQs.forEach(q => { html += "<th>" + esc2(q.label + " " + q.title) + "</th>"; });
   markbookTasks.forEach(t => { html += "<th>" + esc2(t.label) + "</th>"; });
   html += "</tr>";
   markbookRows.forEach(r => {
@@ -1391,6 +1542,10 @@ function exportMarkbook(){
             "<td>" + (r.score === null ? "" : Math.round(100 * r.score / Math.max(1, r.outOf))) + "</td>" +
             "<td>" + (r.seconds ? niceTime(r.seconds) : "") + "</td>" +
             "<td>" + esc2(r.strength) + "</td><td>" + esc2(r.target) + "</td>";
+    markbookQs.forEach(q => {
+      const m = r.marks[q.id];
+      html += "<td>" + (m ? m.got + "/" + m.max : "") + "</td>";
+    });
     markbookTasks.forEach(t => { html += "<td>" + (attempted(r.data, t.id) ? "Yes" : "No") + "</td>"; });
     html += "</tr>";
   });
@@ -1523,7 +1678,7 @@ function showProgress(){
     box.appendChild(done);
   });
 }
-async function whoDone(i, b){
+async function whoDone(i, b, backToManage){
   openModal(async (box) => {
     modalTitle(box, "Task " + (i+1) + " \u2014 who's done it?");
     box.appendChild(el("p","modal-text", stepTitle(b, i)));

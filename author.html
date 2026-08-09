@@ -13,7 +13,7 @@
 <body>
 
 <div class="homebar">
-  <div class="title">Lesson builder</div>
+  <div class="title">Lesson builder<span id="titleShow"></span></div>
   <a class="crumb" href="admin.html" style="margin-right:10px">&larr; Teacher console</a>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
@@ -26,19 +26,20 @@
 <div class="build-top">
   <p class="hint" id="ownerNote" hidden></p>
   <div class="build-titles">
-    <input id="lTitle" placeholder="Lesson title, e.g. Python 1 — Output" autocomplete="off">
-    <input id="lIntro" placeholder="One line for the home page" autocomplete="off">
+    <button class="btn-ghost" id="titleBtn">Title &amp; description</button>
     <select id="lYear" title="Year group"></select>
     <select id="lUnit" title="Unit"></select>
   </div>
   <div class="build-actions">
-    <button class="btn-ghost" id="importBtn">Paste a Trinket page</button>
-    <button class="btn-ghost" id="jsonBtn">JSON</button>
-    <button class="btn-ghost" id="dlBtn">Save file</button>
-    <button class="btn-ghost" id="prevBtn">Refresh preview</button>
     <button class="btn-primary" id="saveSite">Save to the site</button>
-    <button class="btn-ghost" id="copyLesson" hidden>Save as a copy</button>
-    <button class="btn-ghost" id="delLesson" hidden>Delete lesson</button>
+    <span class="menuwrap">
+      <button class="btn-ghost iconbtn" id="moreBtn" title="More">&#8942;</button>
+      <span class="menu" id="moreMenu" hidden>
+        <button id="copyBtn">Save a copy</button>
+        <button id="jsonBtn">JSON</button>
+        <button id="delLesson">Delete lesson</button>
+      </span>
+    </span>
   </div>
 </div>
 
@@ -81,6 +82,8 @@
     <div class="prev-head">
       <b>Live preview</b>
       <span class="hint" id="prevMsg"></span>
+      <button class="btn-ghost iconbtn" id="prevBtn" title="Refresh preview">&#8635;</button>
+      <button class="btn-ghost iconbtn" id="prevBtn" title="Refresh preview">&#8635;</button>
     </div>
     <iframe id="prev" title="Lesson preview"></iframe>
   </section>
@@ -908,7 +911,7 @@ function setMode(assess){
   $("modeAssess").classList.toggle("on", assess);
   $("palLesson").hidden = !!assess;
   $("palAssess").hidden = !assess;
-  $("lTitle").placeholder = assess ? "Assessment title, e.g. Unit 1 Assessment" : "Lesson title, e.g. Python 1 — Output";
+
   saveDraft(); render(); schedulePreview();
 }
 on("modeLesson", "click", () => {
@@ -1107,8 +1110,32 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
     if (last && last.scrollIntoView) last.scrollIntoView({ behavior:"smooth", block:"center" });
   });
 });
-on("lTitle", "input", () => { lesson.title = $("lTitle").value; saveDraft(); schedulePreview(); });
-on("lIntro", "input", () => { lesson.intro = $("lIntro").value; saveDraft(); schedulePreview(); });
+function showTitle(){
+  const t = (lesson.title || "").trim();
+  $("titleShow").textContent = t ? " \u2014 " + t : "";
+  $("titleBtn").textContent = t ? "Title & description" : "Set a title";
+}
+on("titleBtn", "click", () => {
+  openModal(box => {
+    box.appendChild(el("h2","","Title and description"));
+    const w1 = el("div","bfield");
+    w1.appendChild(el("label","","Lesson title"));
+    const t1 = el("input"); t1.value = lesson.title || "";
+    t1.placeholder = "e.g. 8.1.1 Intro to Python";
+    w1.appendChild(t1); box.appendChild(w1);
+    const w2 = el("div","bfield");
+    w2.appendChild(el("label","","One line for the home page"));
+    const t2 = el("input"); t2.value = lesson.intro || "";
+    w2.appendChild(t2); box.appendChild(w2);
+    const go = el("button","btn-primary modal-cta","Done");
+    go.addEventListener("click", () => {
+      lesson.title = t1.value; lesson.intro = t2.value;
+      saveDraft(); showTitle(); schedulePreview(); closeModal();
+    });
+    box.appendChild(go);
+  });
+});
+
 on("lYear", "change", async () => {
   const v = $("lYear").value;
   if (v === "__new"){
@@ -1207,6 +1234,43 @@ function refreshPreview(){
   }catch(e){ $("prevMsg").textContent = e.message; }
 }
 on("prevBtn", "click", refreshPreview);
+on("moreBtn", "click", (e) => {
+  e.stopPropagation();
+  const m = $("moreMenu");
+  m.hidden = !m.hidden;
+});
+document.addEventListener("mousedown", (e) => {
+  const m = $("moreMenu");
+  if (m && !m.hidden && e.target !== $("moreBtn")) m.hidden = true;
+});
+on("copyBtn", "click", () => {
+  $("moreMenu").hidden = true;
+  openModal(box => {
+    box.appendChild(el("h2","","Save a copy"));
+    box.appendChild(el("p","modal-text","This saves everything here as a new lesson, leaving the original alone."));
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Name for the copy"));
+    const inp = el("input"); inp.value = (lesson.title || "Lesson") + " (copy)";
+    w.appendChild(inp); box.appendChild(w);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Save the copy");
+    go.addEventListener("click", async () => {
+      const name = inp.value.trim();
+      if (!name){ msg.textContent = "Give the copy a name."; return; }
+      const was = lesson.title, wasId = lesson.savedAs;
+      lesson.title = name; lesson.savedAs = null;
+      msg.textContent = "Saving\u2026";
+      try{
+        await saveToSite();
+        closeModal(); showTitle();
+      }catch(e){
+        lesson.title = was; lesson.savedAs = wasId;
+        msg.textContent = e.message;
+      }
+    });
+    box.appendChild(go);
+  });
+});
 
 /* ---------------- getting the file out ---------------- */
 function fileName(){
@@ -1218,6 +1282,7 @@ on("mBack", "mousedown", (e) => { if (e.target === $("mBack")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
 on("jsonBtn", "click", () => {
+  $("moreMenu").hidden = true;
   openModal(box => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);
@@ -1225,6 +1290,14 @@ on("jsonBtn", "click", () => {
     box.appendChild(el("p","hint","Save this as lessons/" + fileName() +
       ", add it to lessons/index.json, then publish it in the teacher console."));
     box.appendChild(el("pre","jsonbox", JSON.stringify(compile(), null, 2)));
+    const save = el("button","btn-ghost modal-cta","Save as a file");
+    save.addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(compile(), null, 2)], { type:"application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = fileName(); a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    });
+    box.appendChild(save);
     const copy = el("button","btn-primary modal-cta","Copy to clipboard");
     copy.addEventListener("click", async () => {
       try{ await navigator.clipboard.writeText(JSON.stringify(compile(), null, 2)); copy.textContent = "Copied \u2713"; }
@@ -1295,32 +1368,9 @@ async function saveToSite(){
 on("saveSite", "click", saveToSite);
 
 /* deleting from here asks twice too — it is the same job as in the console */
-on("copyLesson", "click", () => {
-  openModal(box => {
-    box.appendChild(el("h2","","Save as a copy"));
-    box.appendChild(el("p","modal-text","This makes a new lesson from what is on screen. The one you opened is left as it was, in whichever classes have it."));
-    const w = el("div","bfield");
-    w.appendChild(el("label","","Name for the copy"));
-    const inp = el("input"); inp.value = (lesson.title || "") + " (copy)";
-    w.appendChild(inp); box.appendChild(w);
-    const msg = el("p","hint","");
-    const go = el("button","btn-primary modal-cta","Make the copy");
-    go.addEventListener("click", async () => {
-      const name = inp.value.trim();
-      if (!name){ msg.textContent = "Give the copy a name."; return; }
-      lesson.title = name;
-      lesson.savedAs = null;                 // a new lesson, so a new name
-      $("lTitle").value = name;
-      closeModal();
-      await saveToSite();
-    });
-    const no = el("button","btn-ghost modal-stay","Cancel");
-    no.addEventListener("click", closeModal);
-    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
-  });
-});
 
 on("delLesson", "click", () => {
+  $("moreMenu").hidden = true;
   const API = (window.HUB && window.HUB.API) || "";
   const id = lesson.savedAs;
   if (!id) return;
@@ -1350,7 +1400,7 @@ on("delLesson", "click", () => {
             closeModal();
             lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:[] };
             dirty = false;
-            $("lTitle").value = ""; $("lIntro").value = ""; $("lUnit").value = "";
+            showTitle(); paintPickers();
             $("delLesson").hidden = true;
             render(); refreshPreview();
             say("Deleted", "The lesson has been removed from the site.");
@@ -1405,8 +1455,8 @@ async function loadUnitsAndMaybeLesson(){
     migrate(lesson.blocks); tidyIntoPages();
     dirty = false;
     $("delLesson").hidden = false;
-    $("copyLesson").hidden = false;
-    $("lTitle").value = lesson.title; $("lIntro").value = lesson.intro || "";
+    
+    showTitle(); 
     paintPickers();
     setMode(!!lesson.assessment);
     render(); refreshPreview();
@@ -1446,63 +1496,12 @@ function fromCompiled(data, meta){
   return out;
 }
 
-on("dlBtn", "click", () => {
-  const blob = new Blob([JSON.stringify(compile(), null, 2)], { type:"application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = fileName(); a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-});
-
-/* ---------------- paste a Trinket page ----------------
-   Trinket pages follow the same shape every time: explanation, starter code,
-   then questions. Fill in the parts and you get reading + Python + answers. */
-on("importBtn", "click", () => {
-  openModal(box => {
-    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
-    x.addEventListener("click", closeModal); box.appendChild(x);
-    box.appendChild(el("h2","","Paste a Trinket page"));
-    box.appendChild(el("p","hint","Copy each part across. Leave anything blank if that page doesn't have it."));
-    function area(label, rows, ph, mono){
-      const w = el("div","bfield");
-      w.appendChild(el("label","", label));
-      const t = el("textarea"); t.rows = rows;
-      if (ph) t.placeholder = ph;
-      if (mono) t.className = "mono";
-      w.appendChild(t); box.appendChild(w);
-      return t;
-    }
-    const head = area("Heading", 1, "Output a message to the screen");
-    const expl = area("Explanation text", 5,
-      "To output something to the screen in Python, we use the `print()` function");
-    const inv  = area("Investigate / instruction", 2,
-      "Run the following code and add your own output message on line 3");
-    const code = area("Starter code", 6, 'print("Hello World!")', true);
-    const qs   = area("Questions to answer (one per line)", 4,
-      "What is the purpose of the print function?");
-    const go = el("button","btn-primary modal-cta","Add to the lesson");
-    go.addEventListener("click", () => {
-      // everything from one Trinket page belongs on one page here too
-      const kids = [];
-      if (head.value.trim() || expl.value.trim())
-        kids.push({ type:"text", heading:"", body: expl.value.trim() });
-      if (code.value.trim() || inv.value.trim())
-        kids.push({ type:"ide", title:"Investigate", task: inv.value.trim(),
-                    starter: code.value.replace(/\s+$/, ""), turtle:false, expect:"" });
-      qs.value.split("\n").map(x => x.replace(/^\s*[-*\u2022]\s*/, "").trim()).filter(Boolean)
-        .forEach(q => kids.push({ type:"question", prompt: q, minWords: 20 }));
-      lesson.blocks.push({ type:"page", title: head.value.trim() || "Python page",
-                           task:"", blocks: kids });
-      closeModal(); render(); refreshPreview();
-    });
-    box.appendChild(go);
-  });
-});
 
 /* ---------------- go ---------------- */
 loadDraft();
 if (!lesson.topics) lesson.topics = {};
-$("lTitle").value = lesson.title || "";
-$("lIntro").value = lesson.intro || "";
+
+
 paintPickers();
 setMode(!!lesson.assessment);
 loadUnitsAndMaybeLesson();

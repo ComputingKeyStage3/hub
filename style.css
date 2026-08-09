@@ -1223,3 +1223,24 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .mbtick .yes{color:#2E7B54; font-weight:800}
 .mbtick .no{color:var(--line-2); font-weight:800}
 html[data-bg=dark] .mbtick .yes{color:var(--mint)}
+
+
+/* builder: three dot menu, title in the header */
+.menuwrap{position:relative; display:inline-block}
+.menu{position:absolute; right:0; top:110%; z-index:40; min-width:170px; padding:6px;
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
+  box-shadow:0 8px 22px rgba(0,0,0,.16); display:flex; flex-direction:column}
+.menu button{background:transparent; border:none; text-align:left; padding:9px 12px;
+  border-radius:9px; font-size:15px; color:var(--text); cursor:pointer}
+.menu button:hover{background:var(--panel-2)}
+.homebar .title #titleShow{font-weight:500; color:var(--muted)}
+.build-titles{align-items:center}
+
+/* markbook: scrolls, and columns can be sorted */
+.mbscroll{max-height:44vh; overflow:auto; border:1px solid var(--line); border-radius:12px; margin:0 0 18px}
+.mbtable th{position:sticky; top:0; background:var(--panel); z-index:2}
+.mbsort{cursor:pointer; white-space:nowrap}
+.mbsort:hover{color:var(--amber-dark)}
+.mbsort.on{color:var(--amber-dark)}
+.mbtick .part{color:var(--amber-dark); font-weight:800; font-size:13px}
+.mbtick .none{color:var(--line-2)}
