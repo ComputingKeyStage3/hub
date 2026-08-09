@@ -1204,3 +1204,22 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 
 /* builder: year and unit pickers */
 .build-titles select{font-size:15px; padding:9px 11px; max-width:200px; border-radius:12px}
+
+
+/* a task you have just jumped to, in the builder */
+.bcard.justopened{border-color:var(--amber); box-shadow:0 0 0 3px rgba(220,138,62,.22)}
+
+
+/* markbook */
+.mbstats{display:flex; gap:12px; flex-wrap:wrap; margin:4px 0 18px}
+.mbstat{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:10px 16px; min-width:96px}
+.mbstat b{display:block; font-size:20px; font-family:var(--display)}
+.mbstat span{font-size:12.5px; color:var(--muted)}
+.mbtable{width:100%; border-collapse:collapse; font-size:14.5px}
+.mbtable th,.mbtable td{border-bottom:1px solid var(--line); padding:8px 10px; text-align:left}
+.mbtable th{font-size:12.5px; color:var(--muted); font-weight:800}
+.mbtask{max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mbtick{text-align:center}
+.mbtick .yes{color:#2E7B54; font-weight:800}
+.mbtick .no{color:var(--line-2); font-weight:800}
+html[data-bg=dark] .mbtick .yes{color:var(--mint)}

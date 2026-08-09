@@ -1168,6 +1168,11 @@ function openManage(){
     const workBtn = el("button","btn-ghost","View Student Work");
     workBtn.addEventListener("click", () => pickStudentWork(lessonId, true));
     bar.appendChild(pubBtn); bar.appendChild(workBtn);
+    if (lessonJson && lessonJson.assessment){
+      const mb = el("button","btn-ghost","Markbook");
+      mb.addEventListener("click", () => openMarkbook(true));
+      bar.appendChild(mb);
+    }
     box.appendChild(bar);
     const tools = el("div","toolrow");
     const oa = el("button","btn-ghost","Open all tasks"); oa.addEventListener("click", () => postLocks(new Set()));
@@ -1255,6 +1260,149 @@ function paintTasks(){
     row.appendChild(btns);
     list.appendChild(row);
   });
+}
+
+/* ---------- markbook for an assessment ---------- */
+function niceTime(sec){
+  if (!sec) return "\u2014";
+  const m = Math.floor(sec / 60), r = sec % 60;
+  return m ? (m + "m " + r + "s") : (r + "s");
+}
+/* every response and extension task the lesson can hand out */
+function responseTaskIds(){
+  const out = [];
+  const bank = (lessonJson && lessonJson.responses) || {};
+  Object.keys(bank).forEach(topic => (bank[topic] || []).forEach(t => {
+    if (t.id) out.push({ id: t.id, label: topic + ": " + (stripTags(t.prompt || t.title || "") || t.type) });
+  }));
+  ((lessonJson && lessonJson.extensions) || []).forEach(t => {
+    if (t.id) out.push({ id: t.id, label: "Extension: " + (stripTags(t.prompt || t.title || "") || t.type) });
+  });
+  return out;
+}
+function attempted(data, id){
+  if (!data) return false;
+  const v = data[id];
+  if (v === null || v === undefined || v === "") return false;
+  if (Array.isArray(v)) return v.some(x => x !== null && x !== undefined && x !== "");
+  if (typeof v === "object") return Object.keys(v).length > 0;
+  if (typeof v === "boolean") return v;
+  return true;
+}
+let markbookRows = [], markbookTasks = [];
+async function openMarkbook(backToManage){
+  openModal(async (box) => {
+    box.classList.add("wide");
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", () => { closeModal(); if (backToManage) openManage(); });
+    box.appendChild(x);
+    modalTitle(box, "Markbook \u2014 " + titleOf(lessonId) + " \u00b7 " + cls);
+    const holder = el("div"); box.appendChild(holder);
+    holder.appendChild(el("p","hint","Loading\u2026"));
+    try{
+      const [roster, work, res] = [await getRoster(), await getWorkRows(), await getResults()];
+      markbookTasks = responseTaskIds();
+      markbookRows = roster.map(st => {
+        const r = res.find(x => x.display_name === st.display_name) || null;
+        const w = work.find(x => x.username === st.username) || null;
+        return { name: st.display_name, username: st.username,
+                 score: r ? r.score : null, outOf: r ? r.out_of : null,
+                 seconds: r ? (r.seconds || 0) : 0,
+                 strength: r ? (r.strength || "") : "", target: r ? (r.target || "") : "",
+                 data: w ? w.data : null };
+      });
+      holder.innerHTML = "";
+
+      /* the numbers at the top */
+      const done = markbookRows.filter(r => r.score !== null);
+      const pcts = done.map(r => Math.round(100 * r.score / Math.max(1, r.outOf)));
+      const times = done.filter(r => r.seconds > 0).map(r => r.seconds);
+      const avg = (a) => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0;
+      const stats = el("div","mbstats");
+      [["Finished", done.length + " of " + markbookRows.length],
+       ["Average", pcts.length ? avg(pcts) + "%" : "\u2014"],
+       ["Lowest", pcts.length ? Math.min.apply(null, pcts) + "%" : "\u2014"],
+       ["Highest", pcts.length ? Math.max.apply(null, pcts) + "%" : "\u2014"],
+       ["Average time", times.length ? niceTime(avg(times)) : "\u2014"]].forEach(p => {
+        const c = el("div","mbstat");
+        c.appendChild(el("b","", p[1]));
+        c.appendChild(el("span","", p[0]));
+        stats.appendChild(c);
+      });
+      holder.appendChild(stats);
+
+      /* one row per student */
+      const table = el("table","mbtable");
+      const head = el("tr");
+      ["Student","Mark","%","Time"].forEach(h => head.appendChild(el("th","", h)));
+      markbookTasks.forEach(t => {
+        const th = el("th","mbtask");
+        th.title = t.label;
+        th.appendChild(el("span","", t.label.split(":")[0]));
+        head.appendChild(th);
+      });
+      table.appendChild(head);
+      markbookRows.forEach(r => {
+        const tr = el("tr");
+        tr.appendChild(el("td","", r.name));
+        tr.appendChild(el("td","", r.score === null ? "\u2014" : r.score + " / " + r.outOf));
+        tr.appendChild(el("td","", r.score === null ? "\u2014" : Math.round(100 * r.score / Math.max(1, r.outOf)) + "%"));
+        tr.appendChild(el("td","", niceTime(r.seconds)));
+        markbookTasks.forEach(t => {
+          const td = el("td","mbtick");
+          const ok = attempted(r.data, t.id);
+          td.appendChild(el("span", ok ? "yes" : "no", ok ? "\u2713" : "\u2717"));
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      holder.appendChild(table);
+      if (!markbookTasks.length)
+        holder.appendChild(el("p","hint","This assessment has no response tasks yet, so there is nothing to tick."));
+    }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
+
+    const dl = el("button","btn-primary modal-cta","Save for Excel");
+    dl.addEventListener("click", exportMarkbook);
+    box.appendChild(dl);
+    const done2 = el("button","btn-ghost modal-stay","Close");
+    done2.addEventListener("click", () => { closeModal(); if (backToManage) openManage(); });
+    box.appendChild(done2);
+  });
+}
+async function getResults(){
+  const r = await fetch(API + "/api/teacher/results?lesson=" + encodeURIComponent(lessonId) +
+                        "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "Could not load results.");
+  return d.rows || [];
+}
+/* Excel opens a table like this directly — no add-ins, nothing to install. */
+function exportMarkbook(){
+  const esc2 = (v) => String(v === null || v === undefined ? "" : v)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  let html = "<table border='1'><tr><th>Student</th><th>Username</th><th>Mark</th><th>Out of</th>" +
+             "<th>Percent</th><th>Time taken</th><th>Strength</th><th>Target</th>";
+  markbookTasks.forEach(t => { html += "<th>" + esc2(t.label) + "</th>"; });
+  html += "</tr>";
+  markbookRows.forEach(r => {
+    html += "<tr><td>" + esc2(r.name) + "</td><td>" + esc2(r.username) + "</td>" +
+            "<td>" + (r.score === null ? "" : r.score) + "</td>" +
+            "<td>" + (r.outOf === null ? "" : r.outOf) + "</td>" +
+            "<td>" + (r.score === null ? "" : Math.round(100 * r.score / Math.max(1, r.outOf))) + "</td>" +
+            "<td>" + (r.seconds ? niceTime(r.seconds) : "") + "</td>" +
+            "<td>" + esc2(r.strength) + "</td><td>" + esc2(r.target) + "</td>";
+    markbookTasks.forEach(t => { html += "<td>" + (attempted(r.data, t.id) ? "Yes" : "No") + "</td>"; });
+    html += "</tr>";
+  });
+  html += "</table>";
+  const page = "<html xmlns:x='urn:schemas-microsoft-com:office:excel'><head><meta charset='utf-8'></head>" +
+               "<body>" + html + "</body></html>";
+  const blob = new Blob([page], { type:"application/vnd.ms-excel" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (titleOf(lessonId) + " " + cls).replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-") + ".xls";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
 /* ---------- student work: view on screen or print to PDF ---------- */

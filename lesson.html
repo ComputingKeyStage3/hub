@@ -103,6 +103,7 @@ const steps  = [];   // { section, check(), brief:{eyebrow,title,text} }
 let step = 0, bypassed = false, lesson = null;
 if (spectate) bypassed = true;   // teachers see past every lock
 let finished = false;          // set once they press Finish
+let assessStarted = Date.now();
 let restoredData = null;       // last saved data we restored (responses re-apply from it)
 let wasDone = false;           // the saved copy says this lesson was completed
 let lockedSet = new Set();     // task indexes the teacher has locked shut
@@ -2581,7 +2582,8 @@ async function assessmentFinish(){
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({ lesson: lessonId, score: res.score, outOf: res.outOf,
-                               breakdown: res.byTopic, strength: st.strength, target: st.target })
+                               breakdown: res.byTopic, strength: st.strength, target: st.target,
+                               seconds: Math.round((Date.now() - assessStarted) / 1000) })
       });
       sent = r.ok ? "done" : "failed";
     }catch(e){ sent = "failed"; }
@@ -2702,14 +2704,26 @@ function renderAssessmentComplete(justFinished, res, st, sent){
 
 function renderResponses(container, targetTopic, statusEl){
   const bank = (lesson && lesson.responses) || {};
-  const list = bank[targetTopic] || [];
-  if (!list.length) return;
+  let list = bank[targetTopic] || [];
+  /* Full marks means no weakest topic worth working on, so they get a topic
+     picked at random instead — different students get different practice. */
+  if (!list.length || !targetTopic){
+    const topics = Object.keys(bank).filter(k => (bank[k] || []).length);
+    if (topics.length){
+      const pick = topics[Math.floor(Math.random() * topics.length)];
+      list = bank[pick] || [];
+    }
+  }
+  const extras = (lesson && lesson.extensions) || [];
+  if (!list.length && !extras.length) return;
   const wrap = el("div","responses");
   wrap.appendChild(el("h2","sect-head","Response tasks"));
   wrap.appendChild(el("p","resp-sub","Chosen from your target. Work through them \u2014 press Save Work when you're done."));
   list.forEach((b, i) => {
     if (!b.id) b.id = "resp_" + targetTopic + "_" + i;
-    const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort, text:rText }[b.type];
+    const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort,
+                text:rText, picture:rPicture, ide:rIDE, web:rWeb, order:rOrder, image:rImage,
+                embed:rEmbed, link:rLink, pastelink:rPasteLink, frame:rFrame }[b.type];
     if (!R) return;
     try{
       const built = R(b);
@@ -2723,6 +2737,29 @@ function renderResponses(container, targetTopic, statusEl){
       if (restoredData && restoredData[b.id] !== undefined && fields[b.id]) fields[b.id].set(restoredData[b.id]);
     }catch(e){ console.error("response task failed:", e); }
   });
+  /* extension tasks: everyone gets these after their own practice */
+  if (extras.length){
+    wrap.appendChild(el("h2","sect-head","Going further"));
+    wrap.appendChild(el("p","resp-sub","Try these once you have finished the tasks above."));
+    extras.forEach((b, i) => {
+      if (!b.id) b.id = "ext_" + i;
+      const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort,
+                  text:rText, picture:rPicture, ide:rIDE, web:rWeb, order:rOrder, image:rImage,
+                  embed:rEmbed, link:rLink, pastelink:rPasteLink, frame:rFrame }[b.type];
+      if (!R) return;
+      try{
+        const built = R(b);
+        const bb = (typeof built.brief === "function") ? built.brief() : built.brief;
+        const task = el("div","resp-task");
+        if (bb && bb.title) task.appendChild(el("p","resp-q", stripTags(bb.title)));
+        if (b.note) task.appendChild(el("p","resp-note", stripTags(b.note)));
+        built.section.hidden = false;
+        task.appendChild(built.section);
+        wrap.appendChild(task);
+        if (restoredData && restoredData[b.id] !== undefined && fields[b.id]) fields[b.id].set(restoredData[b.id]);
+      }catch(e){ console.error("extension task failed:", e); }
+    });
+  }
   if (!spectate) wrap.appendChild(saveButton(statusEl));
   container.appendChild(wrap);
 }
