@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="builder">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -43,6 +43,12 @@
   </div>
 </div>
 
+<div class="subtabs" id="assessTabs" hidden>
+  <button class="on" id="tabQuestions">Questions</button>
+  <button id="tabTargets">Strength &amp; Target</button>
+  <button id="tabResponses">Response tasks</button>
+</div>
+
 <div class="build">
   <aside class="build-palette">
     <div id="palLesson">
@@ -70,8 +76,8 @@
       <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
       <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
       <p class="pal-head">Feedback</p>
-      <button class="pal" id="topicsBtn"><b>Strength &amp; Target</b><span>Sentences per topic</span></button>
-      <button class="pal" id="responsesBtn"><b>Response tasks</b><span>What to do after the score</span></button>
+
+
     </div>
     <p class="pal-note">Drag a card by its handle to reorder. Everything saves in this browser as you type.</p>
   </aside>
@@ -82,7 +88,6 @@
     <div class="prev-head">
       <b>Live preview</b>
       <span class="hint" id="prevMsg"></span>
-      <button class="btn-ghost iconbtn" id="prevBtn" title="Refresh preview">&#8635;</button>
       <button class="btn-ghost iconbtn" id="prevBtn" title="Refresh preview">&#8635;</button>
     </div>
     <iframe id="prev" title="Lesson preview"></iframe>
@@ -398,17 +403,24 @@ function render(){
   wireList();
   firstPageOpen();
   const list = $("list"); list.innerHTML = "";
+  /* an assessment is three pages: its questions, its feedback, its follow-up */
+  if (lesson.assessment && assessTab === "targets" && !respEditing){
+    paintTargets(list); saveDraft(); return;
+  }
+  if (lesson.assessment && assessTab === "responses" && !respEditing){
+    paintResponseTopics(list); saveDraft(); return;
+  }
   if (respEditing){
     const head = el("div","classhead");
     head.appendChild(el("h2","", respEditing === "__ext" ? "Extension tasks"
                                                           : "Response tasks \u2014 " + respEditing));
-    const back = el("button","btn-ghost bmini2","Back to the assessment");
+    const back = el("button","btn-ghost bmini2","Back to the list");
     back.addEventListener("click", () => { respEditing = null; render(); schedulePreview(); });
     head.appendChild(back);
     list.appendChild(head);
     const arr = respEditing === "__ext" ? (lesson.extensions || [])
                                         : (lesson.responses[respEditing] || []);
-    if (!arr.length) list.appendChild(el("p","hint","No tasks for this topic yet — add some from the Response tasks button."));
+    if (!arr.length) list.appendChild(el("p","hint","No tasks here yet — add one from the left."));
     arr.forEach((b, i) => list.appendChild(card(b, i, arr)));
     saveDraft();
     return;
@@ -907,6 +919,8 @@ function askDelete(what, done){
 /* ---------- lesson or assessment ---------- */
 function setMode(assess){
   lesson.assessment = !!assess;
+  $("assessTabs").hidden = !assess;
+  if (!assess){ assessTab = "questions"; respEditing = null; }
   $("modeLesson").classList.toggle("on", !assess);
   $("modeAssess").classList.toggle("on", assess);
   $("palLesson").hidden = !!assess;
@@ -927,43 +941,96 @@ on("modeLesson", "click", () => {
   } else setMode(false);
 });
 on("modeAssess", "click", () => setMode(true));
+function setAssessTab(which){
+  assessTab = which;
+  respEditing = null;
+  ["tabQuestions","tabTargets","tabResponses"].forEach(id => {
+    const on2 = (id === "tabQuestions" && which === "questions") ||
+                (id === "tabTargets" && which === "targets") ||
+                (id === "tabResponses" && which === "responses");
+    const e = $(id); if (e) e.classList.toggle("on", on2);
+  });
+  render();
+}
+on("tabQuestions", "click", () => setAssessTab("questions"));
+on("tabTargets", "click", () => setAssessTab("targets"));
+on("tabResponses", "click", () => setAssessTab("responses"));
 
 /* ---------- the sentences behind Strength and Target ---------- */
-on("topicsBtn", "click", () => {
-  const used = {};
-  lesson.blocks.forEach(b => { if (b.topic) used[b.topic] = true; });
-  Object.keys(lesson.topics || {}).forEach(k => { used[k] = true; });
-  const names = Object.keys(used);
-  openModal(box => {
-    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
-    x.addEventListener("click", closeModal); box.appendChild(x);
-    box.appendChild(el("h2","","Strength and Target"));
-    box.appendChild(el("p","hint","Each question can carry a topic tag. The topic a student did best in gives their Strength; their weakest gives their Target."));
-    if (!names.length) box.appendChild(el("p","modal-text","Add a topic tag to some questions first (for example: loops, variables)."));
-    names.forEach(name => {
-      const t = lesson.topics[name] || (lesson.topics[name] = { label:name, strength:"", target:"" });
-      const g = el("div","qsub");
-      g.appendChild(el("b","", name));
-      [["label","Friendly name"],["strength","Sentence when this is their BEST topic"],["target","Sentence when this is their WEAKEST topic"]]
-        .forEach(pair => {
-          const w = el("div","bfield");
-          w.appendChild(el("label","", pair[1]));
-          const inp = el("textarea"); inp.rows = 2; inp.value = t[pair[0]] || "";
-          inp.addEventListener("input", () => { t[pair[0]] = inp.value; saveDraft(); schedulePreview(); });
-          w.appendChild(inp); g.appendChild(w);
-        });
-      box.appendChild(g);
-    });
-    const done = el("button","btn-primary modal-cta","Done");
-    done.addEventListener("click", closeModal);
-    box.appendChild(done);
-  });
-});
 
 /* ---------- response tasks ----------
    After an assessment, students are given the tasks that belong to their
    weakest topic. They are ordinary tasks, kept per topic. */
 /* one row per task: click it to edit, arrows to move, cross to remove */
+/* Strength and Target, on its own page */
+function paintTargets(into){
+  const used = {};
+  lesson.blocks.forEach(b => { if (b.topic) used[b.topic] = true; });
+  Object.keys(lesson.topics || {}).forEach(k => { used[k] = true; });
+  const names = Object.keys(used);
+  into.appendChild(el("p","hint","The topic a student did best in gives their Strength; their weakest gives their Target."));
+  if (!names.length){
+    into.appendChild(el("p","hint","Add a topic tag to some questions first, for example: loops, variables."));
+    return;
+  }
+  names.forEach(name => {
+    if (!lesson.topics[name]) lesson.topics[name] = { label:name, strength:"", target:"" };
+    const t = lesson.topics[name];
+    const card2 = el("div","bcard");
+    const head = el("div","bhead");
+    head.appendChild(el("b","btype", name));
+    card2.appendChild(head);
+    const body = el("div","bbody");
+    [["label","Friendly name"],["strength","When this is their BEST topic"],["target","When this is their WEAKEST topic"]]
+      .forEach(pair => {
+        const w = el("div","bfield");
+        w.appendChild(el("label","", pair[1]));
+        const inp = el("textarea"); inp.rows = 2; inp.value = t[pair[0]] || "";
+        inp.addEventListener("input", () => { t[pair[0]] = inp.value; saveDraft(); schedulePreview(); });
+        w.appendChild(inp); body.appendChild(w);
+      });
+    card2.appendChild(body);
+    into.appendChild(card2);
+  });
+  const w = el("div","bfield");
+  w.appendChild(el("label","","When a student gets everything right"));
+  const inp = el("input"); inp.value = lesson.perfectTarget || "";
+  inp.placeholder = "Full marks — stretch yourself with the tasks below.";
+  inp.addEventListener("input", () => { lesson.perfectTarget = inp.value; saveDraft(); schedulePreview(); });
+  w.appendChild(inp);
+  into.appendChild(w);
+}
+
+/* the list of topics, each opening its own set of tasks */
+function paintResponseTopics(into){
+  if (!lesson.responses) lesson.responses = {};
+  if (!lesson.extensions) lesson.extensions = [];
+  const used = {};
+  lesson.blocks.forEach(b => { if (b.topic) used[b.topic] = true; });
+  Object.keys(lesson.topics || {}).forEach(k => { used[k] = true; });
+  Object.keys(lesson.responses).forEach(k => { used[k] = true; });
+  const names = Object.keys(used);
+  into.appendChild(el("p","hint","Students get the tasks for their target topic, then the extension tasks."));
+  if (!names.length) into.appendChild(el("p","hint","Add a topic tag to some questions first."));
+  names.forEach(name => {
+    if (!lesson.responses[name]) lesson.responses[name] = [];
+    const n = lesson.responses[name].length;
+    const row = el("button","ov-row");
+    row.appendChild(el("span","t", name));
+    row.appendChild(el("span","p", n + " task" + (n === 1 ? "" : "s")));
+    row.appendChild(el("span","edit","Open \u2192"));
+    row.addEventListener("click", () => { respEditing = name; render(); });
+    into.appendChild(row);
+  });
+  const ext = el("button","ov-row");
+  ext.appendChild(el("span","t","Extension tasks"));
+  ext.appendChild(el("span","p", lesson.extensions.length + " task" + (lesson.extensions.length === 1 ? "" : "s") +
+                                 " \u00b7 everyone gets these"));
+  ext.appendChild(el("span","edit","Open \u2192"));
+  ext.addEventListener("click", () => { respEditing = "__ext"; render(); });
+  into.appendChild(ext);
+}
+
 function taskRows(into, arr, topic){
   arr.forEach((task, i) => {
     const row = el("button","ov-row");
@@ -975,7 +1042,7 @@ function taskRows(into, arr, topic){
       const j = i + d;
       if (j < 0 || j >= arr.length) return;
       arr.splice(j, 0, arr.splice(i, 1)[0]);
-      saveDraft(); schedulePreview(); openResponses();
+      saveDraft(); schedulePreview(); render();
     };
     const up = el("button","btn-ghost bmini","\u2191");
     up.addEventListener("click", move(-1));
@@ -985,7 +1052,7 @@ function taskRows(into, arr, topic){
     rm.addEventListener("click", (e) => {
       e.stopPropagation();
       arr.splice(i, 1);
-      saveDraft(); schedulePreview(); openResponses();
+      saveDraft(); schedulePreview(); render();
     });
     row.appendChild(up); row.appendChild(down); row.appendChild(rm);
     into.appendChild(row);
@@ -1001,64 +1068,14 @@ function addButtons(arr, topic){
     const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
     btn.addEventListener("click", () => {
       arr.push(BLANK[pair[0]]());
-      saveDraft(); schedulePreview();
-      openResponses();
+      saveDraft(); schedulePreview(); render();
     });
     add.appendChild(btn);
   });
   return add;
 }
 
-function openResponses(){
-  if (!lesson.responses) lesson.responses = {};
-  const used = {};
-  lesson.blocks.forEach(b => {
-    if (b.topic) used[b.topic] = true;
-    (b.blocks || []).forEach(k => { if (k.topic) used[k.topic] = true; });
-  });
-  Object.keys(lesson.topics || {}).forEach(k => { used[k] = true; });
-  const names = Object.keys(used);
-  openModal(box => {
-    box.classList.add("wide");
-    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
-    x.addEventListener("click", closeModal); box.appendChild(x);
-    box.appendChild(el("h2","","Response tasks"));
-    box.appendChild(el("p","hint","Each student is given the tasks for the topic they did worst in. Two or three per topic keeps them busy."));
-    if (!names.length){
-      box.appendChild(el("p","modal-text","Add a topic tag to some questions first."));
-    }
-    names.forEach(topic => {
-      if (!lesson.responses[topic]) lesson.responses[topic] = [];
-      const g = el("div","qsub");
-      const head = el("div","qsub-head");
-      head.appendChild(el("b","", topic));
-      head.appendChild(el("span","hint", lesson.responses[topic].length + " task" +
-        (lesson.responses[topic].length === 1 ? "" : "s")));
-      g.appendChild(head);
-      taskRows(g, lesson.responses[topic], topic);
-      g.appendChild(addButtons(lesson.responses[topic], topic));
-      box.appendChild(g);
-    });
-
-    /* tasks everyone does once their own practice is finished */
-    if (!lesson.extensions) lesson.extensions = [];
-    const ext = el("div","qsub");
-    const eh = el("div","qsub-head");
-    eh.appendChild(el("b","","Extension tasks"));
-    eh.appendChild(el("span","hint", lesson.extensions.length + " task" + (lesson.extensions.length === 1 ? "" : "s")));
-    ext.appendChild(eh);
-    ext.appendChild(el("p","bhelp","Every student gets these after their own response tasks, whatever their score."));
-    taskRows(ext, lesson.extensions, "__ext");
-    ext.appendChild(addButtons(lesson.extensions, "__ext"));
-    box.appendChild(ext);
-    const done = el("button","btn-primary modal-cta","Done");
-    done.addEventListener("click", closeModal);
-    box.appendChild(done);
-  });
-}
-on("responsesBtn", "click", openResponses);
-
-/* the same cards as anywhere else, just for one topic's tasks */
+/* open one topic's tasks, and highlight the one that was clicked */
 function editResponses(topic, index){
   respEditing = topic;
   render();
@@ -1072,6 +1089,7 @@ function editResponses(topic, index){
   }
 }
 let respEditing = null;
+let assessTab = "questions";   // questions | targets | responses
 
 document.querySelectorAll(".pal[data-add]").forEach(btn => {
   btn.draggable = true;
@@ -1084,6 +1102,12 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
   btn.addEventListener("dragend", () => { btn.classList.remove("dragging"); newTask = null; });
   btn.addEventListener("click", () => {
     const kind = btn.dataset.add;
+    if (respEditing){                     // a response or extension set is open
+      const arr = respEditing === "__ext" ? lesson.extensions : lesson.responses[respEditing];
+      arr.push(BLANK[kind]());
+      render(); schedulePreview();
+      return;
+    }
     if (kind === "page" || lesson.assessment){
       lesson.blocks.push(BLANK[kind]());
     } else {

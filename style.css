@@ -1244,3 +1244,20 @@ html[data-bg=dark] .mbtick .yes{color:var(--mint)}
 .mbsort.on{color:var(--amber-dark)}
 .mbtick .part{color:var(--amber-dark); font-weight:800; font-size:13px}
 .mbtick .none{color:var(--line-2)}
+
+
+/* the builder fills the window, with its own panes scrolling */
+html.builder, html.builder body{height:100%; overflow:hidden}
+html.builder body{display:flex; flex-direction:column}
+html.builder .build{flex:1; min-height:0; height:auto}
+html.builder .build-palette,
+html.builder .build-list{min-height:0; overflow-y:auto}
+html.builder .build-preview{min-height:0}
+html.builder .subtabs{margin:10px 24px 0}
+
+/* the three dot menu sits over the page, not in the row */
+.menu[hidden]{display:none !important}
+
+/* task names stay readable on the dark theme */
+.btype,.pal b,.ov-row .t,.bfield label{color:var(--text)}
+.pal span,.ov-row .p{color:var(--muted)}

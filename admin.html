@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
+<script src="xlsx.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -1528,36 +1529,24 @@ async function getResults(){
 }
 /* Excel opens a table like this directly — no add-ins, nothing to install. */
 function exportMarkbook(){
-  const esc2 = (v) => String(v === null || v === undefined ? "" : v)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  let html = "<table border='1'><tr><th>Student</th><th>Username</th><th>Mark</th><th>Out of</th>" +
-             "<th>Percent</th><th>Time taken</th><th>Strength</th><th>Target</th>";
-  markbookQs.forEach(q => { html += "<th>" + esc2(q.label + " " + q.title) + "</th>"; });
-  markbookTasks.forEach(t => { html += "<th>" + esc2(t.label) + "</th>"; });
-  html += "</tr>";
+  const head = ["Student","Username","Mark","Out of","Percent","Time taken","Strength","Target"];
+  markbookQs.forEach(q => head.push(q.label + " " + q.title));
+  markbookTasks.forEach(t => head.push(t.label));
+  const rows = [head];
   markbookRows.forEach(r => {
-    html += "<tr><td>" + esc2(r.name) + "</td><td>" + esc2(r.username) + "</td>" +
-            "<td>" + (r.score === null ? "" : r.score) + "</td>" +
-            "<td>" + (r.outOf === null ? "" : r.outOf) + "</td>" +
-            "<td>" + (r.score === null ? "" : Math.round(100 * r.score / Math.max(1, r.outOf))) + "</td>" +
-            "<td>" + (r.seconds ? niceTime(r.seconds) : "") + "</td>" +
-            "<td>" + esc2(r.strength) + "</td><td>" + esc2(r.target) + "</td>";
-    markbookQs.forEach(q => {
-      const m = r.marks[q.id];
-      html += "<td>" + (m ? m.got + "/" + m.max : "") + "</td>";
-    });
-    markbookTasks.forEach(t => { html += "<td>" + (attempted(r.data, t.id) ? "Yes" : "No") + "</td>"; });
-    html += "</tr>";
+    const row = [r.name, r.username,
+                 r.score === null ? "" : r.score,
+                 r.outOf === null ? "" : r.outOf,
+                 r.pct === null ? "" : r.pct,
+                 r.seconds ? niceTime(r.seconds) : "",
+                 r.strength, r.target];
+    markbookQs.forEach(q => { const m = r.marks[q.id]; row.push(m ? m.got : ""); });
+    markbookTasks.forEach(t => row.push(attempted(r.data, t.id) ? "Yes" : "No"));
+    rows.push(row);
   });
-  html += "</table>";
-  const page = "<html xmlns:x='urn:schemas-microsoft-com:office:excel'><head><meta charset='utf-8'></head>" +
-               "<body>" + html + "</body></html>";
-  const blob = new Blob([page], { type:"application/vnd.ms-excel" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = (titleOf(lessonId) + " " + cls).replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-") + ".xls";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  const name = (titleOf(lessonId) + " " + cls).replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-") + ".xlsx";
+  if (window.saveXlsx) window.saveXlsx(rows, "Markbook", name);
+  else say("Could not build the file", "The spreadsheet builder did not load.");
 }
 
 /* ---------- student work: view on screen or print to PDF ---------- */
@@ -1703,7 +1692,8 @@ async function whoDone(i, b, backToManage){
         holder.appendChild(line);
       });
     }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
-    const done2 = el("button","btn-ghost modal-stay","Close"); done2.addEventListener("click", closeModal);
+    const done2 = el("button","btn-ghost modal-stay","Close");
+    done2.addEventListener("click", () => { closeModal(); if (backToManage) openManage(); });
     box.appendChild(done2);
   });
 }

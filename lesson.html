@@ -1154,7 +1154,7 @@ function rIDE(b){
   [["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(pair => {
     const t = el("button","ide-chip", pair[1]);
     t.dataset.theme = pair[0];
-    t.addEventListener("click", () => setTheme(pair[0]));
+    t.addEventListener("click", () => setTheme(pair[0], true));
     themes.appendChild(t);
   });
   settings.appendChild(themes);
@@ -1254,10 +1254,12 @@ function rIDE(b){
   s.appendChild(note);
 
   /* --- appearance --- */
-  function setTheme(k){
+  function setTheme(k, chosen){
     s.dataset.idetheme = k;
     Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
-    const p = idePrefs(); p.theme = k; saveIdePrefs(p);
+    /* only remember it when the student picked it — otherwise the editor would
+       stop following the site's colours after the first paint */
+    if (chosen){ const p = idePrefs(); p.theme = k; saveIdePrefs(p); }
   }
   function setSize(k){
     s.dataset.idesize = k;
@@ -1507,7 +1509,7 @@ function rWeb(b){
   const themes = el("div","ide-setrow");
   [["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(p => {
     const t = el("button","ide-chip", p[1]); t.dataset.theme = p[0];
-    t.addEventListener("click", () => setTheme(p[0]));
+    t.addEventListener("click", () => setTheme(p[0], true));
     themes.appendChild(t);
   });
   settings.appendChild(themes);
@@ -1720,10 +1722,12 @@ function rWeb(b){
   ta.value = code[current];
 
   /* ---------- appearance ---------- */
-  function setTheme(k){
+  function setTheme(k, chosen){
     s.dataset.idetheme = k;
     Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
-    const p = idePrefs(); p.theme = k; saveIdePrefs(p);
+    /* only remember it when the student picked it — otherwise the editor would
+       stop following the site's colours after the first paint */
+    if (chosen){ const p = idePrefs(); p.theme = k; saveIdePrefs(p); }
   }
   function setSize(k){
     s.dataset.idesize = k;
