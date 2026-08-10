@@ -1261,3 +1261,118 @@ html.builder .subtabs{margin:10px 24px 0}
 /* task names stay readable on the dark theme */
 .btype,.pal b,.ov-row .t,.bfield label{color:var(--text)}
 .pal span,.ov-row .p{color:var(--muted)}
+
+/* ==================================================================
+   SMALLER SCREENS
+   Two sizes matter here: an iPad (about 768–1024 across, and 1024 the
+   other way up) and a phone. Nothing should ever need pinching or
+   sliding sideways, and a desktop should look exactly as it did.
+   ================================================================== */
+
+/* things that must never push the page wider than the screen */
+html, body{max-width:100%; overflow-x:hidden}
+img, iframe, canvas, video, table{max-width:100%}
+pre, code{overflow-wrap:anywhere}
+.page{box-sizing:border-box}
+
+/* ---------- iPad and small laptops ---------- */
+@media (max-width:1180px){
+  /* the builder drops the preview beside the cards and puts it underneath */
+  .build{grid-template-columns:190px minmax(0,1fr); height:auto}
+  .build-preview{grid-column:1 / -1; height:min(70vh, 560px); border-left:none; border-top:1px solid var(--line)}
+  html.builder, html.builder body{overflow:auto; height:auto}
+  html.builder .build{height:auto}
+  html.builder .build-list, html.builder .build-palette{overflow:visible}
+}
+
+/* ---------- iPad portrait and below ---------- */
+@media (max-width:900px){
+  .page{padding-left:18px; padding-right:18px}
+  .homebar{padding:12px 18px; gap:10px}
+  .homebar .title{font-size:16px}
+  .masthead h1{font-size:30px}
+
+  /* tiles get roomier so two fit side by side rather than one and a gap */
+  .classgrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px}
+  .bigcards{grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px}
+  .lessongrid{grid-template-columns:minmax(0,1fr); gap:12px}
+
+  /* the lesson pill's buttons wrap instead of squashing */
+  .lp-acts{gap:6px}
+  .lp-acts button{flex:1 1 auto; min-width:0}
+
+  /* pop-ups use the whole width */
+  .modal-back{padding:2vh 12px}
+  .modal, .modal.wide{max-width:100%; width:100%}
+
+  /* the builder becomes one column: palette on top, cards, then preview */
+  .build{grid-template-columns:minmax(0,1fr)}
+  .build-palette{border-right:none; border-bottom:1px solid var(--line);
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; align-items:start}
+  .pal-head{grid-column:1 / -1; margin:6px 0 2px}
+  .pal-note{grid-column:1 / -1}
+  .pal{margin:0}
+  .build-preview{height:min(60vh, 480px)}
+  .build-titles{min-width:0; flex-wrap:wrap}
+  .build-titles select{flex:1 1 40%; min-width:0}
+
+  /* the code editor stacks: code above, output below */
+  .ide-wrap{grid-template-columns:minmax(0,1fr)}
+  .ide-editor{height:260px}
+  .web-preview{height:300px}
+
+  /* a page of tasks keeps its shape but tightens up */
+  .pg-item{padding-bottom:18px; margin-bottom:18px}
+  .brief{width:calc(100% - 24px); padding:9px 16px 11px}
+}
+
+/* ---------- phones ---------- */
+@media (max-width:640px){
+  body{font-size:17px}
+  .page{padding-left:14px; padding-right:14px}
+  .masthead h1{font-size:26px}
+  .homebar{flex-wrap:wrap; gap:8px; padding:10px 14px}
+  .homebar .title{flex:1 1 100%; font-size:15.5px}
+
+  .classgrid, .bigcards{grid-template-columns:minmax(0,1fr)}
+  .tabs, .subtabs{width:100%; overflow-x:auto}
+  .subtabs button, .tabs button{white-space:nowrap}
+
+  /* the bottom bar of a lesson */
+  .dock{padding:10px 14px; gap:8px}
+  .btn-continue{font-size:16px; padding:12px 18px}
+  .done-title{font-size:32px}
+  .done-score{font-size:44px}
+
+  /* long rows become stacked blocks rather than sliding off */
+  .who-row{flex-wrap:wrap; gap:6px}
+  .who-row .nm{flex:1 1 100%}
+  .stutable td{padding:9px 6px; font-size:15px}
+  .result-card{flex-wrap:wrap}
+  .result-card .st{max-width:100%; flex:1 1 100%}
+
+  /* the toolbars that carry several buttons */
+  .toolrow{gap:6px}
+  .toolrow button, .build-actions button{flex:1 1 auto}
+  .searchbox{flex:1 1 100%; max-width:none}
+
+  /* editors: bigger touch targets, smaller chrome */
+  .ide-bar{flex-wrap:wrap; gap:6px}
+  .ide-editor{height:220px}
+  .ide-gutter{width:34px}
+  .web-preview{height:260px}
+  .ide-small, .ide-tab, .web-file{padding:7px 10px}
+
+  /* pop-ups fill the screen on a phone */
+  .modal-back{padding:0}
+  .modal, .modal.wide{border-radius:0; min-height:100vh; max-height:none; padding:20px 16px 28px}
+  .modal-x{top:10px; right:10px}
+}
+
+/* fingers, not mice */
+@media (pointer:coarse){
+  button, .pal, .lessonCard, .classtile, .ov-row, .opt{min-height:44px}
+  .bmini{min-height:38px; min-width:38px}
+  .iconbtn{min-height:42px; min-width:42px}
+  .ide-code, .ide-hl{font-size:max(var(--ed-size), 15px) !important}
+}

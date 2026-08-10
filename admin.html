@@ -262,6 +262,25 @@ function say(title, message){
     box.appendChild(ok);
   });
 }
+/* On a narrow screen a row of five buttons does not fit, so the extra ones
+   go behind a three dot button that opens where it stands. */
+function overflowMenu(items){
+  const wrap = el("span","menuwrap");
+  const btn = el("button","btn-ghost iconbtn","\u22ee");
+  btn.title = "More";
+  const menu = el("span","menu"); menu.hidden = true;
+  items.forEach(it => {
+    const b = el("button","", it[0]);
+    b.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = true; it[1](); });
+    menu.appendChild(b);
+  });
+  btn.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+  document.addEventListener("mousedown", (e) => { if (e.target !== btn) menu.hidden = true; });
+  wrap.appendChild(btn); wrap.appendChild(menu);
+  return wrap;
+}
+const narrow = () => (typeof window !== "undefined" && window.innerWidth) ? window.innerWidth < 900 : false;
+
 function modalTitle(box, text){ const h = el("h2","",text); h.style.marginTop = "0"; box.appendChild(h); }
 function fieldRow(box, label, type, value){
   const w = el("div","field");
@@ -425,7 +444,10 @@ function lessonCards(list, box){
     edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
     const del = el("button","btn-ghost","Delete");
     del.addEventListener("click", () => deleteLesson(l.lesson_id));
-    acts.appendChild(give); acts.appendChild(edit); acts.appendChild(del);
+    acts.appendChild(give);
+    if (narrow()) acts.appendChild(overflowMenu([["Edit", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
+                                                 ["Delete", () => deleteLesson(l.lesson_id)]]));
+    else { acts.appendChild(edit); acts.appendChild(del); }
     card.appendChild(acts);
     grid.appendChild(card);
   });
@@ -1068,7 +1090,14 @@ function paintLessonGrid(){
     const rem = el("button","btn-ghost","Remove");
     rem.title = "Take it away from " + cls;
     rem.addEventListener("click", () => removeFromClass(l));
-    acts.appendChild(pub); acts.appendChild(workBtn); acts.appendChild(man); acts.appendChild(edit); acts.appendChild(rem);
+    acts.appendChild(pub); acts.appendChild(workBtn);
+    if (narrow()){
+      acts.appendChild(overflowMenu([["Manage", () => manageLesson(l.lesson_id)],
+        ["Edit", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
+        ["Remove from " + cls, () => removeFromClass(l)]]));
+    } else {
+      acts.appendChild(man); acts.appendChild(edit); acts.appendChild(rem);
+    }
     card.appendChild(acts);
     g.appendChild(card);
   });
