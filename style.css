@@ -1419,3 +1419,41 @@ html[data-bg=dark] .statechip.wait{background:#2C3A4A; color:#9CC4E8; border-col
 .feedbackNote b{display:block; font-size:13px; letter-spacing:.06em; text-transform:uppercase;
   color:var(--amber-dark); margin-bottom:4px}
 .feedbackNote p{margin:0; font-size:16px; line-height:1.5}
+
+
+/* a way back to the summary once finished */
+.backdone{position:absolute; top:66px; right:24px; z-index:20}
+@media (max-width:640px){ .backdone{position:static; margin:8px 14px 0; width:calc(100% - 28px)} }
+
+/* per question marks on the review */
+.qmark{display:flex; align-items:baseline; gap:10px; margin:0 0 6px; padding:7px 0; border-bottom:1px solid var(--line)}
+.qmark:last-child{border-bottom:none}
+.qmark b{min-width:32px}
+.qmark-t{flex:1; color:var(--muted); font-size:15px}
+.qmark-n{font-weight:800}
+.qmark.full .qmark-n{color:#2E7B54}
+.qmark.part .qmark-n{color:var(--amber-dark)}
+.qmark.none .qmark-n{color:var(--red)}
+html[data-bg=dark] .qmark.full .qmark-n{color:var(--mint)}
+.st-comment{margin:8px 0 0}
+
+/* the teacher's own panels inside a student's page */
+.teacher-edit{border:2px dashed var(--amber)}
+.teacher-edit textarea{width:100%}
+
+/* the three dot menu must not stretch the page */
+.menuwrap{position:relative}
+.menu{position:absolute; right:0; top:calc(100% + 4px)}
+
+
+/* feedback cards on the student results page */
+.fb-card{display:flex; flex-direction:column; gap:4px; padding:14px 16px; margin:0 0 10px;
+  background:var(--panel); border:1.5px solid var(--line); border-left:4px solid var(--amber);
+  border-radius:0 12px 12px 0; text-decoration:none; color:inherit}
+.fb-card:hover{border-color:var(--amber)}
+.fb-card b{font-size:17px}
+.fb-s{color:#2E7B54; font-size:15px}
+.fb-t{color:var(--amber-dark); font-size:15px}
+.fb-c{color:var(--muted); font-size:15px}
+html[data-bg=dark] .fb-s{color:var(--mint)}
+.tabs .refresh{margin-left:auto}

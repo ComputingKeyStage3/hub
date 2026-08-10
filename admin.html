@@ -401,7 +401,7 @@ const lessonsOfUnit = (u) => (cat.lessons || []).filter(l => (l.unit || "") === 
 on("openHub", "click", async () => {
   show("hubView");
   $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
-  try{ await loadCatalogue(); paintYears(); }
+  try{ await loadCatalogue(true); paintYears(); }
   catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
 on("hubHome", "click", toHome);
@@ -738,12 +738,12 @@ on("backHome", "click", toHome);
 on("refStudents", "click", () => { students = []; workCache = { key:"", rows:[], t:0 }; loadStudents(); });
 on("refUnits", "click", async () => {
   $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
-  try{ await loadCatalogue(); paintClassUnits(); }
+  try{ await loadCatalogue(true); paintClassUnits(); }
   catch(e){ $("unitGrid").innerHTML = ""; $("unitGrid").appendChild(el("p","hint", e.message)); }
 });
 on("refLessons", "click", async () => {
   $("lessonGrid").innerHTML = '<p class="hint">Loading…</p>';
-  try{ await loadCatalogue(); await loadClassLocks(); paintLessonGrid(); }
+  try{ await loadCatalogue(true); await loadClassLocks(); paintLessonGrid(); }
   catch(e){ $("lessonGrid").innerHTML = ""; $("lessonGrid").appendChild(el("p","hint", e.message)); }
 });
 on("backClass1", "click", () => openClass(cls));
@@ -945,7 +945,15 @@ let cat = { units: [], lessons: [] };     // from the database
 let fileLessons = [];                     // from lessons/index.json
 let unit = "";                            // the unit being managed
 
-async function loadCatalogue(){
+/* Kept for as long as the page is open. Reloading the page starts again,
+   and every screen has a refresh button for when something has changed. */
+let catLoaded = false;
+async function loadCatalogue(force){
+  if (catLoaded && !force) return;
+  await fetchCatalogue();
+  catLoaded = true;
+}
+async function fetchCatalogue(){
   fileLessons = [];
   try{
     const d = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
@@ -968,6 +976,7 @@ async function loadCatalogue(){
 const catOf = (id) => (cat.lessons || []).find(l => l.lesson_id === id) || { unit: "", published: 0, position: 0 };
 const titleOf = (id) => { const l = fileLessons.find(x => x.id === id); return l ? l.title : id; };
 async function catPost(payload){
+  catLoaded = false;                 // whatever this changes, the copy we hold is stale
   const r = await fetch(API + "/api/catalog", { method: "POST", headers: HJ(), body: JSON.stringify(payload) });
   if (!r.ok) throw new Error((await r.json()).error || "Could not save.");
   await loadCatalogue();

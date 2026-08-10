@@ -37,6 +37,7 @@
 </div>
 
 <div class="stage" id="stage">
+  <button class="btn-ghost backdone no-print" id="backToDone" hidden>Back to my summary →</button>
   <p class="signin-hint no-print" id="signinHint" hidden>Not signed in — work stays on this computer only. <a href="index.html">Sign in</a></p>
   <div class="banner banner-ok no-print" id="resumeNote" hidden>
     ↩︎ Welcome back — your saved work has been put back on the page.
@@ -95,6 +96,7 @@ const builderParam = qs.get("builder");                          // preview insi
 const spectate = previewParam !== null || viewParam !== null || pdfParam !== null || builderParam !== null;
 let inspectName = "";
 let inspectList = null, inspectIdx = 0, keepStep = null;
+let teacherTools = false;   // a teacher is looking at this work
 const lessonId = qs.get("id") || "demo";
 const WORK_KEY = "hub_work_" + lessonId;
 
@@ -125,15 +127,38 @@ function hasContent(v){
 }
 /* A student who only opened the first page and read it hasn't "come back" to
    anything, so the welcome-back note stays hidden. */
-/* a comment the teacher has left on this work */
-function showFeedback(text){
-  if (!text) return;
-  const box = el("div","feedbackNote");
-  box.appendChild(el("b","","From your teacher"));
-  box.appendChild(el("p","", text));
-  const stage = $("stage");
-  if (stage && stage.firstChild) stage.insertBefore(box, stage.firstChild);
-  else if (stage) stage.appendChild(box);
+/* What the teacher wrote about this piece of work. Older versions stored a
+   plain comment; newer ones store a strength, a target and a comment. */
+let teacherNote = null;
+function parseFeedback(raw){
+  if (!raw) return null;
+  let f = null;
+  try{ f = JSON.parse(raw); }catch(e){ f = { comment: String(raw) }; }
+  if (!f || typeof f !== "object") f = { comment: String(raw) };
+  if (!f.strength && !f.target && !f.comment) return null;
+  return f;
+}
+function showFeedback(raw){
+  teacherNote = parseFeedback(raw);
+}
+/* the card shown on the finished screen, matching an assessment's */
+function feedbackCard(f){
+  if (!f) return null;
+  const card = el("div","st-card");
+  card.appendChild(el("h2","sect-head","Your feedback"));
+  if (f.strength){
+    const r = el("p","st-strength"); r.innerHTML = "<b>Strength</b>";
+    r.appendChild(el("span","", " " + f.strength)); card.appendChild(r);
+  }
+  if (f.target){
+    const r = el("p","st-target"); r.innerHTML = "<b>Target</b>";
+    r.appendChild(el("span","", " " + f.target)); card.appendChild(r);
+  }
+  if (f.comment){
+    const r = el("p","st-comment"); r.innerHTML = "<b>Comment</b>";
+    r.appendChild(el("span","", " " + f.comment)); card.appendChild(r);
+  }
+  return card;
 }
 
 function worthMentioning(d){
@@ -565,7 +590,11 @@ function showStep(i){
   // The welcome-back note belongs to the page they came back to, and nowhere
   // else. Show it on that first render only, then never again.
   $("resumeNote").hidden = true;
-  if (restoredWork && !resumeShown){ $("resumeNote").hidden = false; resumeShown = true; }
+  /* Someone who has finished and gone back into a task does not need telling
+     their work was saved — they need a way back to the summary. */
+  if (restoredWork && !resumeShown && !wasDone){ $("resumeNote").hidden = false; resumeShown = true; }
+  const backBtn2 = $("backToDone");
+  if (backBtn2) backBtn2.hidden = !wasDone;
 
   const sb = steps[step].brief;
   const b = (typeof sb === "function") ? sb() : sb;
@@ -686,6 +715,13 @@ function finishLesson(){
 $("waitOk").addEventListener("click", hideWaitModal);
 $("waitModal").addEventListener("mousedown", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
 
+(function(){
+  const b = document.getElementById("backToDone");
+  if (b) b.addEventListener("click", () => {
+    if (lesson && lesson.assessment) showAssessmentComplete(true);
+    else showLessonComplete(true);
+  });
+})();
 document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); hideSoftModal(); } });
 
 /* ---------- bypass ---------- */
@@ -2736,6 +2772,20 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   });
   box.appendChild(rev);
 
+  // what each question scored
+  if (res && res.perQ && res.perQ.length){
+    const marks = el("div","st-card");
+    marks.appendChild(el("h2","sect-head","Your marks"));
+    res.perQ.forEach(q => {
+      const row = el("p","qmark" + (q.pts === q.max ? " full" : q.pts > 0 ? " part" : " none"));
+      row.appendChild(el("b","", "Q" + q.n));
+      row.appendChild(el("span","qmark-t", q.title));
+      row.appendChild(el("span","qmark-n", q.pts + " / " + q.max));
+      marks.appendChild(row);
+    });
+    box.appendChild(marks);
+  }
+
   // strength + target
   const stCard = el("div","st-card");
   stCard.appendChild(el("h2","sect-head","Your feedback"));
@@ -2743,9 +2793,107 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   const tRow = el("p","st-target"); tRow.innerHTML = "<b>Target</b>"; tRow.appendChild(el("span","", " " + st.target));
   stCard.appendChild(sRow); stCard.appendChild(tRow);
   box.appendChild(stCard);
+  const teacherCard = feedbackCard(teacherNote);
+  if (teacherCard){
+    teacherCard.querySelector(".sect-head").textContent = "From your teacher";
+    box.appendChild(teacherCard);
+  }
+  if (teacherTools){
+    box.appendChild(markEditor(res));
+    box.appendChild(feedbackEditor(box));
+  }
 
   // response tasks for the target topic
   renderResponses(box, st.targetTopic, status);
+}
+
+/* ---- what a teacher can do while looking at a student's work ---- */
+function inspectWho(){
+  try{
+    const box = JSON.parse(localStorage.getItem("hub_inspect") || "null");
+    if (box && Array.isArray(box.list) && box.list.length) return box.list[box.idx || 0];
+  }catch(e){}
+  return null;
+}
+function teacherPost(action, body){
+  const API = (window.HUB && window.HUB.API) || "";
+  const key = localStorage.getItem("hub_tkey") || "";
+  return fetch(API + "/api/teacher/" + action, {
+    method:"POST", headers:{ "Content-Type":"application/json", "x-teacher-key": key },
+    body: JSON.stringify(body)
+  });
+}
+function feedbackEditor(){
+  const who = inspectWho();
+  const card = el("div","st-card teacher-edit");
+  card.appendChild(el("h2","sect-head","Feedback for " + (who ? who.name : "this student")));
+  const f = teacherNote || {};
+  const fields2 = {};
+  [["strength","Strength"],["target","Target"],["comment","Comment"]].forEach(pair => {
+    const w = el("div","bfield");
+    w.appendChild(el("label","", pair[1]));
+    const inp = el("textarea"); inp.rows = pair[0] === "comment" ? 3 : 2;
+    inp.value = f[pair[0]] || "";
+    fields2[pair[0]] = inp;
+    w.appendChild(inp); card.appendChild(w);
+  });
+  const msg = el("p","hint","");
+  const save = el("button","btn-primary","Save feedback");
+  save.addEventListener("click", async () => {
+    if (!who){ msg.textContent = "Could not tell which student this is."; return; }
+    msg.textContent = "Saving\u2026";
+    try{
+      const r = await teacherPost("feedback", { username: who.username, lesson: lessonId,
+        strength: fields2.strength.value, target: fields2.target.value, text: fields2.comment.value });
+      if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
+      teacherNote = { strength: fields2.strength.value, target: fields2.target.value, comment: fields2.comment.value };
+      msg.textContent = "Saved.";
+    }catch(e){ msg.textContent = e.message; }
+  });
+  card.appendChild(save); card.appendChild(msg);
+  return card;
+}
+/* every question, what it was marked, and a box to change it */
+function markEditor(res){
+  const who = inspectWho();
+  const card = el("div","st-card teacher-edit");
+  card.appendChild(el("h2","sect-head","Marks"));
+  const rows = [];
+  let outOf = 0;
+  ((res && res.perQ) || []).forEach((q) => {
+    outOf += q.max;
+    const line = el("div","markrow");
+    line.appendChild(el("span","mr-q","Q" + q.n));
+    line.appendChild(el("span","mr-t", q.title));
+    const inp = el("input"); inp.type = "number"; inp.min = "0"; inp.max = String(q.max);
+    inp.value = String(q.pts); inp.className = "mr-in";
+    line.appendChild(inp);
+    line.appendChild(el("span","mr-max","/ " + q.max));
+    card.appendChild(line);
+    rows.push({ id:q.id, max:q.max, input:inp });
+  });
+  const total = el("p","modal-text","");
+  const sum = () => rows.reduce((n, r) => n + Math.max(0, Math.min(r.max, parseInt(r.input.value, 10) || 0)), 0);
+  const refresh = () => { total.textContent = "Total: " + sum() + " out of " + outOf; };
+  rows.forEach(r => r.input.addEventListener("input", refresh));
+  refresh();
+  card.appendChild(total);
+  const msg = el("p","hint","");
+  const save = el("button","btn-primary","Save marks");
+  save.addEventListener("click", async () => {
+    if (!who){ msg.textContent = "Could not tell which student this is."; return; }
+    msg.textContent = "Saving\u2026";
+    const overrides = {};
+    rows.forEach(r => { overrides[r.id] = Math.max(0, Math.min(r.max, parseInt(r.input.value, 10) || 0)); });
+    try{
+      const r2 = await teacherPost("set-mark", { username: who.username, lesson: lessonId,
+        overrides: overrides, score: sum(), outOf: outOf });
+      if (!r2.ok) throw new Error((await r2.json()).error || "Could not save.");
+      msg.textContent = "Saved.";
+    }catch(e){ msg.textContent = e.message; }
+  });
+  card.appendChild(save); card.appendChild(msg);
+  return card;
 }
 
 function renderResponses(container, targetTopic, statusEl){
@@ -2944,6 +3092,9 @@ function showLessonComplete(revisit){
   const status = el("p","handin");
   hero.appendChild(status);
   if (!revisit && !spectate) hero.appendChild(saveButton(status));
+  const fb = feedbackCard(teacherNote);
+  if (fb) box.appendChild(fb);
+  if (teacherTools) box.appendChild(feedbackEditor(box));
   const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
   if (!spectate) hero.appendChild(back);
   box.appendChild(hero);
