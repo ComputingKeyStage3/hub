@@ -92,10 +92,12 @@ const previewParam = qs.get("preview");
 const viewParam = qs.get("view");
 const stepParam = qs.get("step");
 const pdfParam = qs.get("pdf");                                  // teacher wants the PDF view
-const builderParam = qs.get("builder");                          // preview inside the lesson builder
+const builderParam = qs.get("builder");
+const allParam = qs.get("all");                                  // every page on one scroll
+const embedParam = qs.get("embed");                              // shown inside the teacher console                          // preview inside the lesson builder
 const spectate = previewParam !== null || viewParam !== null || pdfParam !== null || builderParam !== null;
 let inspectName = "";
-let inspectList = null, inspectIdx = 0, keepStep = null;
+let inspectList = null, inspectIdx = 0, keepStep = null, inspectUser = "";
 let teacherTools = false;   // a teacher is looking at this work
 const lessonId = qs.get("id") || "demo";
 const WORK_KEY = "hub_work_" + lessonId;
@@ -420,8 +422,16 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
         return;
       }
       if (document.body.classList) document.body.classList.add("spectating");
-      teacherTools = viewParam !== null;     // only when looking at a real student
+      teacherTools = viewParam !== null && allParam === null && embedParam === null;
+      if (allParam !== null){ showEverything(); return; }
       if (keepStep !== null && keepStep >= 0 && keepStep < steps.length) step = keepStep;
+      if (embedParam !== null){
+        /* the console draws its own switcher around this, so the page keeps
+           only what a student would see */
+        const home = $("homeLink"); if (home) home.hidden = true;
+        showStep(Math.min(Math.max(stepParam !== null ? parseInt(stepParam, 10) : step, 0), steps.length - 1));
+        return;
+      }
       const vb = el("div","viewbar");
       const backBit = el("button","vb-back", viewParam !== null
         ? "Viewing " + (inspectName || "a student") + "'s work \u2014 click here to go back"
@@ -519,6 +529,7 @@ async function loadSaved(){
           inspectIdx = Math.min(Math.max(parseInt(box.idx, 10) || 0, 0), box.list.length - 1);
           const pick = box.list[inspectIdx];
           if (pick && pick.feedback) showFeedback(pick.feedback);   // what has already been written
+          inspectUser = pick && pick.username ? pick.username : "";
           if (typeof box.step === "number") keepStep = box.step;
           box = { lesson: box.lesson, name: pick.name, data: pick.data };
         }
@@ -2812,10 +2823,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
     teacherCard.querySelector(".sect-head").textContent = "From your teacher";
     box.appendChild(teacherCard);
   }
-  if (teacherTools){
-    box.appendChild(markEditor(res));
-    box.appendChild(feedbackEditor(box));
-  }
+  if (teacherTools) box.appendChild(markEditor(res));   // marks stay here; feedback is in the console
 
   // response tasks for the target topic
   renderResponses(box, st.targetTopic, status);
@@ -2836,36 +2844,6 @@ function teacherPost(action, body){
     method:"POST", headers:{ "Content-Type":"application/json", "x-teacher-key": key },
     body: JSON.stringify(body)
   });
-}
-function feedbackEditor(){
-  const who = inspectWho();
-  const card = el("div","st-card teacher-edit");
-  card.appendChild(el("h2","sect-head","Feedback for " + (who ? who.name : "this student")));
-  const f = teacherNote || {};
-  const fields2 = {};
-  [["strength","Strength"],["target","Target"],["comment","Comment"]].forEach(pair => {
-    const w = el("div","bfield");
-    w.appendChild(el("label","", pair[1]));
-    const inp = el("textarea"); inp.rows = pair[0] === "comment" ? 3 : 2;
-    inp.value = f[pair[0]] || "";
-    fields2[pair[0]] = inp;
-    w.appendChild(inp); card.appendChild(w);
-  });
-  const msg = el("p","hint","");
-  const save = el("button","btn-primary","Save feedback");
-  save.addEventListener("click", async () => {
-    if (!who){ msg.textContent = "Could not tell which student this is."; return; }
-    msg.textContent = "Saving\u2026";
-    try{
-      const r = await teacherPost("feedback", { username: who.username, lesson: lessonId,
-        strength: fields2.strength.value, target: fields2.target.value, text: fields2.comment.value });
-      if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
-      teacherNote = { strength: fields2.strength.value, target: fields2.target.value, comment: fields2.comment.value };
-      msg.textContent = "Saved.";
-    }catch(e){ msg.textContent = e.message; }
-  });
-  card.appendChild(save); card.appendChild(msg);
-  return card;
 }
 /* every question, what it was marked, and a box to change it */
 function markEditor(res){
@@ -2974,6 +2952,30 @@ function renderResponses(container, targetTopic, statusEl){
 
 /* Builds the PDF in the browser and shows it inside the page. Nothing is
    downloaded and nothing is stored — the file only exists in memory. */
+/* Every page, one after another, for a teacher who wants to skim. */
+function showEverything(){
+  hideLoader();
+  $("dock").classList.add("gone");
+  const wrap = el("div","allpages");
+  steps.forEach((st, i) => {
+    const b = (typeof st.brief === "function") ? st.brief() : st.brief;
+    const sec = el("div","allpage");
+    const head = el("div","allpage-head");
+    head.appendChild(el("span","allpage-n", String(i + 1)));
+    if (b && b.title) head.appendChild(el("b","", b.title));
+    sec.appendChild(head);
+    if (b && b.text) sec.appendChild(el("p","allpage-sub", b.text));
+    st.section.hidden = false;
+    sec.appendChild(st.section);
+    wrap.appendChild(sec);
+  });
+  const blocks = $("blocks");
+  blocks.innerHTML = "";
+  blocks.appendChild(wrap);
+  const brief = $("brief");
+  if (brief) brief.hidden = true;
+}
+
 function showPdfView(){
   $("dock").classList.add("gone");
   const shell = el("div","pdfshell");
@@ -3108,7 +3110,6 @@ function showLessonComplete(revisit){
   if (!revisit && !spectate) hero.appendChild(saveButton(status));
   const fb = feedbackCard(teacherNote);
   if (fb) box.appendChild(fb);
-  if (teacherTools) box.appendChild(feedbackEditor(box));
   const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
   if (!spectate) hero.appendChild(back);
   box.appendChild(hero);
@@ -3255,6 +3256,13 @@ function markHandedIn(){
 
 }
 function fileName(){
+  const who = (inspectName || "").replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, "-");
+  const user = (inspectUser || "").replace(/[^A-Za-z0-9]/g, "");
+  const title = (lesson && lesson.title ? lesson.title : lessonId).replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, "-");
+  if (user || who) return ((user || who) + "-" + title).slice(0, 90) + ".pdf";
+  return oldFileName();
+}
+function oldFileName(){
   const d = new Date();
   const stamp = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
   return lessonId + "_" + stamp + ".pdf";
@@ -3290,7 +3298,18 @@ function buildPdf(){
         { size:9, color:"#777777", lh:5 });
   rule();
 
-  lesson.blocks.forEach((b) => {
+  /* Lessons are made of pages now, so the tasks are one level down. This
+     walks the pages and hands each task to the same code as before. */
+  const flat = [];
+  (lesson.blocks || []).forEach(b => {
+    if (b.type === "page"){
+      if (b.title) flat.push({ type:"__page", title:b.title });
+      (b.blocks || []).forEach(child => flat.push(child));
+    } else flat.push(b);
+  });
+
+  flat.forEach((b) => {
+    if (b.type === "__page"){ gap(2); heading(b.title); return; }
     const f = fields[b.id];
     const v = f ? f.get() : null;
 

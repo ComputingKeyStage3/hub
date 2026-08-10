@@ -122,6 +122,57 @@
   </div>
 
   <!-- ============ lessons + release ============ -->
+  <div id="workView" hidden>
+    <button class="crumb" id="backFromWork">&larr; <span id="workBack"></span></button>
+    <h2 id="workTitle" style="margin:14px 0 4px"></h2>
+    <div class="subtabs">
+      <button class="on" id="tabSeats">Seating plan</button>
+      <button id="tabWork">View work</button>
+    </div>
+
+    <div id="seatPane">
+      <div class="toolrow">
+        <button class="btn-primary" id="saveSeats">Save seating plan</button>
+        <button class="btn-ghost" id="clearSeats">Clear the plan</button>
+        <span class="hint" id="seatMsg"></span>
+      </div>
+      <p class="hint">Drag a student onto the grid. Click one to open their work.</p>
+      <div class="seatwrap">
+        <div class="seatpool" id="seatPool"><p class="hint">Not seated yet</p></div>
+        <div class="seatgrid" id="seatGrid"></div>
+      </div>
+    </div>
+
+    <div id="workPane" hidden>
+      <div class="workbar">
+        <button class="btn-ghost iconbtn" id="prevStu" title="Previous student">&larr;</button>
+        <select id="stuPick"></select>
+        <button class="btn-ghost iconbtn" id="nextStu" title="Next student">&rarr;</button>
+        <span class="workbar-sp"></span>
+        <button class="btn-ghost" id="viewMode">All on one page</button>
+        <button class="btn-ghost" id="openPdf">PDF</button>
+      </div>
+      <div class="worksplit">
+        <div class="workmain">
+          <iframe id="workFrame" title="Their work"></iframe>
+          <div class="tasknav" id="taskNav"></div>
+        </div>
+        <div class="workside">
+          <h3>Feedback</h3>
+          <div class="bfield"><label>Comment</label><textarea id="fbComment" rows="4"></textarea></div>
+          <div id="fbStrengthWrap" hidden class="bfield"><label>Strength</label><textarea id="fbStrength" rows="2"></textarea></div>
+          <div id="fbTargetWrap" hidden class="bfield"><label>Target</label><textarea id="fbTarget" rows="2"></textarea></div>
+          <div class="toolrow">
+            <button class="btn-ghost" id="addStrength">+ Strength</button>
+            <button class="btn-ghost" id="addTarget">+ Target</button>
+          </div>
+          <button class="btn-primary" id="saveFb">Save feedback</button>
+          <p class="hint" id="fbMsg"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="pwView" hidden>
     <button class="crumb" id="backFromPw">&larr; Back</button>
     <h2 style="margin:14px 0 4px">Password updates</h2>
@@ -230,13 +281,16 @@ function paintCrumbs(){
   if (v === "classView") return crumbs([top, home, { name: cls }]);
   if (v === "studentsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Students" }]);
   if (v === "unitsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units" }]);
+  if (v === "workView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
+                                       { name: unit || "Not in a unit", go: () => { show("lessonsView"); paintLessonGrid(); } },
+                                       { name:"Work" }]);
   if (v === "lessonsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
                                           { name: unit || "Not in a unit" }]);
   crumbs([top]);
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
+const VIEWS = ["keyView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","workView","pwView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
@@ -1156,11 +1210,17 @@ function paintLessonGrid(){
     rem.addEventListener("click", () => removeFromClass(l));
     acts.appendChild(pub);
     acts.appendChild(man);
-    acts.appendChild(overflowMenu([
-      [isAssessment ? "Markbook" : "View student work", () => workBtn.click()],
-      ["Edit in the builder", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
-      ["Remove from " + cls, () => removeFromClass(l)]
-    ]));
+    /* View work is its own button, unless the screen is too narrow for four */
+    const extras = [["Edit in the builder", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
+                    ["Remove from " + cls, () => removeFromClass(l)]];
+    if (isAssessment) extras.unshift(["Markbook", () => workBtn.click()]);
+    if (narrow()) extras.unshift(["View work", () => openWork(l.lesson_id)]);
+    else {
+      const vw = el("button","btn-ghost","View work");
+      vw.addEventListener("click", () => openWork(l.lesson_id));
+      acts.appendChild(vw);
+    }
+    acts.appendChild(overflowMenu(extras));
     card.appendChild(acts);
     g.appendChild(card);
   });
@@ -1737,6 +1797,216 @@ function exportMarkbook(){
   if (window.saveXlsx) window.saveXlsx(rows, "Markbook", name);
   else say("Could not build the file", "The spreadsheet builder did not load.");
 }
+
+/* ==================================================================
+   Seating plan, and looking at a class's work
+   ================================================================== */
+const GRID = { cols: 10, rows: 7 };
+let seatLayout = {};          // username -> {c, r}
+let workRoster = [];          // everyone in the class, alphabetical
+let workRows = [];            // what they have saved
+let workIdx = 0;
+let workAll = false;          // one long page instead of a page at a time
+
+async function openWork(lessonIdIn){
+  lessonId = lessonIdIn;
+  workCache = { key:"", rows:[], t:0 };
+  $("workTitle").textContent = titleOf(lessonId) + " \u00b7 " + cls;
+  $("workBack").textContent = unit || cls;
+  show("workView");
+  seatTab("seats");
+  $("seatMsg").textContent = "Loading\u2026";
+  try{
+    lessonJson = await fetchLesson(lessonId);
+    workRoster = (await getRoster()).slice().sort((a, b) =>
+      (a.display_name || "").localeCompare(b.display_name || ""));
+    workRows = await getWorkRows();
+    seatLayout = await loadSeating();
+    paintSeats();
+    paintPicker();
+    $("seatMsg").textContent = "";
+  }catch(e){ $("seatMsg").textContent = e.message; }
+}
+function seatTab(which){
+  const seats = which === "seats";
+  $("seatPane").hidden = !seats;
+  $("workPane").hidden = seats;
+  $("tabSeats").classList.toggle("on", seats);
+  $("tabWork").classList.toggle("on", !seats);
+  if (!seats && !$("workFrame").src) showStudent(workIdx);
+}
+on("tabSeats", "click", () => seatTab("seats"));
+on("tabWork", "click", () => seatTab("work"));
+on("backFromWork", "click", () => { show("lessonsView"); paintLessonGrid(); });
+
+/* ---- the plan ---- */
+async function loadSeating(){
+  try{
+    const r = await fetch(API + "/api/teacher/seating?group=" + encodeURIComponent(cls),
+                          { headers: H(), cache:"no-store" });
+    const d = await r.json();
+    return (d && d.layout) || {};
+  }catch(e){ return {}; }
+}
+function seatCard(st){
+  const card = el("div","seat");
+  card.draggable = true;
+  card.dataset.user = st.username;
+  card.appendChild(el("b","", st.display_name));
+  card.appendChild(el("span","", st.username));
+  card.addEventListener("dragstart", (e) => {
+    if (e.dataTransfer) e.dataTransfer.setData("text/plain", st.username);
+    card.classList.add("dragging");
+  });
+  card.addEventListener("dragend", () => card.classList.remove("dragging"));
+  card.addEventListener("click", () => {
+    const at = workRoster.findIndex(x => x.username === st.username);
+    if (at >= 0){ workIdx = at; seatTab("work"); showStudent(at); }
+  });
+  return card;
+}
+function paintSeats(){
+  const pool = $("seatPool"), grid = $("seatGrid");
+  pool.innerHTML = ""; grid.innerHTML = "";
+  grid.style.gridTemplateColumns = "repeat(" + GRID.cols + ", 1fr)";
+  /* every square on the grid can take a card */
+  for (let r = 0; r < GRID.rows; r++){
+    for (let c = 0; c < GRID.cols; c++){
+      const cell = el("div","seatcell");
+      cell.dataset.c = c; cell.dataset.r = r;
+      cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("over"); });
+      cell.addEventListener("dragleave", () => cell.classList.remove("over"));
+      cell.addEventListener("drop", (e) => {
+        e.preventDefault(); cell.classList.remove("over");
+        const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+        if (!who) return;
+        /* one card per square: swap if something is already there */
+        const taken = Object.keys(seatLayout).find(u =>
+          seatLayout[u] && seatLayout[u].c === c && seatLayout[u].r === r);
+        if (taken && taken !== who){
+          if (seatLayout[who]) seatLayout[taken] = seatLayout[who];
+          else delete seatLayout[taken];
+        }
+        seatLayout[who] = { c: c, r: r };
+        paintSeats();
+      });
+      grid.appendChild(cell);
+    }
+  }
+  const seated = {};
+  Object.keys(seatLayout).forEach(u => { seated[u] = true; });
+  workRoster.forEach(st => {
+    const at = seatLayout[st.username];
+    const card = seatCard(st);
+    if (at && at.c < GRID.cols && at.r < GRID.rows){
+      const cell = grid.children[at.r * GRID.cols + at.c];
+      if (cell) cell.appendChild(card); else pool.appendChild(card);
+    } else pool.appendChild(card);
+  });
+  /* dropping back into the pool takes them off the plan */
+  pool.addEventListener("dragover", (e) => { e.preventDefault(); pool.classList.add("over"); });
+  pool.addEventListener("dragleave", () => pool.classList.remove("over"));
+  pool.addEventListener("drop", (e) => {
+    e.preventDefault(); pool.classList.remove("over");
+    const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+    if (who){ delete seatLayout[who]; paintSeats(); }
+  });
+  if (!pool.children.length) pool.appendChild(el("p","hint","Everyone is seated"));
+}
+on("saveSeats", "click", async () => {
+  $("seatMsg").textContent = "Saving\u2026";
+  try{
+    const r = await fetch(API + "/api/teacher/seating", { method:"POST", headers: HJ(),
+      body: JSON.stringify({ group: cls, layout: seatLayout }) });
+    if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
+    $("seatMsg").textContent = "Saved.";
+  }catch(e){ $("seatMsg").textContent = e.message; }
+});
+on("clearSeats", "click", () => { seatLayout = {}; paintSeats(); });
+
+/* ---- looking at one student's work ---- */
+function paintPicker(){
+  const sel = $("stuPick");
+  sel.innerHTML = "";
+  workRoster.forEach((st, i) => {
+    const o = document.createElement("option");
+    o.value = String(i);
+    const row = workRows.find(r => r.username === st.username);
+    o.textContent = st.display_name + (row ? "" : "  (nothing saved)");
+    sel.appendChild(o);
+  });
+  sel.value = String(workIdx);
+}
+function showStudent(i){
+  if (i < 0 || i >= workRoster.length) return;
+  workIdx = i;
+  paintPicker();
+  const st = workRoster[i];
+  const row = workRows.find(r => r.username === st.username);
+  handOff(workRows.length ? workRows : [{ display_name: st.display_name, username: st.username, data: {} }],
+          Math.max(0, workRows.findIndex(r => r.username === st.username)));
+  $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
+    "&view=1&embed=1" + (workAll ? "&all=1" : "") + "&t=" + Date.now();
+  paintTaskNav();
+  loadFeedbackFor(row);
+}
+on("prevStu", "click", () => showStudent(workIdx - 1));
+on("nextStu", "click", () => showStudent(workIdx + 1));
+on("stuPick", "change", () => showStudent(parseInt($("stuPick").value, 10) || 0));
+on("viewMode", "click", () => {
+  workAll = !workAll;
+  $("viewMode").textContent = workAll ? "One page at a time" : "All on one page";
+  showStudent(workIdx);
+});
+on("openPdf", "click", () => {
+  const st = workRoster[workIdx];
+  const at = Math.max(0, workRows.findIndex(r => r.username === st.username));
+  printWork(workRows, at);
+});
+function paintTaskNav(){
+  const nav = $("taskNav");
+  nav.innerHTML = "";
+  if (workAll) return;
+  ((lessonJson && lessonJson.blocks) || []).forEach((b, i) => {
+    const btn = el("button","tasknav-btn", String(i + 1));
+    btn.title = b.title || b.type;
+    btn.addEventListener("click", () => {
+      $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
+        "&view=1&embed=1&step=" + i + "&t=" + Date.now();
+    });
+    nav.appendChild(btn);
+  });
+}
+function loadFeedbackFor(row){
+  let f = {};
+  if (row && row.feedback){
+    try{ f = JSON.parse(row.feedback); }catch(e){ f = { comment: row.feedback }; }
+  }
+  $("fbComment").value = f.comment || "";
+  $("fbStrength").value = f.strength || "";
+  $("fbTarget").value = f.target || "";
+  $("fbStrengthWrap").hidden = !f.strength;
+  $("fbTargetWrap").hidden = !f.target;
+  $("fbMsg").textContent = "";
+}
+on("addStrength", "click", () => { $("fbStrengthWrap").hidden = false; $("fbStrength").focus(); });
+on("addTarget", "click", () => { $("fbTargetWrap").hidden = false; $("fbTarget").focus(); });
+on("saveFb", "click", async () => {
+  const st = workRoster[workIdx];
+  if (!st) return;
+  $("fbMsg").textContent = "Saving\u2026";
+  try{
+    const r = await fetch(API + "/api/teacher/feedback", { method:"POST", headers: HJ(),
+      body: JSON.stringify({ username: st.username, lesson: lessonId,
+                             strength: $("fbStrength").value, target: $("fbTarget").value,
+                             text: $("fbComment").value }) });
+    if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
+    const row = workRows.find(x => x.username === st.username);
+    if (row) row.feedback = JSON.stringify({ strength:$("fbStrength").value,
+      target:$("fbTarget").value, comment:$("fbComment").value });
+    $("fbMsg").textContent = "Saved.";
+  }catch(e){ $("fbMsg").textContent = e.message; }
+});
 
 /* ---------- student work: view on screen or print to PDF ---------- */
 async function getWorkRows(){

@@ -1457,3 +1457,50 @@ html[data-bg=dark] .qmark.full .qmark-n{color:var(--mint)}
 .fb-c{color:var(--muted); font-size:15px}
 html[data-bg=dark] .fb-s{color:var(--mint)}
 .tabs .refresh{margin-left:auto}
+
+
+/* seating plan */
+.seatwrap{display:grid; grid-template-columns:200px minmax(0,1fr); gap:16px; margin-top:12px}
+.seatpool{min-height:120px; padding:10px; background:var(--panel-2); border:1.5px dashed var(--line-2);
+  border-radius:14px; display:flex; flex-direction:column; gap:8px; align-content:start}
+.seatpool.over{border-color:var(--amber); background:rgba(220,138,62,.08)}
+.seatgrid{display:grid; gap:6px; background:var(--panel-2); border:1px solid var(--line);
+  border-radius:14px; padding:8px; min-height:360px}
+.seatcell{min-height:58px; border:1px dashed var(--line); border-radius:10px}
+.seatcell.over{border-color:var(--amber); background:rgba(220,138,62,.1)}
+.seat{background:var(--panel); border:1.5px solid var(--line-2); border-radius:10px; padding:7px 9px;
+  cursor:grab; display:flex; flex-direction:column; height:100%; box-sizing:border-box}
+.seat:hover{border-color:var(--amber)}
+.seat.dragging{opacity:.5}
+.seat b{font-size:14px; line-height:1.2}
+.seat span{font-size:11.5px; color:var(--muted)}
+
+/* looking at work */
+.workbar{display:flex; align-items:center; gap:8px; margin:12px 0; flex-wrap:wrap}
+.workbar-sp{flex:1}
+.workbar select{max-width:240px}
+.worksplit{display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:16px; align-items:start}
+.workmain iframe{width:100%; height:62vh; border:1.5px solid var(--line); border-radius:14px; background:var(--panel)}
+.tasknav{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
+.tasknav-btn{min-width:36px; padding:7px 10px; border:1.5px solid var(--line-2); border-radius:9px;
+  background:var(--panel); cursor:pointer; font-weight:700}
+.tasknav-btn:hover{border-color:var(--amber)}
+.workside{background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:16px}
+.workside h3{margin:0 0 10px; font-family:var(--display)}
+.workside textarea{width:100%}
+
+/* every page on one scroll, for a teacher */
+.allpages{display:flex; flex-direction:column; gap:22px}
+.allpage{border:1px solid var(--line); border-radius:14px; padding:16px; background:var(--panel)}
+.allpage-head{display:flex; align-items:center; gap:10px; margin-bottom:8px}
+.allpage-n{display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+  border-radius:50%; background:var(--amber); color:#fff; font-size:13px; font-weight:800}
+.allpage-sub{color:var(--muted); margin:0 0 12px}
+
+@media (max-width:900px){
+  .seatwrap{grid-template-columns:minmax(0,1fr)}
+  .seatpool{flex-direction:row; flex-wrap:wrap}
+  .seat{min-width:130px}
+  .worksplit{grid-template-columns:minmax(0,1fr)}
+  .workmain iframe{height:52vh}
+}
