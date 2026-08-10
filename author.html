@@ -1263,9 +1263,13 @@ on("moreBtn", "click", (e) => {
   const m = $("moreMenu");
   m.hidden = !m.hidden;
 });
-document.addEventListener("mousedown", (e) => {
-  const m = $("moreMenu");
-  if (m && !m.hidden && e.target !== $("moreBtn")) m.hidden = true;
+/* a tap on a menu item must not be swallowed by the closing of the menu */
+document.addEventListener("pointerdown", (e) => {
+  const m = $("moreMenu"), b = $("moreBtn");
+  if (!m || m.hidden) return;
+  if (e.target === b || (b.contains && b.contains(e.target))) return;
+  if (m.contains && m.contains(e.target)) return;
+  m.hidden = true;
 });
 on("copyBtn", "click", () => {
   $("moreMenu").hidden = true;
@@ -1300,7 +1304,19 @@ on("copyBtn", "click", () => {
 function fileName(){
   return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40) + ".json";
 }
-function openModal(build){ $("mBox").innerHTML = ""; build($("mBox")); $("mBack").hidden = false; }
+function openModal(build){
+  const box = $("mBox");
+  box.innerHTML = "";
+  build(box);
+  /* a phone pop-up fills the screen, so there must always be a way out */
+  if (!box.querySelector(".modal-x")){
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.title = "Close";
+    x.addEventListener("click", closeModal);
+    box.insertBefore(x, box.firstChild);
+  }
+  $("mBack").hidden = false;
+}
 function closeModal(){ $("mBack").hidden = true; }
 on("mBack", "mousedown", (e) => { if (e.target === $("mBack")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });

@@ -13,7 +13,7 @@
 <body>
 
 <div class="homebar" id="topbar" hidden>
-  <div class="title">Prince Henry's Computing KS3 — Teacher console</div>
+  <div class="title">Computing Teacher Console</div>
   <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
@@ -237,17 +237,60 @@ function paintCrumbs(){
 
 /* ---------- view switching ---------- */
 const VIEWS = ["keyView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
-function show(view){
-  VIEWS.forEach(v => { $(v).hidden = v !== view; });
+let goingBack = false;          // set while the browser's Back is driving
+function show(view, quiet){
+  VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
   clearInterval(relTimer);
   paintCrumbs();
+  /* Remember where we are, so Back and the swipe gesture step through the
+     console rather than leaving the site. */
+  if (!quiet && !goingBack && view !== "keyView"){
+    try{
+      const state = { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit };
+      if (!history.state || history.state.view !== view ||
+          history.state.cls !== cls || history.state.unit !== unit ||
+          history.state.hubYear !== hubYear || history.state.hubUnit !== hubUnit){
+        history.pushState(state, "", location.pathname + location.search);
+      }
+    }catch(e){}
+  }
 }
+try{
+  window.addEventListener("popstate", (e) => {
+    const st = e.state;
+    if (!st || !st.view) return;
+    goingBack = true;
+    try{
+      cls = st.cls || cls; unit = st.unit || "";
+      hubYear = st.hubYear || ""; hubUnit = st.hubUnit || "";
+      show(st.view, true);
+      if (st.view === "classesView") paintClasses();
+      else if (st.view === "hubView") paintYears();
+      else if (st.view === "hubUnitsView") paintHubUnits();
+      else if (st.view === "hubLessonsView") paintHub();
+      else if (st.view === "unitsView") paintClassUnits();
+      else if (st.view === "lessonsView") paintLessonGrid();
+      else if (st.view === "studentsView") loadStudents();
+      else if (st.view === "classView"){ $("clsName").textContent = cls; }
+    }catch(err){}
+    goingBack = false;
+  });
+}catch(e){}
 
 /* ---------- modal ---------- */
 function openModal(build){
   const box = $("tmodalBox");
   box.innerHTML = "";
+  box.className = "modal";
   build(box);
+  /* On a phone a pop-up fills the screen, so there is nothing to tap outside.
+     Every one gets a cross unless it was given its own. */
+  if (!box.querySelector(".modal-x")){
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.title = "Close";
+    x.addEventListener("click", closeModal);
+    box.insertBefore(x, box.firstChild);
+  }
   $("tmodal").hidden = false;
 }
 function closeModal(){ $("tmodal").hidden = true; }
@@ -275,7 +318,15 @@ function overflowMenu(items){
     menu.appendChild(b);
   });
   btn.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
-  document.addEventListener("mousedown", (e) => { if (e.target !== btn) menu.hidden = true; });
+  /* On a touchscreen mousedown lands before click, so closing on mousedown
+     took the button away before it could be pressed. Close only when the
+     tap was somewhere else entirely. */
+  document.addEventListener("pointerdown", (e) => {
+    if (menu.hidden) return;
+    if (btn === e.target || (btn.contains && btn.contains(e.target))) return;
+    if (menu.contains && menu.contains(e.target)) return;
+    menu.hidden = true;
+  });
   wrap.appendChild(btn); wrap.appendChild(menu);
   return wrap;
 }
@@ -1090,14 +1141,13 @@ function paintLessonGrid(){
     const rem = el("button","btn-ghost","Remove");
     rem.title = "Take it away from " + cls;
     rem.addEventListener("click", () => removeFromClass(l));
-    acts.appendChild(pub); acts.appendChild(workBtn);
-    if (narrow()){
-      acts.appendChild(overflowMenu([["Manage", () => manageLesson(l.lesson_id)],
-        ["Edit", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
-        ["Remove from " + cls, () => removeFromClass(l)]]));
-    } else {
-      acts.appendChild(man); acts.appendChild(edit); acts.appendChild(rem);
-    }
+    acts.appendChild(pub);
+    acts.appendChild(man);
+    acts.appendChild(overflowMenu([
+      [isAssessment ? "Markbook" : "View student work", () => workBtn.click()],
+      ["Edit in the builder", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
+      ["Remove from " + cls, () => removeFromClass(l)]
+    ]));
     card.appendChild(acts);
     g.appendChild(card);
   });

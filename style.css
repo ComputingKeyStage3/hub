@@ -1376,3 +1376,23 @@ pre, code{overflow-wrap:anywhere}
   .iconbtn{min-height:42px; min-width:42px}
   .ide-code, .ide-hl{font-size:max(var(--ed-size), 15px) !important}
 }
+
+/* ---------- small screens: the bars stay put, pop-ups always have a way out ---------- */
+@media (max-width:1024px){
+  /* the top bar and the trail stay visible while the page scrolls */
+  .homebar{position:sticky; top:0; z-index:60}
+  .crumbbar{position:sticky; top:52px; z-index:59}
+  html.builder .homebar, html.builder .crumbbar{position:static}
+  .topbar{position:sticky; top:0; z-index:60}
+}
+@media (max-width:640px){
+  .homebar{padding:8px 14px}
+  .homebar .title{font-size:15px; flex:1 1 auto}
+  .crumbbar{top:48px; padding:8px 14px; font-size:13.5px}
+  /* room for the cross in a full-screen pop-up */
+  .modal{padding-top:52px}
+  .modal-x{position:absolute; top:12px; right:12px; z-index:5}
+  .modal h2:first-of-type{margin-top:0}
+}
+.modal{position:relative}
+.modal-x{position:absolute; top:14px; right:14px}

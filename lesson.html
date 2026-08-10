@@ -1395,6 +1395,10 @@ function rIDE(b){
     if (ta.value === (b.starter || "")) return;
     const back = el("div","modal-back");
     const box = el("div","modal");
+    const xBtn = el("button","btn-ghost iconbtn modal-x","\u2715");
+    xBtn.title = "Close";
+    xBtn.addEventListener("click", () => back.remove());
+    box.appendChild(xBtn);
     box.appendChild(el("h2","","Start this code again?"));
     box.appendChild(el("p","modal-text","Your changes to this program will be lost."));
     const yes = el("button","btn-primary modal-cta","Start again");
@@ -1670,6 +1674,10 @@ function rWeb(b){
   function newFile(){
     const back = el("div","modal-back");
     const box = el("div","modal");
+    const xBtn = el("button","btn-ghost iconbtn modal-x","\u2715");
+    xBtn.title = "Close";
+    xBtn.addEventListener("click", () => back.remove());
+    box.appendChild(xBtn);
     box.appendChild(tel("h2","","Add a file"));
     const row = el("div","filekinds");
     [["html",".html page"],["css",".css stylesheet"],["js",".js script"]].forEach(p => {
@@ -1700,6 +1708,10 @@ function rWeb(b){
   function askDeleteFile(name){
     const back = el("div","modal-back");
     const box = el("div","modal");
+    const xBtn = el("button","btn-ghost iconbtn modal-x","\u2715");
+    xBtn.title = "Close";
+    xBtn.addEventListener("click", () => back.remove());
+    box.appendChild(xBtn);
     box.appendChild(tel("h2","","Delete " + name + "?"));
     box.appendChild(tel("p","modal-text","Everything in that file will be lost."));
     const yes = tel("button","btn-primary modal-cta","Delete");
@@ -1886,6 +1898,10 @@ function rWeb(b){
     if (ta.value === (starters[current] || "")) return;
     const back = el("div","modal-back");
     const box = el("div","modal");
+    const xBtn = el("button","btn-ghost iconbtn modal-x","\u2715");
+    xBtn.title = "Close";
+    xBtn.addEventListener("click", () => back.remove());
+    box.appendChild(xBtn);
     box.appendChild(el("h2","","Start this file again?"));
     box.appendChild(tel("p","modal-text","Your changes to " + current + " will be lost."));
     const yes = el("button","btn-primary modal-cta","Start again");
