@@ -1105,21 +1105,25 @@ function paintLessonGrid(){
   mine.forEach(l => {
     const a = assignOf(l.lesson_id);
     const live = a ? !!a.published : !!l.published;
+    const waiting = live && a && a.release_at && a.release_at > new Date().toISOString();
+    const closed = live && a && a.close_on && a.close_on < new Date().toISOString().slice(0, 10);
     const card = el("div","lessonpill");
     const head = el("div","lp-head");
     head.appendChild(el("b","", titleOf(l.lesson_id)));
-    head.appendChild(el("span","statechip " + (live ? "open" : "shut"), live ? "Published" : "Draft"));
+    head.appendChild(el("span","statechip " + (waiting ? "wait" : live ? "open" : "shut"),
+      waiting ? "Scheduled" : closed ? "Closed" : live ? "Published" : "Draft"));
+    if (a && a.release_at && waiting)
+      card.appendChild(el("p","lp-note","Opens " + niceDate(a.release_at) + " at " + a.release_at.slice(11, 16)));
+    else if (a && a.close_on && live)
+      card.appendChild(el("p","lp-note", (closed ? "Closed " : "Closes ") + niceDate(a.close_on)));
     card.appendChild(head);
     if (l.owner_group) card.appendChild(el("p","lp-note", "Made for " + l.owner_group + " only"));
     if (lessonLocks[l.lesson_id]) card.appendChild(el("p","lp-note","\u{1F512} Locked for " + cls));
     const acts = el("div","lp-acts");
     const pub = el("button", live ? "btn-ghost" : "btn-primary", live ? "Unpublish" : "Publish");
-    pub.addEventListener("click", async () => {
-      pub.textContent = "\u2026";
-      try{
-        await catPost({ op:"class-publish", id: l.lesson_id, group: cls, published: !live });
-        await loadCatalogue(); paintLessonGrid();
-      }catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
+    pub.addEventListener("click", () => {
+      if (live){ setPublish(l.lesson_id, false); return; }
+      schedulePopup(l.lesson_id);
     });
     const isAssessment = !!l.assessment;
     const workBtn = el("button", isAssessment ? "btn-primary" : "btn-ghost",
@@ -1201,6 +1205,92 @@ function removeFromClass(l){
   });
 }
 
+/* ---------- when a lesson opens and closes ---------- */
+const PERIODS = [
+  ["08:50","Period 1",""],
+  ["09:50","Period 2",""],
+  ["11:10","Period 3",""],
+  ["12:10","Period 4","Year 9, 10, 13"],
+  ["12:55","Period 4","Year 7, 8, 11, 12"],
+  ["13:55","Period 5",""]
+];
+const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+function niceDate(iso){
+  if (!iso) return "";
+  const d = new Date(iso.length <= 10 ? iso + "T00:00:00" : iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString(undefined, { weekday:"short", day:"numeric", month:"short" });
+}
+async function setPublish(id, on, releaseAt, closeOn){
+  try{
+    await catPost({ op:"class-publish", id: id, group: cls, published: on,
+                    releaseAt: releaseAt || "", closeOn: closeOn || "" });
+    await loadCatalogue(); paintLessonGrid();
+  }catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
+}
+function schedulePopup(id){
+  openModal(box => {
+    modalTitle(box, "Publish \u201c" + titleOf(id) + "\u201d to " + cls);
+    let date = ymd(new Date()), time = "", close = "";
+    const summary = el("p","modal-text","");
+    const dateRow = el("div","bfield");
+    dateRow.appendChild(el("label","","Opens on"));
+    const dIn = el("input"); dIn.type = "date"; dIn.value = date;
+    dateRow.appendChild(dIn); box.appendChild(dateRow);
+
+    const timeRow = el("div","bfield");
+    timeRow.appendChild(el("label","","At"));
+    const grid = el("div","periodgrid");
+    PERIODS.forEach(p => {
+      const b = el("button","periodbtn");
+      b.appendChild(el("b","", p[1] + " (" + p[0] + ")"));
+      if (p[2]) b.appendChild(el("span","", p[2]));
+      b.addEventListener("click", () => {
+        time = p[0];
+        Array.from(grid.children).forEach(c => c.classList.remove("on"));
+        b.classList.add("on");
+        refresh();
+      });
+      grid.appendChild(b);
+    });
+    timeRow.appendChild(grid); box.appendChild(timeRow);
+
+    const closeRow = el("div","bfield");
+    closeRow.appendChild(el("label","","Closes at the end of"));
+    const cIn = el("input"); cIn.type = "date";
+    closeRow.appendChild(cIn);
+    closeRow.appendChild(el("p","bhelp","Set to match the opening day. Change it for a longer piece of work."));
+    box.appendChild(closeRow);
+
+    let closeTouched = false;
+    cIn.addEventListener("input", () => { closeTouched = true; close = cIn.value; refresh(); });
+    dIn.addEventListener("input", () => {
+      date = dIn.value;
+      if (!closeTouched){ close = date; cIn.value = date; }   // the closing date follows
+      refresh();
+    });
+    function refresh(){
+      if (!closeTouched){ close = date; cIn.value = date; }
+      summary.textContent = time
+        ? "Opens " + niceDate(date) + " at " + time + ", closes at the end of " + niceDate(close) + "."
+        : "Choose a time above, or publish now.";
+    }
+    close = date; cIn.value = date; refresh();
+    box.appendChild(summary);
+
+    const go = el("button","btn-primary modal-cta","Schedule lesson");
+    go.addEventListener("click", async () => {
+      if (!time){ summary.textContent = "Pick a period first."; return; }
+      const at = new Date(date + "T" + time + ":00");
+      closeModal();
+      await setPublish(id, true, at.toISOString(), close);
+    });
+    const now = el("button","btn-ghost modal-stay","Publish now");
+    now.addEventListener("click", async () => { closeModal(); await setPublish(id, true); });
+    box.appendChild(go); box.appendChild(now);
+  });
+}
+
 /* ---------- managing one lesson (big pop-up) ---------- */
 let lessonLocks = {};        // lesson_id -> whole-lesson lock for this class
 let locks = new Set();       // task locks for the lesson being managed
@@ -1265,9 +1355,14 @@ function openManage(){
     pubBtn.addEventListener("click", async () => {
       pubBtn.textContent = "\u2026";
       try{
-        await catPost({ op:"class-publish", id: lessonId, group: cls, published: !isLive });
-        await loadCatalogue();
-        closeModal(); paintLessonGrid(); openManage();
+        if (isLive){
+          await catPost({ op:"class-publish", id: lessonId, group: cls, published: false });
+          await loadCatalogue();
+          closeModal(); paintLessonGrid(); openManage();
+        } else {
+          closeModal();
+          schedulePopup(lessonId);
+        }
       }catch(e){ say("Could not change that", e.message); }
     });
     const workBtn = el("button","btn-ghost","View Student Work");
@@ -1556,7 +1651,13 @@ function paintMarkbook(holder){
     tr.appendChild(el("td","", r.name));
     tr.appendChild(el("td","", r.score === null ? "\u2014" : r.score + " / " + r.outOf));
     tr.appendChild(el("td","", r.pct === null ? "\u2014" : r.pct + "%"));
-    tr.appendChild(el("td","", niceTime(r.seconds)));
+    const tdTime = el("td","");
+    tdTime.appendChild(el("span","", niceTime(r.seconds)));
+    const ed = el("button","btn-ghost bmini","\u270E");
+    ed.title = "Change these marks";
+    ed.addEventListener("click", () => editMarks(r, () => openMarkbook(false)));
+    tdTime.appendChild(ed);
+    tr.appendChild(tdTime);
     markbookQs.forEach(q => {
       const m = r.marks[q.id];
       const td = el("td","mbtick");
@@ -1659,6 +1760,88 @@ function handOff(rows, idx){
     list: rows.map(r => ({ name: r.display_name, username: r.username, data: r.data }))
   }));
 }
+/* leave a comment on a student's work */
+function commentOn(username, name, then){
+  openModal(box => {
+    modalTitle(box, "Comment for " + name);
+    const w = el("div","bfield");
+    w.appendChild(el("label","","They will see this at the top of the lesson"));
+    const ta = el("textarea"); ta.rows = 4;
+    w.appendChild(ta); box.appendChild(w);
+    const msg = el("p","hint","Loading\u2026");
+    box.appendChild(msg);
+    fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(lessonId) +
+          "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" })
+      .then(r => r.json())
+      .then(d => {
+        const row = (d.rows || []).find(r => r.username === username);
+        ta.value = (row && row.feedback) || "";
+        msg.textContent = "";
+      }).catch(() => { msg.textContent = ""; });
+    const go = el("button","btn-primary modal-cta","Save comment");
+    go.addEventListener("click", async () => {
+      msg.textContent = "Saving\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/feedback", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ username: username, lesson: lessonId, text: ta.value }) });
+        if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
+        closeModal(); if (then) then();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go);
+  });
+}
+
+/* change what a question was marked, and the total with it */
+function editMarks(row, then){
+  openModal(box => {
+    box.classList.add("wide");
+    modalTitle(box, "Marks for " + row.name);
+    const qs = assessmentQuestions();
+    if (!qs.length){ box.appendChild(el("p","modal-text","This assessment has no marked questions.")); return; }
+    const changed = {};
+    let total = 0, outOf = 0;
+    const totalLine = el("p","modal-text","");
+    qs.forEach(q => {
+      const m = row.marks[q.id] || { got:0, max:1 };
+      outOf += m.max;
+      total += m.got;
+      const line = el("div","markrow");
+      line.appendChild(el("span","mr-q", q.label));
+      line.appendChild(el("span","mr-t", q.title));
+      const inp = el("input"); inp.type = "number"; inp.min = "0"; inp.max = String(m.max);
+      inp.value = String(m.got); inp.className = "mr-in";
+      inp.addEventListener("input", () => {
+        const v = Math.max(0, Math.min(m.max, parseInt(inp.value, 10) || 0));
+        changed[q.id] = v;
+        total = qs.reduce((sum, qq) => {
+          const base = row.marks[qq.id] || { got:0, max:1 };
+          return sum + (changed[qq.id] !== undefined ? changed[qq.id] : base.got);
+        }, 0);
+        totalLine.textContent = "Total: " + total + " out of " + outOf;
+      });
+      line.appendChild(inp);
+      line.appendChild(el("span","mr-max","/ " + m.max));
+      box.appendChild(line);
+    });
+    totalLine.textContent = "Total: " + total + " out of " + outOf;
+    box.appendChild(totalLine);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Save marks");
+    go.addEventListener("click", async () => {
+      msg.textContent = "Saving\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/set-mark", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ username: row.username, lesson: lessonId,
+                                 overrides: changed, score: total, outOf: outOf }) });
+        if (!r.ok) throw new Error((await r.json()).error || "Could not save.");
+        closeModal(); if (then) then();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+}
+
 function inspect(rows, idx, stepIdx){
   handOff(rows, idx);
   window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1" + (stepIdx !== undefined ? "&step=" + stepIdx : ""), "_blank");
@@ -1702,7 +1885,10 @@ async function pickStudentWork(id, backToManage){
         v.addEventListener("click", () => inspect(rows, i));
         const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "See it as a PDF";
         p.addEventListener("click", () => printWork(rows, i));
-        line.appendChild(v); line.appendChild(p);
+        const c = el("button","btn-ghost iconbtn","\u{1F4AC}"); c.title = "Leave a comment";
+        c.addEventListener("click", () => commentOn(r.username, r.display_name,
+                                                    () => pickStudentWork(lessonId, backToManage)));
+        line.appendChild(v); line.appendChild(p); line.appendChild(c);
         holder.appendChild(line);
       });
     }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }

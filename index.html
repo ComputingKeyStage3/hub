@@ -44,12 +44,12 @@
   <div id="view-lessons" hidden>
     <div class="subtabs">
       <button class="on" id="tabActive">Active</button>
-      <button id="tabDone">Completed</button>
+      <button id="tabDone">Past</button>
     </div>
     <div id="lessonList"><p class="hint">Loading…</p></div>
   </div>
   <div id="view-results" hidden>
-    <div id="resultList"><p class="hint"></p></div>
+    <div id="resultList"><p class="hint">Sign in to see your results.</p></div>
   </div>
 
 </div>
@@ -254,11 +254,15 @@ function paintLessons(byId){
   const cat = (catalogue && catalogue.lessons) || [];
   // published, not locked for this class, and known in the lesson files
   let visible = cat.filter(c => byId[c.lesson_id] && !lockedLessons.has(c.lesson_id));   // the server already filtered by class
-  visible = visible.filter(c => showing === "done" ? doneLessons.has(c.lesson_id) : !doneLessons.has(c.lesson_id));
+  /* A lesson is in the past once its closing date has gone by, or once the
+     student has finished it. Closed lessons can still be opened and edited. */
+  const today = new Date().toISOString().slice(0, 10);
+  const isPast = (c) => (c.close_on && c.close_on < today) || doneLessons.has(c.lesson_id);
+  visible = visible.filter(c => showing === "done" ? isPast(c) : !isPast(c));
 
   if (!visible.length){
     box.innerHTML = '<p class="hint">' + (showing === "done"
-      ? "Nothing finished yet — completed lessons will appear here."
+      ? "Nothing here yet — lessons move here once they close, or once you finish them."
       : (cat.length ? "No lessons are open right now. Your teacher will publish them when you need them."
                     : "No lessons have been published yet.")) + '</p>';
     return;

@@ -1396,3 +1396,26 @@ pre, code{overflow-wrap:anywhere}
 }
 .modal{position:relative}
 .modal-x{position:absolute; top:14px; right:14px}
+
+
+/* scheduling, marks and feedback */
+.periodgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px}
+.periodbtn{text-align:left; padding:10px 12px; border:1.5px solid var(--line-2); border-radius:11px;
+  background:var(--panel); cursor:pointer; font-family:var(--body)}
+.periodbtn b{display:block; font-size:15px; color:var(--text)}
+.periodbtn span{display:block; font-size:12px; color:var(--muted); margin-top:2px}
+.periodbtn.on{border-color:var(--amber); background:var(--panel-2)}
+.statechip.wait{background:#EAF1F7; color:#1B5FA8; border-color:#B9CDDD}
+html[data-bg=dark] .statechip.wait{background:#2C3A4A; color:#9CC4E8; border-color:#3D5468}
+.markrow{display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line)}
+.mr-q{font-weight:800; min-width:38px}
+.mr-t{flex:1; color:var(--muted); font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mr-in{width:66px !important; text-align:center}
+.mr-max{color:var(--muted); font-size:14px}
+
+/* a comment from the teacher, shown to the student */
+.feedbackNote{background:var(--panel-2); border:1.5px solid var(--amber); border-left-width:4px;
+  border-radius:0 12px 12px 0; padding:12px 16px; margin:0 0 18px}
+.feedbackNote b{display:block; font-size:13px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--amber-dark); margin-bottom:4px}
+.feedbackNote p{margin:0; font-size:16px; line-height:1.5}

@@ -94,7 +94,7 @@ const pdfParam = qs.get("pdf");                                  // teacher want
 const builderParam = qs.get("builder");                          // preview inside the lesson builder
 const spectate = previewParam !== null || viewParam !== null || pdfParam !== null || builderParam !== null;
 let inspectName = "";
-let inspectList = null, inspectIdx = 0;
+let inspectList = null, inspectIdx = 0, keepStep = null;
 const lessonId = qs.get("id") || "demo";
 const WORK_KEY = "hub_work_" + lessonId;
 
@@ -125,6 +125,17 @@ function hasContent(v){
 }
 /* A student who only opened the first page and read it hasn't "come back" to
    anything, so the welcome-back note stays hidden. */
+/* a comment the teacher has left on this work */
+function showFeedback(text){
+  if (!text) return;
+  const box = el("div","feedbackNote");
+  box.appendChild(el("b","","From your teacher"));
+  box.appendChild(el("p","", text));
+  const stage = $("stage");
+  if (stage && stage.firstChild) stage.insertBefore(box, stage.firstChild);
+  else if (stage) stage.appendChild(box);
+}
+
 function worthMentioning(d){
   if (!d) return false;
   if (d.__done) return true;
@@ -372,6 +383,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
         return;
       }
       if (document.body.classList) document.body.classList.add("spectating");
+      if (keepStep !== null && keepStep >= 0 && keepStep < steps.length) step = keepStep;
       const vb = el("div","viewbar");
       const backBit = el("button","vb-back", viewParam !== null
         ? "Viewing " + (inspectName || "a student") + "'s work \u2014 click here to go back"
@@ -396,7 +408,9 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
           if (i < 0 || i >= inspectList.length) return;
           try{
             const box = JSON.parse(localStorage.getItem("hub_inspect") || "{}");
-            box.idx = i; localStorage.setItem("hub_inspect", JSON.stringify(box));
+            box.idx = i;
+            box.step = step;                 // stay on the same page for the next student
+            localStorage.setItem("hub_inspect", JSON.stringify(box));
           }catch(e){}
           location.reload();
         };
@@ -426,7 +440,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
       else { showLessonComplete(true); }
       return;
     }
-    hideLoader("Checking with your teacher\u2026");
+    hideLoader("Checking your work\u2026");
     await fetchRelease();      // know the state before we show anything
     hideLoader();
     if (!steps.length){
@@ -466,6 +480,7 @@ async function loadSaved(){
           inspectList = box.list;
           inspectIdx = Math.min(Math.max(parseInt(box.idx, 10) || 0, 0), box.list.length - 1);
           const pick = box.list[inspectIdx];
+          if (typeof box.step === "number") keepStep = box.step;
           box = { lesson: box.lesson, name: pick.name, data: pick.data };
         }
         if (box && box.lesson === lessonId && box.data){
@@ -510,6 +525,7 @@ async function loadSaved(){
                           { headers: { Authorization: "Bearer " + token } });
     if (!r.ok) return;
     const d = await r.json();
+    if (d && d.feedback) showFeedback(d.feedback);
     if (d && d.data){
       restoredData = d.data; wasDone = !!d.data.__done;
       if (wasDone) finished = true;          // so the write-back below keeps it
