@@ -140,6 +140,18 @@ function parseFeedback(raw){
 }
 function showFeedback(raw){
   teacherNote = parseFeedback(raw);
+  /* The full card sits on the finished screen, but someone still working
+     should not have to finish before they can read it. */
+  if (!teacherNote) return;
+  const stage = $("stage");
+  if (!stage || stage.querySelector(".feedbackNote")) return;
+  const note = el("div","feedbackNote");
+  note.appendChild(el("b","","From your teacher"));
+  if (teacherNote.strength) note.appendChild(el("p","", "Strength: " + teacherNote.strength));
+  if (teacherNote.target) note.appendChild(el("p","", "Target: " + teacherNote.target));
+  if (teacherNote.comment) note.appendChild(el("p","", teacherNote.comment));
+  if (stage.firstChild) stage.insertBefore(note, stage.firstChild);
+  else stage.appendChild(note);
 }
 /* the card shown on the finished screen, matching an assessment's */
 function feedbackCard(f){
@@ -408,6 +420,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
         return;
       }
       if (document.body.classList) document.body.classList.add("spectating");
+      teacherTools = viewParam !== null;     // only when looking at a real student
       if (keepStep !== null && keepStep >= 0 && keepStep < steps.length) step = keepStep;
       const vb = el("div","viewbar");
       const backBit = el("button","vb-back", viewParam !== null
@@ -505,6 +518,7 @@ async function loadSaved(){
           inspectList = box.list;
           inspectIdx = Math.min(Math.max(parseInt(box.idx, 10) || 0, 0), box.list.length - 1);
           const pick = box.list[inspectIdx];
+          if (pick && pick.feedback) showFeedback(pick.feedback);   // what has already been written
           if (typeof box.step === "number") keepStep = box.step;
           box = { lesson: box.lesson, name: pick.name, data: pick.data };
         }

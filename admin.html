@@ -1766,7 +1766,7 @@ function nonEmpty(v){
 function handOff(rows, idx){
   localStorage.setItem("hub_inspect", JSON.stringify({
     lesson: lessonId, idx: idx,
-    list: rows.map(r => ({ name: r.display_name, username: r.username, data: r.data }))
+    list: rows.map(r => ({ name: r.display_name, username: r.username, data: r.data, feedback: r.feedback || "" }))
   }));
 }
 /* leave a comment on a student's work */

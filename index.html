@@ -340,10 +340,21 @@ function paintSub(){
 loadLessons();
 
 /* ---- My results tab ---- */
+on("refTab", "click", async () => {
+  const btn = $("refTab");
+  btn.disabled = true;
+  try{
+    if (openTab === "results") await loadResults(true);
+    else await loadLessons(true);
+  }catch(e){}
+  btn.disabled = false;
+});
 on("tabLessons", "click", () => switchTab("lessons"));
 on("tabResults", "click", () => switchTab("results"));
 let resultsLoaded = false;
+let openTab = "lessons";
 function switchTab(which){
+  openTab = which;
   $("tabLessons").classList.toggle("on", which === "lessons");
   $("tabResults").classList.toggle("on", which === "results");
   $("view-lessons").hidden = which !== "lessons";
