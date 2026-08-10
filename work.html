@@ -24,15 +24,29 @@
   <div class="toolrow">
     <button class="btn-primary" id="saveSeats">Save seating plan</button>
     <button class="btn-ghost" id="clearSeats">Clear the plan</button>
-    <button class="btn-ghost" id="addRow">+ Row</button>
-    <button class="btn-ghost" id="addCol">+ Column</button>
+    <span class="sizer"><b>Rows</b>
+      <button class="btn-ghost iconbtn" id="lessRow" title="One fewer row">&minus;</button>
+      <span id="rowCount"></span>
+      <button class="btn-ghost iconbtn" id="addRow" title="One more row">+</button>
+    </span>
+    <span class="sizer"><b>Columns</b>
+      <button class="btn-ghost iconbtn" id="lessCol" title="One fewer column">&minus;</button>
+      <span id="colCount"></span>
+      <button class="btn-ghost iconbtn" id="addCol" title="One more column">+</button>
+    </span>
     <span class="hint" id="seatMsg"></span>
   </div>
   <p class="hint">Drag a student onto the plan. Click one to open their work.</p>
   <div class="seatwrap">
     <div class="seatpool" id="seatPool"></div>
-    <div class="seatboard">
-      <p class="seatfront">Front of the room</p>
+    <div class="seatboard" id="seatBoard">
+      <div class="seatfront" id="seatFront" draggable="true">
+        <span>Front</span>
+        <span class="menuwrap">
+          <button class="btn-ghost iconbtn frontdots" id="frontDots" title="Move the front">&#8942;</button>
+          <span class="menu" id="frontMenu" hidden></span>
+        </span>
+      </div>
       <div class="seatgrid" id="seatGrid"></div>
     </div>
   </div>
@@ -40,16 +54,15 @@
 
 <!-- ================= viewing work ================= -->
 <div id="workPane" class="workwrap" hidden>
-  <div class="workbar">
+  <div class="worksplit">
+    <div class="workmain">
+      <div class="workbar">
     <button class="btn-ghost iconbtn" id="prevStu" title="Previous student">&larr;</button>
     <select id="stuPick"></select>
     <button class="btn-ghost iconbtn" id="nextStu" title="Next student">&rarr;</button>
-    <span class="grow"></span>
     <button class="btn-ghost" id="viewMode">All on one page</button>
     <button class="btn-ghost" id="openPdf">PDF</button>
   </div>
-  <div class="worksplit">
-    <div class="workmain">
       <div class="workframe"><iframe id="workFrame" title="Their work"></iframe></div>
       <div class="tasknav" id="taskNav"></div>
     </div>
@@ -69,6 +82,8 @@
   </div>
 </div>
 
+<div class="modal-back" id="mBack" hidden><div class="modal" id="mBox"></div></div>
+
 <script src="settings.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -84,6 +99,19 @@ function el(tag, cls, text){
   return e;
 }
 
+function openModal(build){
+  const box = $("mBox");
+  box.innerHTML = "";
+  build(box);
+  if (!box.querySelector(".modal-x")){
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", closeModal);
+    box.insertBefore(x, box.firstChild);
+  }
+  $("mBack").hidden = false;
+}
+function closeModal(){ $("mBack").hidden = true; }
+
 const API = (window.HUB && window.HUB.API) || "";
 const KEY = () => localStorage.getItem("hub_tkey") || "";
 const H = () => ({ "x-teacher-key": KEY() });
@@ -98,7 +126,7 @@ let roster = [];        // everyone in the class, alphabetical
 let rows = [];          // what they have saved
 let idx = 0;
 let allPages = false;
-let plan = { cols: 8, rows: 5, seats: {} };
+let plan = { cols: 8, rows: 11, seats: {}, front: "bottom" };
 
 /* ---------------- getting everything ---------------- */
 async function boot(){
@@ -217,10 +245,67 @@ function paintSeats(){
       grid.appendChild(cell);
     }
   }
+  $("rowCount").textContent = plan.rows;
+  $("colCount").textContent = plan.cols;
+  paintFront();
   const spare = roster.filter(st => !plan.seats[st.username]);
   if (!spare.length) pool.appendChild(el("p","hint","Everyone has a seat"));
   else spare.forEach(st => pool.appendChild(seatCard(st)));
 }
+/* ---- where the front of the room is ---- */
+const SIDES = [["top","Move to top"],["right","Move to right"],["bottom","Move to bottom"],["left","Move to left"]];
+function paintFront(){
+  const board = $("seatBoard"), front = $("seatFront");
+  board.dataset.front = plan.front || "bottom";
+  const menu = $("frontMenu");
+  menu.innerHTML = "";
+  SIDES.filter(p => p[0] !== (plan.front || "bottom")).forEach(p => {
+    const b = el("button","", p[1]);
+    b.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = true; plan.front = p[0]; paintSeats(); });
+    menu.appendChild(b);
+  });
+  front.addEventListener("dragstart", (e) => {
+    if (e.dataTransfer){ e.dataTransfer.setData("text/plain", "__front"); e.dataTransfer.effectAllowed = "move"; }
+  }, { once: true });
+}
+on("frontDots", "click", (e) => {
+  e.stopPropagation();
+  const m = $("frontMenu");
+  m.hidden = !m.hidden;
+});
+document.addEventListener("pointerdown", (e) => {
+  const m = $("frontMenu"), b = $("frontDots");
+  if (!m || m.hidden) return;
+  if (e.target === b || (b.contains && b.contains(e.target))) return;
+  if (m.contains && m.contains(e.target)) return;
+  m.hidden = true;
+});
+/* dropping the front box against an edge of the board moves it there */
+["top","right","bottom","left"].forEach(side => {
+  const zone = el("div","frontzone frontzone-" + side);
+  zone.dataset.side = side;
+  zone.addEventListener("dragover", (e) => {
+    if (!dragIsFront) return;
+    e.preventDefault(); zone.classList.add("over");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault(); zone.classList.remove("over");
+    plan.front = side; paintSeats();
+  });
+  document.getElementById("seatBoard").appendChild(zone);
+});
+let dragIsFront = false;
+document.addEventListener("dragstart", (e) => {
+  dragIsFront = !!(e.target && e.target.id === "seatFront");
+  if (dragIsFront) document.getElementById("seatBoard").classList.add("moving-front");
+});
+document.addEventListener("dragend", () => {
+  dragIsFront = false;
+  const b = document.getElementById("seatBoard");
+  if (b) b.classList.remove("moving-front");
+});
+
 $("seatPool").addEventListener("dragover", (e) => { e.preventDefault(); $("seatPool").classList.add("over"); });
 $("seatPool").addEventListener("dragleave", () => $("seatPool").classList.remove("over"));
 $("seatPool").addEventListener("drop", (e) => {
@@ -228,8 +313,22 @@ $("seatPool").addEventListener("drop", (e) => {
   const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
   if (who){ delete plan.seats[who]; paintSeats(); }
 });
-on("addRow", "click", () => { plan.rows = Math.min(12, plan.rows + 1); paintSeats(); });
-on("addCol", "click", () => { plan.cols = Math.min(14, plan.cols + 1); paintSeats(); });
+on("addRow", "click", () => { plan.rows = Math.min(16, plan.rows + 1); paintSeats(); });
+on("addCol", "click", () => { plan.cols = Math.min(16, plan.cols + 1); paintSeats(); });
+/* Taking a row or column away puts anyone sitting there back in the column,
+   rather than losing them off the edge of the plan. */
+on("lessRow", "click", () => {
+  if (plan.rows <= 1) return;
+  plan.rows--;
+  Object.keys(plan.seats).forEach(u => { if (plan.seats[u].r >= plan.rows) delete plan.seats[u]; });
+  paintSeats();
+});
+on("lessCol", "click", () => {
+  if (plan.cols <= 1) return;
+  plan.cols--;
+  Object.keys(plan.seats).forEach(u => { if (plan.seats[u].c >= plan.cols) delete plan.seats[u]; });
+  paintSeats();
+});
 on("clearSeats", "click", () => { plan.seats = {}; paintSeats(); });
 on("saveSeats", "click", async () => {
   $("seatMsg").textContent = "Saving\u2026";
@@ -299,6 +398,11 @@ function paintTaskNav(){
 }
 
 /* ---------------- feedback ---------------- */
+function showing(which){ return !$("fb" + which + "Wrap").hidden; }
+function paintFbButtons(){
+  $("addStrength").textContent = showing("Strength") ? "Delete strength" : "+ Strength";
+  $("addTarget").textContent = showing("Target") ? "Delete target" : "+ Target";
+}
 function loadFeedback(row){
   let f = {};
   if (row && row.feedback){
@@ -309,27 +413,60 @@ function loadFeedback(row){
   $("fbTarget").value = f.target || "";
   $("fbStrengthWrap").hidden = !f.strength;
   $("fbTargetWrap").hidden = !f.target;
+  paintFbButtons();
   $("fbMsg").textContent = "";
 }
-on("addStrength", "click", () => { $("fbStrengthWrap").hidden = false; $("fbStrength").focus(); });
-on("addTarget", "click", () => { $("fbTargetWrap").hidden = false; $("fbTarget").focus(); });
-on("saveFb", "click", async () => {
+/* Hiding one keeps whatever was typed, so it comes back if they change
+   their mind. Only what is on screen is saved. */
+function toggleFb(which){
+  const wrap = $("fb" + which + "Wrap");
+  wrap.hidden = !wrap.hidden;
+  paintFbButtons();
+  if (!wrap.hidden) $("fb" + which).focus();
+}
+on("addStrength", "click", () => toggleFb("Strength"));
+on("addTarget", "click", () => toggleFb("Target"));
+on("saveFb", "click", () => {
+  const hasS = showing("Strength"), hasT = showing("Target");
+  if (hasS && !hasT) return askMissing("target", "strength");
+  if (hasT && !hasS) return askMissing("strength", "target");
+  saveFeedback();
+});
+function askMissing(missing, given){
+  openModal(box => {
+    box.appendChild(el("h2","", "Add a " + missing + " as well?"));
+    box.appendChild(el("p","modal-text",
+      "You have written a " + given + " but no " + missing + ". Students get the most from having both."));
+    const add = el("button","btn-primary modal-cta","Add a " + missing);
+    add.addEventListener("click", () => {
+      closeModal();
+      toggleFb(missing === "target" ? "Target" : "Strength");
+    });
+    const anyway = el("button","btn-ghost modal-stay","Save feedback without " + missing);
+    anyway.addEventListener("click", () => { closeModal(); saveFeedback(); });
+    box.appendChild(add); box.appendChild(anyway);
+  });
+}
+async function saveFeedback(){
   const st = roster[idx];
   if (!st) return;
   $("fbMsg").textContent = "Saving\u2026";
   try{
     const r = await fetch(API + "/api/teacher/feedback", { method:"POST", headers: HJ(),
       body: JSON.stringify({ username: st.username, lesson: lessonId,
-                             strength: $("fbStrength").value, target: $("fbTarget").value,
+                             strength: showing("Strength") ? $("fbStrength").value : "",
+                             target: showing("Target") ? $("fbTarget").value : "",
                              text: $("fbComment").value }) });
     if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
     let row = rows.find(x => x.username === st.username);
     if (!row){ row = { username: st.username, display_name: st.display_name, data: {} }; rows.push(row); }
-    row.feedback = JSON.stringify({ strength: $("fbStrength").value,
-                                    target: $("fbTarget").value, comment: $("fbComment").value });
+    row.feedback = JSON.stringify({
+      strength: showing("Strength") ? $("fbStrength").value : "",
+      target: showing("Target") ? $("fbTarget").value : "",
+      comment: $("fbComment").value });
     $("fbMsg").textContent = "Saved.";
   }catch(e){ $("fbMsg").textContent = e.message; }
-});
+}
 
 if (window.initSettings) initSettings(null);
 boot();

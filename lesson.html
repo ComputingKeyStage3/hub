@@ -106,6 +106,9 @@ const fields = {};   // id -> { get, set }
 const steps  = [];   // { section, check(), brief:{eyebrow,title,text} }
 let step = 0, bypassed = false, lesson = null;
 if (spectate) bypassed = true;   // teachers see past every lock
+/* Skimming a student's work should never ask the teacher to run code, tick a
+   box or wait for anything. */
+const SKIP_MODE = spectate;
 let finished = false;          // set once they press Finish
 let assessStarted = Date.now();
 let restoredData = null;       // last saved data we restored (responses re-apply from it)
@@ -430,6 +433,8 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
            student would see */
         const home = $("homeLink"); if (home) home.hidden = true;
         hideLoader();                       // otherwise the work stays behind it
+        bypassed = true;                    // nothing to run, nothing to tick
+        if (document.body.classList) document.body.classList.add("bypassed");
         if (!steps.length){
           $("briefTitle").textContent = "Nothing to show";
           $("briefText").textContent = "This lesson has no tasks in it.";

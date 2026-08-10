@@ -1480,12 +1480,12 @@ html[data-bg=dark] .fb-s{color:var(--mint)}
    The page a teacher uses to look at a class's work
    ================================================================== */
 body.workpage{height:100vh; overflow:hidden; display:flex; flex-direction:column}
-body.workpage .homebar{flex:none; gap:18px; align-items:center}
+body.workpage .homebar{flex:none; gap:18px; align-items:center; padding-top:10px; padding-bottom:10px}
 body.workpage .grow{flex:1}
-.worktabs{margin:0; padding:0; background:transparent}
+.worktabs{margin:0; padding:0; background:transparent; display:flex; align-items:center; align-self:center}
 .worktabs button{padding:8px 16px; font-size:14.5px}
 .workwrap{flex:1; min-height:0; display:flex; flex-direction:column;
-  padding:14px 22px 18px; box-sizing:border-box; overflow:auto}
+  padding:12px 22px 14px; box-sizing:border-box; overflow:hidden}
 
 /* --- seating plan --- */
 .seatwrap{flex:1; min-height:0; display:grid; grid-template-columns:210px minmax(0,1fr); gap:16px}
@@ -1493,37 +1493,76 @@ body.workpage .grow{flex:1}
   border:2px dashed var(--line-2); border-radius:14px;
   display:flex; flex-direction:column; gap:8px; align-content:start}
 .seatpool.over{border-color:var(--amber); background:rgba(220,138,62,.1)}
-.seatboard{display:flex; flex-direction:column; min-height:0}
-.seatfront{margin:0 0 8px; text-align:center; font-size:12px; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--muted); padding:6px; background:var(--panel-2);
-  border-radius:10px}
-.seatgrid{flex:1; min-height:0; display:grid; gap:8px;
-  grid-auto-rows:minmax(64px, 1fr);
+
+/* the board holds the grid and a "Front" bar on whichever side is chosen */
+.seatboard{position:relative; display:grid; gap:10px; min-height:0}
+.seatboard[data-front=bottom]{grid-template-rows:minmax(0,1fr) auto; grid-template-columns:minmax(0,1fr)}
+.seatboard[data-front=top]{grid-template-rows:auto minmax(0,1fr); grid-template-columns:minmax(0,1fr)}
+.seatboard[data-front=left]{grid-template-columns:auto minmax(0,1fr); grid-template-rows:minmax(0,1fr)}
+.seatboard[data-front=right]{grid-template-columns:minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr)}
+.seatboard[data-front=bottom] .seatgrid{order:1}
+.seatboard[data-front=bottom] .seatfront{order:2}
+.seatboard[data-front=top] .seatfront{order:1}
+.seatboard[data-front=top] .seatgrid{order:2}
+.seatboard[data-front=left] .seatfront{order:1}
+.seatboard[data-front=left] .seatgrid{order:2}
+.seatboard[data-front=right] .seatgrid{order:1}
+.seatboard[data-front=right] .seatfront{order:2}
+
+.seatfront{display:flex; align-items:center; justify-content:center; gap:10px;
+  background:var(--bar); border:1.5px solid var(--line-2); border-radius:12px;
+  font-size:13px; letter-spacing:.16em; text-transform:uppercase; font-weight:800;
+  color:var(--muted); cursor:grab; padding:10px 14px; user-select:none}
+.seatboard[data-front=left] .seatfront,
+.seatboard[data-front=right] .seatfront{writing-mode:vertical-rl; padding:14px 10px}
+.seatboard[data-front=left] .seatfront{transform:rotate(180deg)}
+.seatboard[data-front=left] .frontdots,
+.seatboard[data-front=right] .frontdots{writing-mode:horizontal-tb}
+.frontdots{font-size:16px; min-height:30px; min-width:30px; padding:0}
+
+/* the edges light up while the Front bar is being dragged */
+.frontzone{display:none; position:absolute; z-index:5; border-radius:12px}
+.seatboard.moving-front .frontzone{display:block; background:rgba(220,138,62,.08);
+  border:2px dashed var(--amber)}
+.seatboard.moving-front .frontzone.over{background:rgba(220,138,62,.28)}
+.frontzone-top{top:0; left:0; right:0; height:56px}
+.frontzone-bottom{bottom:0; left:0; right:0; height:56px}
+.frontzone-left{top:0; bottom:0; left:0; width:56px}
+.frontzone-right{top:0; bottom:0; right:0; width:56px}
+
+.seatgrid{min-height:0; display:grid; gap:8px; grid-auto-rows:minmax(50px, 1fr);
   background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:10px}
-.seatcell{border:1.5px dashed var(--line-2); border-radius:10px; min-height:64px;
+.seatcell{border:1.5px dashed var(--line-2); border-radius:10px; min-height:50px;
   display:flex; padding:3px; box-sizing:border-box}
 .seatcell.over{border-color:var(--amber); background:rgba(220,138,62,.12)}
 .seat{flex:1; background:var(--panel); border:1.5px solid var(--line-2); border-radius:9px;
-  padding:7px 9px; cursor:grab; display:flex; flex-direction:column; justify-content:center;
+  padding:6px 8px; cursor:grab; display:flex; flex-direction:column; justify-content:center;
   box-sizing:border-box; min-width:0}
 .seat:hover{border-color:var(--amber)}
 .seat.dragging{opacity:.45}
-.seat b{font-size:14px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.seat span{font-size:11.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.seat b{font-size:13.5px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.seat span{font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.sizer{display:inline-flex; align-items:center; gap:6px; padding:0 10px; height:42px;
+  border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel)}
+.sizer b{font-size:13px; color:var(--muted); font-weight:700}
+.sizer .iconbtn{min-height:30px; min-width:30px; font-size:16px}
 
 /* --- looking at work --- */
-.workbar{display:flex; align-items:center; gap:10px; margin:0 0 12px; flex-wrap:wrap}
+.worksplit{flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 340px;
+  gap:18px; align-items:stretch}
+.workmain{display:flex; flex-direction:column; min-height:0}
+/* the strip of controls lines up with the preview, not the whole page */
+.workbar{display:flex; align-items:center; justify-content:center; gap:10px;
+  margin:0 0 10px; flex-wrap:wrap; flex:none}
 .workbar select{height:42px; padding:0 12px; min-width:220px; max-width:320px;
   border-radius:12px; border:1.5px solid var(--line-2); background:var(--panel);
   font-family:var(--body); font-size:15px; color:var(--text)}
 .workbar .iconbtn{height:42px; min-width:42px}
 .workbar .btn-ghost{height:42px}
-.worksplit{flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:18px}
-.workmain{display:flex; flex-direction:column; min-height:0}
 .workframe{flex:1; min-height:0; border:1.5px solid var(--line); border-radius:14px;
   overflow:hidden; background:var(--panel)}
 .workframe iframe{width:100%; height:100%; border:none; display:block}
-.tasknav{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; flex:none}
+.tasknav{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; flex:none; justify-content:center}
 .tasknav-btn{min-width:38px; padding:8px 11px; border:1.5px solid var(--line-2); border-radius:10px;
   background:var(--panel); cursor:pointer; font-weight:800; font-family:var(--body); color:var(--text)}
 .tasknav-btn:hover{border-color:var(--amber); color:var(--amber-dark)}
