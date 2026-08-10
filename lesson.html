@@ -734,6 +734,10 @@ function rPage(b){
     if (!child.id) child.id = b.id + "_" + j;
     const built = buildBlock(child, j);
     if (!built) return;
+    if (child.required === false){
+      built.check = () => ({ ok:true });
+      built.soft = () => ({ ok:true });
+    }
     const item = el("div","pg-item");
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
     if (child.type !== "picture"){
@@ -762,6 +766,12 @@ function rPage(b){
 function renderBlock(b, i){
   const built = buildBlock(b, i);
   if (!built) return;
+  /* A teacher can turn off the "finish this first" rule on any task. The
+     task still works and is still saved — it just never blocks Continue. */
+  if (b.required === false){
+    built.check = () => ({ ok:true });
+    built.soft = () => ({ ok:true });
+  }
   let final = built;
   if (lesson && lesson.assessment && ["mc","order","blanks","short"].includes(b.type)){
     qCounter++;

@@ -218,6 +218,10 @@ function inline(s){
 }
 /* Empty text fields can go, but arrays the lesson page reads (options, items)
    must stay — otherwise a half-finished card breaks the preview. */
+function withRequired(o, b){
+  if (b && b.required === false) o.required = false;
+  return o;
+}
 function keepArrays(o){
   Object.keys(o).forEach(k => {
     const v = o[k];
@@ -261,7 +265,11 @@ function compile(){
   return out;
 }
 function compileOne(b, id, target){
-  const push = (x) => target.push(x);
+  /* "can be skipped" is remembered on whatever the task compiles to */
+  const push = (x) => {
+    if (x && b && b.required === false) x.required = false;
+    target.push(x);
+  };
   if (b.type === "page"){
     const kids = [];
     (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
@@ -694,6 +702,18 @@ function card(b, i, arr){
                ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]);
     F("Output must contain (optional)", "expect", { placeholder:"Learning to program",
       help:"Leave empty unless you want Continue to wait for the right output." });
+  }
+  if (["question","short","image","pastelink","ide","web","quiz","blanks","order","mc","link","embed","frame","caesar","password"].includes(b.type)){
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Before they can continue"));
+    const on = b.required !== false;
+    const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""),
+                   on ? "Must be done first" : "Can be skipped");
+    btn.title = on ? "Students cannot continue until this is done"
+                   : "Students can continue without doing this";
+    btn.addEventListener("click", () => { b.required = !on; render(); schedulePreview(); });
+    w.appendChild(btn);
+    body.appendChild(w);
   }
   if (b.type === "question"){
     F("Heading (optional)", "heading", { placeholder:"Leave empty for no heading" });
