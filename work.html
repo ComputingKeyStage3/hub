@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viewing student work</title>
+<link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
+</head>
+<body class="workpage">
+
+<div class="homebar">
+  <div class="title" id="barTitle">Computing Teacher Console</div>
+  <div class="subtabs worktabs">
+    <button class="on" id="tabSeats">Seating plan</button>
+    <button id="tabWork">View work</button>
+  </div>
+  <span class="grow"></span>
+  <button class="btn-ghost" id="closeBtn">Close</button>
+</div>
+
+<!-- ================= seating plan ================= -->
+<div id="seatPane" class="workwrap">
+  <div class="toolrow">
+    <button class="btn-primary" id="saveSeats">Save seating plan</button>
+    <button class="btn-ghost" id="clearSeats">Clear the plan</button>
+    <button class="btn-ghost" id="addRow">+ Row</button>
+    <button class="btn-ghost" id="addCol">+ Column</button>
+    <span class="hint" id="seatMsg"></span>
+  </div>
+  <p class="hint">Drag a student onto the plan. Click one to open their work.</p>
+  <div class="seatwrap">
+    <div class="seatpool" id="seatPool"></div>
+    <div class="seatboard">
+      <p class="seatfront">Front of the room</p>
+      <div class="seatgrid" id="seatGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= viewing work ================= -->
+<div id="workPane" class="workwrap" hidden>
+  <div class="workbar">
+    <button class="btn-ghost iconbtn" id="prevStu" title="Previous student">&larr;</button>
+    <select id="stuPick"></select>
+    <button class="btn-ghost iconbtn" id="nextStu" title="Next student">&rarr;</button>
+    <span class="grow"></span>
+    <button class="btn-ghost" id="viewMode">All on one page</button>
+    <button class="btn-ghost" id="openPdf">PDF</button>
+  </div>
+  <div class="worksplit">
+    <div class="workmain">
+      <div class="workframe"><iframe id="workFrame" title="Their work"></iframe></div>
+      <div class="tasknav" id="taskNav"></div>
+    </div>
+    <aside class="workside">
+      <h3>Feedback</h3>
+      <p class="hint" id="fbWho"></p>
+      <div class="bfield"><label>Comment</label><textarea id="fbComment" rows="5"></textarea></div>
+      <div class="bfield" id="fbStrengthWrap" hidden><label>Strength</label><textarea id="fbStrength" rows="3"></textarea></div>
+      <div class="bfield" id="fbTargetWrap" hidden><label>Target</label><textarea id="fbTarget" rows="3"></textarea></div>
+      <div class="toolrow">
+        <button class="btn-ghost" id="addStrength">+ Strength</button>
+        <button class="btn-ghost" id="addTarget">+ Target</button>
+      </div>
+      <button class="btn-primary wide" id="saveFb">Save feedback</button>
+      <p class="hint" id="fbMsg"></p>
+    </aside>
+  </div>
+</div>
+
+<script src="settings.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+function on(id, ev, fn){
+  const e = document.getElementById(id);
+  if (!e){ console.warn("Nothing on the page with id:", id); return; }
+  e.addEventListener(ev, fn);
+}
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+const API = (window.HUB && window.HUB.API) || "";
+const KEY = () => localStorage.getItem("hub_tkey") || "";
+const H = () => ({ "x-teacher-key": KEY() });
+const HJ = () => ({ "Content-Type":"application/json", "x-teacher-key": KEY() });
+
+const qs = new URLSearchParams(location.search);
+const lessonId = qs.get("lesson") || "";
+const cls = qs.get("group") || "";
+
+let lessonJson = null;
+let roster = [];        // everyone in the class, alphabetical
+let rows = [];          // what they have saved
+let idx = 0;
+let allPages = false;
+let plan = { cols: 8, rows: 5, seats: {} };
+
+/* ---------------- getting everything ---------------- */
+async function boot(){
+  if (!API || !KEY()){
+    $("seatMsg").textContent = "Open this from the teacher console so it knows your key.";
+    return;
+  }
+  $("seatMsg").textContent = "Loading\u2026";
+  try{
+    const [lesson, students, work, seating] = await Promise.all([
+      fetchLesson(), fetchRoster(), fetchWork(), fetchSeating()
+    ]);
+    lessonJson = lesson;
+    roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+    rows = work;
+    if (seating && seating.seats) plan = Object.assign(plan, seating);
+    $("barTitle").textContent = "Computing Teacher Console \u2014 Viewing Student Work for " +
+      (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
+    document.title = "Student work \u00b7 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
+    paintSeats();
+    paintPicker();
+    $("seatMsg").textContent = "";
+  }catch(e){ $("seatMsg").textContent = e.message; }
+}
+async function fetchLesson(){
+  try{
+    const r = await fetch("lessons/" + encodeURIComponent(lessonId) + ".json", { cache:"no-store" });
+    if (r.ok) return await r.json();
+  }catch(e){}
+  const r2 = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(lessonId), { headers: H(), cache:"no-store" });
+  const d = await r2.json();
+  if (!r2.ok) throw new Error(d.error || "Could not open that lesson.");
+  return d.lesson;
+}
+async function fetchRoster(){
+  const r = await fetch(API + "/api/teacher/students?group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "Could not load the class.");
+  return d.students || [];
+}
+async function fetchWork(){
+  const r = await fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(lessonId) +
+                        "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "Could not load their work.");
+  return d.rows || [];
+}
+async function fetchSeating(){
+  try{
+    const r = await fetch(API + "/api/teacher/seating?group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+    const d = await r.json();
+    return d && d.layout ? d.layout : null;
+  }catch(e){ return null; }
+}
+
+/* ---------------- which half of the page is showing ---------------- */
+function tab(which){
+  const seats = which === "seats";
+  $("seatPane").hidden = !seats;
+  $("workPane").hidden = seats;
+  $("tabSeats").classList.toggle("on", seats);
+  $("tabWork").classList.toggle("on", !seats);
+  if (!seats && !$("workFrame").src) showStudent(idx);
+}
+on("tabSeats", "click", () => tab("seats"));
+on("tabWork", "click", () => tab("work"));
+on("closeBtn", "click", () => { window.close(); setTimeout(() => { location.href = "admin.html"; }, 150); });
+
+/* ---------------- the seating plan ---------------- */
+function seatCard(st){
+  const card = el("div","seat");
+  card.draggable = true;
+  card.dataset.user = st.username;
+  card.appendChild(el("b","", st.display_name));
+  card.appendChild(el("span","", st.username));
+  card.addEventListener("dragstart", (e) => {
+    if (e.dataTransfer){ e.dataTransfer.setData("text/plain", st.username); e.dataTransfer.effectAllowed = "move"; }
+    card.classList.add("dragging");
+  });
+  card.addEventListener("dragend", () => card.classList.remove("dragging"));
+  card.addEventListener("click", () => {
+    const at = roster.findIndex(x => x.username === st.username);
+    if (at >= 0){ idx = at; tab("work"); showStudent(at); }
+  });
+  return card;
+}
+function seatAt(c, r){
+  return Object.keys(plan.seats).find(u => plan.seats[u] && plan.seats[u].c === c && plan.seats[u].r === r);
+}
+function paintSeats(){
+  const pool = $("seatPool"), grid = $("seatGrid");
+  pool.innerHTML = ""; grid.innerHTML = "";
+  grid.style.gridTemplateColumns = "repeat(" + plan.cols + ", minmax(0, 1fr))";
+  for (let r = 0; r < plan.rows; r++){
+    for (let c = 0; c < plan.cols; c++){
+      const cell = el("div","seatcell");
+      cell.dataset.c = c; cell.dataset.r = r;
+      cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("over"); });
+      cell.addEventListener("dragleave", () => cell.classList.remove("over"));
+      cell.addEventListener("drop", (e) => {
+        e.preventDefault(); cell.classList.remove("over");
+        const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+        if (!who) return;
+        const taken = seatAt(c, r);
+        if (taken && taken !== who){
+          /* two students swap places rather than one landing on the other */
+          if (plan.seats[who]) plan.seats[taken] = plan.seats[who];
+          else delete plan.seats[taken];
+        }
+        plan.seats[who] = { c: c, r: r };
+        paintSeats();
+      });
+      const who = seatAt(c, r);
+      const st = who ? roster.find(x => x.username === who) : null;
+      if (st) cell.appendChild(seatCard(st));
+      grid.appendChild(cell);
+    }
+  }
+  const spare = roster.filter(st => !plan.seats[st.username]);
+  if (!spare.length) pool.appendChild(el("p","hint","Everyone has a seat"));
+  else spare.forEach(st => pool.appendChild(seatCard(st)));
+}
+$("seatPool").addEventListener("dragover", (e) => { e.preventDefault(); $("seatPool").classList.add("over"); });
+$("seatPool").addEventListener("dragleave", () => $("seatPool").classList.remove("over"));
+$("seatPool").addEventListener("drop", (e) => {
+  e.preventDefault(); $("seatPool").classList.remove("over");
+  const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+  if (who){ delete plan.seats[who]; paintSeats(); }
+});
+on("addRow", "click", () => { plan.rows = Math.min(12, plan.rows + 1); paintSeats(); });
+on("addCol", "click", () => { plan.cols = Math.min(14, plan.cols + 1); paintSeats(); });
+on("clearSeats", "click", () => { plan.seats = {}; paintSeats(); });
+on("saveSeats", "click", async () => {
+  $("seatMsg").textContent = "Saving\u2026";
+  try{
+    const r = await fetch(API + "/api/teacher/seating", { method:"POST", headers: HJ(),
+      body: JSON.stringify({ group: cls, layout: plan }) });
+    if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
+    $("seatMsg").textContent = "Saved.";
+  }catch(e){ $("seatMsg").textContent = e.message; }
+});
+
+/* ---------------- one student's work ---------------- */
+function paintPicker(){
+  const sel = $("stuPick");
+  sel.innerHTML = "";
+  roster.forEach((st, i) => {
+    const o = document.createElement("option");
+    o.value = String(i);
+    const row = rows.find(r => r.username === st.username);
+    o.textContent = st.display_name + (row ? "" : "  \u00b7 nothing saved");
+    sel.appendChild(o);
+  });
+  sel.value = String(idx);
+}
+function showStudent(i, step){
+  if (i < 0 || i >= roster.length) return;
+  idx = i;
+  paintPicker();
+  const st = roster[i];
+  const row = rows.find(r => r.username === st.username);
+  /* the lesson page reads this to know whose work to put on the screen */
+  localStorage.setItem("hub_inspect", JSON.stringify({
+    lesson: lessonId, idx: 0,
+    list: [{ name: st.display_name, username: st.username,
+             data: row ? row.data : {}, feedback: row ? (row.feedback || "") : "" }]
+  }));
+  $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
+    "&view=1&embed=1" + (allPages ? "&all=1" : "") +
+    (step !== undefined ? "&step=" + step : "") + "&t=" + Date.now();
+  $("fbWho").textContent = st.display_name + (row ? "" : " \u2014 nothing saved yet");
+  loadFeedback(row);
+  paintTaskNav();
+}
+on("prevStu", "click", () => showStudent(idx - 1));
+on("nextStu", "click", () => showStudent(idx + 1));
+on("stuPick", "change", () => showStudent(parseInt($("stuPick").value, 10) || 0));
+on("viewMode", "click", () => {
+  allPages = !allPages;
+  $("viewMode").textContent = allPages ? "One page at a time" : "All on one page";
+  showStudent(idx);
+});
+on("openPdf", "click", () => {
+  showStudent(idx);
+  window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&pdf=1", "_blank");
+});
+function paintTaskNav(){
+  const nav = $("taskNav");
+  nav.innerHTML = "";
+  if (allPages) return;
+  const blocks = (lessonJson && lessonJson.blocks) || [];
+  blocks.forEach((b, i) => {
+    const btn = el("button","tasknav-btn", String(i + 1));
+    btn.title = b.title || b.type;
+    btn.addEventListener("click", () => showStudent(idx, i));
+    nav.appendChild(btn);
+  });
+}
+
+/* ---------------- feedback ---------------- */
+function loadFeedback(row){
+  let f = {};
+  if (row && row.feedback){
+    try{ f = JSON.parse(row.feedback); }catch(e){ f = { comment: row.feedback }; }
+  }
+  $("fbComment").value = f.comment || "";
+  $("fbStrength").value = f.strength || "";
+  $("fbTarget").value = f.target || "";
+  $("fbStrengthWrap").hidden = !f.strength;
+  $("fbTargetWrap").hidden = !f.target;
+  $("fbMsg").textContent = "";
+}
+on("addStrength", "click", () => { $("fbStrengthWrap").hidden = false; $("fbStrength").focus(); });
+on("addTarget", "click", () => { $("fbTargetWrap").hidden = false; $("fbTarget").focus(); });
+on("saveFb", "click", async () => {
+  const st = roster[idx];
+  if (!st) return;
+  $("fbMsg").textContent = "Saving\u2026";
+  try{
+    const r = await fetch(API + "/api/teacher/feedback", { method:"POST", headers: HJ(),
+      body: JSON.stringify({ username: st.username, lesson: lessonId,
+                             strength: $("fbStrength").value, target: $("fbTarget").value,
+                             text: $("fbComment").value }) });
+    if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
+    let row = rows.find(x => x.username === st.username);
+    if (!row){ row = { username: st.username, display_name: st.display_name, data: {} }; rows.push(row); }
+    row.feedback = JSON.stringify({ strength: $("fbStrength").value,
+                                    target: $("fbTarget").value, comment: $("fbComment").value });
+    $("fbMsg").textContent = "Saved.";
+  }catch(e){ $("fbMsg").textContent = e.message; }
+});
+
+if (window.initSettings) initSettings(null);
+boot();
+</script>
+</body>
+</html>
