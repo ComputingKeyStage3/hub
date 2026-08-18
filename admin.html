@@ -29,9 +29,19 @@
       <h2 style="margin:0 0 6px">Teacher console</h2>
       <p class="hint" style="margin:0 0 16px">Enter the teacher key to load your classes.</p>
       <div class="field"><input type="password" id="keyIn" placeholder="Teacher key" autocomplete="off"></div>
-      <select id="whoAmI" style="margin-top:10px; width:100%"><option value="">All teachers</option></select>
-      <button class="btn-primary" id="keyGo" style="margin-top:10px; width:100%">Load classes</button>
+      <button class="btn-primary" id="keyGo" style="margin-top:10px; width:100%">Continue</button>
       <p class="hint" id="keyMsg" style="margin:12px 0 0"></p>
+    </section>
+  </div>
+
+  <!-- ============ who is teaching ============ -->
+  <div class="keywrap" id="whoView" hidden>
+    <section class="station">
+      <h2 style="margin:0 0 6px">Who is teaching?</h2>
+      <p class="hint" style="margin:0 0 16px">Your classes are shown, or choose Admin to see them all.</p>
+      <select id="whoAmI" class="bigselect"></select>
+      <button class="btn-primary" id="whoGo" style="margin-top:14px; width:100%">Open the console</button>
+      <p class="hint" id="whoMsg" style="margin:12px 0 0"></p>
     </section>
   </div>
 
@@ -240,7 +250,7 @@ function paintCrumbs(){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
@@ -363,16 +373,22 @@ async function tryKey(){
     localStorage.setItem("hub_tkey", KEY);
     groups = d.groups || [];
     $("topbar").hidden = false;
-    meCode = ($("whoAmI") && $("whoAmI").value) || localStorage.getItem("hub_me") || "";
-    try{ localStorage.setItem("hub_me", meCode); }catch(e){}
     await loadTeachers();
-    paintClasses();
-    show("homeView");
+    show("whoView", true);
   }catch(e){
     $("keyMsg").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
   }
 }
 on("keyGo", "click", tryKey);
+on("whoGo", "click", async () => {
+  meCode = $("whoAmI").value || "";
+  try{ localStorage.setItem("hub_me", meCode); }catch(e){}
+  await refreshGroups();
+  paintClasses();
+  show("homeView");
+});
+/* changing who you are, without signing in again */
+function changeTeacher(){ show("whoView", true); }
 on("keyIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
 
 /* ---------- classes grid ---------- */
@@ -488,14 +504,15 @@ async function loadTeachers(){
     const was = sel.value;
     sel.innerHTML = "";
     const all = document.createElement("option");
-    all.value = ""; all.textContent = "All teachers";
+    all.value = ""; all.textContent = "All (Admin)";
     sel.appendChild(all);
     teacherCodes.forEach(c => {
       const o = document.createElement("option");
       o.value = c; o.textContent = c;
       sel.appendChild(o);
     });
-    sel.value = was || meCode || "";
+    /* filled in from last time, but they still press the button */
+    sel.value = was || meCode || localStorage.getItem("hub_me") || "";
   }
 }
 /* the classes this teacher takes; everything when nobody is chosen */
@@ -2056,6 +2073,7 @@ async function loadResetQueue(){
 }
 
 /* ---------- boot ---------- */
+window.settingsExtra = { label: "Change teacher", run: changeTeacher };
 if (window.initSettings) initSettings($("setBtn"));
 const savedKey = localStorage.getItem("hub_tkey");
 if (savedKey){ $("keyIn").value = savedKey; tryKey(); }

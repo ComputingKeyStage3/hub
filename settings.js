@@ -55,6 +55,16 @@
     const isStudent = !!localStorage.getItem("hub_token");
     const onConsole = /admin\.html|author\.html/.test(location.pathname);
     if (isStudent && API && !onConsole) grp.hidden = false;
+    if (window.settingsExtra){
+      const extra = document.createElement("button");
+      extra.className = "btn-ghost";
+      extra.style.width = "100%";
+      extra.style.marginTop = "10px";
+      extra.textContent = window.settingsExtra.label;
+      extra.addEventListener("click", () => { back.hidden = true; window.settingsExtra.run(); });
+      const done = back.querySelector("#setDone");
+      if (done && done.parentNode) done.parentNode.insertBefore(extra, done);
+    }
     back.querySelector("#pwGo").addEventListener("click", async () => {
       const msg = back.querySelector("#pwMsg");
       const next = back.querySelector("#pwNew").value, again = back.querySelector("#pwNew2").value;
@@ -76,6 +86,9 @@
     return { back, paint };
   }
   let ui = null;
+  /* A page can add its own item to the settings pop-up — the console uses
+     this for changing which teacher is signed in. */
+  window.settingsExtra = null;
   window.initSettings = function(btn){
     if (!btn) return;
     btn.addEventListener("click", () => {

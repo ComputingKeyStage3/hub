@@ -135,6 +135,7 @@ function hasContent(v){
 /* What the teacher wrote about this piece of work. Older versions stored a
    plain comment; newer ones store a strength, a target and a comment. */
 let teacherNote = null;
+let myResult = null;      // the mark or grade a teacher has given
 function parseFeedback(raw){
   if (!raw) return null;
   let f = null;
@@ -143,6 +144,18 @@ function parseFeedback(raw){
   if (!f.strength && !f.target && !f.comment) return null;
   return f;
 }
+/* a practical is marked by hand, so the mark comes from the results list */
+async function loadMyMark(){
+  const token = localStorage.getItem("hub_token");
+  if (!token || !apiReady) return;
+  try{
+    const r = await fetch(API + "/api/results", { headers:{ Authorization: "Bearer " + token }, cache:"no-store" });
+    const d = await r.json();
+    const mine = (d.results || []).find(x => x.lesson_id === lessonId);
+    if (mine) myResult = { score: mine.score, outOf: mine.out_of, grade: mine.target || "" };
+  }catch(e){}
+}
+
 function showFeedback(raw){
   teacherNote = parseFeedback(raw);
 }
@@ -181,9 +194,23 @@ function workButton(){
 }
 
 function feedbackCard(f){
-  if (!f) return null;
+  if (!f && !(myResult && (myResult.grade || typeof myResult.score === "number"))) return null;
+  f = f || {};
   const card = el("div","st-card");
   card.appendChild(el("h2","sect-head","Your feedback"));
+  if (myResult && lesson && lesson.practical){
+    if (myResult.grade){
+      const g = el("p","st-grade");
+      g.innerHTML = "<b>Grade</b>";
+      g.appendChild(el("span","", " " + myResult.grade));
+      card.appendChild(g);
+    } else if (typeof myResult.score === "number"){
+      const m = el("p","st-grade");
+      m.innerHTML = "<b>Mark</b>";
+      m.appendChild(el("span","", " " + myResult.score + " out of " + (myResult.outOf || 0)));
+      card.appendChild(m);
+    }
+  }
   if (f.strength){
     const r = el("p","st-strength"); r.innerHTML = "<b>Strength</b>";
     r.appendChild(el("span","", " " + f.strength)); card.appendChild(r);
@@ -605,6 +632,7 @@ async function loadSaved(){
     if (!r.ok) return;
     const d = await r.json();
     if (d && d.feedback) showFeedback(d.feedback);
+    if (lesson && lesson.practical) await loadMyMark();
     if (d && d.data){
       restoredData = d.data; wasDone = !!d.data.__done;
       if (wasDone) finished = true;          // so the write-back below keeps it
@@ -2746,7 +2774,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
      score to show and nothing to review. */
   if (lesson && lesson.practical && !teacherTools){
     const marked = (teacherNote && (teacherNote.strength || teacherNote.target || teacherNote.comment)) ||
-                   (res && typeof res.teacherScore === "number");
+                   (myResult && (myResult.grade || typeof myResult.score === "number"));
     if (!marked){
       const box = doneShell("Submitted!");
       const hero = heroBits("Submitted!", "Your teacher will mark your assessment.");

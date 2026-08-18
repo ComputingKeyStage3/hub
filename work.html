@@ -85,10 +85,12 @@
         <button class="btn-ghost" id="addTarget">+ Target</button>
       </div>
       <div class="bfield" id="markWrap" hidden>
-        <label>Mark</label>
-        <span class="markrow2">
-          <input id="fbScore" type="number" min="0"> <span>out of</span> <input id="fbOutOf" type="number" min="1">
+        <label id="markLabel">Mark</label>
+        <span class="markrow2" id="scoreRow">
+          <input id="fbScore" type="number" min="0"> <span id="outOfLabel">out of 20</span>
         </span>
+        <select id="fbGrade" class="bigselect" hidden></select>
+        <p class="bhelp" id="gradeHelp"></p>
       </div>
       <button class="btn-primary wide" id="saveFb">Save feedback</button>
       <p class="hint" id="fbMsg"></p>
@@ -159,6 +161,15 @@ async function boot(){
     lessonJson = lesson;
     roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
     rows = work;
+    try{
+      const rr = await fetch(API + "/api/teacher/results?lesson=" + encodeURIComponent(lessonId) +
+                             "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+      const rd = await rr.json();
+      (rd.rows || []).forEach(r => {
+        const st = (students || []).find(x => x.display_name === r.display_name);
+        if (st) marks[st.username] = { score: r.score, outOf: r.out_of, grade: r.target || "" };
+      });
+    }catch(e){}
     if (seating && seating.seats) plan = Object.assign(plan, seating);
     $("barTitle").textContent = "Computing Teacher Console \u2014 Viewing Student Work for " +
       (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
@@ -369,12 +380,7 @@ function showStudent(i, step){
     (step !== undefined && !allPages ? "&step=" + step : "") + "&t=" + Date.now();
   $("fbWho").textContent = st.display_name + (row ? "" : " \u2014 nothing saved yet");
   /* a practical assessment is marked by hand, so the boxes appear */
-  $("markWrap").hidden = !(lessonJson && lessonJson.practical);
-  if (lessonJson && lessonJson.practical){
-    const mk = markFor(st.username);
-    $("fbScore").value = mk ? mk.score : "";
-    $("fbOutOf").value = mk ? mk.outOf : "";
-  }
+  paintMarking(st.username);
   loadFeedback(row);
   paintTaskNav();
 }
@@ -491,6 +497,45 @@ function askMissing(missing, given){
 }
 let marks = {};
 function markFor(user){ return marks[user] || null; }
+/* A practical is marked either out of a total or with a grade, whichever the
+   lesson was built with. */
+function usesRubric(){ return !!(lessonJson && lessonJson.practical && lessonJson.marking === "rubric"); }
+function paintMarking(user){
+  const practical = !!(lessonJson && lessonJson.practical);
+  $("markWrap").hidden = !practical;
+  if (!practical) return;
+  const mk = markFor(user);
+  const rubric = usesRubric();
+  $("scoreRow").hidden = rubric;
+  $("fbGrade").hidden = !rubric;
+  $("markLabel").textContent = rubric ? "Grade" : "Mark";
+  if (rubric){
+    const sel = $("fbGrade");
+    sel.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = ""; none.textContent = "Not graded yet";
+    sel.appendChild(none);
+    (lessonJson.rubric || []).forEach(g => {
+      const o = document.createElement("option");
+      o.value = g.name; o.textContent = g.name;
+      sel.appendChild(o);
+    });
+    sel.value = mk && mk.grade ? mk.grade : "";
+    showGradeHelp();
+  } else {
+    const total = lessonJson.outOf || 20;
+    $("outOfLabel").textContent = "out of " + total;
+    $("fbScore").max = String(total);
+    $("fbScore").value = mk && typeof mk.score === "number" ? mk.score : "";
+    $("gradeHelp").textContent = "";
+  }
+}
+function showGradeHelp(){
+  const pick = $("fbGrade").value;
+  const g = ((lessonJson && lessonJson.rubric) || []).find(x => x.name === pick);
+  $("gradeHelp").textContent = g && g.description ? g.description : "";
+}
+on("fbGrade", "change", showGradeHelp);
 async function saveFeedback(){
   const st = roster[idx];
   if (!st) return;
@@ -502,13 +547,20 @@ async function saveFeedback(){
                              target: showing("Target") ? $("fbTarget").value : "",
                              text: $("fbComment").value }) });
     if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
-    if (lessonJson && lessonJson.practical && $("fbScore").value !== ""){
-      const score = parseInt($("fbScore").value, 10) || 0;
-      const outOf = Math.max(1, parseInt($("fbOutOf").value, 10) || 1);
-      await fetch(API + "/api/teacher/set-mark", { method:"POST", headers: HJ(),
-        body: JSON.stringify({ username: st.username, lesson: lessonId, overrides: {},
-                               score: score, outOf: outOf }) });
-      marks[st.username] = { score: score, outOf: outOf };
+    /* the mark or grade goes with the feedback */
+    if (lessonJson && lessonJson.practical){
+      const rubric = usesRubric();
+      const grade = rubric ? $("fbGrade").value : "";
+      const total = lessonJson.outOf || 20;
+      const score = rubric ? 0 : (parseInt($("fbScore").value, 10) || 0);
+      const worth = rubric ? 1 : total;
+      if (rubric ? grade : $("fbScore").value !== ""){
+        const mr = await fetch(API + "/api/teacher/set-mark", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ username: st.username, lesson: lessonId, overrides: {},
+                                 score: score, outOf: worth, grade: grade }) });
+        if (!mr.ok) throw new Error((await mr.json()).error || "Could not save the mark.");
+        marks[st.username] = { score: score, outOf: worth, grade: grade };
+      }
     }
     let row = rows.find(x => x.username === st.username);
     if (!row){ row = { username: st.username, display_name: st.display_name, data: {} }; rows.push(row); }
