@@ -1675,3 +1675,13 @@ body.workpage .grow{flex:1}
 /* the markbook tables scroll once they get long */
 .mbscroll-marks{max-height:calc(5 * 42px + 46px)}
 .mbscroll-tasks{max-height:calc(3 * 42px + 46px)}
+
+/* the rubric, side by side */
+.rubricstrip{display:flex; gap:12px; overflow-x:auto; padding:6px 2px 12px; margin-top:10px}
+.rubriccol{flex:0 0 220px; background:var(--panel-2); border:1.5px solid var(--line);
+  border-radius:12px; padding:14px}
+.rubriccol.mine{border-color:var(--amber); background:var(--panel)}
+.rubriccol b{display:block; font-family:var(--display); font-size:18px; margin-bottom:6px}
+.rubriccol p{margin:0; font-size:15px; line-height:1.5; color:var(--muted)}
+.rubricmine{display:inline-block; margin-top:10px; font-size:12px; font-weight:800;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--amber-dark)}

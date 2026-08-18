@@ -502,7 +502,9 @@ function canDropOn(arr){
 }
 /* put whatever is being dragged at position `at` in `arr` */
 function dropInto(arr, at){
-  if (!canDropOn(arr)){ dragFrom = null; newTask = null; return; }
+  /* Refusing must leave the drag alone: another list may still be about to
+     accept it, and clearing here would take the task away from it. */
+  if (!canDropOn(arr)) return;
   if (newTask){
     const made = BLANK[newTask]();
     newTask = null;

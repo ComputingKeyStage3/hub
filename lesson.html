@@ -161,6 +161,35 @@ function showFeedback(raw){
 }
 /* the card shown on the finished screen, matching an assessment's */
 /* Everything they did, on one scrollable page, in a pop-up. */
+/* All the grades and what each one needs, side by side. */
+function rubricButton(){
+  const wrap = el("div","st-card");
+  wrap.appendChild(el("h2","sect-head","How this was marked"));
+  const btn = el("button","btn-ghost","View rubric");
+  btn.addEventListener("click", () => {
+    const back = el("div","modal-back");
+    const box = el("div","modal wide");
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", () => back.remove());
+    box.appendChild(x);
+    box.appendChild(el("h2","","Rubric"));
+    const strip = el("div","rubricstrip");
+    ((lesson && lesson.rubric) || []).forEach(g => {
+      const col = el("div","rubriccol" + (myResult && myResult.grade === g.name ? " mine" : ""));
+      col.appendChild(el("b","", g.name));
+      col.appendChild(el("p","", g.description || ""));
+      if (myResult && myResult.grade === g.name) col.appendChild(el("span","rubricmine","Your grade"));
+      strip.appendChild(col);
+    });
+    box.appendChild(strip);
+    back.appendChild(box);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 function workButton(){
   const wrap = el("div","st-card");
   wrap.appendChild(el("h2","sect-head","Your work"));
@@ -194,23 +223,11 @@ function workButton(){
 }
 
 function feedbackCard(f){
-  if (!f && !(myResult && (myResult.grade || typeof myResult.score === "number"))) return null;
-  f = f || {};
+  /* The grade or mark is shown at the top of the page, so this card is just
+     what the teacher wrote. */
+  if (!f || (!f.strength && !f.target && !f.comment)) return null;
   const card = el("div","st-card");
   card.appendChild(el("h2","sect-head","Your feedback"));
-  if (myResult && lesson && lesson.practical){
-    if (myResult.grade){
-      const g = el("p","st-grade");
-      g.innerHTML = "<b>Grade</b>";
-      g.appendChild(el("span","", " " + myResult.grade));
-      card.appendChild(g);
-    } else if (typeof myResult.score === "number"){
-      const m = el("p","st-grade");
-      m.innerHTML = "<b>Mark</b>";
-      m.appendChild(el("span","", " " + myResult.score + " out of " + (myResult.outOf || 0)));
-      card.appendChild(m);
-    }
-  }
   if (f.strength){
     const r = el("p","st-strength"); r.innerHTML = "<b>Strength</b>";
     r.appendChild(el("span","", " " + f.strength)); card.appendChild(r);
@@ -1258,6 +1275,14 @@ function checkPython(code){
 
 /* ---------- the IDE ---------- */
 function idePrefs(){ try{ return JSON.parse(localStorage.getItem("hub_ide") || "{}"); }catch(e){ return {}; } }
+/* An older version stored a theme every time the editor was drawn, so nearly
+   every browser has one saved and stopped following the page. Clear those once. */
+(function(){
+  try{
+    const p = idePrefs();
+    if (p.theme && !p.chosen){ delete p.theme; localStorage.setItem("hub_ide", JSON.stringify(p)); }
+  }catch(e){}
+})();
 /* Unless the student has chosen editor colours themselves, the editor follows
    the site theme: dark for the dark background, light for all the others. */
 function themeFromSite(){
@@ -1413,7 +1438,7 @@ function rIDE(b){
     Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
     /* only remember it when the student picked it — otherwise the editor would
        stop following the site's colours after the first paint */
-    if (chosen){ const p = idePrefs(); p.theme = k; saveIdePrefs(p); }
+    if (chosen){ const p = idePrefs(); p.theme = k; p.chosen = true; saveIdePrefs(p); }
   }
   function setSize(k){
     s.dataset.idesize = k;
@@ -1665,9 +1690,17 @@ function rWeb(b){
   const settings = el("div","ide-settings"); settings.hidden = true;
   settings.appendChild(el("span","ide-setlabel","Colours"));
   const themes = el("div","ide-setrow");
-  [["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(p => {
+  [["","Match the page"],["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(p => {
     const t = el("button","ide-chip", p[1]); t.dataset.theme = p[0];
-    t.addEventListener("click", () => setTheme(p[0], true));
+    t.addEventListener("click", () => {
+      if (!p[0]){
+        /* back to following whatever the site is set to */
+        const prefs2 = idePrefs();
+        delete prefs2.theme; delete prefs2.chosen;
+        saveIdePrefs(prefs2);
+        setTheme(themeFromSite());
+      } else setTheme(p[0], true);
+    });
     themes.appendChild(t);
   });
   settings.appendChild(themes);
@@ -1893,7 +1926,7 @@ function rWeb(b){
     Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
     /* only remember it when the student picked it — otherwise the editor would
        stop following the site's colours after the first paint */
-    if (chosen){ const p = idePrefs(); p.theme = k; saveIdePrefs(p); }
+    if (chosen){ const p = idePrefs(); p.theme = k; p.chosen = true; saveIdePrefs(p); }
   }
   function setSize(k){
     s.dataset.idesize = k;
@@ -2809,8 +2842,13 @@ function renderPracticalComplete(){
   }
   box.appendChild(hero);
 
+  const status = el("p","handin");
+  hero.appendChild(status);
+  if (!spectate) hero.appendChild(saveButton(status));
+
   const fb = feedbackCard(teacherNote);
   if (fb) box.appendChild(fb);
+  if (graded) box.appendChild(rubricButton());
   box.appendChild(workButton());
 
   /* practice only makes sense once they have been told how they did */
@@ -3226,6 +3264,7 @@ function saveButton(statusEl){
   return btn;
 }
 function paintStatus(elm, state){
+  if (!elm) return;                 // some screens have no status line
   elm.dataset.state = state;
   elm.textContent = state === "done" ? "\u2713 Sent to your teacher"
                   : state === "offline" ? "Sign in so your work can be sent to your teacher"
