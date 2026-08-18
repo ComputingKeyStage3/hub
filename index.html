@@ -50,7 +50,7 @@
     <div id="lessonList"><p class="hint">Loading…</p></div>
   </div>
   <div id="view-results" hidden>
-    <div id="resultList"><p class="hint">Sign in to see your results.</p></div>
+    <div id="resultList"><p class="hint"></p></div>
   </div>
 
 </div>
@@ -536,7 +536,7 @@ async function paintFeedbackList(box){
 async function fetchResults(){
   const token = localStorage.getItem("hub_token");
   const box = $("resultList");
-  if (!token){ box.innerHTML = '<p class="hint">Sign in to see your results.</p>'; return; }
+  if (!token){ box.innerHTML = ""; return; }
   if (!ready){ box.innerHTML = '<p class="hint">Site not connected to its server yet.</p>'; return; }
   box.innerHTML = '<p class="hint">Loading…</p>';
   try{

@@ -1622,3 +1622,26 @@ body.workpage .grow{flex:1}
 .bankpick span{font-size:13.5px; color:var(--muted); line-height:1.4}
 .markrow2{display:flex; align-items:center; gap:8px}
 .markrow2 input{width:78px !important; text-align:center}
+
+
+/* the colour palette, drawn on the page so nothing covers it */
+.rt-palette{position:absolute; z-index:9999; padding:10px; min-width:236px;
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.22)}
+.rt-grid{display:grid; grid-template-columns:repeat(10, 1fr); gap:3px; margin:8px 0}
+.rt-cell{width:20px; height:20px; border:1px solid rgba(0,0,0,.12); border-radius:4px; cursor:pointer; padding:0}
+.rt-cell:hover{outline:2px solid var(--amber); outline-offset:1px}
+.rt-auto-btn{display:block; width:100%; text-align:left; padding:8px 10px; border-radius:9px;
+  border:1px solid var(--line); background:var(--panel-2); cursor:pointer;
+  font-family:var(--body); font-size:14.5px; color:var(--text)}
+.rt-auto-btn:hover{border-color:var(--amber)}
+.rt-more{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px;
+  font-size:14px; color:var(--muted); cursor:pointer}
+.rt-more input{width:34px; height:26px; padding:0; border:1px solid var(--line-2); border-radius:6px}
+.rt-nummenu{min-width:150px}
+.rt-box ol,.rt-box ul{margin:6px 0 6px 22px}
+.rt-box ol ol,.rt-box ul ul{margin-left:20px}
+
+/* a number with a step either side */
+.stepper{display:inline-flex; align-items:center; gap:6px}
+.stepnum{width:88px !important; text-align:center}

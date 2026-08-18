@@ -147,6 +147,39 @@ function showFeedback(raw){
   teacherNote = parseFeedback(raw);
 }
 /* the card shown on the finished screen, matching an assessment's */
+/* Everything they did, on one scrollable page, in a pop-up. */
+function workButton(){
+  const wrap = el("div","st-card");
+  wrap.appendChild(el("h2","sect-head","Your work"));
+  const btn = el("button","btn-primary","View my work");
+  btn.addEventListener("click", () => {
+    const back = el("div","modal-back");
+    const box2 = el("div","modal wide");
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", () => back.remove());
+    box2.appendChild(x);
+    box2.appendChild(el("h2","","Your work"));
+    const holder = el("div","allpages");
+    steps.forEach((st2, i) => {
+      const b = (typeof st2.brief === "function") ? st2.brief() : st2.brief;
+      const sec = el("div","allpage");
+      const head = el("div","allpage-head");
+      head.appendChild(el("span","allpage-n", String(i + 1)));
+      if (b && b.title) head.appendChild(el("b","", b.title));
+      sec.appendChild(head);
+      st2.section.hidden = false;
+      sec.appendChild(st2.section);
+      holder.appendChild(sec);
+    });
+    box2.appendChild(holder);
+    back.appendChild(box2);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 function feedbackCard(f){
   if (!f) return null;
   const card = el("div","st-card");
@@ -2709,6 +2742,22 @@ async function assessmentFinish(){
 }
 
 function renderAssessmentComplete(justFinished, res, st, sent){
+  /* A practical is marked by hand, so until the teacher has been there is no
+     score to show and nothing to review. */
+  if (lesson && lesson.practical && !teacherTools){
+    const marked = (teacherNote && (teacherNote.strength || teacherNote.target || teacherNote.comment)) ||
+                   (res && typeof res.teacherScore === "number");
+    if (!marked){
+      const box = doneShell("Submitted!");
+      const hero = heroBits("Submitted!", "Your teacher will mark your assessment.");
+      box.appendChild(hero);
+      box.appendChild(workButton());
+      const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
+      box.appendChild(back);
+      confetti();
+      return;
+    }
+  }
   if (!res){ res = computeAssessment(); }
   if (!st){ st = computeST(res.byTopic); }
   const pct = Math.round(100*res.score/Math.max(1,res.outOf));
@@ -2728,7 +2777,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
 
   // per-question review, shown the way the questions looked
   const rev = el("div","review");
-  rev.appendChild(el("h2","sect-head","Your answers"));
+  rev.appendChild(el("h2","sect-head","Your work"));
   res.perQ.forEach(q => {
     const b = lesson.blocks.find(x => x.id === q.id) || {};
     const v = fields[q.id] ? fields[q.id].get() : null;
@@ -2829,7 +2878,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   stCard.appendChild(sRow); stCard.appendChild(tRow);
   box.appendChild(stCard);
   const teacherCard = feedbackCard(teacherNote);
-  if (teacherCard) box.appendChild(teacherCard);
+  if (teacherCard) box.appendChild(teacherCard);   // nothing at all when none has been left
   if (teacherTools) box.appendChild(markEditor(res));   // marks stay here; feedback is in the console
 
   // response tasks for the target topic
@@ -2904,7 +2953,7 @@ function renderResponses(container, targetTopic, statusEl){
       const wait = el("div","st-card");
       wait.appendChild(el("h2","sect-head","Waiting to be marked"));
       wait.appendChild(el("p","modal-text",
-        "Your teacher will look at this and leave you some feedback. Practice tasks appear here once they have."));
+        "Your teacher will look at this and leave you some feedback. Response tasks appear here once they have."));
       container.appendChild(wait);
       return;
     }

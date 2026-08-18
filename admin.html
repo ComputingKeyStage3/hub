@@ -29,7 +29,8 @@
       <h2 style="margin:0 0 6px">Teacher console</h2>
       <p class="hint" style="margin:0 0 16px">Enter the teacher key to load your classes.</p>
       <div class="field"><input type="password" id="keyIn" placeholder="Teacher key" autocomplete="off"></div>
-      <button class="btn-primary" id="keyGo" style="margin-top:12px; width:100%">Load classes</button>
+      <select id="whoAmI" style="margin-top:10px; width:100%"><option value="">All teachers</option></select>
+      <button class="btn-primary" id="keyGo" style="margin-top:10px; width:100%">Load classes</button>
       <p class="hint" id="keyMsg" style="margin:12px 0 0"></p>
     </section>
   </div>
@@ -67,6 +68,7 @@
     </div>
     <div class="toolrow">
       <span class="searchbox"><span class="searchicon">&#128269;</span><input id="unitSearch" placeholder="Search lessons"></span>
+      <button class="btn-ghost iconbtn refresh" id="refYear" title="Refresh">&#8635;</button>
       <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
       <button class="btn-primary" id="hubNewLesson2">+ Build a new lesson</button>
     </div>
@@ -82,6 +84,7 @@
       <button class="btn-ghost iconbtn" id="deleteHubUnitBtn" title="Delete unit">&#128465;</button>
     </div>
     <div class="toolrow">
+      <button class="btn-ghost iconbtn refresh" id="refUnitPage" title="Refresh">&#8635;</button>
       <button class="btn-primary" id="hubNewLesson3">+ Build a new lesson</button>
     </div>
     <div id="hubList"></div>
@@ -360,6 +363,9 @@ async function tryKey(){
     localStorage.setItem("hub_tkey", KEY);
     groups = d.groups || [];
     $("topbar").hidden = false;
+    meCode = ($("whoAmI") && $("whoAmI").value) || localStorage.getItem("hub_me") || "";
+    try{ localStorage.setItem("hub_me", meCode); }catch(e){}
+    await loadTeachers();
     paintClasses();
     show("homeView");
   }catch(e){
@@ -372,8 +378,13 @@ on("keyIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
 /* ---------- classes grid ---------- */
 function paintClasses(){
   const g = $("classGrid"); g.innerHTML = "";
-  if (!groups.length){ g.appendChild(el("p","hint","No students yet \u2014 open a class after adding some, or add them from any class page.")); }
-  groups.forEach(gr => {
+  const mine = myClasses(groups);
+  if (!mine.length){
+    g.appendChild(el("p","hint", meCode
+      ? "No classes are set to " + meCode + " yet. Choose All teachers, or set who teaches a class when you rename it."
+      : "No students yet \u2014 open a class after adding some, or add them from any class page."));
+  }
+  mine.forEach(gr => {
     const t = el("button","classtile");
     t.appendChild(el("b","", gr.name));
     t.appendChild(el("span","", gr.students + " student" + (gr.students === 1 ? "" : "s")));
@@ -385,9 +396,19 @@ on("newClassBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "New class");
     const i = fieldRow(box, "Class name (e.g. 8B)", "text", "");
+    const getCodes = teacherPicker(box, "", meCode ? [meCode] : []);
+    const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Open class");
-    go.addEventListener("click", () => { const v = i.value.trim(); if (v){ closeModal(); openClass(v); } });
-    box.appendChild(go);
+    go.addEventListener("click", async () => {
+      const v = i.value.trim();
+      if (!v) return;
+      const codes = getCodes();
+      if (!codes.length){ msg.textContent = "Choose who teaches this class."; return; }
+      await saveClassTeachers(v, codes);
+      await loadTeachers();
+      closeModal(); openClass(v);
+    });
+    box.appendChild(go); box.appendChild(msg);
   });
 });
 async function refreshGroups(){
@@ -398,8 +419,90 @@ async function refreshGroups(){
   }catch(e){}
 }
 
+/* Who takes a class. Up to three, chosen from whatever the database holds. */
+function teacherPicker(box, group, chosen){
+  const picked = (chosen || []).slice(0, 3);
+  const w = el("div","bfield");
+  w.appendChild(el("label","","Who teaches this class?"));
+  const holder = el("div");
+  w.appendChild(holder);
+  const add = el("button","btn-ghost bmini2","+ Another teacher");
+  function paint(){
+    holder.innerHTML = "";
+    picked.forEach((code, i) => {
+      const row = el("div","brow");
+      const sel = document.createElement("select");
+      const none = document.createElement("option");
+      none.value = ""; none.textContent = "Choose\u2026";
+      sel.appendChild(none);
+      teacherCodes.forEach(c => {
+        const o = document.createElement("option");
+        o.value = c; o.textContent = c;
+        sel.appendChild(o);
+      });
+      sel.value = code || "";
+      sel.addEventListener("change", () => { picked[i] = sel.value; });
+      row.appendChild(sel);
+      if (picked.length > 1){
+        const rm = el("button","btn-ghost bmini","\u2715");
+        rm.addEventListener("click", () => { picked.splice(i, 1); paint(); });
+        row.appendChild(rm);
+      }
+      holder.appendChild(row);
+    });
+    add.hidden = picked.length >= 3;
+  }
+  add.addEventListener("click", () => { picked.push(""); paint(); });
+  if (!picked.length) picked.push("");
+  paint();
+  w.appendChild(add);
+  box.appendChild(w);
+  return () => picked.filter(Boolean);
+}
+async function saveClassTeachers(group, codes){
+  try{
+    await fetch(API + "/api/teacher/set-class-teachers", { method:"POST", headers: HJ(),
+      body: JSON.stringify({ group: group, codes: codes }) });
+  }catch(e){}
+}
+
 /* ---------- the lesson hub: year groups, then units, then lessons ---------- */
 let assigns = [];
+let teacherCodes = [];        // HTS, SNG, EJL — from the database, not the code
+let classTeachers = {};       // class -> [codes]
+let meCode = "";              // who is signed in
+
+async function loadTeachers(){
+  try{
+    const r = await fetch(API + "/api/teacher/teachers", { headers: H(), cache:"no-store" });
+    const d = await r.json();
+    teacherCodes = (d.teachers || []).map(t => t.code);
+    classTeachers = {};
+    (d.classes || []).forEach(l => {
+      const k = l.group_name.toLowerCase();
+      (classTeachers[k] = classTeachers[k] || []).push(l.code);
+    });
+  }catch(e){ teacherCodes = []; classTeachers = {}; }
+  const sel = $("whoAmI");
+  if (sel){
+    const was = sel.value;
+    sel.innerHTML = "";
+    const all = document.createElement("option");
+    all.value = ""; all.textContent = "All teachers";
+    sel.appendChild(all);
+    teacherCodes.forEach(c => {
+      const o = document.createElement("option");
+      o.value = c; o.textContent = c;
+      sel.appendChild(o);
+    });
+    sel.value = was || meCode || "";
+  }
+}
+/* the classes this teacher takes; everything when nobody is chosen */
+function myClasses(list){
+  if (!meCode) return list;
+  return list.filter(g => (classTeachers[(g.name || g).toLowerCase()] || []).includes(meCode));
+}
 let hubYear = "", hubUnit = "";
 const assignsFor = (id) => assigns.filter(a => a.lesson_id === id);
 const unitsOfYear = (y) => (cat.units || []).filter(u => (u.year || "") === y);
@@ -412,9 +515,19 @@ on("openHub", "click", async () => {
   catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
 on("hubHome", "click", toHome);
+on("refYear", "click", async () => {
+  $("hubUnits").innerHTML = '<p class="hint">Loading\u2026</p>';
+  try{ await loadCatalogue(true); paintHubUnits(); }
+  catch(e){ $("hubUnits").innerHTML = ""; $("hubUnits").appendChild(el("p","hint", e.message)); }
+});
+on("refUnitPage", "click", async () => {
+  $("hubList").innerHTML = '<p class="hint">Loading\u2026</p>';
+  try{ await loadCatalogue(true); paintHub(); }
+  catch(e){ $("hubList").innerHTML = ""; $("hubList").appendChild(el("p","hint", e.message)); }
+});
 on("refHub", "click", async () => {
   $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
-  try{ await loadCatalogue(); paintYears(); }
+  try{ await loadCatalogue(true); paintYears(); }
   catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
 on("backYears", "click", () => { show("hubView"); paintYears(); });
@@ -662,7 +775,7 @@ function distribute(id){
     const has = {};
     assignsFor(id).forEach(a => { has[a.group_name.toLowerCase()] = a; });
     const picks = {};
-    (groups || []).forEach(g => {
+    myClasses(groups || []).forEach(g => {
       const row = el("label","opt");
       const cb = el("input"); cb.type = "checkbox";
       const already = has[g.name.toLowerCase()];
@@ -672,7 +785,7 @@ function distribute(id){
       row.appendChild(el("span","", g.name + (already ? (already.published ? " — published" : " — draft") : "")));
       box.appendChild(row);
     });
-    if (!groups.length) box.appendChild(el("p","modal-text","There are no classes yet."));
+    if (!myClasses(groups || []).length) box.appendChild(el("p","modal-text","There are no classes to give this to."));
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Save");
     go.addEventListener("click", async () => {
@@ -760,16 +873,25 @@ on("renameBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Rename class");
     const i = fieldRow(box, "Class name", "text", cls);
+    const getCodes = teacherPicker(box, cls, classTeachers[cls.toLowerCase()] || (meCode ? [meCode] : []));
     const msg = el("p","hint",""); 
-    const go = el("button","btn-primary modal-cta","Rename");
+    const go = el("button","btn-primary modal-cta","Save");
     go.addEventListener("click", async () => {
-      const to = i.value.trim();
-      if (!to || to === cls){ closeModal(); return; }
+      const to = i.value.trim() || cls;
+      const codes = getCodes();
+      if (!codes.length){ msg.textContent = "Choose who teaches this class."; return; }
+      if (to === cls){
+        msg.textContent = "Saving\u2026";
+        await saveClassTeachers(cls, codes);
+        await loadTeachers();
+        closeModal(); return;
+      }
       msg.textContent = "Renaming\u2026";
       try{
         const r = await fetch(API + "/api/teacher/rename-group", { method:"POST", headers: HJ(), body: JSON.stringify({ from: cls, to }) });
         if (!r.ok) throw new Error((await r.json()).error || "Rename failed.");
-        cls = to; await refreshGroups(); openClass(cls); closeModal();
+        cls = to; await saveClassTeachers(to, codes); await loadTeachers();
+        await refreshGroups(); openClass(cls); closeModal();
       }catch(e){ msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(msg);

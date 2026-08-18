@@ -8,15 +8,25 @@
 (function(){
   "use strict";
 
-  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1 };
-  const COLOURS = [
-    ["Automatic", ""],
-    ["Red", "#C0392B"],
-    ["Orange", "#B5651D"],
-    ["Green", "#2E7B54"],
-    ["Blue", "#1B5FA8"],
-    ["Purple", "#6B3FA0"]
+  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1 };
+  /* A swatch like the ones in Office: a row of hues, each with lighter and
+     darker versions underneath. */
+  const HUES = [
+    ["Black",  "#000000"], ["Grey",   "#6B6B6B"], ["Red",    "#C0392B"],
+    ["Orange", "#B5651D"], ["Yellow", "#B8930A"], ["Green",  "#2E7B54"],
+    ["Teal",   "#1D7C7C"], ["Blue",   "#1B5FA8"], ["Purple", "#6B3FA0"],
+    ["Pink",   "#B03A6E"]
   ];
+  const SHADES = [0.65, 0.35, 0, -0.25, -0.45];   // lighter, then the hue, then darker
+  function shade(hex, amount){
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const mix = (c) => amount >= 0
+      ? Math.round(c + (255 - c) * amount)
+      : Math.round(c * (1 + amount));
+    r = mix(r); g = mix(g); b = mix(b);
+    return "#" + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("").toUpperCase();
+  }
 
   /* Keep the tags we offer, drop everything else but its words. */
   function clean(node){
@@ -43,6 +53,16 @@
         if (tag === "SPAN" || tag === "A"){
           const colour = n.style && n.style.color;
           if (colour) keep.style.color = colour;
+          const size = n.style && n.style.fontSize;
+          if (size) keep.style.fontSize = size;
+        }
+        if (tag === "OL" || tag === "UL"){
+          const kind = n.style && n.style.listStyleType;
+          if (kind) keep.style.listStyleType = kind;
+        }
+        if (tag === "FONT" && n.getAttribute && n.getAttribute("size")){
+          const px = { "1":"11px","2":"13px","3":"","4":"18px","5":"22px","6":"28px","7":"36px" }[n.getAttribute("size")];
+          if (px) keep.style.fontSize = px;
         }
         if (tag === "A"){
           const href = n.getAttribute("href") || "";
@@ -50,14 +70,20 @@
         }
         walk(n, keep);
         // a span with nothing special about it is just noise
-        if (keep.tagName === "SPAN" && !keep.style.color){
+        if (keep.tagName === "SPAN" && !keep.style.color && !keep.style.fontSize){
           while (keep.firstChild) to.appendChild(keep.firstChild);
         } else {
           to.appendChild(keep);
         }
       });
     })(node, out);
-    return out.innerHTML.replace(/<span><\/span>/g, "").trim();
+    /* An empty span, or one left with no colour at all, is invisible on the
+       page and confuses everything downstream. Take them out. */
+    let html = out.innerHTML;
+    html = html.replace(/<span[^>]*>\s*<\/span>/g, "");
+    html = html.replace(/<span style="color:\s*(transparent|rgba\([^)]*,\s*0\))[^"]*"[^>]*>/g, "<span>");
+    html = html.replace(/<span><\/span>/g, "");
+    return html.trim();
   }
 
   /* Build the editor. onChange gets the cleaned HTML. */
@@ -85,9 +111,56 @@
     const boldBtn = tool("<b>B</b>", "Bold (Ctrl+B)", () => cmd("bold"));
     const italicBtn = tool("<i>I</i>", "Italic (Ctrl+I)", () => cmd("italic"));
     const underBtn = tool("<u>U</u>", "Underline (Ctrl+U)", () => cmd("underline"));
-    const strikeBtn = tool("<s>S</s>", "Strikethrough", () => cmd("strikeThrough"));
-    tool("&bull;&nbsp;List", "Bullet list", () => cmd("insertUnorderedList"));
-    tool("1.&nbsp;List", "Numbered list", () => cmd("insertOrderedList"));
+    tool("A<small>A</small>", "Smaller text", () => sizeBy(-1), "rt-smaller");
+    tool("A<big>A</big>", "Bigger text", () => sizeBy(1), "rt-bigger");
+    tool("&bull;", "Bullet list", () => cmd("insertUnorderedList"));
+    /* numbered lists come in two kinds, so this one offers a choice */
+    const numBtn = tool("1.", "Numbered list", () => {}, "rt-numbtn");
+    const numMenu = document.createElement("div");
+    numMenu.className = "rt-palette rt-nummenu";
+    numMenu.hidden = true;
+    [["1. 2. 3.", ""], ["a. b. c.", "lower-alpha"]].forEach(pair => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "rt-auto-btn";
+      b.textContent = pair[0];
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => {
+        restore(saved);
+        cmd("insertOrderedList");
+        if (pair[1]) markList(pair[1]);
+        numMenu.hidden = true;
+        box.focus(); fire();
+      });
+      numMenu.appendChild(b);
+    });
+    document.body.appendChild(numMenu);
+    numBtn.addEventListener("mousedown", () => { saved = save(); });
+    numBtn.addEventListener("click", () => {
+      if (!numMenu.hidden){ numMenu.hidden = true; return; }
+      const r = numBtn.getBoundingClientRect();
+      numMenu.style.top = (r.bottom + window.scrollY + 6) + "px";
+      numMenu.style.left = (r.left + window.scrollX) + "px";
+      numMenu.hidden = false;
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!numMenu.hidden && !numMenu.contains(e.target) && e.target !== numBtn) numMenu.hidden = true;
+    });
+
+    /* remember which kind of numbering a list uses */
+    function markList(style){
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      let n = sel.getRangeAt(0).startContainer;
+      while (n && n !== box && n.tagName !== "OL") n = n.parentNode;
+      if (n && n.tagName === "OL") n.style.listStyleType = style;
+    }
+    /* text size, a step at a time */
+    function sizeBy(dir){
+      let now = 3;
+      try{ now = parseInt(document.queryCommandValue("fontSize"), 10) || 3; }catch(e){}
+      cmd("fontSize", String(Math.max(1, Math.min(7, now + dir))));
+    }
     if (o.code !== false) tool("&lt;/&gt;", "Show as code", () => {
       const sel = window.getSelection();
       if (!sel || !sel.rangeCount || sel.isCollapsed) return;
@@ -107,41 +180,69 @@
     swatch.className = "rt-swatch";
     colourBtn.appendChild(document.createTextNode("A"));
     colourBtn.appendChild(swatch);
+    /* The palette is put on the page itself, not inside the toolbar, so
+       nothing further down the page can cover it. */
     const palette = document.createElement("div");
     palette.className = "rt-palette";
     palette.hidden = true;
-    COLOURS.forEach(c => {
-      const opt = document.createElement("button");
-      opt.type = "button";
-      opt.className = "rt-swatchbtn";
-      opt.dataset.colour = c[1];
-      opt.title = c[0];
-      const dot = document.createElement("span");
-      dot.className = "rt-dot";
-      if (c[1]) dot.style.background = c[1];
-      else dot.classList.add("rt-auto");
-      opt.appendChild(dot);
-      opt.appendChild(document.createTextNode(c[0]));
-      opt.addEventListener("mousedown", (e) => e.preventDefault());
-      opt.addEventListener("click", () => {
-        restore(saved);
-        /* "Automatic" puts it back to whatever the page uses */
-        cmd("foreColor", c[1] || "currentColor");
-        if (!c[1]) clearColour();
-        palette.hidden = true;
-        box.focus(); fire(); refreshState();
+    function pick(colour){
+      restore(saved);
+      /* Automatic means take the colour off, never paint a see-through one */
+      if (colour && !/transparent|rgba\([^)]*,\s*0\s*\)/.test(colour)) cmd("foreColor", colour);
+      else clearColour();
+      palette.hidden = true;
+      box.focus(); fire(); refreshState();
+    }
+    const auto = document.createElement("button");
+    auto.type = "button";
+    auto.className = "rt-auto-btn";
+    auto.textContent = "Automatic";
+    auto.addEventListener("mousedown", (e) => e.preventDefault());
+    auto.addEventListener("click", () => pick(""));
+    palette.appendChild(auto);
+
+    const grid = document.createElement("div");
+    grid.className = "rt-grid";
+    SHADES.forEach(amount => {
+      HUES.forEach(h => {
+        const colour = amount === 0 ? h[1] : shade(h[1], amount);
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = "rt-cell";
+        cell.style.background = colour;
+        cell.title = h[0];
+        cell.dataset.colour = colour;
+        cell.addEventListener("mousedown", (e) => e.preventDefault());
+        cell.addEventListener("click", () => pick(colour));
+        grid.appendChild(cell);
       });
-      palette.appendChild(opt);
     });
+    palette.appendChild(grid);
+
+    const more = document.createElement("label");
+    more.className = "rt-more";
+    more.textContent = "More colours";
+    const picker = document.createElement("input");
+    picker.type = "color";
+    picker.addEventListener("input", () => pick(picker.value));
+    more.appendChild(picker);
+    palette.appendChild(more);
+    document.body.appendChild(palette);
     colourBtn.addEventListener("mousedown", (e) => { e.preventDefault(); saved = save(); });
-    colourBtn.addEventListener("click", () => { palette.hidden = !palette.hidden; });
+    colourBtn.addEventListener("click", () => {
+      if (!palette.hidden){ palette.hidden = true; return; }
+      const box2 = colourBtn.getBoundingClientRect();
+      palette.style.top = (box2.bottom + window.scrollY + 6) + "px";
+      palette.style.left = Math.min(box2.left + window.scrollX,
+                                    window.innerWidth - 250) + "px";
+      palette.hidden = false;
+    });
     document.addEventListener("pointerdown", (e) => {
       if (palette.hidden) return;
       if (colourWrap.contains(e.target)) return;
       palette.hidden = true;
     });
     colourWrap.appendChild(colourBtn);
-    colourWrap.appendChild(palette);
     bar.appendChild(colourWrap);
 
     /* take the colour off, rather than painting the default over it */
@@ -186,7 +287,7 @@
     }
     /* Show which options are already on for the text under the cursor, so
        the toolbar tells you the state rather than just setting it. */
-    const stateOf = { bold:boldBtn, italic:italicBtn, underline:underBtn, strikeThrough:strikeBtn };
+    const stateOf = { bold:boldBtn, italic:italicBtn, underline:underBtn };
     function refreshState(){
       Object.keys(stateOf).forEach(name => {
         const btn = stateOf[name];
@@ -205,7 +306,7 @@
       if (!m) return v;
       const hex = "#" + [m[1], m[2], m[3]].map(n => Number(n).toString(16).padStart(2, "0")).join("").toUpperCase();
       /* the everyday text colour counts as no colour at all */
-      return COLOURS.some(c => c[1] && c[1].toUpperCase() === hex) ? hex : "";
+      return hex;
     }
     box.addEventListener("keyup", refreshState);
     box.addEventListener("mouseup", refreshState);
@@ -217,6 +318,43 @@
     box.addEventListener("input", fire);
     box.addEventListener("blur", () => { if (onChange) onChange(clean(box)); });
     // paste as plain words, so a copied web page cannot bring its styling in
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Tab"){
+        /* only indent when there is already an item above to sit under */
+        const sel = window.getSelection();
+        let li = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+        while (li && li !== box && li.tagName !== "LI") li = li.parentNode;
+        if (li && li.tagName === "LI"){
+          e.preventDefault();
+          if (e.shiftKey){ cmd("outdent"); }
+          else if (li.previousElementSibling){ cmd("indent"); subStyle(li); }
+          fire();
+        }
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey){
+        /* a plain Enter starts a new line, not a whole new paragraph */
+        const sel = window.getSelection();
+        let li = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+        while (li && li !== box && li.tagName !== "LI") li = li.parentNode;
+        if (li && li.tagName === "LI") return;      // lists behave normally
+        e.preventDefault();
+        cmd("insertLineBreak");
+        fire();
+      }
+    });
+    /* a nested list is shown differently from the one above it */
+    function subStyle(li){
+      let list = li.parentNode;
+      if (!list) return;
+      const outer = list.parentNode && list.parentNode.closest ? list.parentNode.closest("ol, ul") : null;
+      if (list.tagName === "UL") list.style.listStyleType = "circle";
+      else if (list.tagName === "OL"){
+        const above = outer && outer.style ? outer.style.listStyleType : "";
+        list.style.listStyleType = (above === "lower-alpha") ? "decimal" : "lower-alpha";
+      }
+    }
+
     box.addEventListener("paste", (e) => {
       e.preventDefault();
       const text = (e.clipboardData || window.clipboardData).getData("text/plain");

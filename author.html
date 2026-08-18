@@ -729,7 +729,20 @@ function card(b, i, arr){
     row.appendChild(nudge);
     w.appendChild(row);
     body.appendChild(w);
-    F("Recommended word count", "minWords", { num:true });
+    const ww = el("div","bfield");
+    ww.appendChild(el("label","","Recommended word count"));
+    const wrow = el("div","stepper");
+    const less = el("button","btn-ghost iconbtn","\u2212");
+    const num = el("input"); num.type = "number"; num.className = "stepnum";
+    num.value = String(b.minWords || 20);
+    const more = el("button","btn-ghost iconbtn","+");
+    const setW = (v) => { b.minWords = Math.max(0, v); num.value = String(b.minWords); saveDraft(); schedulePreview(); };
+    less.addEventListener("click", () => setW((parseInt(num.value, 10) || 0) - 5));
+    more.addEventListener("click", () => setW((parseInt(num.value, 10) || 0) + 5));
+    num.addEventListener("input", () => { b.minWords = Math.max(0, parseInt(num.value, 10) || 0); saveDraft(); schedulePreview(); });
+    wrow.appendChild(less); wrow.appendChild(num); wrow.appendChild(more);
+    ww.appendChild(wrow);
+    body.appendChild(ww);
   }
   if (b.type === "quiz"){
     if (!b.questions) b.questions = [{ q:"", options:["",""], answer:0, hint:"" }];
@@ -1002,9 +1015,19 @@ function paintTargets(into){
   lesson.blocks.forEach(b => { if (b.topic) used[b.topic] = true; });
   Object.keys(lesson.topics || {}).forEach(k => { used[k] = true; });
   const names = Object.keys(used);
-  into.appendChild(el("p","hint","The topic a student did best in gives their Strength; their weakest gives their Target."));
-  if (!names.length){
-    into.appendChild(el("p","hint","Add a topic tag to some questions first, for example: loops, variables."));
+  into.appendChild(el("p","hint", lesson.practical
+    ? "These become a bank you can pick from when marking, so you are not writing the same sentence twice."
+    : "The topic a student did best in gives their Strength; their weakest gives their Target."));
+  const addBtn = el("button","btn-primary bmini2","+ New topic");
+  addBtn.addEventListener("click", () => {
+    let n = 1;
+    while (lesson.topics["Topic " + n]) n++;
+    lesson.topics["Topic " + n] = { label:"Topic " + n, strength:"", target:"" };
+    saveDraft(); render();
+  });
+  into.appendChild(addBtn);
+  if (!names.length && !Object.keys(lesson.topics || {}).length){
+    into.appendChild(el("p","hint","No topics yet \u2014 press \u201c+ New topic\u201d, or tag some questions."));
     return;
   }
   names.forEach(name => {
@@ -1013,9 +1036,19 @@ function paintTargets(into){
     const card2 = el("div","bcard");
     const head = el("div","bhead");
     head.appendChild(el("b","btype", name));
+    const del = el("button","btn-ghost bmini","\u2715");
+    del.title = "Remove this topic";
+    del.addEventListener("click", () => {
+      delete lesson.topics[name];
+      if (lesson.responses) delete lesson.responses[name];
+      saveDraft(); render(); schedulePreview();
+    });
+    head.appendChild(del);
     card2.appendChild(head);
     const body = el("div","bbody");
-    [["label","Friendly name"],["strength","When this is their BEST topic"],["target","When this is their WEAKEST topic"]]
+    [["label", lesson.practical ? "Topic name" : "Friendly name"],
+     ["strength", lesson.practical ? "Strength" : "When this is their BEST topic"],
+     ["target", lesson.practical ? "Target" : "When this is their WEAKEST topic"]]
       .forEach(pair => {
         const w = el("div","bfield");
         w.appendChild(el("label","", pair[1]));
