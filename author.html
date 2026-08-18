@@ -448,8 +448,9 @@ function render(){
   }
   if (respEditing){
     const head = el("div","classhead");
+    const niceName = (lesson.topics[respEditing] && lesson.topics[respEditing].label) || respEditing;
     head.appendChild(el("h2","", respEditing === "__ext" ? "Extension tasks"
-                                                          : "Response tasks \u2014 " + respEditing));
+                                                        : "Response tasks \u2022 " + niceName));
     const back = el("button","btn-ghost bmini2","Back to the list");
     back.addEventListener("click", () => { respEditing = null; render(); schedulePreview(); });
     head.appendChild(back);
@@ -484,13 +485,19 @@ function render(){
 let newTask = null;          // a task being dragged in from the palette
 
 /* pages only live at the top; everything else only lives on a page */
+/* the list of tasks currently on screen */
+function openArray(){
+  if (!respEditing) return null;
+  return respEditing === "__ext" ? lesson.extensions : (lesson.responses[respEditing] || []);
+}
 function canDropOn(arr){
   const kind = newTask || (dragFrom && dragFrom.type);
   if (!kind) return false;
   /* a page only makes sense at the top of a lesson */
   if (kind === "page") return arr === lesson.blocks && !respEditing;
-  /* a response or extension set takes anything, whatever kind of thing this is */
-  if (respEditing) return true;
+  /* While a response set is open it is the only place a task can go —
+     otherwise the page behind it takes the drop instead. */
+  if (respEditing) return arr === openArray();
   return lesson.assessment ? true : arr !== lesson.blocks;
 }
 /* put whatever is being dragged at position `at` in `arr` */
@@ -1229,7 +1236,8 @@ function paintResponseTopics(into){
     if (!lesson.responses[name]) lesson.responses[name] = [];
     const n = lesson.responses[name].length;
     const row = el("button","ov-row");
-    row.appendChild(el("span","t", name));
+    const nice = (lesson.topics[name] && lesson.topics[name].label) || name;
+    row.appendChild(el("span","t", nice));
     row.appendChild(el("span","p", n + " task" + (n === 1 ? "" : "s")));
     row.appendChild(el("span","edit","Open \u2192"));
     row.addEventListener("click", () => { respEditing = name; render(); });

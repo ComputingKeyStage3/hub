@@ -1671,3 +1671,7 @@ body.workpage .grow{flex:1}
 /* the rubric editor */
 .gradename{flex:1; margin-right:10px}
 .qsub-head .btools{display:flex; gap:4px; flex:none}
+
+/* the markbook tables scroll once they get long */
+.mbscroll-marks{max-height:calc(5 * 42px + 46px)}
+.mbscroll-tasks{max-height:calc(3 * 42px + 46px)}

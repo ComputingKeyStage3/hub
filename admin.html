@@ -1639,7 +1639,9 @@ function responseTaskIds(){
   const out = [];
   const bank = (lessonJson && lessonJson.responses) || {};
   Object.keys(bank).forEach(topic => (bank[topic] || []).forEach(t => {
-    if (t.id) out.push({ id: t.id, short: topic.slice(0, 8), label: topic + ": " + (stripTags(t.prompt || t.title || "") || t.type) });
+    const nice = (lessonJson.topics && lessonJson.topics[topic] && lessonJson.topics[topic].label) || topic;
+    if (t.id) out.push({ id: t.id, short: nice.slice(0, 10),
+                         label: nice + ": " + (stripTags(t.prompt || t.title || "") || t.type) });
   }));
   ((lessonJson && lessonJson.extensions) || []).forEach(t => {
     if (t.id) out.push({ id: t.id, short: "Ext", label: "Extension: " + (stripTags(t.prompt || t.title || "") || t.type) });
@@ -1798,7 +1800,7 @@ function paintMarkbook(holder){
 
   /* marks, question by question */
   holder.appendChild(el("p","unit-head","Marks"));
-  const scroll = el("div","mbscroll");
+  const scroll = el("div","mbscroll mbscroll-marks");
   const table = el("table","mbtable");
   const head = el("tr");
   head.appendChild(headCell("Student","name"));
@@ -1812,13 +1814,7 @@ function paintMarkbook(holder){
     tr.appendChild(el("td","", r.name));
     tr.appendChild(el("td","", r.score === null ? "\u2014" : r.score + " / " + r.outOf));
     tr.appendChild(el("td","", r.pct === null ? "\u2014" : r.pct + "%"));
-    const tdTime = el("td","");
-    tdTime.appendChild(el("span","", niceTime(r.seconds)));
-    const ed = el("button","btn-ghost bmini","\u270E");
-    ed.title = "Change these marks";
-    ed.addEventListener("click", () => editMarks(r, () => openMarkbook(false)));
-    tdTime.appendChild(ed);
-    tr.appendChild(tdTime);
+    tr.appendChild(el("td","", niceTime(r.seconds)));
     markbookQs.forEach(q => {
       const m = r.marks[q.id];
       const td = el("td","mbtick");
@@ -1840,7 +1836,7 @@ function paintMarkbook(holder){
     holder.appendChild(el("p","hint","This assessment has no response tasks yet."));
     return;
   }
-  const scroll2 = el("div","mbscroll");
+  const scroll2 = el("div","mbscroll mbscroll-tasks");
   const t2 = el("table","mbtable");
   const h2 = el("tr");
   h2.appendChild(headCell("Student","name"));

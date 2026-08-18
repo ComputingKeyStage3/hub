@@ -2752,6 +2752,21 @@ async function assessmentFinish(){
   if (spectate){ renderAssessmentComplete(false); return; }
   finished = true;
   save();
+  /* A practical is marked by hand, so it never adds up a score — but how long
+     it took is still worth recording. */
+  if (lesson.practical){
+    const secs = Math.round((Date.now() - assessStarted) / 1000);
+    try{
+      await fetch(API + "/api/assessment", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json", Authorization:"Bearer " + token },
+        body: JSON.stringify({ lesson: lessonId, score: 0, outOf: 1, breakdown: {},
+                               strength: "", target: "", seconds: secs })
+      });
+    }catch(e){}
+    renderPracticalComplete();
+    return;
+  }
   const res = computeAssessment();
   const st = computeST(res.byTopic);
 
@@ -2772,22 +2787,49 @@ async function assessmentFinish(){
   renderAssessmentComplete(true, res, st, sent);
 }
 
+/* A practical has no questions to add up: the mark or grade comes from the
+   teacher, so this page is built from that rather than from a score. */
+function renderPracticalComplete(){
+  const graded = myResult && myResult.grade;
+  const scored = myResult && typeof myResult.score === "number" && myResult.outOf > 1;
+  const marked = graded || scored ||
+    (teacherNote && (teacherNote.strength || teacherNote.target || teacherNote.comment));
+
+  const box = doneShell(marked ? "Marked!" : "Submitted!");
+  const hero = heroBits(marked ? "Marked!" : "Submitted!",
+    marked ? lesson.title : "Your teacher will mark your assessment.");
+  /* the mark or grade sits where a percentage would on a normal assessment */
+  if (graded){
+    const g = el("p","done-score", myResult.grade);
+    hero.appendChild(g);
+    const rub = ((lesson && lesson.rubric) || []).find(x => x.name === myResult.grade);
+    if (rub && rub.description) hero.appendChild(el("p","done-sub", rub.description));
+  } else if (scored){
+    hero.appendChild(el("p","done-score", myResult.score + " / " + myResult.outOf));
+  }
+  box.appendChild(hero);
+
+  const fb = feedbackCard(teacherNote);
+  if (fb) box.appendChild(fb);
+  box.appendChild(workButton());
+
+  /* practice only makes sense once they have been told how they did */
+  if (marked){
+    const holder = el("div");
+    renderResponses(holder, (teacherNote && teacherNote.targetTopic) || null, null);
+    if (holder.children.length) box.appendChild(holder);
+  }
+  const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
+  box.appendChild(back);
+  confetti();
+}
+
 function renderAssessmentComplete(justFinished, res, st, sent){
   /* A practical is marked by hand, so until the teacher has been there is no
      score to show and nothing to review. */
   if (lesson && lesson.practical && !teacherTools){
-    const marked = (teacherNote && (teacherNote.strength || teacherNote.target || teacherNote.comment)) ||
-                   (myResult && (myResult.grade || typeof myResult.score === "number"));
-    if (!marked){
-      const box = doneShell("Submitted!");
-      const hero = heroBits("Submitted!", "Your teacher will mark your assessment.");
-      box.appendChild(hero);
-      box.appendChild(workButton());
-      const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
-      box.appendChild(back);
-      confetti();
-      return;
-    }
+    renderPracticalComplete();
+    return;
   }
   if (!res){ res = computeAssessment(); }
   if (!st){ st = computeST(res.byTopic); }
@@ -2976,19 +3018,7 @@ function markEditor(res){
 }
 
 function renderResponses(container, targetTopic, statusEl){
-  /* On a practical the teacher marks by hand, so there is nothing useful to
-     practise until they have looked at it. */
-  if (lesson && lesson.practical && !teacherTools){
-    const marked = teacherNote && (teacherNote.strength || teacherNote.target || teacherNote.comment);
-    if (!marked){
-      const wait = el("div","st-card");
-      wait.appendChild(el("h2","sect-head","Waiting to be marked"));
-      wait.appendChild(el("p","modal-text",
-        "Your teacher will look at this and leave you some feedback. Response tasks appear here once they have."));
-      container.appendChild(wait);
-      return;
-    }
-  }
+
   const bank = (lesson && lesson.responses) || {};
   let list = bank[targetTopic] || [];
   /* Full marks means no weakest topic worth working on, so they get a topic
