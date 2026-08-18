@@ -317,7 +317,15 @@ function overflowMenu(items){
     b.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = true; it[1](); });
     menu.appendChild(b);
   });
-  btn.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    /* open upwards when the bottom of the window is close */
+    if (btn.getBoundingClientRect){
+      const box = btn.getBoundingClientRect();
+      wrap.classList.toggle("up", (window.innerHeight - box.bottom) < 220);
+    }
+    menu.hidden = !menu.hidden;
+  });
   /* On a touchscreen mousedown lands before click, so closing on mousedown
      took the button away before it could be pressed. Close only when the
      tap was somewhere else entirely. */
@@ -1136,9 +1144,9 @@ function paintLessonGrid(){
     });
     const isAssessment = !!l.assessment;
     const workBtn = el("button", isAssessment ? "btn-primary" : "btn-ghost",
-                       isAssessment ? "Markbook" : "View Student Work");
+                       isAssessment ? "Markbook" : "View work");
     workBtn.addEventListener("click", async () => {
-      if (!isAssessment){ pickStudentWork(l.lesson_id); return; }
+      if (!isAssessment){ openWorkPage(l.lesson_id); return; }
       lessonId = l.lesson_id;
       workCache = { key: "", rows: [], t: 0 };
       openModal(box => { box.classList.add("wide"); modalTitle(box, titleOf(l.lesson_id));
@@ -1380,8 +1388,8 @@ function openManage(){
         }
       }catch(e){ say("Could not change that", e.message); }
     });
-    const workBtn = el("button","btn-ghost","View Student Work");
-    workBtn.addEventListener("click", () => pickStudentWork(lessonId, true));
+    const workBtn = el("button","btn-ghost","View work");
+    workBtn.addEventListener("click", () => openWorkPage(lessonId));
     bar.appendChild(pubBtn); bar.appendChild(workBtn);
     if (lessonJson && lessonJson.assessment){
       const mb = el("button","btn-ghost","Markbook");
@@ -1781,37 +1789,6 @@ function handOff(rows, idx){
     list: rows.map(r => ({ name: r.display_name, username: r.username, data: r.data, feedback: r.feedback || "" }))
   }));
 }
-/* leave a comment on a student's work */
-function commentOn(username, name, then){
-  openModal(box => {
-    modalTitle(box, "Comment for " + name);
-    const w = el("div","bfield");
-    w.appendChild(el("label","","They will see this at the top of the lesson"));
-    const ta = el("textarea"); ta.rows = 4;
-    w.appendChild(ta); box.appendChild(w);
-    const msg = el("p","hint","Loading\u2026");
-    box.appendChild(msg);
-    fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(lessonId) +
-          "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" })
-      .then(r => r.json())
-      .then(d => {
-        const row = (d.rows || []).find(r => r.username === username);
-        ta.value = (row && row.feedback) || "";
-        msg.textContent = "";
-      }).catch(() => { msg.textContent = ""; });
-    const go = el("button","btn-primary modal-cta","Save comment");
-    go.addEventListener("click", async () => {
-      msg.textContent = "Saving\u2026";
-      try{
-        const r = await fetch(API + "/api/teacher/feedback", { method:"POST", headers: HJ(),
-          body: JSON.stringify({ username: username, lesson: lessonId, text: ta.value }) });
-        if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
-        closeModal(); if (then) then();
-      }catch(e){ msg.textContent = e.message; }
-    });
-    box.appendChild(go);
-  });
-}
 
 /* change what a question was marked, and the total with it */
 function editMarks(row, then){
@@ -1870,88 +1847,6 @@ function inspect(rows, idx, stepIdx){
 function printWork(rows, idx){
   handOff(rows, idx);
   window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&pdf=1", "_blank");
-}
-async function pickStudentWork(id, backToManage){
-  if (id && id !== lessonId){
-    lessonId = id; workCache = { key: "", rows: [], t: 0 };
-    lessonJson = await fetchLesson(id);
-  }
-  openModal(async (box) => {
-    modalTitle(box, "Student work \u2014 " + titleOf(lessonId));
-    const holder = el("div"); box.appendChild(holder);
-    holder.appendChild(el("p","hint","Loading\u2026"));
-    try{
-      const rows = await getWorkRows();
-      const roster = await getRoster();
-      holder.innerHTML = "";
-      if (!rows.length){ holder.appendChild(el("p","hint","Nobody in " + cls + " has saved any work for this lesson yet.")); }
-      roster.filter(st => !rows.some(w => w.username === st.username)).forEach(st => {
-        const line = el("div","who-row");
-        line.appendChild(el("span","nm", st.display_name));
-        line.appendChild(el("span","st no","Not started"));
-        holder.appendChild(line);
-      });
-      rows.forEach((r, i) => {
-        const line = el("div","who-row");
-        line.appendChild(el("span","nm", r.display_name));
-        const total = (lessonJson && lessonJson.blocks) ? lessonJson.blocks.length : 0;
-        let status = "In progress", cl = "no";
-        if (r.data && r.data.__done){ status = "Completed \u2713"; cl = "yes"; }
-        else if (r.data && total){
-          const n = Math.min((r.data.__step || 0), total - 1);
-          status = "Task " + (n + 1) + " of " + total + ": " + stepTitle(lessonJson.blocks[n], n).slice(0, 30);
-        }
-        line.appendChild(el("span","st " + cl, status));
-        const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View their work";
-        v.addEventListener("click", () => inspect(rows, i));
-        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "See it as a PDF";
-        p.addEventListener("click", () => printWork(rows, i));
-        const c = el("button","btn-ghost iconbtn","\u{1F4AC}"); c.title = "Leave a comment";
-        c.addEventListener("click", () => commentOn(r.username, r.display_name,
-                                                    () => pickStudentWork(lessonId, backToManage)));
-        line.appendChild(v); line.appendChild(p); line.appendChild(c);
-        holder.appendChild(line);
-      });
-    }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
-    const done = el("button","btn-ghost modal-stay","Close");
-    done.addEventListener("click", () => { closeModal(); if (backToManage) openManage(); });
-    box.appendChild(done);
-  });
-}
-function showProgress(){
-  openModal(async (box) => {
-    modalTitle(box, "Progress \u2014 " + cls);
-    const holder = el("div"); box.appendChild(holder);
-    holder.appendChild(el("p","hint","Loading\u2026"));
-    try{
-      const roster = await getRoster(), rows = await getWorkRows();
-      holder.innerHTML = "";
-      const total = lessonJson.blocks.length;
-      roster.forEach(st => {
-        const idx = rows.findIndex(w => w.username === st.username);
-        const row = rows[idx];
-        const line = el("div","who-row");
-        line.appendChild(el("span","nm", st.display_name));
-        let status, cl = "no";
-        if (!row){ status = "Not started"; }
-        else if (row.data.__done){ status = "Completed \u2713"; cl = "yes"; }
-        else {
-          const n = Math.min((row.data.__step || 0), total - 1);
-          status = "Task " + (n + 1) + " of " + total + ": " + stepTitle(lessonJson.blocks[n], n).slice(0, 34);
-        }
-        line.appendChild(el("span","st " + cl, status));
-        const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View their work";
-        const p = el("button","btn-ghost iconbtn","\u{1F4C4}"); p.title = "See it as a PDF";
-        if (row){ v.addEventListener("click", () => inspect(rows, idx)); p.addEventListener("click", () => printWork(rows, idx)); }
-        else { v.disabled = true; p.disabled = true; }
-        line.appendChild(v); line.appendChild(p);
-        holder.appendChild(line);
-      });
-      if (!roster.length) holder.appendChild(el("p","hint","No students in this class yet."));
-    }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
-    const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
-    box.appendChild(done);
-  });
 }
 async function whoDone(i, b, backToManage){
   openModal(async (box) => {

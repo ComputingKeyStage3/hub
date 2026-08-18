@@ -1280,7 +1280,11 @@ function refreshPreview(){
 on("prevBtn", "click", refreshPreview);
 on("moreBtn", "click", (e) => {
   e.stopPropagation();
-  const m = $("moreMenu");
+  const m = $("moreMenu"), b = $("moreBtn");
+  if (b.getBoundingClientRect && m.parentNode && m.parentNode.classList){
+    const box = b.getBoundingClientRect();
+    m.parentNode.classList.toggle("up", (window.innerHeight - box.bottom) < 220);
+  }
   m.hidden = !m.hidden;
 });
 /* a tap on a menu item must not be swallowed by the closing of the menu */

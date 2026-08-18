@@ -24,15 +24,9 @@
   <div class="toolrow">
     <button class="btn-primary" id="saveSeats">Save seating plan</button>
     <button class="btn-ghost" id="clearSeats">Clear the plan</button>
-    <span class="sizer"><b>Rows</b>
-      <button class="btn-ghost iconbtn" id="lessRow" title="One fewer row">&minus;</button>
-      <span id="rowCount"></span>
-      <button class="btn-ghost iconbtn" id="addRow" title="One more row">+</button>
-    </span>
-    <span class="sizer"><b>Columns</b>
-      <button class="btn-ghost iconbtn" id="lessCol" title="One fewer column">&minus;</button>
-      <span id="colCount"></span>
-      <button class="btn-ghost iconbtn" id="addCol" title="One more column">+</button>
+    <span class="sizer"><b>Square size</b>
+      <button class="btn-ghost iconbtn" id="lessSize" title="Smaller squares">&minus;</button>
+      <button class="btn-ghost iconbtn" id="addSize" title="Bigger squares">+</button>
     </span>
     <span class="hint" id="seatMsg"></span>
   </div>
@@ -40,7 +34,7 @@
   <div class="seatwrap">
     <div class="seatpool" id="seatPool"></div>
     <div class="seatboard" id="seatBoard">
-      <div class="seatfront" id="seatFront" draggable="true">
+      <div class="seatfront" id="seatFront">
         <span>Front</span>
         <span class="menuwrap">
           <button class="btn-ghost iconbtn frontdots" id="frontDots" title="Move the front">&#8942;</button>
@@ -126,7 +120,9 @@ let roster = [];        // everyone in the class, alphabetical
 let rows = [];          // what they have saved
 let idx = 0;
 let allPages = false;
-let plan = { cols: 8, rows: 11, seats: {}, front: "bottom" };
+let plan = { size: 96, seats: {}, front: "bottom" };   // size is how big one square is
+const SPAN = 20;                                      // how far the board goes in each direction
+let lastStep = 0;                                     // the page being looked at
 
 /* ---------------- getting everything ---------------- */
 async function boot(){
@@ -219,9 +215,12 @@ function seatAt(c, r){
 function paintSeats(){
   const pool = $("seatPool"), grid = $("seatGrid");
   pool.innerHTML = ""; grid.innerHTML = "";
-  grid.style.gridTemplateColumns = "repeat(" + plan.cols + ", minmax(0, 1fr))";
-  for (let r = 0; r < plan.rows; r++){
-    for (let c = 0; c < plan.cols; c++){
+  /* One big board of squares. The size setting decides how many fit on the
+     screen — about ten across at the default. */
+  grid.style.gridTemplateColumns = "repeat(" + SPAN + ", " + plan.size + "px)";
+  grid.style.gridAutoRows = plan.size + "px";
+  for (let r = 0; r < SPAN; r++){
+    for (let c = 0; c < SPAN; c++){
       const cell = el("div","seatcell");
       cell.dataset.c = c; cell.dataset.r = r;
       cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("over"); });
@@ -245,8 +244,6 @@ function paintSeats(){
       grid.appendChild(cell);
     }
   }
-  $("rowCount").textContent = plan.rows;
-  $("colCount").textContent = plan.cols;
   paintFront();
   const spare = roster.filter(st => !plan.seats[st.username]);
   if (!spare.length) pool.appendChild(el("p","hint","Everyone has a seat"));
@@ -264,13 +261,16 @@ function paintFront(){
     b.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = true; plan.front = p[0]; paintSeats(); });
     menu.appendChild(b);
   });
-  front.addEventListener("dragstart", (e) => {
-    if (e.dataTransfer){ e.dataTransfer.setData("text/plain", "__front"); e.dataTransfer.effectAllowed = "move"; }
-  }, { once: true });
 }
 on("frontDots", "click", (e) => {
   e.stopPropagation();
   const m = $("frontMenu");
+  const wrap = m.parentNode;
+  /* open upwards when there is not room below, so nothing is cut off */
+  if (wrap && wrap.classList && $("frontDots").getBoundingClientRect){
+    const box = $("frontDots").getBoundingClientRect();
+    wrap.classList.toggle("up", (window.innerHeight - box.bottom) < 220);
+  }
   m.hidden = !m.hidden;
 });
 document.addEventListener("pointerdown", (e) => {
@@ -280,32 +280,6 @@ document.addEventListener("pointerdown", (e) => {
   if (m.contains && m.contains(e.target)) return;
   m.hidden = true;
 });
-/* dropping the front box against an edge of the board moves it there */
-["top","right","bottom","left"].forEach(side => {
-  const zone = el("div","frontzone frontzone-" + side);
-  zone.dataset.side = side;
-  zone.addEventListener("dragover", (e) => {
-    if (!dragIsFront) return;
-    e.preventDefault(); zone.classList.add("over");
-  });
-  zone.addEventListener("dragleave", () => zone.classList.remove("over"));
-  zone.addEventListener("drop", (e) => {
-    e.preventDefault(); zone.classList.remove("over");
-    plan.front = side; paintSeats();
-  });
-  document.getElementById("seatBoard").appendChild(zone);
-});
-let dragIsFront = false;
-document.addEventListener("dragstart", (e) => {
-  dragIsFront = !!(e.target && e.target.id === "seatFront");
-  if (dragIsFront) document.getElementById("seatBoard").classList.add("moving-front");
-});
-document.addEventListener("dragend", () => {
-  dragIsFront = false;
-  const b = document.getElementById("seatBoard");
-  if (b) b.classList.remove("moving-front");
-});
-
 $("seatPool").addEventListener("dragover", (e) => { e.preventDefault(); $("seatPool").classList.add("over"); });
 $("seatPool").addEventListener("dragleave", () => $("seatPool").classList.remove("over"));
 $("seatPool").addEventListener("drop", (e) => {
@@ -313,23 +287,20 @@ $("seatPool").addEventListener("drop", (e) => {
   const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
   if (who){ delete plan.seats[who]; paintSeats(); }
 });
-on("addRow", "click", () => { plan.rows = Math.min(16, plan.rows + 1); paintSeats(); });
-on("addCol", "click", () => { plan.cols = Math.min(16, plan.cols + 1); paintSeats(); });
-/* Taking a row or column away puts anyone sitting there back in the column,
-   rather than losing them off the edge of the plan. */
-on("lessRow", "click", () => {
-  if (plan.rows <= 1) return;
-  plan.rows--;
-  Object.keys(plan.seats).forEach(u => { if (plan.seats[u].r >= plan.rows) delete plan.seats[u]; });
-  paintSeats();
+on("addSize", "click", () => { plan.size = Math.min(160, plan.size + 12); paintSeats(); });
+on("lessSize", "click", () => { plan.size = Math.max(60, plan.size - 12); paintSeats(); });
+on("clearSeats", "click", () => {
+  openModal(box => {
+    box.appendChild(el("h2","","Clear the seating plan?"));
+    box.appendChild(el("p","modal-text","Everyone goes back to the waiting column. Nothing else is affected."));
+    const yes = el("button","btn-primary modal-cta","Clear the plan");
+    yes.style.background = "var(--red)";
+    yes.addEventListener("click", () => { plan.seats = {}; paintSeats(); closeModal(); });
+    const no = el("button","btn-ghost modal-stay","Keep it");
+    no.addEventListener("click", closeModal);
+    box.appendChild(yes); box.appendChild(no);
+  });
 });
-on("lessCol", "click", () => {
-  if (plan.cols <= 1) return;
-  plan.cols--;
-  Object.keys(plan.seats).forEach(u => { if (plan.seats[u].c >= plan.cols) delete plan.seats[u]; });
-  paintSeats();
-});
-on("clearSeats", "click", () => { plan.seats = {}; paintSeats(); });
 on("saveSeats", "click", async () => {
   $("seatMsg").textContent = "Saving\u2026";
   try{
@@ -353,8 +324,13 @@ function paintPicker(){
   });
   sel.value = String(idx);
 }
+window.addEventListener("message", (e) => {
+  if (e && e.data && typeof e.data.hubWorkStep === "number") lastStep = e.data.hubWorkStep;
+});
 function showStudent(i, step){
   if (i < 0 || i >= roster.length) return;
+  /* stay on the same page when moving to the next student */
+  if (step === undefined) step = lastStep;
   idx = i;
   paintPicker();
   const st = roster[i];
@@ -367,7 +343,7 @@ function showStudent(i, step){
   }));
   $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
     "&view=1&embed=1" + (allPages ? "&all=1" : "") +
-    (step !== undefined ? "&step=" + step : "") + "&t=" + Date.now();
+    (step !== undefined && !allPages ? "&step=" + step : "") + "&t=" + Date.now();
   $("fbWho").textContent = st.display_name + (row ? "" : " \u2014 nothing saved yet");
   loadFeedback(row);
   paintTaskNav();
@@ -392,7 +368,7 @@ function paintTaskNav(){
   blocks.forEach((b, i) => {
     const btn = el("button","tasknav-btn", String(i + 1));
     btn.title = b.title || b.type;
-    btn.addEventListener("click", () => showStudent(idx, i));
+    btn.addEventListener("click", () => { lastStep = i; showStudent(idx, i); });
     nav.appendChild(btn);
   });
 }

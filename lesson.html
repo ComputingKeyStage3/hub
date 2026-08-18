@@ -145,18 +145,6 @@ function parseFeedback(raw){
 }
 function showFeedback(raw){
   teacherNote = parseFeedback(raw);
-  /* The full card sits on the finished screen, but someone still working
-     should not have to finish before they can read it. */
-  if (!teacherNote) return;
-  const stage = $("stage");
-  if (!stage || stage.querySelector(".feedbackNote")) return;
-  const note = el("div","feedbackNote");
-  note.appendChild(el("b","","From your teacher"));
-  if (teacherNote.strength) note.appendChild(el("p","", "Strength: " + teacherNote.strength));
-  if (teacherNote.target) note.appendChild(el("p","", "Target: " + teacherNote.target));
-  if (teacherNote.comment) note.appendChild(el("p","", teacherNote.comment));
-  if (stage.firstChild) stage.insertBefore(note, stage.firstChild);
-  else stage.appendChild(note);
 }
 /* the card shown on the finished screen, matching an assessment's */
 function feedbackCard(f){
@@ -612,6 +600,10 @@ function showStep(i){
      back to it rather than jumping to the beginning */
   if (builderParam !== null){
     try{ sessionStorage.setItem("hub_preview_step", String(i)); }catch(e){}
+  }
+  /* the page around an embedded view keeps its place when the student changes */
+  if (embedParam !== null){
+    try{ parent.postMessage({ hubWorkStep: i }, "*"); }catch(e){}
   }
   step = Math.min(Math.max(i, 0), steps.length - 1);
   // A restored position can be ahead of what the teacher has opened.
@@ -2830,10 +2822,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   stCard.appendChild(sRow); stCard.appendChild(tRow);
   box.appendChild(stCard);
   const teacherCard = feedbackCard(teacherNote);
-  if (teacherCard){
-    teacherCard.querySelector(".sect-head").textContent = "From your teacher";
-    box.appendChild(teacherCard);
-  }
+  if (teacherCard) box.appendChild(teacherCard);
   if (teacherTools) box.appendChild(markEditor(res));   // marks stay here; feedback is in the console
 
   // response tasks for the target topic

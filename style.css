@@ -1512,7 +1512,7 @@ body.workpage .grow{flex:1}
 .seatfront{display:flex; align-items:center; justify-content:center; gap:10px;
   background:var(--bar); border:1.5px solid var(--line-2); border-radius:12px;
   font-size:13px; letter-spacing:.16em; text-transform:uppercase; font-weight:800;
-  color:var(--muted); cursor:grab; padding:10px 14px; user-select:none}
+  color:var(--muted); padding:10px 14px; user-select:none}
 .seatboard[data-front=left] .seatfront,
 .seatboard[data-front=right] .seatfront{writing-mode:vertical-rl; padding:14px 10px}
 .seatboard[data-front=left] .seatfront{transform:rotate(180deg)}
@@ -1520,24 +1520,15 @@ body.workpage .grow{flex:1}
 .seatboard[data-front=right] .frontdots{writing-mode:horizontal-tb}
 .frontdots{font-size:16px; min-height:30px; min-width:30px; padding:0}
 
-/* the edges light up while the Front bar is being dragged */
-.frontzone{display:none; position:absolute; z-index:5; border-radius:12px}
-.seatboard.moving-front .frontzone{display:block; background:rgba(220,138,62,.08);
-  border:2px dashed var(--amber)}
-.seatboard.moving-front .frontzone.over{background:rgba(220,138,62,.28)}
-.frontzone-top{top:0; left:0; right:0; height:56px}
-.frontzone-bottom{bottom:0; left:0; right:0; height:56px}
-.frontzone-left{top:0; bottom:0; left:0; width:56px}
-.frontzone-right{top:0; bottom:0; right:0; width:56px}
 
-.seatgrid{min-height:0; display:grid; gap:8px; grid-auto-rows:minmax(50px, 1fr);
+.seatgrid{min-height:0; display:grid; gap:6px; overflow:auto; justify-content:start; align-content:start;
   background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:10px}
-.seatcell{border:1.5px dashed var(--line-2); border-radius:10px; min-height:50px;
-  display:flex; padding:3px; box-sizing:border-box}
+.seatcell{border:1.5px dashed var(--line-2); border-radius:10px;
+  display:flex; padding:3px; box-sizing:border-box; aspect-ratio:1 / 1}
 .seatcell.over{border-color:var(--amber); background:rgba(220,138,62,.12)}
 .seat{flex:1; background:var(--panel); border:1.5px solid var(--line-2); border-radius:9px;
   padding:6px 8px; cursor:grab; display:flex; flex-direction:column; justify-content:center;
-  box-sizing:border-box; min-width:0}
+  box-sizing:border-box; min-width:0; overflow:hidden}
 .seat:hover{border-color:var(--amber)}
 .seat.dragging{opacity:.45}
 .seat b{font-size:13.5px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -1583,3 +1574,13 @@ body.workpage .grow{flex:1}
   body.workpage .homebar{flex-wrap:wrap}
   .worktabs{order:3; width:100%}
 }
+
+
+/* a menu near the bottom of the window opens upwards, so it is never cut off */
+.menu{max-height:min(60vh, 340px); overflow-y:auto}
+.menuwrap.up .menu{top:auto; bottom:calc(100% + 4px)}
+.seatboard[data-front=bottom] .menu,
+.seatboard[data-front=right] .menu{top:auto; bottom:calc(100% + 4px)}
+.seatboard[data-front=left] .seatfront .menuwrap,
+.seatboard[data-front=right] .seatfront .menuwrap{writing-mode:horizontal-tb}
+.seatboard[data-front=left] .menu{top:auto; bottom:calc(100% + 4px)}
