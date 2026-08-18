@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="richtext.js"></script>
+<script src="menus.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -21,6 +22,7 @@
 <div class="modeswitch">
   <button class="on" id="modeLesson">Lesson</button>
   <button id="modeAssess">Assessment</button>
+  <button id="modePractical">Practical assessment</button>
 </div>
 
 <div class="build-top">
@@ -117,7 +119,7 @@ function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, "").trim(); }
 
 /* ---------------- the lesson being built ---------------- */
-let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, topics:{}, responses:{}, extensions:[], blocks:[] };
+let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical:false, topics:{}, responses:{}, extensions:[], blocks:[] };
 
 const BLANK = {
   text:     () => ({ type:"text", heading:"", html:"" }),
@@ -240,8 +242,16 @@ function compile(){
   if (lesson.intro) out.intro = lesson.intro;
   if (lesson.unit) out.unit = lesson.unit;
   if (lesson.year) out.year = lesson.year;
+  if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
+  if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
   if (lesson.year) out.year = lesson.year;
-  if (lesson.assessment){
+  if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
+  if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
+  if (lesson.practical){
+    out.practical = true;
+    out.assessment = true;      // students and teachers treat it as an assessment
+  }
+  if (lesson.assessment || lesson.practical){
     out.assessment = true;
     const topics = {};
     Object.keys(lesson.topics || {}).forEach(k => {
@@ -386,6 +396,7 @@ function compileOne(b, id, target){
 /* ---------------- drawing the cards ---------------- */
 let dragFrom = null;
 let openPage = 0;          // the page new tasks join
+let lastAddedAt = -1;      // where the newest task landed, so we can scroll to it
 let listWired = false;
 function wireList(){
   if (listWired) return;
@@ -412,10 +423,10 @@ function render(){
   firstPageOpen();
   const list = $("list"); list.innerHTML = "";
   /* an assessment is three pages: its questions, its feedback, its follow-up */
-  if (lesson.assessment && assessTab === "targets" && !respEditing){
+  if ((lesson.assessment || lesson.practical) && assessTab === "targets" && !respEditing){
     paintTargets(list); saveDraft(); return;
   }
-  if (lesson.assessment && assessTab === "responses" && !respEditing){
+  if ((lesson.assessment || lesson.practical) && assessTab === "responses" && !respEditing){
     paintResponseTopics(list); saveDraft(); return;
   }
   if (respEditing){
@@ -625,12 +636,11 @@ function card(b, i, arr){
   }
 
   if (b.type === "text"){
-    F("Heading (optional)", "heading", { placeholder:"Leave empty for no heading" });
-    R("Paragraph", "html", { rows:5, placeholder:"Type here. Use the buttons above to make words bold, italic or coloured." });
+    F("Heading (optional)", "heading");
+    R("Paragraph", "html", { rows:5 });
   }
   if (b.type === "picture"){
-    F("Address of the picture", "url", { placeholder:"https://…/diagram.png",
-      help:"Right-click a picture on the web and choose \u201cCopy image address\u201d." });
+    F("Address of the picture", "url", { help:"Right-click a picture on the web and choose \u201cCopy image address\u201d." });
     if (b.url){
       const prev = el("div","bfield");
       const img = el("img","bpreview"); img.src = b.url; img.alt = "";
@@ -642,8 +652,8 @@ function card(b, i, arr){
     F("Instruction above it (optional)", "note");
   }
   if (b.type === "pastelink"){
-    F("Heading (optional)", "heading", { placeholder:"Paste your link" });
-    F("What should they paste?", "task", { area:true, rows:2, placeholder:"Paste the link to your finished Scratch project." });
+    F("Heading (optional)", "heading");
+    F("What should they paste?", "task", { area:true, rows:2 });
   }
   if (b.type === "code"){
     const w = el("div","bfield");
@@ -669,7 +679,7 @@ function card(b, i, arr){
     body.appendChild(w);
   }
   if (b.type === "web"){
-    F("Heading (optional)", "title", { placeholder:"Build a page" });
+    F("Heading (optional)", "title");
     F("Subheading (optional)", "task", { area:true, rows:2 });
     const fw = el("div","bfield");
     fw.appendChild(el("label","","Which files can they use?"));
@@ -691,36 +701,35 @@ function card(b, i, arr){
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
     toggleRow([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true],
-               ["addFiles","Students can add files", false]]);
-    F("Code must contain (optional)", "expect", { placeholder:"h1" });
+               ["addFiles","Students can add files", false], ["required","Run required", true]]);
+    F("Code must contain (optional)", "expect");
   }
   if (b.type === "ide"){
-    F("Heading (optional)", "title", { placeholder:"Investigate" });
-    F("Subheading (optional)", "task", { area:true, rows:2, placeholder:"Run this, then add your own message on line 3." });
+    F("Heading (optional)", "title");
+    F("Subheading (optional)", "task", { area:true, rows:2 });
     F("Starter code", "starter", { area:true, rows:7, mono:true });
     toggleRow([["turtle","Turtle canvas", false], ["run","Running", true],
-               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]);
-    F("Output must contain (optional)", "expect", { placeholder:"Learning to program",
-      help:"Leave empty unless you want Continue to wait for the right output." });
-  }
-  if (["question","short","image","pastelink","ide","web","quiz","blanks","order","mc","link","embed","frame","caesar","password"].includes(b.type)){
-    const w = el("div","bfield");
-    w.appendChild(el("label","","Before they can continue"));
-    const on = b.required !== false;
-    const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""),
-                   on ? "Must be done first" : "Can be skipped");
-    btn.title = on ? "Students cannot continue until this is done"
-                   : "Students can continue without doing this";
-    btn.addEventListener("click", () => { b.required = !on; render(); schedulePreview(); });
-    w.appendChild(btn);
-    body.appendChild(w);
+               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true],
+               ["required","Run required", true]]);
+    F("Output must contain (optional)", "expect", { help:"Leave empty unless you want Continue to wait for the right output." });
   }
   if (b.type === "question"){
-    F("Heading (optional)", "heading", { placeholder:"Leave empty for no heading" });
-    R("Context (optional)", "context", { rows:3, placeholder:"Anything they need to know before the question." });
-    F("The question", "prompt", { area:true, rows:2, placeholder:"What is the purpose of the print function?",
-      help:"This is shown larger than the context, so it stands out." });
-    F("Roughly how many words", "minWords", { num:true });
+    F("Heading (optional)", "heading");
+    R("Context (optional)", "context", { rows:3 });
+    F("The question", "prompt", { area:true, rows:2, help:"This is shown larger than the context, so it stands out." });
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Options"));
+    const row = el("div","brow");
+    const on = b.required !== false;
+    const nudge = el("button","btn-ghost bmini2" + (on ? " right" : ""),
+                     "Nudge for an answer: " + (on ? "on" : "off"));
+    nudge.title = on ? "They are encouraged to write more before continuing"
+                     : "They can continue whatever they have written";
+    nudge.addEventListener("click", () => { b.required = !on; render(); schedulePreview(); });
+    row.appendChild(nudge);
+    w.appendChild(row);
+    body.appendChild(w);
+    F("Recommended word count", "minWords", { num:true });
   }
   if (b.type === "quiz"){
     if (!b.questions) b.questions = [{ q:"", options:["",""], answer:0, hint:"" }];
@@ -807,18 +816,18 @@ function card(b, i, arr){
     body.appendChild(pick);
   }
   if (b.type === "web"){
-    F("Heading (optional)", "title", { placeholder:"Build a web page" });
+    F("Heading (optional)", "title");
     F("Subheading (optional)", "task", { area:true, rows:2 });
     F("index.html", "html", { area:true, rows:7, mono:true });
     F("style.css", "css", { area:true, rows:6, mono:true });
     F("script.js", "js", { area:true, rows:5, mono:true });
     toggleRow([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true]]);
-    F("Their code must contain (optional)", "expect", { placeholder:"<h1>" });
+    F("Their code must contain (optional)", "expect");
   }
   if (b.type === "page"){
-    F("Title", "title", { placeholder:"Output a message to the screen" });
-    F("Subtitle", "task", { area:true, rows:2, placeholder:"Read the explanation, run the code, then answer the questions." });
+    F("Title", "title");
+    F("Subtitle", "task", { area:true, rows:2 });
 
     const inner = el("div","pagekids");
     if (!b.blocks) b.blocks = [];
@@ -853,27 +862,26 @@ function card(b, i, arr){
   if (b.type === "image"){ F("Heading (optional)", "title"); F("Instruction (optional)", "task", { area:true, rows:2 }); }
   if (b.type === "frame"){
     F("Heading (optional)", "heading");
-    F("Address of the page", "url", { placeholder:"https://…" });
+    F("Address of the page", "url");
     F("Instruction (optional)", "task", { area:true, rows:2 });
-    F("Width", "width", { placeholder:"100%" , help:"A number of pixels, or something like 100%." });
-    F("Height", "height", { placeholder:"520" });
+    F("Width", "width", { help:"A number of pixels, or something like 100%." });
+    F("Height", "height");
     toggleRow([["confirm","Confirmation", false]]);
   }
   if (b.type === "embed"){
-    F("YouTube link, video id, or the whole embed code", "url", { area:true, rows:2,
-      placeholder:"https://www.youtube.com/watch?v=xi_tJdq_YNY" });
+    F("YouTube link, video id, or the whole embed code", "url", { area:true, rows:2 });
     const shown = toEmbed(b.url);
     const note = el("p","bhelp", shown ? "Will be embedded as: " + shown : "Paste any YouTube address \u2014 it gets tidied up automatically.");
     if (shown && !/youtube\.com\/embed\//.test(shown)) note.className = "bhelp warn";
     body.appendChild(note);
     F("Heading (optional)", "title");
-    F("Subheading (optional)", "note", { area:true, rows:2, placeholder:"Headphones on. Watch it all." });
+    F("Subheading (optional)", "note", { area:true, rows:2 });
     toggleRow([["confirm","Confirmation", false]]);
   }
   if (b.type === "link"){
-    F("Heading (optional)", "heading", { placeholder:"Have a look at this site" });
-    F("Address", "url", { placeholder:"https://..." });
-    F("Button label", "title", { placeholder:"Open BBC Bitesize" });
+    F("Heading (optional)", "heading");
+    F("Address", "url");
+    F("Button label", "title");
     F("What to do there (optional)", "task", { area:true, rows:2 });
     toggleRow([["confirm","Confirmation", false]]);
   }
@@ -886,7 +894,7 @@ function card(b, i, arr){
     F("Instruction (optional)", "prompt");
     F("Sentence with gaps", "text", { area:true, rows:3,
       help:"Put the answers in double brackets: The [[cat]] sat on the [[mat]]." });
-    F("Extra wrong words for the dropdowns", "distractors", { placeholder:"dog, hat" });
+    F("Extra wrong words for the dropdowns", "distractors");
     if (lesson.assessment) F("Topic tag", "topic");
   }
   if (b.type === "order"){
@@ -897,8 +905,7 @@ function card(b, i, arr){
   if (b.type === "short"){
     F("Question", "prompt", { area:true, rows:2 });
     F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by , — e.g. loop, repeat; count" });
-    F("What each group means", "keywordLabels", { placeholder:"says it repeats; says what is counted",
-      help:"One phrase per group, separated by ; — students see these when they check their answer." });
+    F("What each group means", "keywordLabels", { help:"One phrase per group, separated by ; — students see these when they check their answer." });
     F("Model answer", "model", { area:true, rows:2 });
     if (lesson.assessment) F("Topic tag", "topic");
   }
@@ -937,13 +944,19 @@ function askDelete(what, done){
 }
 
 /* ---------- lesson or assessment ---------- */
-function setMode(assess){
+/* Three kinds: a lesson, a marked assessment, and a practical one — built
+   like a lesson but marked by hand and shown to students as an assessment. */
+function setMode(assess, practical){
   lesson.assessment = !!assess;
-  $("assessTabs").hidden = !assess;
+  lesson.practical = !!practical;
+  if (practical) lesson.assessment = false;
+  $("modePractical").classList.toggle("on", !!practical);
+  $("assessTabs").hidden = !assess && !practical;
+  $("tabQuestions").textContent = practical ? "Tasks" : "Questions";
   if (!assess){ assessTab = "questions"; respEditing = null; }
-  $("modeLesson").classList.toggle("on", !assess);
+  $("modeLesson").classList.toggle("on", !assess && !practical);
   $("modeAssess").classList.toggle("on", assess);
-  $("palLesson").hidden = !!assess;
+  $("palLesson").hidden = !!assess;          // a practical uses the lesson palette
   $("palAssess").hidden = !assess;
 
   saveDraft(); render(); schedulePreview();
@@ -954,13 +967,14 @@ on("modeLesson", "click", () => {
       box.appendChild(el("h2","","Switch to a lesson?"));
       box.appendChild(el("p","modal-text","Your questions stay, but assessment marking is switched off."));
       const yes = el("button","btn-primary modal-cta","Switch");
-      yes.addEventListener("click", () => { closeModal(); setMode(false); });
+      yes.addEventListener("click", () => { closeModal(); setMode(false, false); });
       const no = el("button","btn-ghost modal-stay","Cancel"); no.addEventListener("click", closeModal);
       box.appendChild(yes); box.appendChild(no);
     });
-  } else setMode(false);
+  } else setMode(false, false);
 });
-on("modeAssess", "click", () => setMode(true));
+on("modeAssess", "click", () => setMode(true, false));
+on("modePractical", "click", () => setMode(false, true));
 function setAssessTab(which){
   assessTab = which;
   respEditing = null;
@@ -1012,13 +1026,15 @@ function paintTargets(into){
     card2.appendChild(body);
     into.appendChild(card2);
   });
-  const w = el("div","bfield");
-  w.appendChild(el("label","","When a student gets everything right"));
-  const inp = el("input"); inp.value = lesson.perfectTarget || "";
-  inp.placeholder = "Full marks — stretch yourself with the tasks below.";
-  inp.addEventListener("input", () => { lesson.perfectTarget = inp.value; saveDraft(); schedulePreview(); });
-  w.appendChild(inp);
-  into.appendChild(w);
+  [["perfectTarget","Target for when a student gets everything right"],
+   ["zeroStrength","Strength for when a student gets everything wrong"]].forEach(pair => {
+    const w = el("div","bfield");
+    w.appendChild(el("label","", pair[1]));
+    const inp = el("textarea"); inp.rows = 2; inp.value = lesson[pair[0]] || "";
+    inp.addEventListener("input", () => { lesson[pair[0]] = inp.value; saveDraft(); schedulePreview(); });
+    w.appendChild(inp);
+    into.appendChild(w);
+  });
 }
 
 /* the list of topics, each opening its own set of tasks */
@@ -1081,10 +1097,10 @@ function taskRows(into, arr, topic){
 /* the same choice of tasks as anywhere else in a lesson */
 function addButtons(arr, topic){
   const add = el("div","pageadd");
-  [["text","Paragraph"],["picture","Image"],["question","Written answer"],["quiz","Quiz"],
-   ["code","Coding task"],["blanks","Fill the gaps"],["order","Put in order"],["short","Short answer"],
-   ["image","Screenshot"],["embed","Video"],["link","Link to a site"],["pastelink","Paste a link"],
-   ["frame","Embedded page"]].forEach(pair => {
+  [["page","Page of tasks"],["text","Paragraph"],["picture","Image"],["question","Written answer"],
+   ["quiz","Quiz"],["code","Coding task"],["blanks","Fill the gaps"],["order","Put in order"],
+   ["short","Short answer"],["image","Screenshot"],["embed","Video"],["link","Link to a site"],
+   ["pastelink","Paste a link"],["frame","Embedded page"]].forEach(pair => {
     const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
     btn.addEventListener("click", () => {
       arr.push(BLANK[pair[0]]());
@@ -1125,11 +1141,13 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
     if (respEditing){                     // a response or extension set is open
       const arr = respEditing === "__ext" ? lesson.extensions : lesson.responses[respEditing];
       arr.push(BLANK[kind]());
+      lastAddedAt = arr.length - 1;
       render(); schedulePreview();
       return;
     }
     if (kind === "page" || lesson.assessment){
       lesson.blocks.push(BLANK[kind]());
+      lastAddedAt = lesson.blocks.length - 1;
     } else {
       /* Lessons are made of pages, so a task always goes on one. It joins the
          page you last touched, or a new page if there isn't one yet. */
@@ -1147,11 +1165,17 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
         openPage = lesson.blocks.length - 1;
       }
       page.blocks.push(BLANK[kind]());
+      lastAddedAt = -1;                  // it is inside a page, so the page is the target
     }
     render(); schedulePreview();
+    /* go to the task that was just added, wherever it landed */
     const cards = $("list").querySelectorAll(".bcard");
-    const last = cards[cards.length - 1];
-    if (last && last.scrollIntoView) last.scrollIntoView({ behavior:"smooth", block:"center" });
+    const target = (lastAddedAt >= 0 && cards[lastAddedAt]) ? cards[lastAddedAt] : cards[cards.length - 1];
+    if (target && target.scrollIntoView) target.scrollIntoView({ behavior:"smooth", block:"center" });
+    if (target && target.classList){
+      target.classList.add("justopened");
+      setTimeout(() => target.classList.remove("justopened"), 1600);
+    }
   });
 });
 function showTitle(){
@@ -1165,8 +1189,7 @@ on("titleBtn", "click", () => {
     const w1 = el("div","bfield");
     w1.appendChild(el("label","","Lesson title"));
     const t1 = el("input"); t1.value = lesson.title || "";
-    t1.placeholder = "e.g. 8.1.1 Intro to Python";
-    w1.appendChild(t1); box.appendChild(w1);
+        w1.appendChild(t1); box.appendChild(w1);
     const w2 = el("div","bfield");
     w2.appendChild(el("label","","One line for the home page"));
     const t2 = el("input"); t2.value = lesson.intro || "";
@@ -1281,11 +1304,12 @@ on("prevBtn", "click", refreshPreview);
 on("moreBtn", "click", (e) => {
   e.stopPropagation();
   const m = $("moreMenu"), b = $("moreBtn");
-  if (b.getBoundingClientRect && m.parentNode && m.parentNode.classList){
-    const box = b.getBoundingClientRect();
-    m.parentNode.classList.toggle("up", (window.innerHeight - box.bottom) < 220);
-  }
-  m.hidden = !m.hidden;
+  if (!m.hidden){ m.hidden = true; return; }
+  const items = [["Save a copy", () => $("copyBtn").click()],
+                 ["JSON", () => $("jsonBtn").click()],
+                 ["Delete lesson", () => $("delLesson").click()]];
+  if (window.openMenu) window.openMenu(b, m, "More", items);
+  else m.hidden = false;
 });
 /* a tap on a menu item must not be swallowed by the closing of the menu */
 document.addEventListener("pointerdown", (e) => {
@@ -1522,7 +1546,7 @@ async function loadUnitsAndMaybeLesson(){
     
     showTitle(); 
     paintPickers();
-    setMode(!!lesson.assessment);
+    setMode(!!lesson.assessment && !lesson.practical, !!lesson.practical);
     render(); refreshPreview();
   }catch(e){ say("Could not open that lesson", e.message); }
 }
@@ -1530,7 +1554,8 @@ async function loadUnitsAndMaybeLesson(){
 /* turn a saved lesson file back into editable cards */
 function fromCompiled(data, meta){
   const out = { title: data.title || (meta && meta.title) || "", intro: data.intro || "",
-                unit: data.unit || (meta && meta.unit) || "", year: data.year || "", assessment: !!data.assessment,
+                unit: data.unit || (meta && meta.unit) || "", year: data.year || "",
+                assessment: !!data.assessment && !data.practical, practical: !!data.practical,
                 topics: data.topics || {}, responses: {}, extensions: [], blocks: [] };
   const back = (b) => {
     if (b.type === "page") return { type:"page", title:b.title || "", task:b.task || "", blocks:(b.blocks || []).map(back) };
@@ -1567,7 +1592,7 @@ if (!lesson.topics) lesson.topics = {};
 
 
 paintPickers();
-setMode(!!lesson.assessment);
+setMode(!!lesson.assessment && !lesson.practical, !!lesson.practical);
 loadUnitsAndMaybeLesson();
 render();
 refreshPreview();

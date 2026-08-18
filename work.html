@@ -24,9 +24,17 @@
   <div class="toolrow">
     <button class="btn-primary" id="saveSeats">Save seating plan</button>
     <button class="btn-ghost" id="clearSeats">Clear the plan</button>
-    <span class="sizer"><b>Square size</b>
-      <button class="btn-ghost iconbtn" id="lessSize" title="Smaller squares">&minus;</button>
-      <button class="btn-ghost iconbtn" id="addSize" title="Bigger squares">+</button>
+    <span class="sizer"><b>Zoom</b>
+      <button class="btn-ghost iconbtn" id="lessSize" title="Zoom out">&minus;</button>
+      <button class="btn-ghost iconbtn" id="addSize" title="Zoom in">+</button>
+    </span>
+    <span class="sizer"><b>Width</b>
+      <button class="btn-ghost iconbtn" id="lessW" title="Narrower">&minus;</button>
+      <button class="btn-ghost iconbtn" id="addW" title="Wider">+</button>
+    </span>
+    <span class="sizer"><b>Height</b>
+      <button class="btn-ghost iconbtn" id="lessH" title="Shorter">&minus;</button>
+      <button class="btn-ghost iconbtn" id="addH" title="Taller">+</button>
     </span>
     <span class="hint" id="seatMsg"></span>
   </div>
@@ -64,11 +72,23 @@
       <h3>Feedback</h3>
       <p class="hint" id="fbWho"></p>
       <div class="bfield"><label>Comment</label><textarea id="fbComment" rows="5"></textarea></div>
-      <div class="bfield" id="fbStrengthWrap" hidden><label>Strength</label><textarea id="fbStrength" rows="3"></textarea></div>
-      <div class="bfield" id="fbTargetWrap" hidden><label>Target</label><textarea id="fbTarget" rows="3"></textarea></div>
+      <div class="bfield" id="fbStrengthWrap" hidden>
+        <label>Strength</label><textarea id="fbStrength" rows="3"></textarea>
+        <div class="bank" id="bankStrength"></div>
+      </div>
+      <div class="bfield" id="fbTargetWrap" hidden>
+        <label>Target</label><textarea id="fbTarget" rows="3"></textarea>
+        <div class="bank" id="bankTarget"></div>
+      </div>
       <div class="toolrow">
         <button class="btn-ghost" id="addStrength">+ Strength</button>
         <button class="btn-ghost" id="addTarget">+ Target</button>
+      </div>
+      <div class="bfield" id="markWrap" hidden>
+        <label>Mark</label>
+        <span class="markrow2">
+          <input id="fbScore" type="number" min="0"> <span>out of</span> <input id="fbOutOf" type="number" min="1">
+        </span>
       </div>
       <button class="btn-primary wide" id="saveFb">Save feedback</button>
       <p class="hint" id="fbMsg"></p>
@@ -78,6 +98,7 @@
 
 <div class="modal-back" id="mBack" hidden><div class="modal" id="mBox"></div></div>
 
+<script src="menus.js"></script>
 <script src="settings.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -120,7 +141,7 @@ let roster = [];        // everyone in the class, alphabetical
 let rows = [];          // what they have saved
 let idx = 0;
 let allPages = false;
-let plan = { size: 96, seats: {}, front: "bottom" };   // size is how big one square is
+let plan = { size: 96, w: 1, h: 1, seats: {}, front: "bottom" };   // size is the zoom; w and h shape each place
 const SPAN = 20;                                      // how far the board goes in each direction
 let lastStep = 0;                                     // the page being looked at
 
@@ -217,8 +238,8 @@ function paintSeats(){
   pool.innerHTML = ""; grid.innerHTML = "";
   /* One big board of squares. The size setting decides how many fit on the
      screen — about ten across at the default. */
-  grid.style.gridTemplateColumns = "repeat(" + SPAN + ", " + plan.size + "px)";
-  grid.style.gridAutoRows = plan.size + "px";
+  grid.style.gridTemplateColumns = "repeat(" + SPAN + ", " + Math.round(plan.size * (plan.w || 1)) + "px)";
+  grid.style.gridAutoRows = Math.round(plan.size * (plan.h || 1)) + "px";
   for (let r = 0; r < SPAN; r++){
     for (let c = 0; c < SPAN; c++){
       const cell = el("div","seatcell");
@@ -265,13 +286,11 @@ function paintFront(){
 on("frontDots", "click", (e) => {
   e.stopPropagation();
   const m = $("frontMenu");
-  const wrap = m.parentNode;
-  /* open upwards when there is not room below, so nothing is cut off */
-  if (wrap && wrap.classList && $("frontDots").getBoundingClientRect){
-    const box = $("frontDots").getBoundingClientRect();
-    wrap.classList.toggle("up", (window.innerHeight - box.bottom) < 220);
-  }
-  m.hidden = !m.hidden;
+  if (!m.hidden){ m.hidden = true; return; }
+  const items = SIDES.filter(p => p[0] !== (plan.front || "bottom"))
+                     .map(p => [p[1], () => { plan.front = p[0]; paintSeats(); }]);
+  if (window.openMenu) window.openMenu($("frontDots"), m, "Move the front", items);
+  else m.hidden = false;
 });
 document.addEventListener("pointerdown", (e) => {
   const m = $("frontMenu"), b = $("frontDots");
@@ -287,8 +306,12 @@ $("seatPool").addEventListener("drop", (e) => {
   const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
   if (who){ delete plan.seats[who]; paintSeats(); }
 });
-on("addSize", "click", () => { plan.size = Math.min(160, plan.size + 12); paintSeats(); });
-on("lessSize", "click", () => { plan.size = Math.max(60, plan.size - 12); paintSeats(); });
+on("addSize", "click", () => { plan.size = Math.min(180, plan.size + 12); paintSeats(); });
+on("lessSize", "click", () => { plan.size = Math.max(56, plan.size - 12); paintSeats(); });
+on("addW", "click", () => { plan.w = Math.min(3, (plan.w || 1) + 0.25); paintSeats(); });
+on("lessW", "click", () => { plan.w = Math.max(0.6, (plan.w || 1) - 0.25); paintSeats(); });
+on("addH", "click", () => { plan.h = Math.min(3, (plan.h || 1) + 0.25); paintSeats(); });
+on("lessH", "click", () => { plan.h = Math.max(0.6, (plan.h || 1) - 0.25); paintSeats(); });
 on("clearSeats", "click", () => {
   openModal(box => {
     box.appendChild(el("h2","","Clear the seating plan?"));
@@ -345,6 +368,13 @@ function showStudent(i, step){
     "&view=1&embed=1" + (allPages ? "&all=1" : "") +
     (step !== undefined && !allPages ? "&step=" + step : "") + "&t=" + Date.now();
   $("fbWho").textContent = st.display_name + (row ? "" : " \u2014 nothing saved yet");
+  /* a practical assessment is marked by hand, so the boxes appear */
+  $("markWrap").hidden = !(lessonJson && lessonJson.practical);
+  if (lessonJson && lessonJson.practical){
+    const mk = markFor(st.username);
+    $("fbScore").value = mk ? mk.score : "";
+    $("fbOutOf").value = mk ? mk.outOf : "";
+  }
   loadFeedback(row);
   paintTaskNav();
 }
@@ -390,6 +420,7 @@ function loadFeedback(row){
   $("fbStrengthWrap").hidden = !f.strength;
   $("fbTargetWrap").hidden = !f.target;
   paintFbButtons();
+  paintBank("Strength"); paintBank("Target");
   $("fbMsg").textContent = "";
 }
 /* Hiding one keeps whatever was typed, so it comes back if they change
@@ -398,7 +429,42 @@ function toggleFb(which){
   const wrap = $("fb" + which + "Wrap");
   wrap.hidden = !wrap.hidden;
   paintFbButtons();
-  if (!wrap.hidden) $("fb" + which).focus();
+  if (!wrap.hidden){ paintBank(which); $("fb" + which).focus(); }
+}
+/* The sentences written in the builder, offered as a starting point. Picking
+   one fills the box, which the teacher can then reword. */
+function bankFor(which){
+  const topics = (lessonJson && lessonJson.topics) || {};
+  const out = [];
+  Object.keys(topics).forEach(k => {
+    const t = topics[k] || {};
+    const line = which === "Strength" ? t.strength : t.target;
+    if (line) out.push({ topic: t.label || k, line: line });
+  });
+  if (which === "Target" && lessonJson && lessonJson.perfectTarget)
+    out.push({ topic: "Full marks", line: lessonJson.perfectTarget });
+  if (which === "Strength" && lessonJson && lessonJson.zeroStrength)
+    out.push({ topic: "Made a start", line: lessonJson.zeroStrength });
+  return out;
+}
+function paintBank(which){
+  const holder = $("bank" + which);
+  if (!holder) return;
+  holder.innerHTML = "";
+  const items = bankFor(which);
+  if (!items.length) return;
+  holder.appendChild(el("p","bankhead", "From your bank"));
+  items.forEach(it => {
+    const b = el("button","bankpick");
+    b.appendChild(el("b","", it.topic));
+    b.appendChild(el("span","", it.line));
+    b.addEventListener("click", () => {
+      const box = $("fb" + which);
+      box.value = box.value.trim() ? (box.value.trim() + " " + it.line) : it.line;
+      box.focus();
+    });
+    holder.appendChild(b);
+  });
 }
 on("addStrength", "click", () => toggleFb("Strength"));
 on("addTarget", "click", () => toggleFb("Target"));
@@ -423,6 +489,8 @@ function askMissing(missing, given){
     box.appendChild(add); box.appendChild(anyway);
   });
 }
+let marks = {};
+function markFor(user){ return marks[user] || null; }
 async function saveFeedback(){
   const st = roster[idx];
   if (!st) return;
@@ -434,6 +502,14 @@ async function saveFeedback(){
                              target: showing("Target") ? $("fbTarget").value : "",
                              text: $("fbComment").value }) });
     if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
+    if (lessonJson && lessonJson.practical && $("fbScore").value !== ""){
+      const score = parseInt($("fbScore").value, 10) || 0;
+      const outOf = Math.max(1, parseInt($("fbOutOf").value, 10) || 1);
+      await fetch(API + "/api/teacher/set-mark", { method:"POST", headers: HJ(),
+        body: JSON.stringify({ username: st.username, lesson: lessonId, overrides: {},
+                               score: score, outOf: outOf }) });
+      marks[st.username] = { score: score, outOf: outOf };
+    }
     let row = rows.find(x => x.username === st.username);
     if (!row){ row = { username: st.username, display_name: st.display_name, data: {} }; rows.push(row); }
     row.feedback = JSON.stringify({

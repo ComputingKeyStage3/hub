@@ -1521,10 +1521,10 @@ body.workpage .grow{flex:1}
 .frontdots{font-size:16px; min-height:30px; min-width:30px; padding:0}
 
 
-.seatgrid{min-height:0; display:grid; gap:6px; overflow:auto; justify-content:start; align-content:start;
+.seatgrid{min-height:0; display:grid; gap:4px; overflow:auto; justify-content:start; align-content:start;
   background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:10px}
-.seatcell{border:1.5px dashed var(--line-2); border-radius:10px;
-  display:flex; padding:3px; box-sizing:border-box; aspect-ratio:1 / 1}
+.seatcell{border:none; border-radius:10px; display:flex; padding:3px; box-sizing:border-box}
+.seatcell.over{background:rgba(220,138,62,.18)}
 .seatcell.over{border-color:var(--amber); background:rgba(220,138,62,.12)}
 .seat{flex:1; background:var(--panel); border:1.5px solid var(--line-2); border-radius:9px;
   padding:6px 8px; cursor:grab; display:flex; flex-direction:column; justify-content:center;
@@ -1584,3 +1584,41 @@ body.workpage .grow{flex:1}
 .seatboard[data-front=left] .seatfront .menuwrap,
 .seatboard[data-front=right] .seatfront .menuwrap{writing-mode:horizontal-tb}
 .seatboard[data-front=left] .menu{top:auto; bottom:calc(100% + 4px)}
+
+
+/* a menu placed wherever it fits */
+.menuwrap.left .menu{top:0; right:calc(100% + 6px); left:auto; bottom:auto}
+.menuwrap.right .menu{top:0; left:calc(100% + 6px); right:auto; bottom:auto}
+.menu-modal-item{display:block; width:100%; text-align:left; padding:14px 16px; margin:0 0 6px;
+  background:var(--panel-2); border:1.5px solid var(--line); border-radius:12px;
+  font-size:16px; font-family:var(--body); color:var(--text); cursor:pointer}
+.menu-modal-item:hover{border-color:var(--amber)}
+
+
+/* rich text: a proper colour picker, and buttons that show what is on */
+.rt-btn.on{background:var(--panel-2); border-color:var(--amber); color:var(--amber-dark)}
+.rt-colourwrap{position:relative; display:inline-block}
+.rt-colourbtn{display:inline-flex; flex-direction:column; align-items:center; gap:2px; line-height:1;
+  padding:4px 9px 5px}
+.rt-swatch{display:block; width:16px; height:4px; border-radius:2px; background:transparent;
+  border:1px solid var(--line-2)}
+.rt-palette{position:absolute; top:calc(100% + 4px); left:0; z-index:50; min-width:150px; padding:6px;
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
+  box-shadow:0 8px 22px rgba(0,0,0,.16); display:flex; flex-direction:column}
+.rt-swatchbtn{display:flex; align-items:center; gap:9px; padding:7px 10px; border:none; border-radius:9px;
+  background:transparent; cursor:pointer; font-family:var(--body); font-size:14.5px; color:var(--text); text-align:left}
+.rt-swatchbtn:hover{background:var(--panel-2)}
+.rt-dot{width:15px; height:15px; border-radius:50%; border:1px solid var(--line-2); flex:none}
+.rt-dot.rt-auto{background:linear-gradient(135deg, var(--text) 50%, transparent 50%)}
+
+/* the bank of strengths and targets */
+.bank{margin-top:8px}
+.bankhead{margin:0 0 6px; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+.bankpick{display:block; width:100%; text-align:left; padding:8px 11px; margin:0 0 6px;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:10px; cursor:pointer;
+  font-family:var(--body); color:var(--text)}
+.bankpick:hover{border-color:var(--amber)}
+.bankpick b{display:block; font-size:12.5px; color:var(--amber-dark)}
+.bankpick span{font-size:13.5px; color:var(--muted); line-height:1.4}
+.markrow2{display:flex; align-items:center; gap:8px}
+.markrow2 input{width:78px !important; text-align:center}

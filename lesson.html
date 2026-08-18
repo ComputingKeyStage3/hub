@@ -159,10 +159,7 @@ function feedbackCard(f){
     const r = el("p","st-target"); r.innerHTML = "<b>Target</b>";
     r.appendChild(el("span","", " " + f.target)); card.appendChild(r);
   }
-  if (f.comment){
-    const r = el("p","st-comment"); r.innerHTML = "<b>Comment</b>";
-    r.appendChild(el("span","", " " + f.comment)); card.appendChild(r);
-  }
+  if (f.comment) card.appendChild(el("p","st-comment", f.comment));
   return card;
 }
 
@@ -942,8 +939,11 @@ function rQuestion(b){
   function tick(){
     const n = wordCount(ta.value);
     const stage = n >= min ? "good" : n >= Math.ceil(min/2) ? "going" : "more";
-    counter.textContent = stage === "good" ? "Looking good!" : stage === "going" ? "Keep going!" : "Write more";
+    const started = ta.value.trim().length > 0;
+    counter.textContent = !started ? "" :
+      stage === "good" ? "Looking good!" : stage === "going" ? "Keep going!" : "Try to write more!";
     counter.dataset.stage = stage;
+    counter.hidden = !started;
   }
   ta.addEventListener("input", () => { tick(); markDirty(); });
   fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; tick(); } };
@@ -2667,7 +2667,14 @@ function computeST(byTopic){
   let best = entries[0], worst = entries[0];
   entries.forEach(e => { if (pct(e) > pct(best)) best = e; if (pct(e) < pct(worst)) worst = e; });
   const bBank = bank[best[0]] || {}, wBank = bank[worst[0]] || {};
-  const strength = bBank.strength || ("Strong work on " + (bBank.label || best[0]) + ".");
+  let strength;
+  if (pct(best) === 0){
+    /* nothing right anywhere, so praise the effort rather than a topic */
+    strength = (lesson && lesson.zeroStrength) ||
+      "You made a start on every question \u2014 that is the hardest part.";
+  } else {
+    strength = bBank.strength || ("Strong work on " + (bBank.label || best[0]) + ".");
+  }
   let target;
   if (pct(worst) === 1){
     target = (lesson && lesson.perfectTarget) || "Full marks \u2014 stretch yourself with the response tasks below.";
@@ -2889,6 +2896,19 @@ function markEditor(res){
 }
 
 function renderResponses(container, targetTopic, statusEl){
+  /* On a practical the teacher marks by hand, so there is nothing useful to
+     practise until they have looked at it. */
+  if (lesson && lesson.practical && !teacherTools){
+    const marked = teacherNote && (teacherNote.strength || teacherNote.target || teacherNote.comment);
+    if (!marked){
+      const wait = el("div","st-card");
+      wait.appendChild(el("h2","sect-head","Waiting to be marked"));
+      wait.appendChild(el("p","modal-text",
+        "Your teacher will look at this and leave you some feedback. Practice tasks appear here once they have."));
+      container.appendChild(wait);
+      return;
+    }
+  }
   const bank = (lesson && lesson.responses) || {};
   let list = bank[targetTopic] || [];
   /* Full marks means no weakest topic worth working on, so they get a topic

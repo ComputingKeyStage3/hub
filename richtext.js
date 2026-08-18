@@ -10,7 +10,7 @@
 
   const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1 };
   const COLOURS = [
-    ["Normal", ""],
+    ["Automatic", ""],
     ["Red", "#C0392B"],
     ["Orange", "#B5651D"],
     ["Green", "#2E7B54"],
@@ -76,16 +76,16 @@
       b.title = title;
       b.innerHTML = label;
       b.addEventListener("mousedown", (e) => e.preventDefault());   // keep the selection
-      b.addEventListener("click", () => { run(); box.focus(); fire(); });
+      b.addEventListener("click", () => { run(); box.focus(); fire(); if (typeof refreshState === "function") refreshState(); });
       bar.appendChild(b);
       return b;
     }
     const cmd = (name, value) => { try{ document.execCommand(name, false, value || null); }catch(e){} };
 
-    tool("<b>B</b>", "Bold (Ctrl+B)", () => cmd("bold"));
-    tool("<i>I</i>", "Italic (Ctrl+I)", () => cmd("italic"));
-    tool("<u>U</u>", "Underline (Ctrl+U)", () => cmd("underline"));
-    tool("<s>S</s>", "Strikethrough", () => cmd("strikeThrough"));
+    const boldBtn = tool("<b>B</b>", "Bold (Ctrl+B)", () => cmd("bold"));
+    const italicBtn = tool("<i>I</i>", "Italic (Ctrl+I)", () => cmd("italic"));
+    const underBtn = tool("<u>U</u>", "Underline (Ctrl+U)", () => cmd("underline"));
+    const strikeBtn = tool("<s>S</s>", "Strikethrough", () => cmd("strikeThrough"));
     tool("&bull;&nbsp;List", "Bullet list", () => cmd("insertUnorderedList"));
     tool("1.&nbsp;List", "Numbered list", () => cmd("insertOrderedList"));
     if (o.code !== false) tool("&lt;/&gt;", "Show as code", () => {
@@ -96,22 +96,67 @@
       try{ range.surroundContents(code); }catch(e){}
     });
 
-    const colour = document.createElement("select");
-    colour.className = "rt-colour";
-    colour.title = "Text colour";
+    /* the colour picker: a swatch that opens a small palette */
+    const colourWrap = document.createElement("span");
+    colourWrap.className = "rt-colourwrap";
+    const colourBtn = document.createElement("button");
+    colourBtn.type = "button";
+    colourBtn.className = "rt-btn rt-colourbtn";
+    colourBtn.title = "Text colour";
+    const swatch = document.createElement("span");
+    swatch.className = "rt-swatch";
+    colourBtn.appendChild(document.createTextNode("A"));
+    colourBtn.appendChild(swatch);
+    const palette = document.createElement("div");
+    palette.className = "rt-palette";
+    palette.hidden = true;
     COLOURS.forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c[1]; opt.textContent = c[0];
-      colour.appendChild(opt);
+      const opt = document.createElement("button");
+      opt.type = "button";
+      opt.className = "rt-swatchbtn";
+      opt.dataset.colour = c[1];
+      opt.title = c[0];
+      const dot = document.createElement("span");
+      dot.className = "rt-dot";
+      if (c[1]) dot.style.background = c[1];
+      else dot.classList.add("rt-auto");
+      opt.appendChild(dot);
+      opt.appendChild(document.createTextNode(c[0]));
+      opt.addEventListener("mousedown", (e) => e.preventDefault());
+      opt.addEventListener("click", () => {
+        restore(saved);
+        /* "Automatic" puts it back to whatever the page uses */
+        cmd("foreColor", c[1] || "currentColor");
+        if (!c[1]) clearColour();
+        palette.hidden = true;
+        box.focus(); fire(); refreshState();
+      });
+      palette.appendChild(opt);
     });
-    colour.addEventListener("mousedown", () => { saved = save(); });
-    colour.addEventListener("change", () => {
-      restore(saved);
-      cmd("foreColor", colour.value || "#3B352C");
-      colour.selectedIndex = 0;
-      box.focus(); fire();
+    colourBtn.addEventListener("mousedown", (e) => { e.preventDefault(); saved = save(); });
+    colourBtn.addEventListener("click", () => { palette.hidden = !palette.hidden; });
+    document.addEventListener("pointerdown", (e) => {
+      if (palette.hidden) return;
+      if (colourWrap.contains(e.target)) return;
+      palette.hidden = true;
     });
-    bar.appendChild(colour);
+    colourWrap.appendChild(colourBtn);
+    colourWrap.appendChild(palette);
+    bar.appendChild(colourWrap);
+
+    /* take the colour off, rather than painting the default over it */
+    function clearColour(){
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const holder = document.createElement("span");
+      try{
+        holder.appendChild(range.extractContents());
+        holder.querySelectorAll("[style]").forEach(n => { n.style.removeProperty("color"); });
+        holder.querySelectorAll("font[color]").forEach(n => { n.removeAttribute("color"); });
+        while (holder.firstChild) range.insertNode(holder.lastChild);
+      }catch(e){}
+    }
 
     tool("&#10006;", "Remove formatting", () => cmd("removeFormat"), "rt-clear");
 
@@ -139,6 +184,36 @@
       clearTimeout(timer);
       timer = setTimeout(() => { if (onChange) onChange(clean(box)); }, 200);
     }
+    /* Show which options are already on for the text under the cursor, so
+       the toolbar tells you the state rather than just setting it. */
+    const stateOf = { bold:boldBtn, italic:italicBtn, underline:underBtn, strikeThrough:strikeBtn };
+    function refreshState(){
+      Object.keys(stateOf).forEach(name => {
+        const btn = stateOf[name];
+        if (!btn) return;
+        let on = false;
+        try{ on = document.queryCommandState(name); }catch(e){}
+        btn.classList.toggle("on", !!on);
+      });
+      let colour = "";
+      try{ colour = document.queryCommandValue("foreColor") || ""; }catch(e){}
+      swatch.style.background = normaliseColour(colour) || "transparent";
+    }
+    function normaliseColour(v){
+      if (!v) return "";
+      const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(v);
+      if (!m) return v;
+      const hex = "#" + [m[1], m[2], m[3]].map(n => Number(n).toString(16).padStart(2, "0")).join("").toUpperCase();
+      /* the everyday text colour counts as no colour at all */
+      return COLOURS.some(c => c[1] && c[1].toUpperCase() === hex) ? hex : "";
+    }
+    box.addEventListener("keyup", refreshState);
+    box.addEventListener("mouseup", refreshState);
+    box.addEventListener("focus", refreshState);
+    document.addEventListener("selectionchange", () => {
+      if (document.activeElement === box) refreshState();
+    });
+
     box.addEventListener("input", fire);
     box.addEventListener("blur", () => { if (onChange) onChange(clean(box)); });
     // paste as plain words, so a copied web page cannot bring its styling in

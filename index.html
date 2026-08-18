@@ -298,9 +298,11 @@ function paintLessons(byId){
       a.className = "lessonCard";
       a.href = "lesson.html?id=" + encodeURIComponent(l.id);
 
-      const num = document.createElement("span");
-      num.className = "num"; num.textContent = String(i + 1).padStart(2, "0");
-      a.appendChild(num);
+      if (visible.length > 1){
+        const num = document.createElement("span");
+        num.className = "num"; num.textContent = String(i + 1).padStart(2, "0");
+        a.appendChild(num);
+      }
 
       const bodyEl = document.createElement("span");
       bodyEl.className = "body";
