@@ -53,13 +53,15 @@
     const grp = back.querySelector("#pwGroup");
     // only students have a password to change here
     const isStudent = !!localStorage.getItem("hub_token");
-    const onConsole = /admin\.html|author\.html/.test(location.pathname);
-    if (isStudent && API && !onConsole) grp.hidden = false;
+    const onConsole = /admin\.html|author\.html|work\.html/.test(location.pathname);
+    const isTeacher = !!localStorage.getItem("hub_tkey");
+    if (isStudent && API && !onConsole && !isTeacher) grp.hidden = false;
     if (window.settingsExtra){
       const extra = document.createElement("button");
       extra.className = "btn-ghost";
       extra.style.width = "100%";
       extra.style.marginTop = "10px";
+      extra.style.marginBottom = "10px";
       extra.textContent = window.settingsExtra.label;
       extra.addEventListener("click", () => { back.hidden = true; window.settingsExtra.run(); });
       const done = back.querySelector("#setDone");

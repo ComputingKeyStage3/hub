@@ -539,6 +539,9 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
       return;
     }
     if (wasDone){
+      /* A practical is marked by hand afterwards, so fetch the mark before
+         drawing the summary — otherwise it shows as unmarked. */
+      if (lesson.practical) await loadMyMark();
       hideLoader();
       if (lesson.assessment){ renderAssessmentComplete(false); }
       else { showLessonComplete(true); }

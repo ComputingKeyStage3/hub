@@ -171,9 +171,9 @@ async function boot(){
       });
     }catch(e){}
     if (seating && seating.seats) plan = Object.assign(plan, seating);
-    $("barTitle").textContent = "Computing Teacher Console \u2014 Viewing Student Work for " +
+    $("barTitle").textContent = "Computing Teacher Console \u2022 Viewing Student Work for " +
       (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
-    document.title = "Student work \u00b7 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
+    document.title = "Student work \u2022 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
     paintSeats();
     paintPicker();
     $("seatMsg").textContent = "";

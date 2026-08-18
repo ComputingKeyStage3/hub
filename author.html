@@ -431,9 +431,16 @@ function firstPageOpen(){
 function render(){
   wireList();
   firstPageOpen();
+  /* the palette is hidden only while writing feedback sentences */
+  const writingTargets = (lesson.assessment || lesson.practical) && assessTab === "targets" && !respEditing;
+  if (!writingTargets){
+    $("palLesson").hidden = !!lesson.assessment;
+    $("palAssess").hidden = !lesson.assessment;
+  }
   const list = $("list"); list.innerHTML = "";
   /* an assessment is three pages: its questions, its feedback, its follow-up */
   if ((lesson.assessment || lesson.practical) && assessTab === "targets" && !respEditing){
+    $("palLesson").hidden = true; $("palAssess").hidden = true;
     paintTargets(list); saveDraft(); return;
   }
   if ((lesson.assessment || lesson.practical) && assessTab === "responses" && !respEditing){
@@ -449,8 +456,21 @@ function render(){
     list.appendChild(head);
     const arr = respEditing === "__ext" ? (lesson.extensions || [])
                                         : (lesson.responses[respEditing] || []);
-    if (!arr.length) list.appendChild(el("p","hint","No tasks here yet — add one from the left."));
+    if (!arr.length){
+      const empty = el("p","hint dropzone","No tasks here yet — drag one from the left, or click it.");
+      list.appendChild(empty);
+    }
     arr.forEach((b, i) => list.appendChild(card(b, i, arr)));
+    /* dropping anywhere in the empty space adds to the end */
+    list.addEventListener("dragover", (e) => {
+      if (!canDropOn(arr)) return;
+      e.preventDefault(); list.classList.add("over");
+    });
+    list.addEventListener("dragleave", () => list.classList.remove("over"));
+    list.addEventListener("drop", (e) => {
+      e.preventDefault(); list.classList.remove("over");
+      dropInto(arr, -1);
+    });
     saveDraft();
     return;
   }
@@ -467,7 +487,10 @@ let newTask = null;          // a task being dragged in from the palette
 function canDropOn(arr){
   const kind = newTask || (dragFrom && dragFrom.type);
   if (!kind) return false;
-  if (kind === "page") return arr === lesson.blocks;
+  /* a page only makes sense at the top of a lesson */
+  if (kind === "page") return arr === lesson.blocks && !respEditing;
+  /* a response or extension set takes anything, whatever kind of thing this is */
+  if (respEditing) return true;
   return lesson.assessment ? true : arr !== lesson.blocks;
 }
 /* put whatever is being dragged at position `at` in `arr` */
@@ -1021,6 +1044,66 @@ on("tabResponses", "click", () => setAssessTab("responses"));
 /* one row per task: click it to edit, arrows to move, cross to remove */
 /* Strength and Target, on its own page */
 /* How a practical is marked: out of a number, or against a rubric. */
+/* The grades a practical can be given, each with what earns it. */
+function rubricPopup(){
+  if (!lesson.rubric) lesson.rubric = [];
+  openModal(box => {
+    box.classList.add("wide");
+    box.appendChild(el("h2","","Rubric"));
+    box.appendChild(el("p","modal-text","Put the best grade first. Teachers pick one of these when marking."));
+    const list = el("div");
+    box.appendChild(list);
+    function paint(){
+      list.innerHTML = "";
+      if (!lesson.rubric.length) list.appendChild(el("p","hint","No grades yet \u2014 press \u201c+ New grade\u201d."));
+      lesson.rubric.forEach((g, i) => {
+        const card = el("div","qsub");
+        const head = el("div","qsub-head");
+        const nameIn = el("input"); nameIn.value = g.name || "";
+        nameIn.className = "gradename";
+        nameIn.addEventListener("input", () => { g.name = nameIn.value; saveDraft(); });
+        head.appendChild(nameIn);
+        const tools = el("span","btools");
+        const move = (d) => () => {
+          const j = i + d;
+          if (j < 0 || j >= lesson.rubric.length) return;
+          lesson.rubric.splice(j, 0, lesson.rubric.splice(i, 1)[0]);
+          saveDraft(); paint();
+        };
+        [["\u2191","Move up", move(-1)],
+         ["\u2193","Move down", move(1)],
+         ["\u29C9","Duplicate", () => {
+            lesson.rubric.splice(i + 1, 0, JSON.parse(JSON.stringify(g)));
+            saveDraft(); paint();
+          }],
+         ["\u2715","Remove", () => { lesson.rubric.splice(i, 1); saveDraft(); paint(); }]
+        ].forEach(t => {
+          const b = el("button","btn-ghost bmini", t[0]);
+          b.title = t[1];
+          b.addEventListener("click", t[2]);
+          tools.appendChild(b);
+        });
+        head.appendChild(tools);
+        card.appendChild(head);
+        const d = el("div","bfield");
+        d.appendChild(el("label","","What is needed for this grade"));
+        const desc = el("textarea"); desc.rows = 2; desc.value = g.description || "";
+        desc.addEventListener("input", () => { g.description = desc.value; saveDraft(); });
+        d.appendChild(desc);
+        card.appendChild(d);
+        list.appendChild(card);
+      });
+    }
+    paint();
+    const add = el("button","btn-ghost bmini2","+ New grade");
+    add.addEventListener("click", () => { lesson.rubric.push({ name:"", description:"" }); saveDraft(); paint(); });
+    box.appendChild(add);
+    const done = el("button","btn-primary modal-cta","Done");
+    done.addEventListener("click", () => { closeModal(); render(); schedulePreview(); });
+    box.appendChild(done);
+  });
+}
+
 function markingSetup(into){
   if (!lesson.marking) lesson.marking = "score";
   const card = el("div","bcard");
@@ -1055,38 +1138,13 @@ function markingSetup(into){
   } else {
     if (!lesson.rubric) lesson.rubric = [];
     const w = el("div","bfield");
-    w.appendChild(el("label","","Grades"));
-    w.appendChild(el("p","bhelp","Put the best grade first. Teachers pick one of these when marking."));
-    lesson.rubric.forEach((g, i) => {
-      const g2 = el("div","qsub");
-      const gh = el("div","qsub-head");
-      const nameIn = el("input"); nameIn.value = g.name || "";
-      nameIn.addEventListener("input", () => { g.name = nameIn.value; saveDraft(); });
-      gh.appendChild(nameIn);
-      const up = el("button","btn-ghost bmini","\u2191");
-      up.addEventListener("click", () => {
-        if (i === 0) return;
-        lesson.rubric.splice(i - 1, 0, lesson.rubric.splice(i, 1)[0]);
-        saveDraft(); render();
-      });
-      const rm = el("button","btn-ghost bmini","\u2715");
-      rm.addEventListener("click", () => { lesson.rubric.splice(i, 1); saveDraft(); render(); });
-      gh.appendChild(up); gh.appendChild(rm);
-      g2.appendChild(gh);
-      const d = el("div","bfield");
-      d.appendChild(el("label","","What is needed for this grade"));
-      const desc = el("textarea"); desc.rows = 2; desc.value = g.description || "";
-      desc.addEventListener("input", () => { g.description = desc.value; saveDraft(); });
-      d.appendChild(desc);
-      g2.appendChild(d);
-      w.appendChild(g2);
-    });
-    const add = el("button","btn-ghost bmini2","+ New grade");
-    add.addEventListener("click", () => {
-      lesson.rubric.push({ name:"", description:"" });
-      saveDraft(); render();
-    });
-    w.appendChild(add);
+    const n = lesson.rubric.filter(g => g.name).length;
+    w.appendChild(el("p","bhelp", n
+      ? n + " grade" + (n === 1 ? "" : "s") + " set up."
+      : "No grades yet."));
+    const open2 = el("button","btn-ghost bmini2","Edit the rubric");
+    open2.addEventListener("click", rubricPopup);
+    w.appendChild(open2);
     body.appendChild(w);
   }
   card.appendChild(body);
@@ -1111,7 +1169,9 @@ function paintTargets(into){
   });
   into.appendChild(addBtn);
   if (!names.length && !Object.keys(lesson.topics || {}).length){
-    into.appendChild(el("p","hint","No topics yet \u2014 press \u201c+ New topic\u201d, or tag some questions."));
+    into.appendChild(el("p","hint", lesson.practical
+      ? "No topics yet \u2014 press \u201c+ New topic\u201d."
+      : "No topics yet \u2014 press \u201c+ New topic\u201d, or tag some questions."));
     return;
   }
   names.forEach(name => {
@@ -1297,7 +1357,7 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
 });
 function showTitle(){
   const t = (lesson.title || "").trim();
-  $("titleShow").textContent = t ? " \u2014 " + t : "";
+  $("titleShow").textContent = t ? " \u2022 " + t : "";
   $("titleBtn").textContent = t ? "Title & description" : "Set a title";
 }
 on("titleBtn", "click", () => {
