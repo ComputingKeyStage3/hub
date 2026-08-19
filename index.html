@@ -501,9 +501,10 @@ async function loadResults(force){
   resultsLoaded = true;
 }
 /* every lesson a teacher has written feedback on */
+let resultLessons = {};
 async function paintFeedbackList(box){
   const token = localStorage.getItem("hub_token");
-  const ids = Object.keys(lastById || {});
+  const ids = Object.keys(lastById || {}).filter(id => !resultLessons[id]);
   if (!ids.length || !token) return;
   const found = [];
   for (const id of ids){
@@ -547,16 +548,26 @@ async function fetchResults(){
     box.innerHTML = "";
     /* two lists: how assessments went, and any lesson the teacher has
        written on */
+    resultLessons = {};
     if (!d.results.length) box.appendChild(el("p","hint","No assessment results yet."));
     else box.appendChild(el("p","unit-head","Assessments"));
     d.results.forEach(res => {
+      resultLessons[res.lesson_id] = true;      // so it is not listed twice below
       const card = document.createElement("a"); card.className = "result-card";
       card.href = "lesson.html?id=" + encodeURIComponent(res.lesson_id);
-      const pct = Math.round(100 * res.score / Math.max(1, res.out_of));
       card.innerHTML = '<span class="sc"></span><span class="body"><b></b><span></span></span><span class="st"></span>';
-      card.querySelector(".sc").textContent = res.score + " / " + res.out_of;
+      const when = new Date(res.updated_at + "Z").toLocaleDateString("en-GB");
+      /* A grade stands on its own: there is no percentage to work out. */
+      if (res.grade){
+        card.querySelector(".sc").textContent = res.grade;
+        card.querySelector(".sc").classList.add("sc-grade");
+        card.querySelector(".body span").textContent = when;
+      } else {
+        const pct = Math.round(100 * res.score / Math.max(1, res.out_of));
+        card.querySelector(".sc").textContent = res.score + " / " + res.out_of;
+        card.querySelector(".body span").textContent = pct + "% \u00b7 " + when;
+      }
       card.querySelector("b").textContent = lessonTitles[res.lesson_id] || res.lesson_id;
-      card.querySelector(".body span").textContent = pct + "% · " + new Date(res.updated_at + "Z").toLocaleDateString("en-GB");
       const st = card.querySelector(".st");
       if (res.strength || res.target){
         st.innerHTML = (res.strength ? "<b>Strength:</b> " : "") + (res.strength || "") +

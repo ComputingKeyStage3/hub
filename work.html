@@ -167,7 +167,7 @@ async function boot(){
       const rd = await rr.json();
       (rd.rows || []).forEach(r => {
         const st = (students || []).find(x => x.display_name === r.display_name);
-        if (st) marks[st.username] = { score: r.score, outOf: r.out_of, grade: r.target || "" };
+        if (st) marks[st.username] = { score: r.score, outOf: r.out_of, grade: r.grade || "" };
       });
     }catch(e){}
     if (seating && seating.seats) plan = Object.assign(plan, seating);
@@ -557,7 +557,9 @@ async function saveFeedback(){
       if (rubric ? grade : $("fbScore").value !== ""){
         const mr = await fetch(API + "/api/teacher/set-mark", { method:"POST", headers: HJ(),
           body: JSON.stringify({ username: st.username, lesson: lessonId, overrides: {},
-                                 score: score, outOf: worth, grade: grade }) });
+                                 score: score, outOf: worth, grade: grade,
+                                 strength: showing("Strength") ? $("fbStrength").value : "",
+                                 target: showing("Target") ? $("fbTarget").value : "" }) });
         if (!mr.ok) throw new Error((await mr.json()).error || "Could not save the mark.");
         marks[st.username] = { score: score, outOf: worth, grade: grade };
       }

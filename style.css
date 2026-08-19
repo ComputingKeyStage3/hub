@@ -4,35 +4,61 @@
    Space Grotesk (display) · IBM Plex Sans (body) · IBM Plex Mono (code)
    ===================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=Lexend:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
+/* =====================================================================
+   The school's own look: white on a soft grey, near-black text, one blue
+   for anything you can act on, square corners and thin grey rules.
+   ===================================================================== */
 :root{
-  --bg:#F3ECDD;
-  --bar:#ECE2CC;
+  --bg:#EDEDED;
+  --bar:#FFFFFF;
   --panel:#FFFFFF;
-  --panel-2:#FBF7EE;
-  --line:#E4D9C2;
-  --line-2:#D2C3A4;
+  --panel-2:#F8F8F8;
+  --line:#E0E0E0;
+  --line-2:#CFCFCF;
 
-  --text:#3B352C;
-  --muted:#7B7263;
-  --dim:#A69C89;
+  --text:#1D1D1B;
+  --muted:#5E5E5C;
+  --dim:#6E6E6C;   /* the school uses #888, lifted so small labels still read */
 
-  --amber:#DC8A3E;      /* the one action colour */
-  --amber-dark:#C67730;
-  --amber-ink:#FFFFFF;  /* text on the action colour */
-  --mint:#4C9E76;       /* success + progress only */
-  --mint-dim:#CBE6D7;
-  --red:#C9564E;
-  --red-dim:#F2D7D4;
+  /* The school's blue is #4587D0, but white text on it only reaches 3.7:1 —
+     too low to read comfortably. The working colour is a shade deeper, which
+     passes at 5.5:1 and still reads as the same blue. */
+  --brand:#4587D0;      /* the exact school blue, for rules and tints */
+  --amber:#2F6BAE;
+  --amber-dark:#255A96;
+  --amber-ink:#FFFFFF;
+  --mint:#2E7D5B;
+  --mint-dim:#D6E8DF;
+  --red:#CF1111;
+  --red-dim:#F6D9D9;
 
-  --display:'Lexend','Segoe UI',system-ui,sans-serif;
-  --body:'Lexend','Segoe UI',system-ui,-apple-system,sans-serif;
+  --display:'Barlow Condensed','Barlow','Segoe UI',system-ui,sans-serif;
+  --body:'Barlow','Segoe UI',system-ui,-apple-system,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
 
-  --r:16px;
+  --r:2px;
 }
+
 /* background choices (Settings on the home page) */
+/* the warm beige the site used before, kept so anyone can go back to it */
+html[data-bg=warm]{--bg:#F3ECDD; --bar:#ECE2CC; --panel:#FFFFFF; --panel-2:#FBF7EE;
+  --line:#E4D9C2; --line-2:#D2C3A4;
+  --text:#3B352C; --muted:#7B7263; --dim:#A69C89;
+  --brand:#DC8A3E;      /* the warm amber, for rules and tints */
+  --amber:#A25E22;      /* deep enough for white text to read on it */
+  --amber-dark:#8C4F1C; --amber-ink:#FFFFFF;
+  --mint:#4C9E76; --mint-dim:#CBE6D7; --red:#C9564E; --red-dim:#F2D7D4;
+  --display:'Lexend','Segoe UI',system-ui,sans-serif;
+  --body:'Lexend','Segoe UI',system-ui,-apple-system,sans-serif;
+  --r:16px}
+/* the same look after dark */
+html[data-bg=night]{--bg:#141414; --bar:#1D1D1B; --panel:#1D1D1B; --panel-2:#262625;
+  --line:#33332F; --line-2:#454540;
+  --text:#F2F2F0; --muted:#B4B4B0; --dim:#8A8A86;
+  --brand:#6FA8E0; --amber:#6FA8E0; --amber-dark:#8FBEEA; --amber-ink:#0E1116;
+  --mint:#5FBF95; --mint-dim:#22402F; --red:#E8736E; --red-dim:#4A2523}
 html[data-bg=blue]{--bg:#E2EDF7; --bar:#D0E2F0; --panel:#FFFFFF; --panel-2:#F4F9FC; --line:#D4E1EB; --line-2:#B9CDDD}
 html[data-bg=green]{--bg:#DDEDD5; --bar:#CBE2C0; --panel:#FFFFFF; --panel-2:#F2F8EF; --line:#CBDEC4; --line-2:#AECBA4}
 html[data-bg=peach]{--bg:#FAEADC; --bar:#F1DCC6; --panel:#FFFFFF; --panel-2:#FDF6F0; --line:#EFD9C7; --line-2:#DEC0A6}
@@ -41,6 +67,7 @@ html[data-bg=dark]{--bg:#23262E; --bar:#2C303A; --panel:#2C303A; --panel-2:#3338
   --text:#EAEBEF; --muted:#A9AFBC; --dim:#7E8595; --amber:#E39B52; --amber-ink:#221A0F;
   --mint:#5BBE94; --mint-dim:#2C5847; --red:#DE7C74; --red-dim:#54312E}
 /* font choices */
+html[data-font=lexend]{--display:'Lexend',sans-serif; --body:'Lexend',sans-serif}
 html[data-font=nunito]{--display:'Nunito',sans-serif; --body:'Nunito',sans-serif}
 html[data-font=atkinson]{--display:'Atkinson Hyperlegible',sans-serif; --body:'Atkinson Hyperlegible',sans-serif}
 
@@ -1685,3 +1712,81 @@ body.workpage .grow{flex:1}
 .rubriccol p{margin:0; font-size:15px; line-height:1.5; color:var(--muted)}
 .rubricmine{display:inline-block; margin-top:10px; font-size:12px; font-weight:800;
   letter-spacing:.06em; text-transform:uppercase; color:var(--amber-dark)}
+
+/* a grade instead of a mark on the results list */
+.result-card .sc.sc-grade{font-size:20px; letter-spacing:0}
+
+
+/* =====================================================================
+   THE SCHOOL'S LOOK
+   Square corners, thin grey rules, headings in condensed capitals, and
+   buttons that are outlined until you point at them. Everything below
+   reshapes what is already there rather than adding new components.
+   ===================================================================== */
+
+/* --- type --- */
+h1,h2,h3{ letter-spacing:0; font-weight:600 }
+h1{ font-size:clamp(30px,6vw,2.6rem); line-height:1.15 }
+h2{ font-size:clamp(24px,5vw,2rem); line-height:1.2 }
+h3{ font-size:clamp(19px,4vw,1.45rem); line-height:1.25 }
+.masthead h1{ text-transform:uppercase; letter-spacing:.01em }
+body{ font-size:17px; line-height:1.6 }
+
+/* --- edges --- */
+.station,.lessonCard,.classtile,.lessonpill,.modal,.brief,.bcard,.qsub,
+.st-card,.result-card,.fb-card,.seat,.seatcell,.seatgrid,.seatpool,.seatfront,
+.workside,.workframe,.mbscroll,.searchbox,.sizer,.menu,.rt,.ide-wrap,
+.field input,.bfield input,.bfield textarea,.bfield select,input,textarea,select,
+.periodbtn,.bankpick,.rubriccol,.allpage,.linkprev,.picimg,.embed,.framed{
+  border-radius:2px
+}
+.circleish,.num,.allpage-n,.mbtick .yes{ border-radius:50% }
+
+/* --- buttons: outlined, uppercase, filling on hover --- */
+.btn-primary,.btn-ghost{
+  border-radius:2px; text-transform:uppercase; letter-spacing:.06em;
+  font-weight:600; font-size:14.5px; padding:0 1.15em; line-height:2.7;
+  transition:background .25s ease, color .25s ease, border-color .25s ease;
+}
+.btn-primary{ background:var(--amber); color:var(--amber-ink); border:1px solid var(--amber) }
+.btn-primary:hover{ background:var(--amber-dark); border-color:var(--amber-dark) }
+.btn-ghost{ background:transparent; color:var(--amber); border:1px solid var(--amber) }
+.btn-ghost:hover{ background:var(--amber); color:var(--amber-ink) }
+.btn-ghost.iconbtn{ text-transform:none; letter-spacing:0; color:var(--text);
+  border-color:var(--line-2) }
+.btn-ghost.iconbtn:hover{ background:var(--panel-2); color:var(--text); border-color:var(--amber) }
+.bmini,.bmini2,.ide-small,.ide-chip{ text-transform:none; letter-spacing:0 }
+
+/* --- panels sit as white cards on the grey --- */
+.station,.lessonCard,.classtile,.lessonpill,.bcard,.st-card,.result-card{
+  border:1px solid var(--line); box-shadow:none;
+}
+.lessonCard:hover,.classtile:hover,.lessonpill:hover{ border-color:var(--amber) }
+.homebar,.topbar{ border-bottom:1px solid var(--line); box-shadow:inset 0 -3px 0 var(--brand) }
+.crumbbar{ border-bottom:1px solid var(--line) }
+
+/* --- links read as links --- */
+.prose a,.content a,.q-context a{ color:var(--amber); text-decoration:underline;
+  text-decoration-color:color-mix(in srgb, var(--amber) 30%, transparent) }
+
+/* --- tabs become an underlined strip --- */
+.tabs button,.subtabs button,.modeswitch button{
+  border-radius:0; text-transform:uppercase; letter-spacing:.06em; font-size:14px;
+  border:none; border-bottom:2px solid transparent; background:transparent;
+}
+.tabs button.on,.subtabs button.on,.modeswitch button.on{
+  border-bottom-color:var(--amber); color:var(--text); background:transparent
+}
+
+/* --- form fields --- */
+.field input,.bfield input,.bfield textarea,.bfield select,
+input[type=text],input[type=password],input[type=number],input[type=date],textarea,select{
+  border:1px solid var(--line-2); background:var(--panel)
+}
+.field input:focus,.bfield input:focus,.bfield textarea:focus,
+input:focus,textarea:focus,select:focus{ border-color:var(--amber); outline:none }
+
+/* --- the small labels above things --- */
+.eyebrow,.pal-head,.unit-head,.bankhead,.mbstat span{
+  text-transform:uppercase; letter-spacing:.1em; font-weight:600; color:var(--dim)
+}

@@ -152,7 +152,12 @@ async function loadMyMark(){
     const r = await fetch(API + "/api/results", { headers:{ Authorization: "Bearer " + token }, cache:"no-store" });
     const d = await r.json();
     const mine = (d.results || []).find(x => x.lesson_id === lessonId);
-    if (mine) myResult = { score: mine.score, outOf: mine.out_of, grade: mine.target || "" };
+    if (mine){
+      myResult = { score: mine.score, outOf: mine.out_of, grade: mine.grade || "" };
+      /* the sentences are kept here too, in case the work note is missing */
+      if (!teacherNote && (mine.strength || mine.target))
+        teacherNote = { strength: mine.strength || "", target: mine.target || "", comment: "" };
+    }
   }catch(e){}
 }
 
@@ -162,11 +167,8 @@ function showFeedback(raw){
 /* the card shown on the finished screen, matching an assessment's */
 /* Everything they did, on one scrollable page, in a pop-up. */
 /* All the grades and what each one needs, side by side. */
-function rubricButton(){
-  const wrap = el("div","st-card");
-  wrap.appendChild(el("h2","sect-head","How this was marked"));
-  const btn = el("button","btn-ghost","View rubric");
-  btn.addEventListener("click", () => {
+function showRubric(){
+  {
     const back = el("div","modal-back");
     const box = el("div","modal wide");
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
@@ -185,9 +187,7 @@ function rubricButton(){
     back.appendChild(box);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
-  });
-  wrap.appendChild(btn);
-  return wrap;
+  }
 }
 
 function workButton(){
@@ -1288,7 +1288,7 @@ function idePrefs(){ try{ return JSON.parse(localStorage.getItem("hub_ide") || "
 function themeFromSite(){
   try{
     const bg = document.documentElement.dataset.bg || "";
-    return bg === "dark" ? "dark" : "light";
+    return (bg === "dark" || bg === "night") ? "dark" : "light";
   }catch(e){ return "light"; }
 }
 const ideThemeWatchers = [];
@@ -2842,13 +2842,14 @@ function renderPracticalComplete(){
   }
   box.appendChild(hero);
 
-  const status = el("p","handin");
-  hero.appendChild(status);
-  if (!spectate) hero.appendChild(saveButton(status));
+  if (graded){
+    const rb = el("button","btn-primary done-save","View rubric");
+    rb.addEventListener("click", showRubric);
+    hero.appendChild(rb);
+  }
 
   const fb = feedbackCard(teacherNote);
   if (fb) box.appendChild(fb);
-  if (graded) box.appendChild(rubricButton());
   box.appendChild(workButton());
 
   /* practice only makes sense once they have been told how they did */
