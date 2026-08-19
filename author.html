@@ -56,34 +56,70 @@
   <aside class="build-palette">
     <div id="palLesson">
       <button class="pal strong" data-add="page"><b>+ New page</b><span>Students see one page at a time</span></button>
-      <p class="pal-head">Add to the open page</p>
-      <button class="pal" data-add="text"><b>Paragraph</b><span>Words, with formatting</span></button>
-      <button class="pal" data-add="picture"><b>Image</b><span>Show a picture from a link</span></button>
-      <button class="pal" data-add="code"><b>Coding task</b><span>Python, or HTML + CSS + JS</span></button>
-      <button class="pal" data-add="question"><b>Written answer</b><span>They type a response</span></button>
-      <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
-      <button class="pal" data-add="image"><b>Screenshot</b><span>They paste a picture</span></button>
-      <button class="pal" data-add="embed"><b>Video</b><span>Embed a clip</span></button>
-      <button class="pal" data-add="frame"><b>Embedded page</b><span>A site inside the lesson</span></button>
-      <button class="pal" data-add="link"><b>Link to a site</b><span>Send them somewhere</span></button>
-      <button class="pal" data-add="pastelink"><b>Paste a link</b><span>They hand in a link</span></button>
-      <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
-      <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
-      <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
-      <p class="pal-head">Binary</p>
-      <button class="pal" data-add="binary"><b>Binary conversion</b><span>Binary to denary and back</span></button>
-      <button class="pal" data-add="binadd"><b>Binary addition</b><span>Column addition with carries</span></button>
+      <div class="palgroup" data-group="writing">
+        <button class="pal-head" type="button">Reading and writing</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="text"><b>Paragraph</b><span>Words, with formatting</span></button>
+          <button class="pal" data-add="question"><b>Written answer</b><span>They type a response</span></button>
+          <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
+        </div>
+      </div>
+      <div class="palgroup" data-group="media">
+        <button class="pal-head" type="button">Media</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="picture"><b>Image</b><span>Show a picture from a link</span></button>
+          <button class="pal" data-add="embed"><b>Video</b><span>Embed a clip</span></button>
+          <button class="pal" data-add="frame"><b>Embedded page</b><span>A site inside the lesson</span></button>
+          <button class="pal" data-add="link"><b>Link to a site</b><span>Send them somewhere</span></button>
+        </div>
+      </div>
+      <div class="palgroup" data-group="coding">
+        <button class="pal-head" type="button">Coding</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="code"><b>Coding task</b><span>Python, or HTML + CSS + JS</span></button>
+        </div>
+      </div>
+      <div class="palgroup" data-group="binary">
+        <button class="pal-head" type="button">Binary</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="binary"><b>Binary conversion</b><span>Binary to denary and back</span></button>
+          <button class="pal" data-add="binadd"><b>Binary addition</b><span>Column addition with carries</span></button>
+        </div>
+      </div>
+      <div class="palgroup" data-group="checks">
+        <button class="pal-head" type="button">Checking understanding</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
+          <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
+          <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
+        </div>
+      </div>
+      <div class="palgroup" data-group="handin">
+        <button class="pal-head" type="button">Handing work in</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="image"><b>Screenshot</b><span>They paste a picture</span></button>
+          <button class="pal" data-add="pastelink"><b>Paste a link</b><span>They hand in a link</span></button>
+        </div>
+      </div>
     </div>
     <div id="palAssess" hidden>
-      <p class="pal-head">Questions</p>
-      <button class="pal" data-add="mc"><b>Multiple choice</b><span>One right answer</span></button>
-      <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
-      <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
-      <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
-      <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
-      <p class="pal-head">Feedback</p>
-
-
+      <div class="palgroup" data-group="aq">
+        <button class="pal-head" type="button">Questions</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="mc"><b>Multiple choice</b><span>One right answer</span></button>
+          <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
+          <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
+          <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
+          <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
+        </div>
+      </div>
+      <div class="palgroup" data-group="abinary">
+        <button class="pal-head" type="button">Binary</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="binary"><b>Binary conversion</b><span>Binary to denary and back</span></button>
+          <button class="pal" data-add="binadd"><b>Binary addition</b><span>Column addition with carries</span></button>
+        </div>
+      </div>
     </div>
     <p class="pal-note">Drag a card by its handle to reorder. Everything saves in this browser as you type.</p>
   </aside>
@@ -95,6 +131,7 @@
       <b>Live preview</b>
       <span class="hint" id="prevMsg"></span>
       <button class="btn-ghost iconbtn" id="prevBtn" title="Refresh preview">&#8635;</button>
+      <button class="btn-ghost iconbtn" id="prevFull" title="Full screen preview">&#9974;</button>
     </div>
     <iframe id="prev" title="Lesson preview"></iframe>
   </section>
@@ -1067,7 +1104,7 @@ function setMode(assess, practical){
   $("assessTabs").hidden = !assess && !practical;
   $("tabQuestions").textContent = practical ? "Tasks" : "Questions";
   if (!assess){ assessTab = "questions"; respEditing = null; }
-  $("modeLesson").classList.toggle("on", !assess && !practical);
+  $("modeLesson").classList.toggle("on", !assess && !practical && !lesson.homework);
   $("modeAssess").classList.toggle("on", assess);
   $("palLesson").hidden = !!assess;          // a practical uses the lesson palette
   $("palAssess").hidden = !assess;
@@ -1378,6 +1415,29 @@ function editResponses(topic, index){
 let respEditing = null;
 let assessTab = "questions";   // questions | targets | responses
 
+/* Sections start folded away, so the list stays short. Which ones are open
+   is remembered between visits. */
+function wirePalette(){
+  let open2 = {};
+  try{ open2 = JSON.parse(localStorage.getItem("hub_pal") || "{}"); }catch(e){}
+  document.querySelectorAll(".palgroup").forEach(g => {
+    const head = g.querySelector(".pal-head");
+    const body = g.querySelector(".palbody");
+    if (!head || !body) return;
+    const key = g.dataset.group;
+    const show = (on) => {
+      body.hidden = !on;
+      head.classList.toggle("open", on);
+      open2[key] = on;
+      try{ localStorage.setItem("hub_pal", JSON.stringify(open2)); }catch(e){}
+    };
+    body.hidden = !open2[key];
+    head.classList.toggle("open", !!open2[key]);
+    head.addEventListener("click", () => show(body.hidden));
+  });
+}
+wirePalette();
+
 document.querySelectorAll(".pal[data-add]").forEach(btn => {
   btn.draggable = true;
   btn.addEventListener("dragstart", (e) => {
@@ -1552,6 +1612,22 @@ function refreshPreview(){
   }catch(e){ $("prevMsg").textContent = e.message; }
 }
 on("prevBtn", "click", refreshPreview);
+/* the same preview, with the room to see it properly */
+on("prevFull", "click", () => {
+  const back = el("div","modal-back");
+  const box = el("div","modal wide fullprev");
+  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+  x.addEventListener("click", () => back.remove());
+  box.appendChild(x);
+  const frame = document.createElement("iframe");
+  frame.className = "fullprev-frame";
+  const live = document.getElementById("prevFrame") || document.querySelector(".build-preview iframe");
+  frame.src = live ? live.src : "";
+  box.appendChild(frame);
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+  document.body.appendChild(back);
+});
 on("moreBtn", "click", (e) => {
   e.stopPropagation();
   const m = $("moreMenu"), b = $("moreBtn");

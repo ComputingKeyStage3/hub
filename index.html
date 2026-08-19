@@ -132,7 +132,9 @@ function renderAuth(){
       renderAuth();
     });
     $("loginCard").hidden = true;
-    $("headline").textContent = "Pick a lesson, " + name.split(" ")[0];
+    const hour = new Date().getHours();
+    const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+    $("headline").textContent = part + ", " + name.split(" ")[0];
     signedInView(true);
   } else {
     $("auth").innerHTML = "";

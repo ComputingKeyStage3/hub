@@ -129,6 +129,7 @@
     <div class="toolrow">
       <button class="btn-primary" id="addOneBtn">+ Add student</button>
       <button class="btn-ghost" id="addManyBtn">Add many at once</button>
+      <button class="btn-ghost" id="importBtn">Import from Arbor</button>
     </div>
     <div id="resetBox"></div>
     <table class="stutable" id="stuTable"></table>
@@ -1057,6 +1058,99 @@ on("addOneBtn", "click", () => {
     box.appendChild(go); box.appendChild(msg);
   });
 });
+/* Bring a whole class in from an Arbor export. */
+on("importBtn", "click", () => {
+  openModal(box => {
+    box.classList.add("wide");
+    modalTitle(box, "Import " + cls + " from Arbor");
+    box.appendChild(el("p","modal-text",
+      "In Arbor, export the class list with two columns: First name and Email address (main). " +
+      "Drop that file below \u2014 the username is taken from the email address, so doej26@\u2026 becomes doej26."));
+
+    const drop = el("div","dropfile");
+    drop.appendChild(el("b","","Drop the spreadsheet here"));
+    drop.appendChild(el("span","","or"));
+    const browse = el("button","btn-ghost","Browse for a file");
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = ".xlsx";
+    picker.style.display = "none";
+    browse.addEventListener("click", () => picker.click());
+    drop.appendChild(browse);
+    drop.appendChild(picker);
+    box.appendChild(drop);
+
+    const msg = el("p","hint","");
+    const preview = el("div","importlist");
+    box.appendChild(preview);
+    box.appendChild(msg);
+
+    let found = [];
+    const go = el("button","btn-primary modal-cta","Add these students");
+    go.hidden = true;
+
+    async function take(file){
+      if (!file) return;
+      msg.textContent = "Reading \u2026";
+      preview.innerHTML = "";
+      found = [];
+      try{
+        if (!window.readXlsx) throw new Error("The spreadsheet reader did not load.");
+        const rows = await window.readXlsx(file);
+        /* find the two columns by their headings, wherever they are */
+        const head = (rows[0] || []).map(h => String(h).toLowerCase().trim());
+        let nameCol = head.findIndex(h => h.startsWith("first name"));
+        let mailCol = head.findIndex(h => h.indexOf("email") >= 0);
+        if (nameCol < 0) nameCol = 0;
+        if (mailCol < 0) mailCol = 1;
+        rows.slice(1).forEach(r => {
+          const name = String(r[nameCol] || "").trim();
+          const mail = String(r[mailCol] || "").trim();
+          const user = mail.split("@")[0].trim().toLowerCase();
+          if (name && user) found.push({ name: name, username: user });
+        });
+        if (!found.length) throw new Error("No students found in that file.");
+        found.forEach(st => {
+          const row = el("div","importrow");
+          row.appendChild(el("b","", st.name));
+          row.appendChild(el("span","", st.username));
+          preview.appendChild(row);
+        });
+        msg.textContent = found.length + " student" + (found.length === 1 ? "" : "s") + " ready to add.";
+        go.hidden = false;
+      }catch(e){ msg.textContent = e.message; }
+    }
+    picker.addEventListener("change", () => take(picker.files && picker.files[0]));
+    ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, (e) => {
+      e.preventDefault(); drop.classList.add("over");
+    }));
+    ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, (e) => {
+      e.preventDefault(); drop.classList.remove("over");
+    }));
+    drop.addEventListener("drop", (e) => {
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      take(f);
+    });
+
+    go.addEventListener("click", async () => {
+      msg.textContent = "Adding \u2026";
+      let done = 0, failed = [];
+      for (const st of found){
+        try{
+          const r = await fetch(API + "/api/teacher/students", { method:"POST", headers: HJ(),
+            body: JSON.stringify({ group: cls, name: st.name, username: st.username }) });
+          if (!r.ok) throw new Error((await r.json()).error || "failed");
+          done++;
+        }catch(e){ failed.push(st.username); }
+      }
+      msg.textContent = done + " added." + (failed.length ? " Could not add: " + failed.join(", ") : "");
+      await loadStudents();
+      if (!failed.length) closeModal();
+    });
+    box.appendChild(go);
+  });
+});
+
 on("addManyBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Add many to " + cls);

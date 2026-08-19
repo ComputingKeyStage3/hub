@@ -2152,6 +2152,13 @@ function rWeb(b){
    Students either read a binary number and write the denary, or the other
    way round. Numbers are made up if none are given.
    ====================================================================== */
+/* the row of place values, sat directly above whatever it labels */
+function placeRow(bits){
+  const row = el("div","bin-row bin-placerow");
+  for (let i = bits - 1; i >= 0; i--) row.appendChild(el("span","bin-place", String(Math.pow(2, i))));
+  return row;
+}
+
 function rBinary(b){
   const bits = Math.max(4, Math.min(16, parseInt(b.bits, 10) || 8));
   const most = Math.pow(2, bits) - 1;
@@ -2168,15 +2175,6 @@ function rBinary(b){
   }
   const asBinary = (n) => n.toString(2).padStart(bits, "0");
 
-  if (b.showPlace !== false){
-    const head = el("div","bin-places");
-    head.appendChild(el("span","bin-placelabel","Place values"));
-    const row = el("div","bin-row");
-    for (let i = bits - 1; i >= 0; i--) row.appendChild(el("span","bin-place", String(Math.pow(2, i))));
-    head.appendChild(row);
-    s.appendChild(head);
-  }
-
   const answers = [];
   nums.forEach((n, i) => {
     /* which way round this one goes */
@@ -2185,6 +2183,7 @@ function rBinary(b){
     const shown = el("div","bin-shown");
     if (toDenary){
       shown.appendChild(el("span","bin-lead","Binary"));
+      if (b.showPlace !== false) shown.appendChild(placeRow(bits));
       const digits = el("div","bin-row");
       asBinary(n).split("").forEach(d => digits.appendChild(el("span","bin-bit", d)));
       shown.appendChild(digits);
@@ -2204,7 +2203,8 @@ function rBinary(b){
       ansWrap.appendChild(inp);
       inputs.push(inp);
     } else {
-      /* one box per bit, so the place values line up above them */
+      /* one box per bit, with the place values directly above them */
+      if (b.showPlace !== false) ansWrap.appendChild(placeRow(bits));
       const row = el("div","bin-row");
       for (let k = 0; k < bits; k++){
         const cell = el("input","bin-cell");
@@ -2308,14 +2308,14 @@ function rBinAdd(b){
     const total = pair[0] + pair[1];
     const q = el("div","bin-sum");
     if (b.showPlace !== false){
-      const row = el("div","bin-row bin-placerow");
-      for (let i = bits - 1; i >= 0; i--) row.appendChild(el("span","bin-place", String(Math.pow(2, i))));
+      const row = placeRow(bits);
+      row.insertBefore(el("span","bin-rowlabel",""), row.firstChild);
       q.appendChild(row);
     }
     let carryIn = [];
     if (wantCarry){
       const carry = el("div","bin-row bin-carry");
-      carry.appendChild(el("span","bin-rowlabel","Carried"));
+      carry.appendChild(el("span","bin-rowlabel",""));   // empty, so the boxes stay lined up
       for (let k = 0; k < bits; k++){
         const c = el("input","bin-cell bin-carrycell");
         c.type = "text"; c.maxLength = 1; c.inputMode = "numeric";

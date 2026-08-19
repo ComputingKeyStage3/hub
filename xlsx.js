@@ -140,3 +140,116 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
 })();
+
+/* ======================================================================
+   READING a spreadsheet.
+   An .xlsx file is a zip; the sheet is XML inside it. Enough of that is
+   unpicked here to pull out a grid of text, which is all the student
+   import needs. No library.
+   ====================================================================== */
+(function(){
+  "use strict";
+
+  /* --- the smallest possible zip reader --- */
+  function readZip(buf){
+    const view = new DataView(buf);
+    const bytes = new Uint8Array(buf);
+    /* find the central directory at the end */
+    let end = -1;
+    for (let i = bytes.length - 22; i >= 0 && i > bytes.length - 66000; i--){
+      if (view.getUint32(i, true) === 0x06054b50){ end = i; break; }
+    }
+    if (end < 0) throw new Error("That does not look like a spreadsheet.");
+    const count = view.getUint16(end + 10, true);
+    let at = view.getUint32(end + 16, true);
+    const files = {};
+    for (let n = 0; n < count; n++){
+      if (view.getUint32(at, true) !== 0x02014b50) break;
+      const method = view.getUint16(at + 10, true);
+      const compSize = view.getUint32(at + 20, true);
+      const nameLen = view.getUint16(at + 28, true);
+      const extraLen = view.getUint16(at + 30, true);
+      const commentLen = view.getUint16(at + 32, true);
+      const localAt = view.getUint32(at + 42, true);
+      const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLen));
+      /* the local header says where the data really starts */
+      const lNameLen = view.getUint16(localAt + 26, true);
+      const lExtraLen = view.getUint16(localAt + 28, true);
+      const dataAt = localAt + 30 + lNameLen + lExtraLen;
+      files[name] = { method: method, data: bytes.subarray(dataAt, dataAt + compSize) };
+      at += 46 + nameLen + extraLen + commentLen;
+    }
+    return files;
+  }
+
+  async function unpack(entry){
+    if (entry.method === 0) return new TextDecoder().decode(entry.data);
+    /* deflate: the browser can do this for us */
+    const stream = new Blob([entry.data]).stream()
+      .pipeThrough(new DecompressionStream("deflate-raw"));
+    return await new Response(stream).text();
+  }
+
+  function tagContents(xml, tag){
+    const out = [];
+    const re = new RegExp("<" + tag + "[^>]*>([\\s\\S]*?)</" + tag + ">", "g");
+    let m;
+    while ((m = re.exec(xml)) !== null) out.push(m[1]);
+    return out;
+  }
+  const unescape2 = (t) => String(t)
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+
+  /* "B3" -> column 1 */
+  function colOf(ref){
+    const letters = (ref.match(/^[A-Z]+/) || ["A"])[0];
+    let n = 0;
+    for (let i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64);
+    return n - 1;
+  }
+
+  /* Returns rows of plain text: [["First Name","Email"],["Jo","jo@x"]] */
+  window.readXlsx = async function(file){
+    const buf = await file.arrayBuffer();
+    const files = readZip(buf);
+    const sheetName = Object.keys(files).find(n => /^xl\/worksheets\/sheet1\.xml$/.test(n))
+                   || Object.keys(files).find(n => /^xl\/worksheets\//.test(n));
+    if (!sheetName) throw new Error("No sheet found in that file.");
+
+    /* shared strings hold most of the text */
+    let shared = [];
+    if (files["xl/sharedStrings.xml"]){
+      const xml = await unpack(files["xl/sharedStrings.xml"]);
+      shared = tagContents(xml, "si").map(si =>
+        tagContents(si, "t").map(unescape2).join(""));
+    }
+
+    const sheet = await unpack(files[sheetName]);
+    const rows = [];
+    tagContents(sheet, "row").forEach(rowXml => {
+      const cells = [];
+      const re = /<c\s([^>]*)>([\s\S]*?)<\/c>|<c\s([^>]*)\/>/g;
+      let m;
+      while ((m = re.exec(rowXml)) !== null){
+        const attrs = m[1] || m[3] || "";
+        const inner = m[2] || "";
+        const ref = (attrs.match(/r="([A-Z]+\d+)"/) || [])[1] || "A1";
+        const type = (attrs.match(/t="(\w+)"/) || [])[1] || "n";
+        let value = "";
+        if (type === "s"){
+          const idx = parseInt(tagContents(inner, "v")[0] || "-1", 10);
+          value = shared[idx] || "";
+        } else if (type === "inlineStr"){
+          value = tagContents(inner, "t").map(unescape2).join("");
+        } else {
+          value = unescape2(tagContents(inner, "v")[0] || "");
+        }
+        cells[colOf(ref)] = value;
+      }
+      for (let i = 0; i < cells.length; i++) if (cells[i] === undefined) cells[i] = "";
+      rows.push(cells);
+    });
+    return rows;
+  };
+})();

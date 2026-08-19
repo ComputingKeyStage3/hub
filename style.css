@@ -1846,3 +1846,84 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 
 /* home learning is marked differently from an assessment */
 .badge-home{background:var(--mint-dim); color:var(--mint); border-color:var(--mint)}
+
+
+/* =====================================================================
+   SHAPE AND HEIGHT CORRECTIONS
+   ===================================================================== */
+
+/* A button holding one icon should be a circle: same width as height, no
+   padding pulling it out of shape. */
+.iconbtn,.btn-ghost.iconbtn,.btn-primary.iconbtn{
+  width:38px; min-width:38px; height:38px; min-height:38px;
+  padding:0 !important; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:16px; line-height:1; flex:0 0 auto;
+}
+.sizer .iconbtn,.stepper .iconbtn{ width:30px; min-width:30px; height:30px; min-height:30px; font-size:15px }
+.bmini{ width:30px; min-width:30px; height:30px; min-height:30px; padding:0 !important;
+  border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:14px }
+.frontdots{ width:30px; min-width:30px; height:30px; min-height:30px }
+@media (pointer:coarse){
+  .iconbtn,.btn-ghost.iconbtn{ width:42px; min-width:42px; height:42px; min-height:42px }
+}
+
+/* Buttons were carrying too much height for their text. */
+.btn-primary,.btn-ghost{ line-height:2.2; font-size:15px }
+.tabs button,.subtabs button,.modeswitch button{ line-height:2.1; padding:0 15px }
+.lp-acts button{ line-height:2.1 }
+
+/* which made the top bar deeper than it needed to be */
+.homebar,.topbar{ padding-top:8px; padding-bottom:8px }
+.homebar .title{ line-height:1.3 }
+
+/* the tab strip should sit flush */
+.subtabs{ padding-left:0; margin-left:0 }
+
+/* headings inside the builder follow the theme rather than staying black */
+.bcard input,.bcard textarea,.qsub input,.qsub textarea,
+.bhead input,.bfield input,.bfield textarea{ color:var(--text); background:var(--panel) }
+.btype,.bhead b,.bcard label,.qsub label{ color:var(--text) }
+
+/* every search box looks the same wherever it is */
+.searchbox,.search,input[type=search],.pickersearch{
+  height:42px; padding:0 14px; border:1.5px solid var(--line-2); border-radius:10px;
+  background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px;
+}
+.searchbox:focus,.search:focus,input[type=search]:focus,.pickersearch:focus{
+  border-color:var(--amber); outline:none;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent);
+}
+
+
+/* foldable palette sections */
+.palgroup{margin-bottom:6px}
+.pal-head{display:flex; align-items:center; justify-content:space-between; width:100%;
+  padding:9px 12px; margin:0; background:var(--panel-2); border:1px solid var(--line);
+  border-radius:10px; cursor:pointer; font-family:var(--body); font-size:13px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--muted); text-align:left}
+.pal-head:hover{border-color:var(--amber); color:var(--text)}
+.pal-head::after{content:"\203A"; font-size:17px; transform:rotate(90deg); transition:transform .2s ease}
+.pal-head.open::after{transform:rotate(-90deg)}
+.palbody{padding:6px 0 2px; display:flex; flex-direction:column; gap:6px}
+
+/* the preview, full screen */
+.fullprev{width:100%; max-width:1500px; height:92vh; padding:0; overflow:hidden}
+.fullprev-frame{width:100%; height:100%; border:none; display:block; border-radius:14px}
+.fullprev .modal-x{z-index:5; background:var(--panel)}
+
+/* place values sit tight against what they label */
+.bin-placerow{margin-bottom:-2px; opacity:.75}
+.bin-placerow .bin-place{font-size:11px}
+.bin-carry .bin-rowlabel{min-width:24px}
+
+/* dropping a spreadsheet in */
+.dropfile{display:flex; flex-direction:column; align-items:center; gap:10px; padding:28px 20px;
+  margin:14px 0; border:2px dashed var(--line-2); border-radius:14px; background:var(--panel-2); text-align:center}
+.dropfile.over{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 8%, var(--panel-2))}
+.dropfile b{font-size:17px}
+.dropfile span{color:var(--muted); font-size:14px}
+.importlist{max-height:260px; overflow-y:auto; margin:10px 0}
+.importrow{display:flex; justify-content:space-between; gap:12px; padding:8px 10px;
+  border-bottom:1px solid var(--line)}
+.importrow span{color:var(--muted); font-family:var(--mono); font-size:14px}
