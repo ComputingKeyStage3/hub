@@ -855,7 +855,8 @@ function buildBlock(b, i){
   if (!b.id) b.id = b.type + "_" + i;
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
-              picture:rPicture, pastelink:rPasteLink, frame:rFrame, web:rWeb, web:rWeb,
+              picture:rPicture, pastelink:rPasteLink, frame:rFrame, web:rWeb,
+              binary:rBinary, binadd:rBinAdd, web:rWeb,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
@@ -2144,6 +2145,267 @@ function rWeb(b){
            },
            brief:{ eyebrow:"Code", title:b.title || "", text:b.task || "" } };
 }
+/* ======================================================================
+   BINARY CONVERSION
+   {"type":"binary", "mode":"toDenary" | "toBinary" | "either",
+    "bits":8, "showPlace":true, "count":4, "numbers":[13,200], "prompt":"..."}
+   Students either read a binary number and write the denary, or the other
+   way round. Numbers are made up if none are given.
+   ====================================================================== */
+function rBinary(b){
+  const bits = Math.max(4, Math.min(16, parseInt(b.bits, 10) || 8));
+  const most = Math.pow(2, bits) - 1;
+  const howMany = Math.max(1, Math.min(10, parseInt(b.count, 10) || 4));
+  const mode = b.mode || "toDenary";
+  const s = el("section","binary");
+
+  /* the questions: the teacher's own, or some made up to fit the bits */
+  const given = (b.numbers || []).map(Number).filter(n => !isNaN(n) && n >= 0 && n <= most);
+  const nums = [];
+  for (let i = 0; i < howMany; i++){
+    if (given[i] !== undefined) nums.push(given[i]);
+    else nums.push(1 + Math.floor(Math.random() * most));
+  }
+  const asBinary = (n) => n.toString(2).padStart(bits, "0");
+
+  if (b.showPlace !== false){
+    const head = el("div","bin-places");
+    head.appendChild(el("span","bin-placelabel","Place values"));
+    const row = el("div","bin-row");
+    for (let i = bits - 1; i >= 0; i--) row.appendChild(el("span","bin-place", String(Math.pow(2, i))));
+    head.appendChild(row);
+    s.appendChild(head);
+  }
+
+  const answers = [];
+  nums.forEach((n, i) => {
+    /* which way round this one goes */
+    const toDenary = mode === "toDenary" || (mode === "either" && i % 2 === 0);
+    const q = el("div","bin-q");
+    const shown = el("div","bin-shown");
+    if (toDenary){
+      shown.appendChild(el("span","bin-lead","Binary"));
+      const digits = el("div","bin-row");
+      asBinary(n).split("").forEach(d => digits.appendChild(el("span","bin-bit", d)));
+      shown.appendChild(digits);
+    } else {
+      shown.appendChild(el("span","bin-lead","Denary"));
+      shown.appendChild(el("span","bin-num", String(n)));
+    }
+    q.appendChild(shown);
+
+    const ansWrap = el("div","bin-answer");
+    ansWrap.appendChild(el("span","bin-lead", toDenary ? "Denary" : "Binary"));
+    const inputs = [];
+    if (toDenary){
+      const inp = el("input","bin-in");
+      inp.type = "text"; inp.inputMode = "numeric";
+      inp.addEventListener("input", () => { fb.hidden = true; markDirty(); });
+      ansWrap.appendChild(inp);
+      inputs.push(inp);
+    } else {
+      /* one box per bit, so the place values line up above them */
+      const row = el("div","bin-row");
+      for (let k = 0; k < bits; k++){
+        const cell = el("input","bin-cell");
+        cell.type = "text"; cell.maxLength = 1; cell.inputMode = "numeric";
+        cell.addEventListener("input", () => {
+          cell.value = cell.value.replace(/[^01]/g, "").slice(0, 1);
+          if (cell.value && inputs[k + 1]) inputs[k + 1].focus();
+          fb.hidden = true; markDirty();
+        });
+        row.appendChild(cell);
+        inputs.push(cell);
+      }
+      ansWrap.appendChild(row);
+    }
+    q.appendChild(ansWrap);
+
+    const fb = el("p","bin-fb"); fb.hidden = true;
+    q.appendChild(fb);
+    s.appendChild(q);
+    answers.push({ n, toDenary, inputs, fb });
+  });
+
+  const check = el("button","btn-primary","Check my answers");
+  const summary = el("p","bin-summary"); summary.hidden = true;
+  let allRight = false;
+  check.addEventListener("click", () => {
+    let right = 0;
+    answers.forEach(a => {
+      const want = a.toDenary ? String(a.n) : asBinary(a.n);
+      const got = a.inputs.map(x => x.value.trim()).join("");
+      const ok = got === want || (a.toDenary && got !== "" && parseInt(got, 10) === a.n);
+      a.fb.hidden = false;
+      a.fb.dataset.ok = ok ? "yes" : "no";
+      a.fb.textContent = ok ? "Correct"
+        : got === "" ? "Have a go at this one"
+        : "Not yet \u2014 " + (a.toDenary ? "add up the place values above the 1s."
+                                         : "which place values add up to " + a.n + "?");
+      if (ok) right++;
+    });
+    allRight = right === answers.length;
+    summary.hidden = false;
+    summary.textContent = right + " out of " + answers.length + " right.";
+    markDirty();
+  });
+  s.appendChild(check);
+  s.appendChild(summary);
+
+  fields[b.id] = {
+    get:() => ({ answers: answers.map(a => a.inputs.map(x => x.value).join("")),
+                 nums: nums, done: allRight }),
+    set:(v) => {
+      if (!v || !Array.isArray(v.answers)) return;
+      if (Array.isArray(v.nums) && v.nums.length === answers.length){
+        /* put back the numbers they actually saw */
+        v.nums.forEach((n, i) => { answers[i].n = n; });
+      }
+      v.answers.forEach((text, i) => {
+        const a = answers[i];
+        if (!a) return;
+        if (a.inputs.length === 1) a.inputs[0].value = text;
+        else String(text).split("").forEach((c, k) => { if (a.inputs[k]) a.inputs[k].value = c; });
+      });
+      allRight = !!v.done;
+    }
+  };
+
+  return { section:s,
+           check:() => allRight ? { ok:true }
+             : { ok:false, message:"Check your answers before carrying on" },
+           brief:{ eyebrow:"Binary", title:b.title || "", text:b.task || "" } };
+}
+
+/* ======================================================================
+   BINARY ADDITION
+   {"type":"binadd", "bits":8, "showPlace":true, "count":3,
+    "pairs":[[10,5]], "showCarry":true}
+   Two binary numbers to add, with a row for carries above the sum.
+   ====================================================================== */
+function rBinAdd(b){
+  const bits = Math.max(4, Math.min(16, parseInt(b.bits, 10) || 8));
+  const most = Math.pow(2, bits) - 1;
+  const howMany = Math.max(1, Math.min(6, parseInt(b.count, 10) || 3));
+  const wantCarry = b.showCarry !== false;
+  const s = el("section","binary");
+  const asBinary = (n) => n.toString(2).padStart(bits, "0");
+
+  const given = (b.pairs || []).filter(p => Array.isArray(p) && p.length === 2);
+  const sums = [];
+  for (let i = 0; i < howMany; i++){
+    if (given[i]) sums.push([Number(given[i][0]), Number(given[i][1])]);
+    else {
+      /* keep the total inside the number of bits, so it always fits */
+      const a = 1 + Math.floor(Math.random() * (most / 2));
+      const c = 1 + Math.floor(Math.random() * (most - a));
+      sums.push([a, c]);
+    }
+  }
+
+  const rows = [];
+  sums.forEach(pair => {
+    const total = pair[0] + pair[1];
+    const q = el("div","bin-sum");
+    if (b.showPlace !== false){
+      const row = el("div","bin-row bin-placerow");
+      for (let i = bits - 1; i >= 0; i--) row.appendChild(el("span","bin-place", String(Math.pow(2, i))));
+      q.appendChild(row);
+    }
+    let carryIn = [];
+    if (wantCarry){
+      const carry = el("div","bin-row bin-carry");
+      carry.appendChild(el("span","bin-rowlabel","Carried"));
+      for (let k = 0; k < bits; k++){
+        const c = el("input","bin-cell bin-carrycell");
+        c.type = "text"; c.maxLength = 1; c.inputMode = "numeric";
+        c.addEventListener("input", () => { c.value = c.value.replace(/[^01]/g, "").slice(0, 1); markDirty(); });
+        carry.appendChild(c);
+        carryIn.push(c);
+      }
+      q.appendChild(carry);
+    }
+    [0, 1].forEach(which => {
+      const row = el("div","bin-row");
+      row.appendChild(el("span","bin-rowlabel", which === 1 ? "+" : ""));
+      asBinary(pair[which]).split("").forEach(d => row.appendChild(el("span","bin-bit", d)));
+      q.appendChild(row);
+    });
+    const line = el("div","bin-rule");
+    q.appendChild(line);
+
+    const answer = el("div","bin-row");
+    answer.appendChild(el("span","bin-rowlabel","="));
+    const cells = [];
+    for (let k = 0; k < bits; k++){
+      const cell = el("input","bin-cell");
+      cell.type = "text"; cell.maxLength = 1; cell.inputMode = "numeric";
+      cell.addEventListener("input", () => {
+        cell.value = cell.value.replace(/[^01]/g, "").slice(0, 1);
+        if (cell.value && cells[k + 1]) cells[k + 1].focus();
+        fb.hidden = true; markDirty();
+      });
+      answer.appendChild(cell);
+      cells.push(cell);
+    }
+    q.appendChild(answer);
+    const fb = el("p","bin-fb"); fb.hidden = true;
+    q.appendChild(fb);
+    s.appendChild(q);
+    rows.push({ pair, total, cells, carryIn, fb });
+  });
+
+  const check = el("button","btn-primary","Check my answers");
+  const summary = el("p","bin-summary"); summary.hidden = true;
+  let allRight = false;
+  check.addEventListener("click", () => {
+    let right = 0;
+    rows.forEach(r => {
+      const want = r.total.toString(2).padStart(bits, "0");
+      const got = r.cells.map(c => c.value.trim()).join("");
+      const tooBig = r.total > most;
+      const ok = !tooBig && got === want;
+      r.fb.hidden = false;
+      r.fb.dataset.ok = ok ? "yes" : "no";
+      r.fb.textContent = ok ? "Correct"
+        : got.length < bits ? "Fill in every box"
+        : tooBig ? "This one overflows " + bits + " bits \u2014 that is the answer to give."
+        : "Not yet \u2014 remember 1 + 1 is 0 with 1 carried.";
+      if (ok) right++;
+    });
+    allRight = right === rows.length;
+    summary.hidden = false;
+    summary.textContent = right + " out of " + rows.length + " right.";
+    markDirty();
+  });
+  s.appendChild(check);
+  s.appendChild(summary);
+
+  fields[b.id] = {
+    get:() => ({ sums: sums, answers: rows.map(r => r.cells.map(c => c.value).join("")),
+                 carries: rows.map(r => r.carryIn.map(c => c.value).join("")), done: allRight }),
+    set:(v) => {
+      if (!v || !Array.isArray(v.answers)) return;
+      v.answers.forEach((text, i) => {
+        const r = rows[i];
+        if (!r) return;
+        String(text).split("").forEach((c, k) => { if (r.cells[k]) r.cells[k].value = c; });
+      });
+      (v.carries || []).forEach((text, i) => {
+        const r = rows[i];
+        if (!r) return;
+        String(text).split("").forEach((c, k) => { if (r.carryIn[k]) r.carryIn[k].value = c; });
+      });
+      allRight = !!v.done;
+    }
+  };
+
+  return { section:s,
+           check:() => allRight ? { ok:true }
+             : { ok:false, message:"Check your answers before carrying on" },
+           brief:{ eyebrow:"Binary addition", title:b.title || "", text:b.task || "" } };
+}
+
 function rQuiz(b){
   const s = el("section");
   const qs = b.questions || [];

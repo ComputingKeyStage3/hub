@@ -4,7 +4,7 @@
    Space Grotesk (display) · IBM Plex Sans (body) · IBM Plex Mono (code)
    ===================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lexend:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lexend:wght@400;500;600;700;800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 /* =====================================================================
    The school's own look: white on a soft grey, near-black text, one blue
@@ -68,7 +68,6 @@ html[data-bg=dark]{--bg:#23262E; --bar:#2C303A; --panel:#2C303A; --panel-2:#3338
   --mint:#5BBE94; --mint-dim:#2C5847; --red:#DE7C74; --red-dim:#54312E}
 /* font choices */
 html[data-font=lexend]{--display:'Lexend',sans-serif; --body:'Lexend',sans-serif}
-html[data-font=nunito]{--display:'Nunito',sans-serif; --body:'Nunito',sans-serif}
 html[data-font=atkinson]{--display:'Atkinson Hyperlegible',sans-serif; --body:'Atkinson Hyperlegible',sans-serif}
 
 [hidden]{display:none !important}
@@ -254,7 +253,7 @@ iframe.embed{
 .opt.right{border-color:var(--mint); background:rgba(65,199,164,.08)}
 .opt.wrong{border-color:var(--red); background:rgba(232,97,90,.08)}
 
-.feedback{margin-top:16px; padding:15px 17px; border-radius:12px; font-size:17px; line-height:1.5; border:1px solid var(--line)}
+.feedback{margin:16px 0; padding:15px 17px; border-radius:12px; font-size:17px; line-height:1.5; border:1px solid var(--line)}
 .feedback[hidden]{display:none}
 .feedback b{display:block; font-family:var(--display); font-size:17px; margin-bottom:4px}
 .feedback[data-verdict=correct]{background:var(--panel); border-color:var(--mint); color:var(--text)}
@@ -851,7 +850,7 @@ body.spectating{padding-top:40px}
 .lp-note{margin:0 0 10px; font-size:14.5px; color:var(--amber-dark); font-weight:700}
 .lp-acts{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
 .lp-acts button{font-size:14.5px; padding:9px 14px}
-.modal.wide{max-width:760px; text-align:left}
+.modal.wide{max-width:1500px; text-align:left}
 .modal.wide .toolrow{justify-content:flex-start}
 .stutable .statechip{margin-left:8px}
 .who-row .btn-primary,.who-row .btn-ghost{font-size:14px; padding:7px 13px}
@@ -1064,7 +1063,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 /* lesson hub */
 #hubList .unit-head{margin-top:26px}
 #hubList .lessongrid{margin-top:10px}
-.lp-acts button{flex:0 0 auto}
+.lp-acts button{flex:0 0 auto; font-size:12px}
 #ownerNote{margin:8px 24px 0; font-weight:700; color:var(--amber-dark)}
 
 
@@ -1744,7 +1743,7 @@ textarea,select,.searchbox,.sizer{ border-radius:10px }
 /* --- buttons: rounded, filling in when pointed at --- */
 .btn-primary,.btn-ghost{
   border-radius:999px; letter-spacing:.01em; text-transform:none;
-  font-weight:600; font-size:15.5px; padding:0 1.3em; line-height:2.6;
+  font-weight:600; font-size:15.5px; line-height:2.6;
   transition:background .2s ease, color .2s ease, border-color .2s ease;
 }
 .btn-primary{ background:var(--amber); color:var(--amber-ink); border:1.5px solid var(--amber) }
@@ -1779,7 +1778,7 @@ textarea,select,.searchbox,.sizer{ border-radius:10px }
 /* --- tabs: a pill for the one you are on --- */
 .tabs button,.subtabs button,.modeswitch button{
   border-radius:999px; text-transform:none; letter-spacing:.01em; font-size:15px;
-  border:1.5px solid transparent; background:transparent; padding:7px 16px;
+  border:1.5px solid transparent; background:transparent;
 }
 .tabs button.on,.subtabs button.on,.modeswitch button.on{
   background:var(--panel); border-color:var(--line); color:var(--text)
@@ -1800,3 +1799,50 @@ input:focus,textarea:focus,select:focus{
 .eyebrow,.pal-head,.unit-head,.bankhead,.mbstat span{
   text-transform:uppercase; letter-spacing:.08em; font-weight:600; color:var(--dim)
 }
+
+
+/* --- spacing corrections --- */
+.st-card{ padding:12px }
+#setModal .modal{ max-width:460px }
+
+
+/* the reading overlay */
+#hubTint{position:fixed; inset:0; z-index:9998; pointer-events:none; mix-blend-mode:multiply; display:none}
+html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
+.swatch-wide{width:auto !important; padding:0 16px; height:38px; font-family:var(--body);
+  font-size:14.5px; font-weight:600; color:var(--text)}
+.swatch[data-none]{background:var(--panel-2); color:var(--muted); font-size:13px}
+.swatch-pick{position:relative; display:inline-flex; align-items:center; justify-content:center;
+  cursor:pointer; overflow:hidden}
+.swatch-pick input{position:absolute; inset:0; opacity:0; cursor:pointer; border:none; padding:0}
+.swatch-pick span{font-size:17px; color:var(--muted)}
+.tintrow{display:flex; align-items:center; gap:10px; margin-top:10px}
+.tintrow label{font-size:14px; color:var(--muted)}
+.tintrow input[type=range]{flex:1; accent-color:var(--amber)}
+.tintrow span{font-size:14px; font-weight:600; min-width:42px; text-align:right}
+
+
+/* binary tasks */
+.binary .bin-row{display:flex; gap:4px; align-items:center; flex-wrap:nowrap; overflow-x:auto; padding:2px 0}
+.bin-place{min-width:38px; text-align:center; font-family:var(--mono); font-size:12px; color:var(--muted)}
+.bin-placelabel,.bin-lead{display:block; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--dim); font-weight:600; margin-bottom:4px}
+.bin-bit{min-width:38px; height:38px; line-height:38px; text-align:center; font-family:var(--mono);
+  font-size:17px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px}
+.bin-cell{width:38px !important; height:38px; text-align:center; font-family:var(--mono) !important;
+  font-size:17px !important; padding:0 !important; border-radius:8px}
+.bin-carrycell{height:30px; font-size:14px !important; background:var(--panel-2)}
+.bin-num{font-family:var(--mono); font-size:24px; font-weight:600}
+.bin-q,.bin-sum{padding:14px 0; border-bottom:1px solid var(--line)}
+.bin-q:last-of-type,.bin-sum:last-of-type{border-bottom:none}
+.bin-shown,.bin-answer{margin-bottom:10px}
+.bin-rowlabel{min-width:24px; font-family:var(--mono); font-size:17px; color:var(--muted); text-align:right}
+.bin-rule{height:2px; background:var(--line-2); margin:6px 0 8px}
+.bin-carry .bin-rowlabel{font-size:12px; text-transform:uppercase; letter-spacing:.06em}
+.bin-fb{margin:8px 0 0; font-size:15px; font-weight:600}
+.bin-fb[data-ok=yes]{color:var(--mint)}
+.bin-fb[data-ok=no]{color:var(--red)}
+.bin-summary{margin-top:12px; font-weight:600}
+
+/* home learning is marked differently from an assessment */
+.badge-home{background:var(--mint-dim); color:var(--mint); border-color:var(--mint)}

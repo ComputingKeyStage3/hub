@@ -23,6 +23,7 @@
   <button class="on" id="modeLesson">Lesson</button>
   <button id="modeAssess">Assessment</button>
   <button id="modePractical">Practical assessment</button>
+  <button id="modeHome">Home learning</button>
 </div>
 
 <div class="build-top">
@@ -69,6 +70,9 @@
       <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
       <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
       <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
+      <p class="pal-head">Binary</p>
+      <button class="pal" data-add="binary"><b>Binary conversion</b><span>Binary to denary and back</span></button>
+      <button class="pal" data-add="binadd"><b>Binary addition</b><span>Column addition with carries</span></button>
     </div>
     <div id="palAssess" hidden>
       <p class="pal-head">Questions</p>
@@ -119,7 +123,7 @@ function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, "").trim(); }
 
 /* ---------------- the lesson being built ---------------- */
-let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical:false, topics:{}, responses:{}, extensions:[], blocks:[] };
+let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical:false, homework:false, topics:{}, responses:{}, extensions:[], blocks:[] };
 
 const BLANK = {
   text:     () => ({ type:"text", heading:"", html:"" }),
@@ -143,11 +147,15 @@ const BLANK = {
   mc:       () => ({ type:"mc", prompt:"", options:["",""], answer:0, topic:"" }),
   blanks:   () => ({ type:"blanks", prompt:"Fill in the gaps", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
   order:    () => ({ type:"order", prompt:"Put these in order", items:["","",""], topic:"" }),
+  binary:   () => ({ type:"binary", title:"", task:"", mode:"toDenary", bits:8, count:4,
+                     showPlace:true, numbers:"" }),
+  binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
+                     showPlace:true, showCarry:true, pairs:"" }),
   short:    () => ({ type:"short", prompt:"", keywords:"", keywordLabels:"", model:"", why:"", topic:"" })
 };
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", frame:"Embedded page", code:"Coding task", web:"Web page" };
+                short:"Short answer", page:"Page", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", code:"Coding task", web:"Web page" };
 
 /* A YouTube address in any of its usual shapes -> the embeddable one. */
 function toEmbed(raw){
@@ -242,6 +250,7 @@ function compile(){
   if (lesson.intro) out.intro = lesson.intro;
   if (lesson.unit) out.unit = lesson.unit;
   if (lesson.year) out.year = lesson.year;
+  if (lesson.homework) out.homework = true;
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
   if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
   if (lesson.practical){
@@ -250,6 +259,7 @@ function compile(){
     else out.rubric = (lesson.rubric || []).filter(g => g.name);
   }
   if (lesson.year) out.year = lesson.year;
+  if (lesson.homework) out.homework = true;
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
   if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
   if (lesson.practical){
@@ -358,6 +368,19 @@ function compileOne(b, id, target){
       push(blk);
     }
     else if (b.type === "code"){ /* not chosen yet — nothing to build */ }
+    else if (b.type === "binary")
+      push(keepArrays({ type:"binary", id, title: b.title || "", task: b.task || "",
+        mode: b.mode || "toDenary", bits: Number(b.bits) || 8, count: Number(b.count) || 4,
+        showPlace: b.showPlace !== false,
+        numbers: String(b.numbers || "").split(/[\s,]+/).map(Number).filter(n => !isNaN(n) && n >= 0) }));
+    else if (b.type === "binadd")
+      push(keepArrays({ type:"binadd", id, title: b.title || "", task: b.task || "",
+        bits: Number(b.bits) || 8, count: Number(b.count) || 3,
+        showPlace: b.showPlace !== false, showCarry: b.showCarry !== false,
+        pairs: String(b.pairs || "").split(/\n/).map(line => {
+          const two = line.split(/[+,]/).map(x => parseInt(x.trim(), 10));
+          return (two.length === 2 && !isNaN(two[0]) && !isNaN(two[1])) ? two : null;
+        }).filter(Boolean) }));
     else if (b.type === "picture")
       push(keepArrays({ type:"picture", id, title: b.title || "", url: b.url || "",
              caption: b.caption || "", note: b.note || "" }));
@@ -957,6 +980,40 @@ function card(b, i, arr){
     listField("Items in the CORRECT order", "items", "Students see them shuffled.");
     if (lesson.assessment) F("Topic tag", "topic");
   }
+  if (b.type === "binary" || b.type === "binadd"){
+    F("Heading (optional)", "title");
+    F("Instruction (optional)", "task", { area:true, rows:2 });
+    const w = el("div","bfield");
+    w.appendChild(el("label","","How many bits"));
+    const st = el("div","stepper");
+    const less = el("button","btn-ghost iconbtn","\u2212");
+    const num = el("input"); num.type = "number"; num.className = "stepnum"; num.value = String(b.bits || 8);
+    const more = el("button","btn-ghost iconbtn","+");
+    const setB = (v) => { b.bits = Math.max(4, Math.min(16, v)); num.value = String(b.bits); saveDraft(); schedulePreview(); };
+    less.addEventListener("click", () => setB((parseInt(num.value, 10) || 8) - 1));
+    more.addEventListener("click", () => setB((parseInt(num.value, 10) || 8) + 1));
+    num.addEventListener("input", () => { b.bits = Math.max(4, Math.min(16, parseInt(num.value, 10) || 8)); saveDraft(); });
+    st.appendChild(less); st.appendChild(num); st.appendChild(more);
+    w.appendChild(st);
+    body.appendChild(w);
+    F("How many questions", "count", { num:true });
+    if (b.type === "binary"){
+      const mw = el("div","bfield");
+      mw.appendChild(el("label","","Which way round"));
+      const row = el("div","brow");
+      [["toDenary","Binary to denary"],["toBinary","Denary to binary"],["either","A mixture"]].forEach(pair => {
+        const btn = el("button","btn-ghost bmini2" + (b.mode === pair[0] ? " right" : ""), pair[1]);
+        btn.addEventListener("click", () => { b.mode = pair[0]; render(); schedulePreview(); });
+        row.appendChild(btn);
+      });
+      mw.appendChild(row); body.appendChild(mw);
+      F("Set numbers (optional)", "numbers", { help:"Separate with commas, e.g. 13, 200. Left empty, numbers are made up each time." });
+      toggleRow([["showPlace","Place values", true]]);
+    } else {
+      F("Set sums (optional)", "pairs", { help:"One per line, e.g. 10 + 5. Left empty, sums are made up each time." });
+      toggleRow([["showPlace","Place values", true], ["showCarry","Row for carrying", true]]);
+    }
+  }
   if (b.type === "short"){
     F("Question", "prompt", { area:true, rows:2 });
     F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by , — e.g. loop, repeat; count" });
@@ -1006,6 +1063,7 @@ function setMode(assess, practical){
   lesson.practical = !!practical;
   if (practical) lesson.assessment = false;
   $("modePractical").classList.toggle("on", !!practical);
+  $("modeHome").classList.toggle("on", !!lesson.homework && !assess && !practical);
   $("assessTabs").hidden = !assess && !practical;
   $("tabQuestions").textContent = practical ? "Tasks" : "Questions";
   if (!assess){ assessTab = "questions"; respEditing = null; }
@@ -1017,6 +1075,7 @@ function setMode(assess, practical){
   saveDraft(); render(); schedulePreview();
 }
 on("modeLesson", "click", () => {
+  lesson.homework = false;
   if (lesson.assessment && lesson.blocks.length){
     openModal(box => {
       box.appendChild(el("h2","","Switch to a lesson?"));
@@ -1029,7 +1088,12 @@ on("modeLesson", "click", () => {
   } else setMode(false, false);
 });
 on("modeAssess", "click", () => setMode(true, false));
-on("modePractical", "click", () => setMode(false, true));
+on("modePractical", "click", () => { lesson.homework = false; setMode(false, true); });
+on("modeHome", "click", () => {
+  /* the same as a lesson in every way, but students see it as home learning */
+  lesson.homework = true;
+  setMode(false, false);
+});
 function setAssessTab(which){
   assessTab = which;
   respEditing = null;
@@ -1743,6 +1807,7 @@ function fromCompiled(data, meta){
   const out = { title: data.title || (meta && meta.title) || "", intro: data.intro || "",
                 unit: data.unit || (meta && meta.unit) || "", year: data.year || "",
                 assessment: !!data.assessment && !data.practical, practical: !!data.practical,
+                homework: !!data.homework,
                 marking: data.marking || "score", outOf: data.outOf || 20, rubric: data.rubric || [],
                 topics: data.topics || {}, responses: {}, extensions: [], blocks: [] };
   const back = (b) => {

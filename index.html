@@ -322,6 +322,10 @@ function paintLessons(byId){
         const badge = document.createElement("span");
         badge.className = "badge"; badge.textContent = "Assessment";
         a.appendChild(badge);
+      } else if (l.homework || c.homework){
+        const badge = document.createElement("span");
+        badge.className = "badge badge-home"; badge.textContent = "Home Learning";
+        a.appendChild(badge);
       }
       const go = document.createElement("span");
       go.className = "go"; go.textContent = "\u2192";
@@ -501,38 +505,6 @@ async function loadResults(force){
   resultsLoaded = true;
 }
 /* every lesson a teacher has written feedback on */
-let resultLessons = {};
-async function paintFeedbackList(box){
-  const token = localStorage.getItem("hub_token");
-  const ids = Object.keys(lastById || {}).filter(id => !resultLessons[id]);
-  if (!ids.length || !token) return;
-  const found = [];
-  for (const id of ids){
-    try{
-      const r = await fetch(API + "/api/work?lesson=" + encodeURIComponent(id),
-                            { headers:{ Authorization:"Bearer " + token }, cache:"no-store" });
-      if (!r.ok) continue;
-      const d = await r.json();
-      if (!d.feedback) continue;
-      let f = null;
-      try{ f = JSON.parse(d.feedback); }catch(e){ f = { comment: d.feedback }; }
-      if (f && (f.strength || f.target || f.comment)) found.push({ id: id, f: f });
-    }catch(e){}
-  }
-  if (!found.length) return;
-  box.appendChild(el("p","unit-head","Feedback on your lessons"));
-  found.forEach(item => {
-    const card = document.createElement("a");
-    card.className = "fb-card";
-    card.href = "lesson.html?id=" + encodeURIComponent(item.id);
-    const title = el("b","", (lastById[item.id] && lastById[item.id].title) || item.id);
-    card.appendChild(title);
-    if (item.f.strength) card.appendChild(el("span","fb-s", "Strength: " + item.f.strength));
-    if (item.f.target) card.appendChild(el("span","fb-t", "Target: " + item.f.target));
-    if (item.f.comment) card.appendChild(el("span","fb-c", item.f.comment));
-    box.appendChild(card);
-  });
-}
 
 async function fetchResults(){
   const token = localStorage.getItem("hub_token");
@@ -548,11 +520,9 @@ async function fetchResults(){
     box.innerHTML = "";
     /* two lists: how assessments went, and any lesson the teacher has
        written on */
-    resultLessons = {};
     if (!d.results.length) box.appendChild(el("p","hint","No assessment results yet."));
     else box.appendChild(el("p","unit-head","Assessments"));
     d.results.forEach(res => {
-      resultLessons[res.lesson_id] = true;      // so it is not listed twice below
       const card = document.createElement("a"); card.className = "result-card";
       card.href = "lesson.html?id=" + encodeURIComponent(res.lesson_id);
       card.innerHTML = '<span class="sc"></span><span class="body"><b></b><span></span></span><span class="st"></span>';
@@ -575,7 +545,6 @@ async function fetchResults(){
       }
       box.appendChild(card);
     });
-    await paintFeedbackList(box);
   }catch(e){ box.innerHTML = '<p class="hint">' + e.message + '</p>'; }
 }
   if (window.initSettings) initSettings($("setBtn"));

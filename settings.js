@@ -2,22 +2,43 @@
      <script src="settings.js"></script>  then  initSettings(buttonElement)
    Choices persist per device in localStorage under hub_prefs. */
 (function(){
-  const BGS = [
-    ["","School white","#EDEDED"], ["night","School dark","#2C2C33"],
-    ["warm","Warm beige","#F3ECDD"], ["blue","Soft blue","#E2EDF7"],
-    ["green","Soft green","#DDEDD5"], ["peach","Peach","#FAEADC"],
-    ["yellow","Soft yellow","#F9F0CB"], ["dark","Dark grey","#23262E"]
+  const THEMES = [
+    ["","Light","#EDEDED"], ["night","Dark","#2C2C33"]
+  ];
+  /* A colour laid over the whole page. Some readers find this makes text
+     settle down — it is the same idea as a coloured reading ruler. */
+  const TINTS = [
+    ["","None",""], ["green","Green","#7BD389"], ["blue","Blue","#7FB2E5"],
+    ["pink","Pink","#EA9AC0"], ["yellow","Yellow","#F2D479"]
   ];
   const FONTS = [
     ["","Poppins \u2014 the standard font","'Poppins'"],
     ["lexend","Lexend \u2014 easier for some readers","'Lexend'"],
-    ["nunito","Nunito \u2014 soft and rounded","'Nunito'"],
     ["atkinson","Atkinson Hyperlegible \u2014 extra-clear letters","'Atkinson Hyperlegible'"]
   ];
   function prefs(){ try{ return JSON.parse(localStorage.getItem("hub_prefs") || "{}"); }catch(e){ return {}; } }
+  function overlay(){
+    let o = document.getElementById("hubTint");
+    if (!o){
+      o = document.createElement("div");
+      o.id = "hubTint";
+      o.setAttribute("aria-hidden","true");
+      document.body.appendChild(o);
+    }
+    return o;
+  }
+  function applyTint(p){
+    const o = overlay();
+    const colour = p.tintColour || "";
+    if (!colour){ o.style.display = "none"; return; }
+    o.style.display = "block";
+    o.style.background = colour;
+    o.style.opacity = String((p.tintAmt === undefined ? 25 : p.tintAmt) / 100);
+  }
   function apply(p){
     if (p.bg) document.documentElement.dataset.bg = p.bg; else delete document.documentElement.dataset.bg;
     if (p.font) document.documentElement.dataset.font = p.font; else delete document.documentElement.dataset.font;
+    applyTint(p);
     /* editors on the page follow along */
     try{ window.dispatchEvent(new Event("hubprefs")); }catch(e){}
   }
@@ -27,9 +48,22 @@
     back.innerHTML =
       '<div class="modal" role="dialog" aria-modal="true">' +
       '<h2 style="margin-top:0">Settings</h2>' +
-      '<div class="set-group"><span class="set-label">Background colour</span><div class="swatches" id="setSw">' +
-      BGS.map(b => '<button class="swatch" data-bg="' + b[0] + '" style="background:' + b[2] + '" title="' + b[1] + '"></button>').join("") +
+      '<div class="set-group"><span class="set-label">Theme</span><div class="swatches" id="setSw">' +
+      THEMES.map(b => '<button class="swatch swatch-wide" data-bg="' + b[0] + '" style="background:' + b[2] + '">' + b[1] + '</button>').join("") +
       '</div></div>' +
+      '<div class="set-group"><span class="set-label">Colour overlay</span>' +
+      '<p class="subnote" style="margin:0 0 8px">A colour laid over the page. Some readers find it makes text easier to follow.</p>' +
+      '<div class="swatches" id="setTint">' +
+      TINTS.map(t => '<button class="swatch" data-tint="' + t[0] + '"' +
+        (t[2] ? ' style="background:' + t[2] + '"' : ' data-none="1"') + ' title="' + t[1] + '">' +
+        (t[2] ? '' : '\u2715') + '</button>').join("") +
+      '<label class="swatch swatch-pick" title="Any other colour"><input type="color" id="tintPick">' +
+      '<span>\u2295</span></label>' +
+      '</div>' +
+      '<div class="tintrow" id="tintStrength" hidden>' +
+      '<label for="tintAmt">Strength</label>' +
+      '<input type="range" id="tintAmt" min="5" max="60" step="5">' +
+      '<span id="tintAmtOut"></span></div></div>' +
       '<div class="set-group"><span class="set-label">Font</span><div class="font-opts" id="setFo">' +
       FONTS.map(f => '<button class="font-opt" data-font="' + f[0] + '" style="font-family:' + f[2] + '">' + f[1] + '</button>').join("") +
       '</div></div>' +
@@ -43,12 +77,41 @@
     document.body.appendChild(back);
     function paint(){
       const p = prefs();
-      back.querySelectorAll(".swatch").forEach(b => b.classList.toggle("on", (p.bg || "") === b.dataset.bg));
+      back.querySelectorAll(".swatch[data-bg]").forEach(b => b.classList.toggle("on", (p.bg || "") === b.dataset.bg));
+      back.querySelectorAll(".swatch[data-tint]").forEach(b => b.classList.toggle("on", (p.tint || "") === b.dataset.tint));
+      const on = !!p.tintColour;
+      const row = back.querySelector("#tintStrength");
+      if (row) row.hidden = !on;
+      const amt2 = back.querySelector("#tintAmt"), out = back.querySelector("#tintAmtOut");
+      if (amt2){ amt2.value = String(p.tintAmt === undefined ? 25 : p.tintAmt); }
+      if (out) out.textContent = (p.tintAmt === undefined ? 25 : p.tintAmt) + "%";
+      const pick2 = back.querySelector("#tintPick");
+      if (pick2 && p.tint === "custom" && p.tintColour) pick2.value = p.tintColour;
       back.querySelectorAll(".font-opt").forEach(b => b.classList.toggle("on", (p.font || "") === b.dataset.font));
     }
-    back.querySelectorAll(".swatch").forEach(b => b.addEventListener("click", () => {
-      const p = prefs(); p.bg = b.dataset.bg; localStorage.setItem("hub_prefs", JSON.stringify(p)); apply(p); paint();
+    back.querySelectorAll(".swatch[data-bg]").forEach(b => b.addEventListener("click", () => {
+      const p = prefs(); p.bg = b.dataset.bg; save(p); paint();
     }));
+    back.querySelectorAll(".swatch[data-tint]").forEach(b => b.addEventListener("click", () => {
+      const p = prefs();
+      const tint = b.dataset.tint;
+      p.tint = tint;
+      p.tintColour = tint ? (TINTS.find(t => t[0] === tint) || ["","",""])[2] : "";
+      if (p.tintAmt === undefined) p.tintAmt = 25;
+      save(p); paint();
+    }));
+    const pick = back.querySelector("#tintPick");
+    if (pick) pick.addEventListener("input", () => {
+      const p = prefs();
+      p.tint = "custom"; p.tintColour = pick.value;
+      if (p.tintAmt === undefined) p.tintAmt = 25;
+      save(p); paint();
+    });
+    const amt = back.querySelector("#tintAmt");
+    if (amt) amt.addEventListener("input", () => {
+      const p = prefs(); p.tintAmt = parseInt(amt.value, 10) || 25; save(p); paint();
+    });
+    function save(p){ localStorage.setItem("hub_prefs", JSON.stringify(p)); apply(p); }
     back.querySelectorAll(".font-opt").forEach(b => b.addEventListener("click", () => {
       const p = prefs(); p.font = b.dataset.font; localStorage.setItem("hub_prefs", JSON.stringify(p)); apply(p); paint();
     }));
