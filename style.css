@@ -4,7 +4,7 @@
    Space Grotesk (display) · IBM Plex Sans (body) · IBM Plex Mono (code)
    ===================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=Lexend:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lexend:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 /* =====================================================================
    The school's own look: white on a soft grey, near-black text, one blue
@@ -34,11 +34,11 @@
   --red:#CF1111;
   --red-dim:#F6D9D9;
 
-  --display:'Barlow Condensed','Barlow','Segoe UI',system-ui,sans-serif;
-  --body:'Barlow','Segoe UI',system-ui,-apple-system,sans-serif;
+  --display:'Poppins','Segoe UI',system-ui,sans-serif;
+  --body:'Poppins','Segoe UI',system-ui,-apple-system,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
 
-  --r:2px;
+  --r:12px;
 }
 
 /* background choices (Settings on the home page) */
@@ -54,9 +54,9 @@ html[data-bg=warm]{--bg:#F3ECDD; --bar:#ECE2CC; --panel:#FFFFFF; --panel-2:#FBF7
   --body:'Lexend','Segoe UI',system-ui,-apple-system,sans-serif;
   --r:16px}
 /* the same look after dark */
-html[data-bg=night]{--bg:#141414; --bar:#1D1D1B; --panel:#1D1D1B; --panel-2:#262625;
-  --line:#33332F; --line-2:#454540;
-  --text:#F2F2F0; --muted:#B4B4B0; --dim:#8A8A86;
+html[data-bg=night]{--bg:#1F1F24; --bar:#33333B; --panel:#2C2C33; --panel-2:#383840;
+  --line:#43434C; --line-2:#5A5A65;
+  --text:#F2F2F0; --muted:#B4B4B0; --dim:#9A9A96;
   --brand:#6FA8E0; --amber:#6FA8E0; --amber-dark:#8FBEEA; --amber-ink:#0E1116;
   --mint:#5FBF95; --mint-dim:#22402F; --red:#E8736E; --red-dim:#4A2523}
 html[data-bg=blue]{--bg:#E2EDF7; --bar:#D0E2F0; --panel:#FFFFFF; --panel-2:#F4F9FC; --line:#D4E1EB; --line-2:#B9CDDD}
@@ -1718,75 +1718,85 @@ body.workpage .grow{flex:1}
 
 
 /* =====================================================================
-   THE SCHOOL'S LOOK
-   Square corners, thin grey rules, headings in condensed capitals, and
-   buttons that are outlined until you point at them. Everything below
-   reshapes what is already there rather than adding new components.
+   THE SCHOOL'S LOOK, SOFTENED
+   White cards on a soft grey, near-black text, one blue for anything you
+   can act on — but with rounded corners and Poppins, which sits better
+   with the rest of the site than hard edges did.
    ===================================================================== */
 
 /* --- type --- */
-h1,h2,h3{ letter-spacing:0; font-weight:600 }
-h1{ font-size:clamp(30px,6vw,2.6rem); line-height:1.15 }
-h2{ font-size:clamp(24px,5vw,2rem); line-height:1.2 }
-h3{ font-size:clamp(19px,4vw,1.45rem); line-height:1.25 }
-.masthead h1{ text-transform:uppercase; letter-spacing:.01em }
-body{ font-size:17px; line-height:1.6 }
+h1,h2,h3{ letter-spacing:-.01em; font-weight:600 }
+h1{ font-size:clamp(28px,5.5vw,2.4rem); line-height:1.2 }
+h2{ font-size:clamp(22px,4.5vw,1.8rem); line-height:1.25 }
+h3{ font-size:clamp(18px,3.5vw,1.35rem); line-height:1.3 }
+body{ font-size:16.5px; line-height:1.65 }
 
-/* --- edges --- */
-.station,.lessonCard,.classtile,.lessonpill,.modal,.brief,.bcard,.qsub,
-.st-card,.result-card,.fb-card,.seat,.seatcell,.seatgrid,.seatpool,.seatfront,
-.workside,.workframe,.mbscroll,.searchbox,.sizer,.menu,.rt,.ide-wrap,
-.field input,.bfield input,.bfield textarea,.bfield select,input,textarea,select,
-.periodbtn,.bankpick,.rubriccol,.allpage,.linkprev,.picimg,.embed,.framed{
-  border-radius:2px
-}
-.circleish,.num,.allpage-n,.mbtick .yes{ border-radius:50% }
+/* --- edges: soft, with the roundest reserved for buttons and pills --- */
+.station,.modal,.bcard,.qsub,.st-card,.result-card,.fb-card,.allpage,
+.workside,.workframe,.mbscroll,.seatgrid,.seatpool,.rubriccol,.ide-wrap{ border-radius:14px }
+.lessonCard,.classtile,.lessonpill,.brief,.linkprev,.picimg,.embed,.framed,
+.seat,.seatcell,.seatfront,.menu,.rt,.periodbtn,.bankpick{ border-radius:12px }
+.field input,.bfield input,.bfield textarea,.bfield select,
+input[type=text],input[type=password],input[type=number],input[type=date],
+textarea,select,.searchbox,.sizer{ border-radius:10px }
+.num,.allpage-n{ border-radius:50% }
 
-/* --- buttons: outlined, uppercase, filling on hover --- */
+/* --- buttons: rounded, filling in when pointed at --- */
 .btn-primary,.btn-ghost{
-  border-radius:2px; text-transform:uppercase; letter-spacing:.06em;
-  font-weight:600; font-size:14.5px; padding:0 1.15em; line-height:2.7;
-  transition:background .25s ease, color .25s ease, border-color .25s ease;
+  border-radius:999px; letter-spacing:.01em; text-transform:none;
+  font-weight:600; font-size:15.5px; padding:0 1.3em; line-height:2.6;
+  transition:background .2s ease, color .2s ease, border-color .2s ease;
 }
-.btn-primary{ background:var(--amber); color:var(--amber-ink); border:1px solid var(--amber) }
+.btn-primary{ background:var(--amber); color:var(--amber-ink); border:1.5px solid var(--amber) }
 .btn-primary:hover{ background:var(--amber-dark); border-color:var(--amber-dark) }
-.btn-ghost{ background:transparent; color:var(--amber); border:1px solid var(--amber) }
-.btn-ghost:hover{ background:var(--amber); color:var(--amber-ink) }
-.btn-ghost.iconbtn{ text-transform:none; letter-spacing:0; color:var(--text);
-  border-color:var(--line-2) }
-.btn-ghost.iconbtn:hover{ background:var(--panel-2); color:var(--text); border-color:var(--amber) }
-.bmini,.bmini2,.ide-small,.ide-chip{ text-transform:none; letter-spacing:0 }
+.btn-ghost{ background:transparent; color:var(--amber); border:1.5px solid var(--line-2) }
+.btn-ghost:hover{ background:var(--amber); color:var(--amber-ink); border-color:var(--amber) }
+.btn-ghost.iconbtn{ border-radius:50%; color:var(--text); border-color:var(--line-2) }
+.btn-ghost.iconbtn:hover{ background:var(--panel-2); color:var(--amber); border-color:var(--amber) }
+.bmini,.bmini2,.ide-small,.ide-chip{ border-radius:999px }
 
-/* --- panels sit as white cards on the grey --- */
+/* --- panels: white cards, lifted a little off the grey --- */
 .station,.lessonCard,.classtile,.lessonpill,.bcard,.st-card,.result-card{
-  border:1px solid var(--line); box-shadow:none;
+  border:1px solid var(--line); box-shadow:0 1px 2px rgba(0,0,0,.04);
 }
-.lessonCard:hover,.classtile:hover,.lessonpill:hover{ border-color:var(--amber) }
-.homebar,.topbar{ border-bottom:1px solid var(--line); box-shadow:inset 0 -3px 0 var(--brand) }
-.crumbbar{ border-bottom:1px solid var(--line) }
+.lessonCard:hover,.classtile:hover,.lessonpill:hover{
+  border-color:var(--amber); box-shadow:0 4px 14px rgba(0,0,0,.08);
+}
+/* No coloured band here: it sat directly above the progress bar and read as
+   part of it. The bar carries the colour instead. */
+.homebar,.topbar,.crumbbar{ border-bottom:1px solid var(--line) }
+
+/* --- the progress bar, made clearly its own thing --- */
+.tracker{ padding:10px 20px 0; gap:4px }
+.seg{ height:6px; border-radius:999px; background:var(--line) }
+.seg.done{ background:var(--mint) }
+.seg.now{ background:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 18%, transparent) }
 
 /* --- links read as links --- */
 .prose a,.content a,.q-context a{ color:var(--amber); text-decoration:underline;
   text-decoration-color:color-mix(in srgb, var(--amber) 30%, transparent) }
 
-/* --- tabs become an underlined strip --- */
+/* --- tabs: a pill for the one you are on --- */
 .tabs button,.subtabs button,.modeswitch button{
-  border-radius:0; text-transform:uppercase; letter-spacing:.06em; font-size:14px;
-  border:none; border-bottom:2px solid transparent; background:transparent;
+  border-radius:999px; text-transform:none; letter-spacing:.01em; font-size:15px;
+  border:1.5px solid transparent; background:transparent; padding:7px 16px;
 }
 .tabs button.on,.subtabs button.on,.modeswitch button.on{
-  border-bottom-color:var(--amber); color:var(--text); background:transparent
+  background:var(--panel); border-color:var(--line); color:var(--text)
 }
 
 /* --- form fields --- */
 .field input,.bfield input,.bfield textarea,.bfield select,
 input[type=text],input[type=password],input[type=number],input[type=date],textarea,select{
-  border:1px solid var(--line-2); background:var(--panel)
+  border:1.5px solid var(--line-2); background:var(--panel)
 }
 .field input:focus,.bfield input:focus,.bfield textarea:focus,
-input:focus,textarea:focus,select:focus{ border-color:var(--amber); outline:none }
+input:focus,textarea:focus,select:focus{
+  border-color:var(--amber); outline:none;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent)
+}
 
 /* --- the small labels above things --- */
 .eyebrow,.pal-head,.unit-head,.bankhead,.mbstat span{
-  text-transform:uppercase; letter-spacing:.1em; font-weight:600; color:var(--dim)
+  text-transform:uppercase; letter-spacing:.08em; font-weight:600; color:var(--dim)
 }

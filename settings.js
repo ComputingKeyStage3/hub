@@ -3,13 +3,13 @@
    Choices persist per device in localStorage under hub_prefs. */
 (function(){
   const BGS = [
-    ["","School white","#EDEDED"], ["night","School dark","#1D1D1B"],
+    ["","School white","#EDEDED"], ["night","School dark","#2C2C33"],
     ["warm","Warm beige","#F3ECDD"], ["blue","Soft blue","#E2EDF7"],
     ["green","Soft green","#DDEDD5"], ["peach","Peach","#FAEADC"],
     ["yellow","Soft yellow","#F9F0CB"], ["dark","Dark grey","#23262E"]
   ];
   const FONTS = [
-    ["","Barlow \u2014 the standard font","'Barlow'"],
+    ["","Poppins \u2014 the standard font","'Poppins'"],
     ["lexend","Lexend \u2014 easier for some readers","'Lexend'"],
     ["nunito","Nunito \u2014 soft and rounded","'Nunito'"],
     ["atkinson","Atkinson Hyperlegible \u2014 extra-clear letters","'Atkinson Hyperlegible'"]
