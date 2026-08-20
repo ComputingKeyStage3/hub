@@ -3594,9 +3594,20 @@ function saveButton(statusEl){
   if (OFFLINE){
     const btn = el("button","btn-primary done-save","Save my work as a PDF");
     btn.addEventListener("click", () => {
-      showPdfView();
-      /* straight to the print dialogue, where "Save as PDF" is the option */
-      setTimeout(() => { try{ window.print(); }catch(e){} }, 400);
+      /* built here and downloaded — no print dialogue to get lost in */
+      btn.textContent = "Making the PDF\u2026";
+      setTimeout(() => {
+        try{
+          if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
+          const doc = buildPdf();
+          doc.save(fileName());
+          btn.textContent = "\u2713 Saved as a PDF";
+          if (statusEl) statusEl.textContent = "Saved as " + fileName() + " \u2014 hand that in.";
+        }catch(e){
+          btn.textContent = "Save my work as a PDF";
+          if (statusEl) statusEl.textContent = e.message;
+        }
+      }, 30);
     });
     if (statusEl){
       statusEl.dataset.state = "offline";
@@ -3780,6 +3791,15 @@ function markHandedIn(){
 
 }
 function fileName(){
+  /* Offline the student names it themselves: their name, year and lesson,
+     so a folder of handed-in PDFs sorts sensibly. */
+  if (OFFLINE){
+    const tidy = (t) => String(t || "").replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, "-");
+    const me = tidy(localStorage.getItem("hub_name"));
+    const yr = tidy(localStorage.getItem("hub_year"));
+    const ttl = tidy(lesson && lesson.title ? lesson.title : lessonId);
+    return [me, yr, ttl].filter(Boolean).join("-").slice(0, 110) + ".pdf";
+  }
   const who = (inspectName || "").replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, "-");
   const user = (inspectUser || "").replace(/[^A-Za-z0-9]/g, "");
   const title = (lesson && lesson.title ? lesson.title : lessonId).replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, "-");

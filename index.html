@@ -130,9 +130,13 @@ function renderAuth(){
      they are so their work can be told apart on this computer. */
   if (OFFLINE){
     if (name){
-      $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn">Not me</button>';
+      $("auth").innerHTML = '<span class="who"><b></b> <span class="whoyear"></span></span> <button class="btn-ghost" id="outBtn">Not me</button>';
       $("auth").querySelector("b").textContent = name;
-      on("outBtn", "click", () => { localStorage.removeItem("hub_name"); renderAuth(); });
+      $("auth").querySelector(".whoyear").textContent = localStorage.getItem("hub_year") || "";
+      on("outBtn", "click", () => {
+        ["hub_name","hub_year"].forEach(k => localStorage.removeItem(k));
+        renderAuth();
+      });
       $("loginCard").hidden = true;
       const hour = new Date().getHours();
       const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -158,13 +162,26 @@ function renderAuth(){
       input.autocomplete = "off";
       field.appendChild(input);
       const go = document.createElement("button");
-      go.className = "btn-primary";
-      go.style.minWidth = "180px";
-      go.textContent = "Start";
+      const years = (window.HUB && window.HUB.YEARS) || ["Year 7","Year 8","Year 9"];
+      const pick = document.createElement("select");
+      pick.className = "offname";
+      const blank = document.createElement("option");
+      blank.value = ""; blank.textContent = "Choose your year";
+      pick.appendChild(blank);
+      years.forEach(y => {
+        const o = document.createElement("option");
+        o.value = y; o.textContent = y;
+        pick.appendChild(o);
+      });
+      pick.value = localStorage.getItem("hub_year") || "";
+      field.appendChild(pick);
+
       const start = () => {
         const v = (input.value || "").trim();
-        if (!v) return;
+        if (!v){ input.focus(); return; }
+        if (!pick.value){ pick.focus(); return; }
         localStorage.setItem("hub_name", v);
+        localStorage.setItem("hub_year", pick.value);
         renderAuth();
       };
       go.addEventListener("click", start);
@@ -261,7 +278,7 @@ async function fetchLessons(){
   const box = $("lessonList");
   const token = localStorage.getItem("hub_token");
   if (!OFFLINE && !token){ box.innerHTML = ""; return; }   // signing in comes first
-  if (OFFLINE && !localStorage.getItem("hub_name")){ box.innerHTML = ""; return; }
+  if (OFFLINE && !(localStorage.getItem("hub_name") && localStorage.getItem("hub_year"))){ box.innerHTML = ""; return; }
   box.innerHTML = '<p class="hint">Loading…</p>';
   const group = localStorage.getItem("hub_group") || "";
   try{
@@ -280,9 +297,14 @@ async function fetchLessons(){
        catalogue: everything in lessons/index.json is on offer. */
     catalogue = ready
       ? await (await fetch(API + "/api/catalog" + (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json()
-      : { units: [], lessons: flat.map(l => ({
-            lesson_id: l.id, title: l.title, description: l.description || "",
-            unit: l.unit || "", assessment: !!l.assessment, homework: !!l.homework })) };
+      : { units: [], lessons: flat
+            /* only the year they said they are in; a lesson with no year is
+               shown to everyone */
+            .filter(l => !l.year || l.year === (localStorage.getItem("hub_year") || ""))
+            .map(l => ({
+              lesson_id: l.id, title: l.title, description: l.description || "",
+              unit: l.unit || "", year: l.year || "",
+              assessment: !!l.assessment, homework: !!l.homework })) };
 
     (catalogue.lessons || []).forEach(c => {
       if (!byId[c.lesson_id]){

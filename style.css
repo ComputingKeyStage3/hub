@@ -1981,7 +1981,7 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .codeblock{background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
   padding:12px 14px; font-family:var(--mono); font-size:13.5px; overflow-x:auto; margin:0 0 12px}
 /* a banner saying the site is running without a server */
-.offbar{display:flex; align-items:center; gap:10px; justify-content:center; padding:7px 14px;
+.offbar{flex:0 0 auto; display:flex; align-items:center; gap:10px; justify-content:center; padding:7px 14px;
   background:color-mix(in srgb, var(--amber) 12%, var(--panel)); border-bottom:1px solid var(--amber);
   font-size:14px; color:var(--text)}
 .offbar b{font-weight:700}
@@ -1999,3 +1999,7 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .offname:focus{ border-color:var(--amber); outline:none;
   box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent) }
 .offwrap{ display:flex; flex-direction:column; align-items:center; gap:12px }
+
+/* the year beside a student name in the bar */
+.whoyear{color:var(--muted); font-size:14px}
+select.offname{text-align-last:center; cursor:pointer}

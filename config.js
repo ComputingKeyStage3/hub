@@ -20,11 +20,16 @@
    and anything already in the database is untouched.
    ===================================================================== */
 window.HUB = {
-  OFFLINE: true,
+  OFFLINE: false,
 
   // Your Vercel address — no trailing slash. Ignored entirely when OFFLINE
   // is true, so it can be left as it is.
-  API: "https://hub-backend-azure.vercel.app".replace(/\/+$/, "")
+  API: "PASTE_YOUR_VERCEL_URL_HERE".replace(/\/+$/, ""),
+
+  // The year groups students can pick from when the site runs without a
+  // server. Add or change these freely — they are just names, and they must
+  // match the "year" written on each lesson in lessons/index.json.
+  YEARS: ["Year 7", "Year 8", "Year 9"]
 };
 
 /* Everything below works out what that means, so no page has to. */

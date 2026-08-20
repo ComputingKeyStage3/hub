@@ -1756,6 +1756,10 @@ function lessonId(){
 /* Save the lesson as a file for the lessons folder, with what to do next. */
 function downloadForFolder(){
   if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
+  if (!lesson.year || !lesson.year.trim()){
+    say("Which year group?", "Students pick their year when they open the site, and only see lessons for it.");
+    return;
+  }
   const id = (lessonId || lesson.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const built = compile();
   const blob = new Blob([JSON.stringify(built, null, 2)], { type:"application/json" });
@@ -1777,6 +1781,7 @@ function downloadForFolder(){
     const snippet = el("pre","codeblock");
     snippet.textContent = JSON.stringify({ id: id, title: lesson.title,
       description: lesson.intro || "",
+      year: lesson.year || "",
       assessment: !!(lesson.assessment || lesson.practical) || undefined,
       homework: !!lesson.homework || undefined }, null, 2);
     box.appendChild(snippet);
