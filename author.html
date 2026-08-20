@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
+<script src="offlinebar.js"></script>
 <script src="richtext.js"></script>
 <script src="menus.js"></script>
 <script src="settings.js"></script>
@@ -1752,8 +1753,49 @@ function lessonId(){
   if (lesson.savedAs) return lesson.savedAs;
   return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50);
 }
+/* Save the lesson as a file for the lessons folder, with what to do next. */
+function downloadForFolder(){
+  if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
+  const id = (lessonId || lesson.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const built = compile();
+  const blob = new Blob([JSON.stringify(built, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = id + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  dirty = false;
+  openModal(box => {
+    box.appendChild(el("h2","","Saved as " + id + ".json"));
+    box.appendChild(el("p","modal-text","To put it on the site:"));
+    const list = el("ol","modal-steps");
+    [ "Put " + id + ".json into the lessons folder in GitHub.",
+      "Open lessons/index.json and add this line inside the right unit:",
+      "Commit. The lesson appears for students within a minute or so."
+    ].forEach(t => list.appendChild(el("li","", t)));
+    box.appendChild(list);
+    const snippet = el("pre","codeblock");
+    snippet.textContent = JSON.stringify({ id: id, title: lesson.title,
+      description: lesson.intro || "",
+      assessment: !!(lesson.assessment || lesson.practical) || undefined,
+      homework: !!lesson.homework || undefined }, null, 2);
+    box.appendChild(snippet);
+    const copy = el("button","btn-ghost","Copy that line");
+    copy.addEventListener("click", () => {
+      try{ navigator.clipboard.writeText(snippet.textContent); copy.textContent = "Copied"; }catch(e){}
+    });
+    box.appendChild(copy);
+    const done = el("button","btn-primary modal-cta","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+}
+
 async function saveToSite(){
   const API = (window.HUB && window.HUB.API) || "";
+  /* Offline there is nowhere to save to, so the lesson is downloaded instead
+     and dropped into the lessons folder on GitHub. */
+  if (window.HUB && window.HUB.OFFLINE){ downloadForFolder(); return; }
   if (!API){ say("Not connected", "This copy of the site has no server address in config.js, so it can't save lessons."); return; }
   if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
   if (!lesson.year || !lesson.year.trim()){ say("Which year group?", "Choose a year group at the top, or make a new one."); return; }

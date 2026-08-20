@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
+<script src="offlinebar.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -99,7 +100,8 @@
 
 <script>
 const API = (window.HUB && window.HUB.API) || "";
-const ready = API && API.indexOf("PASTE_") !== 0;
+const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
+const ready = !(window.HUB && window.HUB.OFFLINE) && API && API.indexOf("PASTE_") !== 0;
 const $ = (id) => document.getElementById(id);
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text; return e; }
@@ -124,6 +126,53 @@ function signedInView(inYet){
 
 function renderAuth(){
   const name = localStorage.getItem("hub_name");
+  /* With no backend there is nobody to sign in to. Students just say who
+     they are so their work can be told apart on this computer. */
+  if (OFFLINE){
+    if (name){
+      $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn">Not me</button>';
+      $("auth").querySelector("b").textContent = name;
+      on("outBtn", "click", () => { localStorage.removeItem("hub_name"); renderAuth(); });
+      $("loginCard").hidden = true;
+      const hour = new Date().getHours();
+      const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+      $("headline").textContent = part + ", " + name.split(" ")[0];
+      signedInView(true);
+      loadLessons();
+    } else {
+      $("auth").innerHTML = "";
+      $("loginCard").hidden = false;
+      $("headline").textContent = "What is your name?";
+      /* built as real elements, so the button is wired to the one on screen */
+      const card = $("loginCard");
+      card.innerHTML = "";
+      const note = document.createElement("p");
+      note.className = "hint";
+      note.textContent = "Your work is kept on this computer, in this browser. " +
+                         "Put your name in so it can be told apart from anyone else using it.";
+      const field = document.createElement("div");
+      field.className = "field";
+      const input = document.createElement("input");
+      input.placeholder = "Your name";
+      input.autocomplete = "off";
+      field.appendChild(input);
+      const go = document.createElement("button");
+      go.className = "btn-primary";
+      go.style.width = "100%";
+      go.textContent = "Start";
+      const start = () => {
+        const v = (input.value || "").trim();
+        if (!v) return;
+        localStorage.setItem("hub_name", v);
+        renderAuth();
+      };
+      go.addEventListener("click", start);
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") start(); });
+      card.appendChild(note); card.appendChild(field); card.appendChild(go);
+      signedInView(false);
+    }
+    return;
+  }
   if (name && localStorage.getItem("hub_token")){
     $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn">Sign out</button>';
     $("auth").querySelector("b").textContent = name;
@@ -209,7 +258,8 @@ let lastById = {};
 async function fetchLessons(){
   const box = $("lessonList");
   const token = localStorage.getItem("hub_token");
-  if (!token){ box.innerHTML = ""; return; }        // signing in comes first
+  if (!OFFLINE && !token){ box.innerHTML = ""; return; }   // signing in comes first
+  if (OFFLINE && !localStorage.getItem("hub_name")){ box.innerHTML = ""; return; }
   box.innerHTML = '<p class="hint">Loading…</p>';
   const group = localStorage.getItem("hub_group") || "";
   try{
@@ -224,7 +274,13 @@ async function fetchLessons(){
     const byId = {};
     flat.forEach(l => { byId[l.id] = l; lessonTitles[l.id] = l.title; });
 
-    catalogue = ready ? await (await fetch(API + "/api/catalog" + (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json() : { units: [], lessons: [] };
+    /* Offline there is no catalogue to ask, so the lesson files are the
+       catalogue: everything in lessons/index.json is on offer. */
+    catalogue = ready
+      ? await (await fetch(API + "/api/catalog" + (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json()
+      : { units: [], lessons: flat.map(l => ({
+            lesson_id: l.id, title: l.title, description: l.description || "",
+            unit: l.unit || "", assessment: !!l.assessment, homework: !!l.homework })) };
 
     (catalogue.lessons || []).forEach(c => {
       if (!byId[c.lesson_id]){

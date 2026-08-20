@@ -9,7 +9,8 @@
      settle down — it is the same idea as a coloured reading ruler. */
   const TINTS = [
     ["","None",""], ["green","Green","#7BD389"], ["blue","Blue","#7FB2E5"],
-    ["pink","Pink","#EA9AC0"], ["yellow","Yellow","#F2D479"]
+    ["pink","Pink","#EA9AC0"], ["yellow","Yellow","#F2D479"],
+    ["purple","Purple","#8B6FB5"], ["forest","Dark green","#4E8C63"]
   ];
   const FONTS = [
     ["","Poppins \u2014 the standard font","'Poppins'"],
@@ -57,8 +58,6 @@
       TINTS.map(t => '<button class="swatch" data-tint="' + t[0] + '"' +
         (t[2] ? ' style="background:' + t[2] + '"' : ' data-none="1"') + ' title="' + t[1] + '">' +
         (t[2] ? '' : '\u2715') + '</button>').join("") +
-      '<label class="swatch swatch-pick" title="Any other colour"><input type="color" id="tintPick">' +
-      '<span>\u2295</span></label>' +
       '</div>' +
       '<div class="tintrow" id="tintStrength" hidden>' +
       '<label for="tintAmt">Strength</label>' +
@@ -85,8 +84,6 @@
       const amt2 = back.querySelector("#tintAmt"), out = back.querySelector("#tintAmtOut");
       if (amt2){ amt2.value = String(p.tintAmt === undefined ? 25 : p.tintAmt); }
       if (out) out.textContent = (p.tintAmt === undefined ? 25 : p.tintAmt) + "%";
-      const pick2 = back.querySelector("#tintPick");
-      if (pick2 && p.tint === "custom" && p.tintColour) pick2.value = p.tintColour;
       back.querySelectorAll(".font-opt").forEach(b => b.classList.toggle("on", (p.font || "") === b.dataset.font));
     }
     back.querySelectorAll(".swatch[data-bg]").forEach(b => b.addEventListener("click", () => {
@@ -100,13 +97,6 @@
       if (p.tintAmt === undefined) p.tintAmt = 25;
       save(p); paint();
     }));
-    const pick = back.querySelector("#tintPick");
-    if (pick) pick.addEventListener("input", () => {
-      const p = prefs();
-      p.tint = "custom"; p.tintColour = pick.value;
-      if (p.tintAmt === undefined) p.tintAmt = 25;
-      save(p); paint();
-    });
     const amt = back.querySelector("#tintAmt");
     if (amt) amt.addEventListener("input", () => {
       const p = prefs(); p.tintAmt = parseInt(amt.value, 10) || 25; save(p); paint();
@@ -121,7 +111,8 @@
     const isStudent = !!localStorage.getItem("hub_token");
     const onConsole = /admin\.html|author\.html|work\.html/.test(location.pathname);
     const isTeacher = !!localStorage.getItem("hub_tkey");
-    if (isStudent && API && !onConsole && !isTeacher) grp.hidden = false;
+    const noServer = !!(window.HUB && window.HUB.OFFLINE);
+    if (isStudent && API && !onConsole && !isTeacher && !noServer) grp.hidden = false;
     if (window.settingsExtra){
       const extra = document.createElement("button");
       extra.className = "btn-ghost";

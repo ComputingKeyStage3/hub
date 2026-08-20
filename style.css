@@ -11,6 +11,10 @@
    for anything you can act on, square corners and thin grey rules.
    ===================================================================== */
 :root{
+  /* the code editor's default colours, so they are named like everything else */
+  --code-bg:#20242E;
+  --code-fg:#D8DEE9;
+
   --bg:#EDEDED;
   --bar:#FFFFFF;
   --panel:#FFFFFF;
@@ -54,6 +58,7 @@ html[data-bg=warm]{--bg:#F3ECDD; --bar:#ECE2CC; --panel:#FFFFFF; --panel-2:#FBF7
   --body:'Lexend','Segoe UI',system-ui,-apple-system,sans-serif;
   --r:16px}
 /* the same look after dark */
+html[data-idetheme=light]{--code-bg:#FFFFFF; --code-fg:#1D1D1B}
 html[data-bg=night]{--bg:#1F1F24; --bar:#33333B; --panel:#2C2C33; --panel-2:#383840;
   --line:#43434C; --line-2:#5A5A65;
   --text:#F2F2F0; --muted:#B4B4B0; --dim:#9A9A96;
@@ -90,7 +95,7 @@ button{
 }
 button:active{transform:translateY(1px)}
 button:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
-.btn-primary{background:var(--amber); color:#131A26; border-color:var(--amber)}
+.btn-primary{background:var(--amber); color:var(--amber-ink); border-color:var(--amber)}
 .btn-primary:hover{background:var(--amber-dark); border-color:var(--amber-dark)}
 .btn-ghost{background:transparent; color:var(--text); border-color:var(--line-2)}
 .btn-ghost:hover{border-color:var(--muted)}
@@ -117,7 +122,7 @@ input:focus,textarea:focus{outline:none; border-color:var(--amber); box-shadow:0
   display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
 }
 .chip::before{content:""; width:6px; height:6px; border-radius:50%; background:var(--dim)}
-.chip[data-state=saving]{color:var(--amber); border-color:#5A4520}
+.chip[data-state=saving]{color:var(--amber); border-color:var(--amber-dark)}
 .chip[data-state=saving]::before{background:var(--amber)}
 .chip[data-state=saved]{color:var(--mint); border-color:var(--mint-dim)}
 .chip[data-state=saved]::before{background:var(--mint)}
@@ -168,7 +173,7 @@ body.lesson{
 .brief{
   width:min(760px, calc(100% - 40px)); margin:10px auto 2px;
   padding:10px 26px 12px; background:var(--panel-2);
-  border:1px solid var(--line); border-radius:20px; text-align:center;
+  border:1px solid var(--line); border-radius:12px; text-align:center;
 }
 .brief .eyebrow{
   font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.14em; text-transform:uppercase;
@@ -180,7 +185,7 @@ body.lesson{
 /* the stage: the activity itself. Only this scrolls, and only if it must. */
 .stage{overflow-y:auto; padding:18px 20px; scrollbar-width:thin; scrollbar-color:var(--line-2) transparent}
 .stage::-webkit-scrollbar{width:10px}
-.stage::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:5px; border:3px solid var(--bg)}
+.stage::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:4px; border:3px solid var(--bg)}
 .stage > section{max-width:840px; margin:0 auto}
 .stage > section[hidden]{display:none}
 
@@ -196,19 +201,19 @@ body.lesson{
 }
 .lockmsg::before{content:"🔒"; font-size:14px}
 .lockmsg[hidden]{display:none}
-.btn-continue{font-size:18px; padding:14px 30px; border-radius:11px}
+.btn-continue{font-size:18px; padding:14px 30px; border-radius:10px}
 .btn-continue:disabled{background:var(--line); border-color:var(--line); color:var(--dim)}
 #backBtn:disabled{opacity:.35}
 
 /* bypass: present, unremarkable */
 #bypassDot{
   font-family:var(--mono); color:var(--line-2); font-size:20px; line-height:1;
-  padding:6px 10px; cursor:default; user-select:none; border-radius:6px;
+  padding:6px 10px; cursor:default; user-select:none; border-radius:8px;
 }
 #bypassDot:hover{color:var(--dim)}
 #bypassDot:focus-visible{outline:1px solid var(--line-2)}
 body.bypassed #bypassDot{color:var(--mint)}
-body.bypassed .btn-continue:disabled{background:var(--amber); color:#131A26; border-color:var(--amber)}
+body.bypassed .btn-continue:disabled{background:var(--amber); color:var(--amber-ink); border-color:var(--amber)}
 
 /* ---------- activity content ---------- */
 .prose{font-size:19px; line-height:1.65; color:var(--text)}
@@ -291,11 +296,11 @@ input[type=range]{flex:1; accent-color:var(--amber); height:6px}
 /* python */
 textarea.code{
   font-family:var(--mono); font-size:15px; line-height:1.55; min-height:190px;
-  background:#20242E; color:#D8DEE9; border-color:#20242E;
+  background:var(--code-bg); color:var(--code-fg); border-color:var(--code-bg);
 }
 .output{
   margin-top:14px; font-family:var(--mono); font-size:14.5px; white-space:pre-wrap; word-break:break-word;
-  background:#20242E; border:1px solid #3A4150; border-radius:10px; padding:14px; min-height:48px; color:#D8DEE9;
+  background:var(--code-bg); border:1px solid #3A4150; border-radius:10px; padding:14px; min-height:48px; color:var(--code-fg);
 }
 .output:empty::before{content:"Output appears here after you press Run."; color:var(--dim)}
 
@@ -317,14 +322,14 @@ textarea.code{
 .lessons{display:grid; gap:14px; margin-top:8px}
 .lessonCard{
   display:flex; align-items:center; gap:20px; text-decoration:none; color:var(--text);
-  background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:22px 24px;
+  background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px 24px;
   transition:border-color .14s, transform .14s;
 }
 .lessonCard:hover{border-color:var(--amber); transform:translateX(3px)}
 .lessonCard .num{
   font-family:var(--mono); font-size:13px; color:var(--dim); flex:none;
   width:34px; height:34px; display:grid; place-items:center;
-  border:1px solid var(--line-2); border-radius:9px;
+  border:1px solid var(--line-2); border-radius:8px;
 }
 .lessonCard .body{flex:1; min-width:0}
 .lessonCard b{font-family:var(--display); font-size:20px; display:block; margin-bottom:3px}
@@ -467,7 +472,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .tip{
   position:absolute; bottom:calc(100% + 10px); right:0; z-index:40;
   background:var(--panel-2); color:var(--text); border:1px solid var(--line-2);
-  border-radius:9px; padding:8px 12px; font-size:13.5px; font-weight:600;
+  border-radius:8px; padding:8px 12px; font-size:13.5px; font-weight:600;
   white-space:nowrap; box-shadow:0 8px 22px rgba(0,0,0,.4); pointer-events:none;
 }
 .tip[hidden]{display:none}
@@ -497,7 +502,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 
 /* ---- Save Work button feedback ---- */
 #saveBtn.flash-ok{background:transparent; color:var(--mint); border-color:var(--mint-dim)}
-#saveBtn.flash-bad{background:transparent; color:var(--amber); border-color:#5A4520}
+#saveBtn.flash-bad{background:transparent; color:var(--amber); border-color:var(--amber-dark)}
 
 /* ---- writing coach (replaces the word count) ---- */
 .counter{font-family:var(--body); font-size:15px; font-weight:700; letter-spacing:0}
@@ -545,7 +550,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .unit-head{font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--amber); margin:26px 0 10px}
 .unit-head:first-child{margin-top:0}
 .badge{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
-  color:var(--amber); border:1px solid #5A4520; border-radius:999px; padding:3px 9px; white-space:nowrap}
+  color:var(--amber); border:1px solid var(--amber-dark); border-radius:999px; padding:3px 9px; white-space:nowrap}
 .result-card{display:flex; align-items:center; gap:18px; background:var(--panel); border:1px solid var(--line);
   border-radius:14px; padding:18px 20px; margin-bottom:12px}
 .result-card .sc{font-family:var(--display); font-size:26px; font-weight:700; flex:none; min-width:86px}
@@ -618,14 +623,14 @@ b,strong,h1,h2,h3,.done-title,.lessonCard b{font-weight:800}
 .topbar,.dock{background:var(--bar); border-color:var(--line)}
 .homebar{background:var(--bar) !important; border-color:var(--line) !important}
 .station,.resp-task,.result-card,.lessonCard,.login-card{
-  box-shadow:0 1px 3px rgba(96,74,42,.07);
+  box-shadow:0 1px 3px rgba(0,0,0,.07);
 }
-.brief{box-shadow:0 1px 3px rgba(96,74,42,.06); padding:9px 24px 11px}
+.brief{box-shadow:0 1px 3px rgba(0,0,0,.06); padding:9px 24px 11px}
 .brief h2{margin:0}
 .brief p{color:var(--muted)}
 
 /* tracker: bar only, softer states */
-.seg{background:#EFE7D6; border-radius:99px}
+.seg{background:var(--line); border-radius:99px}
 html[data-bg=dark] .seg{background:#3D434F}
 .seg.done{background:var(--mint)}
 .seg.now{background:var(--amber)}
@@ -640,8 +645,8 @@ input[type=text],input[type=password],textarea,select{
 input:focus,textarea:focus,select:focus{border-color:var(--amber); outline:none}
 
 /* the code terminal stays dark on purpose — it's a terminal */
-.output{background:#20242E !important; color:#D8DEE9 !important; border-color:#20242E !important}
-textarea.code{background:#20242E !important; color:#D8DEE9 !important; border-color:#3A4150 !important}
+.output{background:var(--code-bg) !important; color:var(--code-fg) !important; border-color:var(--code-bg) !important}
+textarea.code{background:var(--code-bg) !important; color:var(--code-fg) !important; border-color:#3A4150 !important}
 
 /* no more orange caps */
 .unit-head{font-family:var(--display); font-size:16px; letter-spacing:0; text-transform:none;
@@ -685,7 +690,7 @@ textarea.code{background:#20242E !important; color:#D8DEE9 !important; border-co
 .rev-order .row.good .ok{color:var(--mint)} .rev-order .row.bad .ok{color:var(--red)}
 .rev-order-label{font-size:14px; color:var(--muted); margin:10px 0 4px; font-weight:700}
 
-.blank-fill{display:inline-block; padding:4px 12px; margin:0 3px; border-radius:9px; font-weight:700;
+.blank-fill{display:inline-block; padding:4px 12px; margin:0 3px; border-radius:8px; font-weight:700;
   border:1.5px solid; font-size:16px}
 .blank-fill.ok{color:var(--mint); border-color:var(--mint-dim); background:var(--panel)}
 .blank-fill.no{color:var(--red); border-color:var(--red-dim); background:var(--panel)}
@@ -711,26 +716,26 @@ textarea.code{background:#20242E !important; color:#D8DEE9 !important; border-co
 
 /* readable on every background: messages live on solid cards */
 .banner{background:var(--panel) !important; border:1.5px solid var(--line-2); color:var(--text) !important;
-  border-radius:12px; box-shadow:0 1px 3px rgba(96,74,42,.07)}
+  border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .banner-ok{border-color:var(--mint)}
 .signin-hint{background:var(--panel); border:1.5px solid var(--line-2); color:var(--text);
   border-radius:10px; padding:8px 14px; display:inline-block}
 .handin{font-weight:700}
 .handin[data-state=done]{color:var(--mint)}
-html:not([data-bg=dark]) .handin[data-state=done]{color:#2E7B54}
+.handin[data-state=done]{color:var(--mint)}
 .handin[data-state=offline],.handin[data-state=failed]{color:var(--amber-dark)}
-html:not([data-bg=dark]) .counter[data-stage=good]{color:#2E7B54}
-html:not([data-bg=dark]) .st-strength b{color:#2E7B54}
+.counter[data-stage=good]{color:var(--mint)}
+.st-strength b{color:var(--mint)}
 
 /* icon-only buttons (settings cog, task tools) */
-.iconbtn{padding:8px 11px; font-size:17px; line-height:1; border-radius:11px}
+.iconbtn{padding:8px 11px; font-size:17px; line-height:1; border-radius:10px}
 .taskbtns{display:flex; gap:6px; margin-left:auto}
 .taskbtns .iconbtn{font-size:15.5px; padding:6px 9px}
 
 /* online pill */
 .online-pill{display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px;
   border:1.5px solid var(--mint); color:var(--mint); font-weight:800; font-size:14.5px; background:var(--panel)}
-html:not([data-bg=dark]) .online-pill{color:#2E7B54}
+.online-pill{color:var(--mint)}
 .online-pill .odot{width:9px; height:9px; border-radius:50%; background:var(--mint); animation:opulse 1.3s ease-in-out infinite}
 @keyframes opulse{0%,100%{opacity:1; transform:scale(1)} 50%{opacity:.35; transform:scale(.75)}}
 .online-pill.off{border-color:var(--line-2); color:var(--muted)}
@@ -757,7 +762,7 @@ html:not([data-bg=dark]) .online-pill{color:#2E7B54}
 .keywrap input{text-align:center; font-size:19px}
 .classgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:16px; margin-top:18px}
 .classtile{background:var(--panel); border:1.5px solid var(--line); border-radius:18px; padding:26px 20px;
-  cursor:pointer; text-align:left; box-shadow:0 1px 3px rgba(96,74,42,.07)}
+  cursor:pointer; text-align:left; box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .classtile:hover{border-color:var(--amber); transform:translateY(-2px); transition:.12s}
 .classtile b{display:block; font-size:20px; margin-bottom:6px}
 .classtile span{color:var(--muted); font-size:15px}
@@ -775,11 +780,11 @@ html:not([data-bg=dark]) .online-pill{color:#2E7B54}
 .taskrow.shut{opacity:.7}   /* NOT .locked — that class hides its children on the student page */
 .statechip{font-size:12.5px; font-weight:800; border-radius:999px; padding:3px 10px; border:1.5px solid}
 .statechip.open{color:var(--mint); border-color:var(--mint-dim)}
-html:not([data-bg=dark]) .statechip.open{color:#2E7B54}
+.statechip.open{color:var(--mint)}
 .statechip.shut{color:var(--muted); border-color:var(--line-2)}
 .who-row{display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--line); font-size:16px}
 .who-row .nm{flex:1}
-.who-row .st.yes{color:#2E7B54; font-weight:800}
+.who-row .st.yes{color:var(--mint); font-weight:800}
 html[data-bg=dark] .who-row .st.yes{color:var(--mint)}
 .who-row .st.no{color:var(--muted)}
 .toolrow{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:14px 0}
@@ -814,7 +819,7 @@ body.spectating{padding-top:40px}
   border:1px solid var(--line); border-radius:999px; width:fit-content}
 .subtabs button{background:transparent; border:none; color:var(--muted); font-size:15px; font-weight:700;
   padding:8px 20px; border-radius:999px}
-.subtabs button.on{background:var(--panel); color:var(--text); box-shadow:0 1px 3px rgba(96,74,42,.10)}
+.subtabs button.on{background:var(--panel); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.10)}
 
 
 /* viewing banner: back text + student switcher */
@@ -822,10 +827,10 @@ body.spectating{padding-top:40px}
 .vb-back{background:none; border:none; color:inherit; font:inherit; font-weight:800; cursor:pointer; padding:6px 4px}
 .vb-nav{display:flex; align-items:center; gap:6px}
 .vb-arrow{background:rgba(255,255,255,.22); border:none; color:inherit; font-size:15px; font-weight:800;
-  border-radius:9px; padding:5px 11px; cursor:pointer}
+  border-radius:8px; padding:5px 11px; cursor:pointer}
 .vb-arrow:hover{background:rgba(255,255,255,.36)}
-.vb-sel{font-family:var(--body); font-size:14.5px; font-weight:700; padding:5px 10px; border-radius:9px;
-  border:none; background:rgba(255,255,255,.9); color:#3B352C; max-width:210px}
+.vb-sel{font-family:var(--body); font-size:14.5px; font-weight:700; padding:5px 10px; border-radius:8px;
+  border:none; background:rgba(255,255,255,.9); color:var(--text); max-width:210px}
 
 /* printable copy of a students work */
 .print-head{margin:0 0 18px}
@@ -844,7 +849,7 @@ body.spectating{padding-top:40px}
 /* lesson pills in the teacher console */
 .lessongrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:16px; margin-top:16px}
 .lessonpill{background:var(--panel); border:1.5px solid var(--line); border-radius:18px; padding:20px;
-  box-shadow:0 1px 3px rgba(96,74,42,.07)}
+  box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .lp-head{display:flex; align-items:flex-start; gap:10px; margin-bottom:6px}
 .lp-head b{font-size:18px; flex:1; line-height:1.3}
 .lp-note{margin:0 0 10px; font-size:14.5px; color:var(--amber-dark); font-weight:700}
@@ -888,13 +893,13 @@ body.spectating{padding-top:40px}
 
 
 /* ================= built-in Python IDE ================= */
-.ide{margin:0; --ed-bg:#20242E; --ed-fg:#E6EAF2; --ed-bar:#2A2F3B; --ed-line:#3A4150;
+.ide{margin:0; --ed-bg:var(--code-bg); --ed-fg:#E6EAF2; --ed-bar:#2A2F3B; --ed-line:#3A4150;
      --ed-gut:#5C6779; --ed-size:14px;
      --t-kw:#C792EA; --t-str:#B8E08A; --t-num:#F2B36B; --t-fn:#7FC7F0; --t-call:#E8D48B;
      --t-com:#7A8699; --t-op:#9FB0C8;}
 .ide[data-idetheme=light]{--ed-bg:#FFFFFF; --ed-fg:#2B2B2B; --ed-bar:#F1EDE4; --ed-line:#E0D8C8;
      --ed-gut:#A79C88;
-     --t-kw:#8B2FA8; --t-str:#2E7B54; --t-num:#B25C00; --t-fn:#1B6AA5; --t-call:#8A6A00;
+     --t-kw:#8B2FA8; --t-str:var(--mint); --t-num:#B25C00; --t-fn:#1B6AA5; --t-call:#8A6A00;
      --t-com:#8A8578; --t-op:#5A6472;}
 .ide[data-idetheme=contrast]{--ed-bg:#000000; --ed-fg:#FFFFFF; --ed-bar:#101010; --ed-line:#444;
      --ed-gut:#BBBBBB;
@@ -911,7 +916,7 @@ body.spectating{padding-top:40px}
 .ide-bar{display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--ed-bar); border-bottom:1px solid var(--ed-line)}
 .ide-file{flex:1; font-family:var(--mono); font-size:13px; color:var(--ed-gut); font-weight:700}
 .ide-run{font-size:15px; padding:7px 18px; border-radius:10px}
-.ide-small{font-size:13.5px; padding:6px 12px; border-radius:9px; background:transparent;
+.ide-small{font-size:13.5px; padding:6px 12px; border-radius:8px; background:transparent;
   color:var(--ed-fg); border:1px solid var(--ed-line); opacity:.85}
 .ide-small:hover{border-color:var(--amber); color:var(--amber); opacity:1}
 
@@ -928,6 +933,8 @@ body.spectating{padding-top:40px}
   font-family:var(--mono); font-size:var(--ed-size); line-height:1.55; color:var(--ed-gut);
   background:var(--ed-bg); user-select:none}
 .ide-gutter .gl{height:calc(var(--ed-size) * 1.55)}
+/* The editor colours below are deliberately fixed: they sit on the editor's
+   own background, which does not change with the page theme. */
 .ide-gutter .gl.bad{color:#E8615A; font-weight:800}
 .ide-codewrap{position:relative; flex:1; overflow:hidden}
 .ide-hl,.ide-code{
@@ -951,7 +958,7 @@ body.spectating{padding-top:40px}
 .ide-probmsg{flex:1; opacity:.92}
 
 .ide-canvaswrap{padding:10px; background:var(--ed-bar); border-bottom:1px solid var(--ed-line); display:grid; place-items:center}
-.ide-canvas{width:100%; max-width:480px; height:auto; background:#fff; border-radius:9px}
+.ide-canvas{width:100%; max-width:480px; height:auto; background:#fff; border-radius:8px}
 .ide-console{background:var(--ed-bg); min-height:150px; max-height:340px; overflow:auto; padding:12px 14px}
 .ide-out{margin:0; font-family:var(--mono); font-size:var(--ed-size); line-height:1.55;
   color:var(--ed-fg); white-space:pre-wrap; word-break:break-word}
@@ -965,7 +972,7 @@ body.spectating{padding-top:40px}
 .ide-askin:focus{outline:none; box-shadow:none !important}
 .ide-note{margin:12px 0 0; font-size:16px; font-weight:700}
 .ide-note.ok{color:var(--mint)}
-html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
+.ide-note.ok{color:var(--mint)}
 .ide-note.no{color:var(--amber-dark)}
 
 
@@ -994,7 +1001,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 
 .build-list{padding:20px; overflow-y:auto; min-width:0}
 .bcard{background:var(--panel); border:1.5px solid var(--line); border-radius:16px; margin:0 0 14px;
-  box-shadow:0 1px 3px rgba(96,74,42,.06)}
+  box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .bcard.dragging{opacity:.45}
 .bcard.over{border-color:var(--amber); box-shadow:0 0 0 3px rgba(220,138,62,.16)}
 .bhead{display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid var(--line)}
@@ -1003,7 +1010,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .btools{display:flex; gap:4px}
 .bmini{font-size:14px; padding:5px 9px; border-radius:8px; line-height:1}
 .bmini.right{border-color:var(--mint); color:var(--mint)}
-.bmini2{font-size:13.5px; padding:7px 12px; border-radius:9px}
+.bmini2{font-size:13.5px; padding:7px 12px; border-radius:8px}
 .bmini2.right{border-color:var(--mint); color:var(--mint)}
 .bbody{padding:14px}
 .bfield{margin:0 0 12px}
@@ -1021,7 +1028,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 #prev{flex:1; width:100%; border:none; background:var(--bg); min-height:420px}
 
 .jsonbox{max-height:46vh; overflow:auto; white-space:pre-wrap; word-break:break-word;
-  background:#20242E; color:#D8DEE9; border-radius:12px; padding:14px; font-family:var(--mono);
+  background:var(--code-bg); color:var(--code-fg); border-radius:12px; padding:14px; font-family:var(--mono);
   font-size:12.5px; text-align:left; margin:0 0 14px}
 
 
@@ -1083,7 +1090,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .linkprev{display:flex; align-items:center; gap:12px; margin-top:12px; padding:12px 14px;
   background:var(--panel); border:1.5px solid var(--line); border-radius:12px; text-decoration:none; color:inherit}
 .linkprev:hover{border-color:var(--amber)}
-.linkicon{width:26px; height:26px; flex:none; border-radius:6px}
+.linkicon{width:26px; height:26px; flex:none; border-radius:8px}
 .linkbits{display:flex; flex-direction:column; min-width:0}
 .linkhost{font-size:16px}
 .linkurl{font-size:13.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -1093,7 +1100,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
   border-radius:999px; padding:3px 10px}
 .ide-wrap.no-console{grid-template-columns:minmax(0,1fr)}
 .t-help{text-decoration:underline dotted currentColor; text-underline-offset:3px; text-decoration-thickness:1px}
-.ide-tip{position:absolute; z-index:30; max-width:290px; padding:10px 13px; border-radius:11px;
+.ide-tip{position:absolute; z-index:30; max-width:290px; padding:10px 13px; border-radius:10px;
   background:var(--panel); border:1.5px solid var(--amber); box-shadow:0 6px 18px rgba(0,0,0,.22);
   font-family:var(--body); font-size:14px; line-height:1.45; color:var(--text); cursor:pointer}
 .ide-tip b{display:block; font-family:var(--mono); font-size:13.5px; color:var(--amber-dark); margin-bottom:3px}
@@ -1113,7 +1120,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .rt-box:focus{background:var(--panel)}
 .rt-box:empty::before{content:attr(data-placeholder); color:var(--dim)}
 .rt-box code{font-family:var(--mono); font-size:14px; background:var(--panel-2);
-  border:1px solid var(--line); border-radius:5px; padding:1px 5px}
+  border:1px solid var(--line); border-radius:4px; padding:1px 5px}
 .rt-box ul,.rt-box ol{margin:6px 0 6px 22px}
 
 /* builder: the open page, drop targets, picture preview */
@@ -1133,7 +1140,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 
 
 /* IDE: console / help tabs and the reference list */
-.ide-tab{font-size:13.5px; font-weight:800; padding:6px 14px; border-radius:9px 9px 0 0;
+.ide-tab{font-size:13.5px; font-weight:800; padding:6px 14px; border-radius:8px 9px 0 0;
   border:none; background:transparent; color:var(--ed-gut); cursor:pointer}
 .ide-tab.on{background:var(--ed-bg); color:var(--ed-fg)}
 .ide-help{background:var(--ed-bg); max-height:340px; overflow-y:auto; padding:12px 14px}
@@ -1168,7 +1175,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 /* help search */
 .ide-helpsearch{width:100%; margin:0 0 12px; font-family:var(--body) !important; font-size:14px !important;
   padding:8px 12px !important; background:var(--ed-bar) !important; color:var(--ed-fg) !important;
-  border:1px solid var(--ed-line) !important; border-radius:9px !important}
+  border:1px solid var(--ed-line) !important; border-radius:8px !important}
 .ide-helpsearch:focus{border-color:var(--amber) !important; outline:none}
 .ide-helpgroup{margin:14px 0 6px; font-size:12px; font-weight:800; letter-spacing:.06em;
   text-transform:uppercase; color:var(--ed-gut)}
@@ -1246,7 +1253,7 @@ html:not([data-bg=dark]) .ide-note.ok{color:#2E7B54}
 .mbtable th{font-size:12.5px; color:var(--muted); font-weight:800}
 .mbtask{max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .mbtick{text-align:center}
-.mbtick .yes{color:#2E7B54; font-weight:800}
+.mbtick .yes{color:var(--mint); font-weight:800}
 .mbtick .no{color:var(--line-2); font-weight:800}
 html[data-bg=dark] .mbtick .yes{color:var(--mint)}
 
@@ -1257,7 +1264,7 @@ html[data-bg=dark] .mbtick .yes{color:var(--mint)}
   background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
   box-shadow:0 8px 22px rgba(0,0,0,.16); display:flex; flex-direction:column}
 .menu button{background:transparent; border:none; text-align:left; padding:9px 12px;
-  border-radius:9px; font-size:15px; color:var(--text); cursor:pointer}
+  border-radius:8px; font-size:15px; color:var(--text); cursor:pointer}
 .menu button:hover{background:var(--panel-2)}
 .homebar .title #titleShow{font-weight:500; color:var(--muted)}
 .build-titles{align-items:center}
@@ -1430,13 +1437,12 @@ pre, code{overflow-wrap:anywhere}
 
 /* scheduling, marks and feedback */
 .periodgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px}
-.periodbtn{text-align:left; padding:10px 12px; border:1.5px solid var(--line-2); border-radius:11px;
+.periodbtn{text-align:left; padding:10px 12px; border:1.5px solid var(--line-2); border-radius:10px;
   background:var(--panel); cursor:pointer; font-family:var(--body)}
 .periodbtn b{display:block; font-size:15px; color:var(--text)}
 .periodbtn span{display:block; font-size:12px; color:var(--muted); margin-top:2px}
 .periodbtn.on{border-color:var(--amber); background:var(--panel-2)}
-.statechip.wait{background:#EAF1F7; color:#1B5FA8; border-color:#B9CDDD}
-html[data-bg=dark] .statechip.wait{background:#2C3A4A; color:#9CC4E8; border-color:#3D5468}
+.statechip.wait{background:color-mix(in srgb, var(--amber) 12%, var(--panel)); color:var(--amber-dark); border-color:var(--amber)}
 .markrow{display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line)}
 .mr-q{font-weight:800; min-width:38px}
 .mr-t{flex:1; color:var(--muted); font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -1461,7 +1467,7 @@ html[data-bg=dark] .statechip.wait{background:#2C3A4A; color:#9CC4E8; border-col
 .qmark b{min-width:32px}
 .qmark-t{flex:1; color:var(--muted); font-size:15px}
 .qmark-n{font-weight:800}
-.qmark.full .qmark-n{color:#2E7B54}
+.qmark.full .qmark-n{color:var(--mint)}
 .qmark.part .qmark-n{color:var(--amber-dark)}
 .qmark.none .qmark-n{color:var(--red)}
 html[data-bg=dark] .qmark.full .qmark-n{color:var(--mint)}
@@ -1482,7 +1488,7 @@ html[data-bg=dark] .qmark.full .qmark-n{color:var(--mint)}
   border-radius:0 12px 12px 0; text-decoration:none; color:inherit}
 .fb-card:hover{border-color:var(--amber)}
 .fb-card b{font-size:17px}
-.fb-s{color:#2E7B54; font-size:15px}
+.fb-s{color:var(--mint); font-size:15px}
 .fb-t{color:var(--amber-dark); font-size:15px}
 .fb-c{color:var(--muted); font-size:15px}
 html[data-bg=dark] .fb-s{color:var(--mint)}
@@ -1556,7 +1562,7 @@ body.workpage .grow{flex:1}
 .seatcell{border:none; border-radius:10px; display:flex; padding:3px; box-sizing:border-box}
 .seatcell.over{background:rgba(220,138,62,.18)}
 .seatcell.over{border-color:var(--amber); background:rgba(220,138,62,.12)}
-.seat{flex:1; background:var(--panel); border:1.5px solid var(--line-2); border-radius:9px;
+.seat{flex:1; background:var(--panel); border:1.5px solid var(--line-2); border-radius:8px;
   padding:6px 8px; cursor:grab; display:flex; flex-direction:column; justify-content:center;
   box-sizing:border-box; min-width:0; overflow:hidden}
 .seat:hover{border-color:var(--amber)}
@@ -1635,7 +1641,7 @@ body.workpage .grow{flex:1}
 .rt-palette{position:absolute; top:calc(100% + 4px); left:0; z-index:50; min-width:150px; padding:6px;
   background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
   box-shadow:0 8px 22px rgba(0,0,0,.16); display:flex; flex-direction:column}
-.rt-swatchbtn{display:flex; align-items:center; gap:9px; padding:7px 10px; border:none; border-radius:9px;
+.rt-swatchbtn{display:flex; align-items:center; gap:9px; padding:7px 10px; border:none; border-radius:8px;
   background:transparent; cursor:pointer; font-family:var(--body); font-size:14.5px; color:var(--text); text-align:left}
 .rt-swatchbtn:hover{background:var(--panel-2)}
 .rt-dot{width:15px; height:15px; border-radius:50%; border:1px solid var(--line-2); flex:none}
@@ -1661,13 +1667,13 @@ body.workpage .grow{flex:1}
 .rt-grid{display:grid; grid-template-columns:repeat(10, 1fr); gap:3px; margin:8px 0}
 .rt-cell{width:20px; height:20px; border:1px solid rgba(0,0,0,.12); border-radius:4px; cursor:pointer; padding:0}
 .rt-cell:hover{outline:2px solid var(--amber); outline-offset:1px}
-.rt-auto-btn{display:block; width:100%; text-align:left; padding:8px 10px; border-radius:9px;
+.rt-auto-btn{display:block; width:100%; text-align:left; padding:8px 10px; border-radius:8px;
   border:1px solid var(--line); background:var(--panel-2); cursor:pointer;
   font-family:var(--body); font-size:14.5px; color:var(--text)}
 .rt-auto-btn:hover{border-color:var(--amber)}
 .rt-more{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px;
   font-size:14px; color:var(--muted); cursor:pointer}
-.rt-more input{width:34px; height:26px; padding:0; border:1px solid var(--line-2); border-radius:6px}
+.rt-more input{width:34px; height:26px; padding:0; border:1px solid var(--line-2); border-radius:8px}
 .rt-nummenu{min-width:150px}
 .rt-box ol,.rt-box ul{margin:6px 0 6px 22px}
 .rt-box ol ol,.rt-box ul ul{margin-left:20px}
@@ -1734,7 +1740,7 @@ body{ font-size:16.5px; line-height:1.65 }
 .station,.modal,.bcard,.qsub,.st-card,.result-card,.fb-card,.allpage,
 .workside,.workframe,.mbscroll,.seatgrid,.seatpool,.rubriccol,.ide-wrap{ border-radius:14px }
 .lessonCard,.classtile,.lessonpill,.brief,.linkprev,.picimg,.embed,.framed,
-.seat,.seatcell,.seatfront,.menu,.rt,.periodbtn,.bankpick{ border-radius:12px }
+.seat,.seatcell,.seatfront,.menu,.rt,.periodbtn,.bankpick{ border-radius:12px !important }
 .field input,.bfield input,.bfield textarea,.bfield select,
 input[type=text],input[type=password],input[type=number],input[type=date],
 textarea,select,.searchbox,.sizer{ border-radius:10px }
@@ -1810,7 +1816,10 @@ input:focus,textarea:focus,select:focus{
 #hubTint{position:fixed; inset:0; z-index:9998; pointer-events:none; mix-blend-mode:multiply; display:none}
 html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 .swatch-wide{width:auto !important; padding:0 16px; height:38px; font-family:var(--body);
-  font-size:14.5px; font-weight:600; color:var(--text)}
+  font-size:14.5px; font-weight:600}
+/* each label is coloured for its own swatch, not the page it sits on */
+.swatch-wide[data-bg=""]{color:#1D1D1B}
+.swatch-wide[data-bg=night]{color:#F2F2F0}
 .swatch[data-none]{background:var(--panel-2); color:var(--muted); font-size:13px}
 .swatch-pick{position:relative; display:inline-flex; align-items:center; justify-content:center;
   cursor:pointer; overflow:hidden}
@@ -1927,3 +1936,52 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 .importrow{display:flex; justify-content:space-between; gap:12px; padding:8px 10px;
   border-bottom:1px solid var(--line)}
 .importrow span{color:var(--muted); font-family:var(--mono); font-size:14px}
+
+/* the welcome-back note fades away rather than sitting there */
+#resumeNote{transition:opacity 3s ease}
+#resumeNote.fading{opacity:0}
+
+/* a target is a thing to work on, so it should not look like a link */
+.st-target,.st-target b{color:var(--red)}
+html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
+.st-strength,.st-strength b{color:var(--mint)}
+
+/* each question in the marked work */
+.markedq{border-left:4px solid var(--line)}
+.markedq.full{border-left-color:var(--mint)}
+.markedq.part{border-left-color:var(--amber)}
+.markedq.none{border-left-color:var(--red)}
+.markedq .allpage-head .qmark-n{margin-left:auto; font-weight:700}
+
+
+/* --- components that had no styling of their own --- */
+
+/* the denary answer box on a binary conversion */
+.bin-in{ width:120px !important; height:38px; text-align:center;
+  font-family:var(--mono) !important; font-size:17px !important; border-radius:8px }
+
+/* the strip above an editor's output */
+.ide-outbar{ display:flex; align-items:center; gap:8px; padding:6px 10px;
+  border-bottom:1px solid var(--line); background:var(--panel-2); font-size:13px; color:var(--muted) }
+
+/* the wrapper used when printing a student's work */
+.printwrap{ background:var(--panel); color:var(--text); padding:24px }
+
+/* an image task, and the web editor's outer box */
+.picture{ margin:8px 0 }
+.picture img{ max-width:100%; height:auto; border-radius:12px; border:1px solid var(--line) }
+.web{ margin:8px 0 }
+
+/* the sign-in panel on the student home */
+.auth{ max-width:420px; margin:0 auto }
+
+/* the steps shown after saving a lesson to a file */
+.modal-steps{margin:10px 0 14px 20px; line-height:1.7}
+.modal-steps li{margin-bottom:6px}
+.codeblock{background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+  padding:12px 14px; font-family:var(--mono); font-size:13.5px; overflow-x:auto; margin:0 0 12px}
+/* a banner saying the site is running without a server */
+.offbar{display:flex; align-items:center; gap:10px; justify-content:center; padding:7px 14px;
+  background:color-mix(in srgb, var(--amber) 12%, var(--panel)); border-bottom:1px solid var(--amber);
+  font-size:14px; color:var(--text)}
+.offbar b{font-weight:700}

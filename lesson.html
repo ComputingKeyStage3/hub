@@ -11,6 +11,7 @@
 <script src="webhub.js"></script>
 <script src="webhub.js"></script>
 <script src="config.js"></script>
+<script src="offlinebar.js"></script>
 <script src="settings.js"></script>
 </head>
 <body class="lesson">
@@ -190,6 +191,44 @@ function showRubric(){
   }
 }
 
+/* Their answers, with what each one scored beside it. */
+function marksButton(res){
+  const wrap = el("div","st-card");
+  wrap.appendChild(el("h2","sect-head","Your work"));
+  const got = res.perQ.reduce((n, q) => n + q.pts, 0);
+  const outOf = res.perQ.reduce((n, q) => n + q.max, 0);
+  wrap.appendChild(el("p","modal-text", "You scored " + got + " out of " + outOf + "."));
+  const btn = el("button","btn-primary","View my work");
+  btn.addEventListener("click", () => {
+    const back = el("div","modal-back");
+    const box2 = el("div","modal wide");
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    x.addEventListener("click", () => back.remove());
+    box2.appendChild(x);
+    box2.appendChild(el("h2","","Your work"));
+    const holder = el("div","allpages");
+    res.perQ.forEach(q => {
+      const sec = el("div","allpage markedq" +
+        (q.pts === q.max ? " full" : q.pts > 0 ? " part" : " none"));
+      const head = el("div","allpage-head");
+      head.appendChild(el("span","allpage-n", String(q.n)));
+      head.appendChild(el("b","", q.title));
+      head.appendChild(el("span","qmark-n", q.pts + " / " + q.max));
+      sec.appendChild(head);
+      /* the question itself, exactly as they answered it */
+      const st2 = steps.find(x => x.qid === q.id);
+      if (st2 && st2.section){ st2.section.hidden = false; sec.appendChild(st2.section); }
+      holder.appendChild(sec);
+    });
+    box2.appendChild(holder);
+    back.appendChild(box2);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 function workButton(){
   const wrap = el("div","st-card");
   wrap.appendChild(el("h2","sect-head","Your work"));
@@ -276,6 +315,11 @@ function stripTags(s){ return String(s || "").replace(/<[^>]*>/g, " ").replace(/
    No network, so we can save immediately on every change. A short debounce
    only avoids doing pointless work on every keystroke.                     */
 let saveTimer = null, lastSaved = "";
+/* Nothing may be written until the student's saved work has been fetched and
+   put back on the page. A save landing before that would replace real answers
+   with the empty boxes that are on screen at the time — which is how work was
+   being lost. */
+let restoreDone = false;
 
 function snapshot(){
   const data = { __step: step, __saved: new Date().toISOString(), __done: finished };
@@ -283,13 +327,13 @@ function snapshot(){
   return data;
 }
 function markDirty(){
-  if (spectate) return;
+  if (spectate || !restoreDone) return;
   refreshGate();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 400);
 }
 function save(){
-  if (spectate) return;
+  if (spectate || !restoreDone) return;
   const payload = JSON.stringify(snapshot());
   if (payload === lastSaved) return;
   try{
@@ -315,7 +359,10 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
    If the backend can't be reached we fall back to the last state we knew, and
    failing that we let them through. A network blip must never strand a class. */
 const API = (window.HUB && window.HUB.API) || "";
-const apiReady = API && API.indexOf("PASTE_") !== 0;
+const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
+/* Offline, there is no backend at all: every task is open, work stays in
+   this browser, and handing in means saving a PDF. */
+const apiReady = !OFFLINE && API && API.indexOf("PASTE_") !== 0;
 
 /* Lessons written in the builder are saved straight to the database, so a
    missing file is normal rather than an error. */
@@ -459,7 +506,8 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     $("lessonTitle").textContent = l.title;
     l.blocks.forEach(renderBlock);
     buildTracker();
-    await loadSaved();
+    try{ await loadSaved(); }
+    finally{ restoreDone = true; }      // saving is allowed from here on
     if (spectate){
       $("saveBtn").hidden = true; $("signinHint").hidden = true;
       if (builderParam !== null){
@@ -698,7 +746,16 @@ function showStep(i){
   $("resumeNote").hidden = true;
   /* Someone who has finished and gone back into a task does not need telling
      their work was saved — they need a way back to the summary. */
-  if (restoredWork && !resumeShown && !wasDone){ $("resumeNote").hidden = false; resumeShown = true; }
+  if (restoredWork && !resumeShown && !wasDone){
+    const note = $("resumeNote");
+    note.hidden = false;
+    resumeShown = true;
+    /* five seconds to read, three to fade, then out of the layout entirely */
+    setTimeout(() => {
+      note.classList.add("fading");
+      setTimeout(() => { if (note.parentNode) note.parentNode.removeChild(note); }, 3000);
+    }, 5000);
+  }
   const backBtn2 = $("backToDone");
   if (backBtn2) backBtn2.hidden = !wasDone;
 
@@ -771,6 +828,7 @@ function paintTracker(){
 let lastSubmittedPayload = "";
 async function submitWork(){
   if (spectate) return "offline";
+  if (!restoreDone) return "offline";      // never send blanks over real work
   /* Writes to the database only when something actually changed since the
      last successful write — pressing Save Work twice costs nothing. */
   if (!token || !apiReady) return "offline";
@@ -814,7 +872,7 @@ function finishLesson(){
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
   finished = true;
   save();
-  showLessonComplete(false);
+  showLessonComplete(false, true);   // they have just pressed Finish
 }
 
 /* ---------- finish pop-up ---------- */
@@ -921,6 +979,7 @@ function renderBlock(b, i){
     final.brief = { ...final.brief, title: qCounter + ". " + final.brief.title };
   }
   final = applyLock(b, final);
+  final.qid = b.id;                 // so the marked work can find this question
   final.section.hidden = true;
   $("blocks").appendChild(final.section);
   steps.push(final);
@@ -3122,7 +3181,6 @@ function renderPracticalComplete(){
   }
   const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
   box.appendChild(back);
-  confetti();
 }
 
 function renderAssessmentComplete(justFinished, res, st, sent){
@@ -3147,7 +3205,9 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   else if (token){ status.dataset.state = "done"; status.textContent = "Result saved earlier \u2713"; }
   hero.appendChild(status);
   box.appendChild(hero);
-  confetti();
+  /* Only when they have just finished, and never when nothing was earned —
+     a celebration over a blank score reads as mockery. */
+  if (justFinished && res.score > 0) confetti();
 
   // per-question review, shown the way the questions looked
   const rev = el("div","review");
@@ -3231,18 +3291,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   box.appendChild(rev);
 
   // what each question scored
-  if (res && res.perQ && res.perQ.length){
-    const marks = el("div","st-card");
-    marks.appendChild(el("h2","sect-head","Your marks"));
-    res.perQ.forEach(q => {
-      const row = el("p","qmark" + (q.pts === q.max ? " full" : q.pts > 0 ? " part" : " none"));
-      row.appendChild(el("b","", "Q" + q.n));
-      row.appendChild(el("span","qmark-t", q.title));
-      row.appendChild(el("span","qmark-n", q.pts + " / " + q.max));
-      marks.appendChild(row);
-    });
-    box.appendChild(marks);
-  }
+  if (res && res.perQ && res.perQ.length) box.appendChild(marksButton(res));
 
   // strength + target
   const stCard = el("div","st-card");
@@ -3517,6 +3566,17 @@ function heroBits(title, sub){
   return hero;
 }
 function saveButton(statusEl){
+  /* With no backend there is nothing to send work to, so handing in means
+     making a PDF to give to the teacher. */
+  if (OFFLINE){
+    const btn = el("button","btn-primary done-save","Save my work as a PDF");
+    btn.addEventListener("click", () => showPdfView());
+    if (statusEl){
+      statusEl.dataset.state = "offline";
+      statusEl.textContent = "Your work is kept in this browser. Save a PDF to hand it in.";
+    }
+    return btn;
+  }
   const btn = el("button","btn-primary done-save","Save Work");
   btn.addEventListener("click", async () => {
     btn.textContent = "Saving\u2026";
@@ -3528,13 +3588,18 @@ function saveButton(statusEl){
 }
 function paintStatus(elm, state){
   if (!elm) return;                 // some screens have no status line
+  if (OFFLINE){
+    elm.dataset.state = "offline";
+    elm.textContent = "Kept in this browser \u2014 save a PDF to hand it in";
+    return;
+  }
   elm.dataset.state = state;
   elm.textContent = state === "done" ? "\u2713 Sent to your teacher"
                   : state === "offline" ? "Sign in so your work can be sent to your teacher"
                   : "Could not reach the server \u2014 press Save Work to try again";
 }
 
-function showLessonComplete(revisit){
+function showLessonComplete(revisit, justFinished){
   const box = doneShell("Well done!");
   const hero = heroBits("Well done!", lesson.title + " complete");
   const status = el("p","handin");
@@ -3542,10 +3607,10 @@ function showLessonComplete(revisit){
   if (!revisit && !spectate) hero.appendChild(saveButton(status));
   const fb = feedbackCard(teacherNote);
   if (fb) box.appendChild(fb);
+  if (justFinished) confetti();      // only the moment they finish, not every visit
   const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
   if (!spectate) hero.appendChild(back);
   box.appendChild(hero);
-  confetti();
   if (!revisit && !spectate){ submitWork().then(st => paintStatus(status, st)); }
   else if (revisit && token && !spectate){ status.dataset.state = "done"; status.textContent = "Saved earlier \u2713"; }
   buildOverview(box);
