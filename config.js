@@ -20,11 +20,11 @@
    and anything already in the database is untouched.
    ===================================================================== */
 window.HUB = {
-  OFFLINE: false,
+  OFFLINE: true,
 
   // Your Vercel address — no trailing slash. Ignored entirely when OFFLINE
   // is true, so it can be left as it is.
-  API: "PASTE_YOUR_VERCEL_URL_HERE".replace(/\/+$/, ""),
+  API: "https://hub-backend-azure.vercel.app".replace(/\/+$/, ""),
 
   // The year groups students can pick from when the site runs without a
   // server. Add or change these freely — they are just names, and they must
