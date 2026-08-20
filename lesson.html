@@ -39,7 +39,7 @@
 
 <div class="stage" id="stage">
   <button class="btn-ghost backdone no-print" id="backToDone" hidden>Back to my summary →</button>
-  <p class="signin-hint no-print" id="signinHint" hidden>Not signed in — work stays on this computer only. <a href="index.html">Sign in</a></p>
+  <p class="signin-hint no-print" id="signinHint" hidden data-online-only>Not signed in — work stays on this computer only. <a href="index.html">Sign in</a></p>
   <div class="banner banner-ok no-print" id="resumeNote" hidden>
     ↩︎ Welcome back — your saved work has been put back on the page.
   </div>
@@ -360,6 +360,10 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
    failing that we let them through. A network blip must never strand a class. */
 const API = (window.HUB && window.HUB.API) || "";
 const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
+/* nothing that talks about signing in belongs on a site with no accounts */
+if (OFFLINE){
+  document.querySelectorAll("[data-online-only]").forEach(e => { e.remove(); });
+}
 /* Offline, there is no backend at all: every task is open, work stays in
    this browser, and handing in means saving a PDF. */
 const apiReady = !OFFLINE && API && API.indexOf("PASTE_") !== 0;
@@ -3102,6 +3106,24 @@ function computeST(byTopic){
   return { strength, target, targetTopic: worst[0] };
 }
 
+function keepResultLocally(res, st){
+  /* With no server, the browser is the only place a result can live. */
+  try{
+    const all = JSON.parse(localStorage.getItem("hub_results") || "{}");
+    all[lessonId] = {
+      lesson_id: lessonId,
+      title: (lesson && lesson.title) || lessonId,
+      score: res ? res.score : 0,
+      out_of: res ? res.outOf : 0,
+      strength: st ? st.strength : "",
+      target: st ? st.target : "",
+      grade: "",
+      updated_at: new Date().toISOString().replace("T", " ").slice(0, 19)
+    };
+    localStorage.setItem("hub_results", JSON.stringify(all));
+  }catch(e){}
+}
+
 async function assessmentFinish(){
   if (spectate){ renderAssessmentComplete(false); return; }
   finished = true;
@@ -3123,6 +3145,7 @@ async function assessmentFinish(){
   }
   const res = computeAssessment();
   const st = computeST(res.byTopic);
+  if (OFFLINE) keepResultLocally(res, st);
 
   submitWork().then(() => {});
   let sent = "offline";
@@ -3570,7 +3593,11 @@ function saveButton(statusEl){
      making a PDF to give to the teacher. */
   if (OFFLINE){
     const btn = el("button","btn-primary done-save","Save my work as a PDF");
-    btn.addEventListener("click", () => showPdfView());
+    btn.addEventListener("click", () => {
+      showPdfView();
+      /* straight to the print dialogue, where "Save as PDF" is the option */
+      setTimeout(() => { try{ window.print(); }catch(e){} }, 400);
+    });
     if (statusEl){
       statusEl.dataset.state = "offline";
       statusEl.textContent = "Your work is kept in this browser. Save a PDF to hand it in.";

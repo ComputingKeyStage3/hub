@@ -1985,3 +1985,17 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   background:color-mix(in srgb, var(--amber) 12%, var(--panel)); border-bottom:1px solid var(--amber);
   font-size:14px; color:var(--text)}
 .offbar b{font-weight:700}
+
+
+/* --- top bar: the title takes the space, everything else sits right --- */
+.homebar .title{ flex:1 1 auto; min-width:0 }
+.homebar .settings-btn,.homebar .auth{ flex:0 0 auto; margin-left:auto }
+.homebar .settings-btn ~ .auth{ margin-left:10px }
+
+/* --- the offline name box matches every other field --- */
+.offname{ width:100%; max-width:340px; height:44px; padding:0 14px; text-align:center;
+  border:1.5px solid var(--line-2); border-radius:10px; background:var(--panel);
+  color:var(--text); font-family:var(--body); font-size:16px }
+.offname:focus{ border-color:var(--amber); outline:none;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent) }
+.offwrap{ display:flex; flex-direction:column; align-items:center; gap:12px }

@@ -151,14 +151,15 @@ function renderAuth(){
       note.textContent = "Your work is kept on this computer, in this browser. " +
                          "Put your name in so it can be told apart from anyone else using it.";
       const field = document.createElement("div");
-      field.className = "field";
+      field.className = "offwrap";
       const input = document.createElement("input");
+      input.className = "offname";
       input.placeholder = "Your name";
       input.autocomplete = "off";
       field.appendChild(input);
       const go = document.createElement("button");
       go.className = "btn-primary";
-      go.style.width = "100%";
+      go.style.minWidth = "180px";
       go.textContent = "Start";
       const start = () => {
         const v = (input.value || "").trim();
@@ -168,7 +169,8 @@ function renderAuth(){
       };
       go.addEventListener("click", start);
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") start(); });
-      card.appendChild(note); card.appendChild(field); card.appendChild(go);
+      field.appendChild(go);
+      card.appendChild(note); card.appendChild(field);
       signedInView(false);
     }
     return;
@@ -564,9 +566,49 @@ async function loadResults(force){
 }
 /* every lesson a teacher has written feedback on */
 
+function paintResults(box, d){
+box.innerHTML = "";
+  /* how each assessment went */
+  if (!d.results.length) box.appendChild(el("p","hint","No assessment results yet."));
+  else box.appendChild(el("p","unit-head","Assessments"));
+  d.results.forEach(res => {
+    const card = document.createElement("a"); card.className = "result-card";
+    card.href = "lesson.html?id=" + encodeURIComponent(res.lesson_id);
+    card.innerHTML = '<span class="sc"></span><span class="body"><b></b><span></span></span><span class="st"></span>';
+    const when = new Date(res.updated_at + "Z").toLocaleDateString("en-GB");
+    /* A grade stands on its own: there is no percentage to work out. */
+    if (res.grade){
+      card.querySelector(".sc").textContent = res.grade;
+      card.querySelector(".sc").classList.add("sc-grade");
+      card.querySelector(".body span").textContent = when;
+    } else {
+      const pct = Math.round(100 * res.score / Math.max(1, res.out_of));
+      card.querySelector(".sc").textContent = res.score + " / " + res.out_of;
+      card.querySelector(".body span").textContent = pct + "% \u00b7 " + when;
+    }
+    card.querySelector("b").textContent = lessonTitles[res.lesson_id] || res.lesson_id;
+    const st = card.querySelector(".st");
+    if (res.strength || res.target){
+      st.innerHTML = (res.strength ? "<b>Strength:</b> " : "") + (res.strength || "") +
+                     (res.target ? "<br><i>Target:</i> " + res.target : "");
+    }
+    box.appendChild(card);
+  });
+}
+
 async function fetchResults(){
   const token = localStorage.getItem("hub_token");
   const box = $("resultList");
+  if (OFFLINE){
+    /* the browser is the only place results live */
+    let all = {};
+    try{ all = JSON.parse(localStorage.getItem("hub_results") || "{}"); }catch(e){}
+    const mine = Object.values(all).sort((a, b) =>
+      String(b.updated_at).localeCompare(String(a.updated_at)));
+    mine.forEach(r => { if (r.title) lessonTitles[r.lesson_id] = r.title; });
+    paintResults(box, { results: mine });
+    return;
+  }
   if (!token){ box.innerHTML = ""; return; }
   if (!ready){ box.innerHTML = '<p class="hint">Site not connected to its server yet.</p>'; return; }
   box.innerHTML = '<p class="hint">Loading…</p>';
@@ -575,34 +617,8 @@ async function fetchResults(){
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Could not load results.");
     resultsLoaded = true;
-    box.innerHTML = "";
-    /* two lists: how assessments went, and any lesson the teacher has
-       written on */
-    if (!d.results.length) box.appendChild(el("p","hint","No assessment results yet."));
-    else box.appendChild(el("p","unit-head","Assessments"));
-    d.results.forEach(res => {
-      const card = document.createElement("a"); card.className = "result-card";
-      card.href = "lesson.html?id=" + encodeURIComponent(res.lesson_id);
-      card.innerHTML = '<span class="sc"></span><span class="body"><b></b><span></span></span><span class="st"></span>';
-      const when = new Date(res.updated_at + "Z").toLocaleDateString("en-GB");
-      /* A grade stands on its own: there is no percentage to work out. */
-      if (res.grade){
-        card.querySelector(".sc").textContent = res.grade;
-        card.querySelector(".sc").classList.add("sc-grade");
-        card.querySelector(".body span").textContent = when;
-      } else {
-        const pct = Math.round(100 * res.score / Math.max(1, res.out_of));
-        card.querySelector(".sc").textContent = res.score + " / " + res.out_of;
-        card.querySelector(".body span").textContent = pct + "% \u00b7 " + when;
-      }
-      card.querySelector("b").textContent = lessonTitles[res.lesson_id] || res.lesson_id;
-      const st = card.querySelector(".st");
-      if (res.strength || res.target){
-        st.innerHTML = (res.strength ? "<b>Strength:</b> " : "") + (res.strength || "") +
-                       (res.target ? "<br><i>Target:</i> " + res.target : "");
-      }
-      box.appendChild(card);
-    });
+    paintResults(box, d);
+
   }catch(e){ box.innerHTML = '<p class="hint">' + e.message + '</p>'; }
 }
   if (window.initSettings) initSettings($("setBtn"));

@@ -12,6 +12,9 @@
     bar.id = "offBar";
     bar.className = "offbar no-print";
     const teacher = /admin\.html|author\.html|work\.html/.test(location.pathname);
+    /* Students do not need telling how the site is hosted — the page already
+       says their work stays in the browser. */
+    if (!teacher) return;
     const b = document.createElement("b");
     b.textContent = "Running without a server.";
     bar.appendChild(b);
