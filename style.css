@@ -162,11 +162,6 @@ body.lesson{
 }
 .seg.done{background:var(--mint)}
 .seg.now{background:var(--amber)}
-.trackmeta{
-  display:flex; justify-content:space-between; align-items:baseline;
-  padding:4px 20px 6px; background:var(--panel); border-bottom:1px solid var(--line);
-  font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim);
-}
 .trackmeta .now-label{color:var(--amber)}
 
 /* the brief: instructions, big, always at the top, never scrolls away */
@@ -491,13 +486,8 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 
 /* ---- teacher hand-in cards ---- */
 .handin-card{background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:0 0 14px}
-.handin-head{display:flex; justify-content:space-between; align-items:baseline; margin:0 0 10px}
 .handin-head b{font-family:var(--display); font-size:16px}
 .handin-head span{font-family:var(--mono); font-size:11px; color:var(--dim)}
-.handin-field{padding:7px 0; border-top:1px solid var(--line)}
-.handin-k{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0 0 3px}
-.handin-v{font-size:14px; white-space:pre-wrap}
-.handin-img{max-width:340px; max-height:240px; border-radius:8px; border:1px solid var(--line-2); display:block}
 
 
 /* ---- Save Work button feedback ---- */
@@ -525,11 +515,6 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 
 /* ---- assessment: fill in the blanks ---- */
 .blanks{font-size:19px; line-height:2.3}
-.blank-input{
-  display:inline-block; width:150px; margin:0 4px; padding:6px 10px;
-  font-size:17px; text-align:center; border-radius:8px;
-  background:var(--bg); border:1.5px solid var(--line-2); color:var(--text);
-}
 .blank-input:focus{outline:none; border-color:var(--amber)}
 
 /* ---- assessment results screen ---- */
@@ -585,8 +570,6 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .resq.part .mark{color:var(--amber); font-family:var(--mono); font-size:14.5px}
 .resq.part .body b{color:var(--text)}
 .resq .why{display:block; color:var(--dim); font-size:14px; margin-top:3px}
-.chips{display:flex; flex-wrap:wrap; gap:8px; margin:7px 0 3px}
-.chip-ans{padding:5px 13px; border-radius:999px; font-size:14.5px; border:1px solid}
 .chip-ans.ok{color:var(--mint); border-color:var(--mint-dim); background:rgba(65,199,164,.07)}
 .chip-ans.no{color:var(--red); border-color:var(--red); background:var(--panel)}
 
@@ -621,8 +604,7 @@ b,strong,h1,h2,h3,.done-title,.lessonCard b{font-weight:800}
 .btn-ghost:hover:not(:disabled){border-color:var(--amber); color:var(--amber-dark); background:var(--panel)}
 
 .topbar,.dock{background:var(--bar); border-color:var(--line)}
-.homebar{background:var(--bar) !important; border-color:var(--line) !important}
-.station,.resp-task,.result-card,.lessonCard,.login-card{
+.homebar{background:var(--bar) !important; border-color:var(--line) !important}.station, .resp-task, .result-card, .lessonCard{
   box-shadow:0 1px 3px rgba(0,0,0,.07);
 }
 .brief{box-shadow:0 1px 3px rgba(0,0,0,.06); padding:9px 24px 11px}
@@ -735,7 +717,6 @@ textarea.code{background:var(--code-bg) !important; color:var(--code-fg) !import
 /* online pill */
 .online-pill{display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px;
   border:1.5px solid var(--mint); color:var(--mint); font-weight:800; font-size:14.5px; background:var(--panel)}
-.online-pill{color:var(--mint)}
 .online-pill .odot{width:9px; height:9px; border-radius:50%; background:var(--mint); animation:opulse 1.3s ease-in-out infinite}
 @keyframes opulse{0%,100%{opacity:1; transform:scale(1)} 50%{opacity:.35; transform:scale(.75)}}
 .online-pill.off{border-color:var(--line-2); color:var(--muted)}
@@ -836,8 +817,6 @@ body.spectating{padding-top:40px}
 .print-head{margin:0 0 18px}
 .print-head h1{font-size:28px; margin:0 0 4px}
 .print-head p{margin:0; color:var(--muted); font-size:15px}
-.print-task{break-inside:avoid; page-break-inside:avoid; border-top:1px solid var(--line); padding:14px 0}
-.print-h{font-family:var(--display); font-size:18px; margin:0 0 8px}
 @media print{
   .topbar,.dock,.viewbar,.tracker,.brief,.no-print{display:none !important}
   .stage{overflow:visible !important; height:auto !important}
@@ -1114,8 +1093,6 @@ body.spectating{padding-top:40px}
   background:transparent; color:var(--text); cursor:pointer; line-height:1.2}
 .rt-btn:hover{border-color:var(--line-2); background:var(--panel)}
 .rt-clear{margin-left:auto; color:var(--muted)}
-.rt-colour{font-family:var(--body); font-size:13px; padding:4px 8px; border-radius:8px;
-  border:1px solid var(--line-2); background:var(--panel); color:var(--text)}
 .rt-box{min-height:104px; padding:12px 14px; font-size:15.5px; line-height:1.6; color:var(--text); outline:none}
 .rt-box:focus{background:var(--panel)}
 .rt-box:empty::before{content:attr(data-placeholder); color:var(--dim)}
@@ -1156,29 +1133,12 @@ body.spectating{padding-top:40px}
 
 /* web editor: preview, messages, colouring */
 .web-preview{background:#fff; min-height:300px; display:flex; flex-direction:column}
-.web-frame{flex:1; width:100%; min-height:300px; border:none; background:#fff}
-.web-log{margin:0; max-height:150px; overflow:auto; padding:10px 14px; background:var(--ed-bg);
-  color:var(--ed-fg); font-family:var(--mono); font-size:13px; white-space:pre-wrap;
-  border-top:1px solid var(--ed-line)}
-.w-tag{color:var(--t-fn); font-weight:700}
-.w-attr{color:var(--t-call)}
-.w-str{color:var(--t-str)}
-.w-com{color:var(--t-com); font-style:italic}
-.w-punc{color:var(--t-op)}
-.w-prop{color:var(--t-fn)}
-.w-sel{color:var(--t-kw); font-weight:700}
-.w-num{color:var(--t-num)}
-.w-kw{color:var(--t-kw); font-weight:700}
-.w-fn{color:var(--t-fn)}
-.w-help{text-decoration:underline dotted currentColor; text-underline-offset:3px; text-decoration-thickness:1px}
 
 /* help search */
 .ide-helpsearch{width:100%; margin:0 0 12px; font-family:var(--body) !important; font-size:14px !important;
   padding:8px 12px !important; background:var(--ed-bar) !important; color:var(--ed-fg) !important;
   border:1px solid var(--ed-line) !important; border-radius:8px !important}
 .ide-helpsearch:focus{border-color:var(--amber) !important; outline:none}
-.ide-helpgroup{margin:14px 0 6px; font-size:12px; font-weight:800; letter-spacing:.06em;
-  text-transform:uppercase; color:var(--ed-gut)}
 .ide-helpgroup:first-child{margin-top:0}
 .ide-helplist{display:block}
 
@@ -1251,7 +1211,6 @@ body.spectating{padding-top:40px}
 .mbtable{width:100%; border-collapse:collapse; font-size:14.5px}
 .mbtable th,.mbtable td{border-bottom:1px solid var(--line); padding:8px 10px; text-align:left}
 .mbtable th{font-size:12.5px; color:var(--muted); font-weight:800}
-.mbtask{max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .mbtick{text-align:center}
 .mbtick .yes{color:var(--mint); font-weight:800}
 .mbtick .no{color:var(--line-2); font-weight:800}
@@ -1465,7 +1424,6 @@ pre, code{overflow-wrap:anywhere}
 .qmark{display:flex; align-items:baseline; gap:10px; margin:0 0 6px; padding:7px 0; border-bottom:1px solid var(--line)}
 .qmark:last-child{border-bottom:none}
 .qmark b{min-width:32px}
-.qmark-t{flex:1; color:var(--muted); font-size:15px}
 .qmark-n{font-weight:800}
 .qmark.full .qmark-n{color:var(--mint)}
 .qmark.part .qmark-n{color:var(--amber-dark)}
@@ -1488,9 +1446,6 @@ html[data-bg=dark] .qmark.full .qmark-n{color:var(--mint)}
   border-radius:0 12px 12px 0; text-decoration:none; color:inherit}
 .fb-card:hover{border-color:var(--amber)}
 .fb-card b{font-size:17px}
-.fb-s{color:var(--mint); font-size:15px}
-.fb-t{color:var(--amber-dark); font-size:15px}
-.fb-c{color:var(--muted); font-size:15px}
 html[data-bg=dark] .fb-s{color:var(--mint)}
 .tabs .refresh{margin-left:auto}
 
@@ -1641,10 +1596,7 @@ body.workpage .grow{flex:1}
 .rt-palette{position:absolute; top:calc(100% + 4px); left:0; z-index:50; min-width:150px; padding:6px;
   background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
   box-shadow:0 8px 22px rgba(0,0,0,.16); display:flex; flex-direction:column}
-.rt-swatchbtn{display:flex; align-items:center; gap:9px; padding:7px 10px; border:none; border-radius:8px;
-  background:transparent; cursor:pointer; font-family:var(--body); font-size:14.5px; color:var(--text); text-align:left}
 .rt-swatchbtn:hover{background:var(--panel-2)}
-.rt-dot{width:15px; height:15px; border-radius:50%; border:1px solid var(--line-2); flex:none}
 .rt-dot.rt-auto{background:linear-gradient(135deg, var(--text) 50%, transparent 50%)}
 
 /* the bank of strengths and targets */
@@ -1734,11 +1686,8 @@ h1,h2,h3{ letter-spacing:-.01em; font-weight:600 }
 h1{ font-size:clamp(28px,5.5vw,2.4rem); line-height:1.2 }
 h2{ font-size:clamp(22px,4.5vw,1.8rem); line-height:1.25 }
 h3{ font-size:clamp(18px,3.5vw,1.35rem); line-height:1.3 }
-body{ font-size:16.5px; line-height:1.65 }
-
-/* --- edges: soft, with the roundest reserved for buttons and pills --- */
-.station,.modal,.bcard,.qsub,.st-card,.result-card,.fb-card,.allpage,
-.workside,.workframe,.mbscroll,.seatgrid,.seatpool,.rubriccol,.ide-wrap{ border-radius:14px }
+body{ font-size:16.5px; line-height:1.65 }/* --- edges: soft, with the roundest reserved for buttons and pills --- */
+.station, .modal, .bcard, .qsub, .st-card, .result-card, .allpage, .workside, .workframe, .mbscroll, .seatgrid, .seatpool, .rubriccol, .ide-wrap{ border-radius:14px }
 .lessonCard,.classtile,.lessonpill,.brief,.linkprev,.picimg,.embed,.framed,
 .seat,.seatcell,.seatfront,.menu,.rt,.periodbtn,.bankpick{ border-radius:12px !important }
 .field input,.bfield input,.bfield textarea,.bfield select,
@@ -1821,8 +1770,6 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 .swatch-wide[data-bg=""]{color:#1D1D1B}
 .swatch-wide[data-bg=night]{color:#F2F2F0}
 .swatch[data-none]{background:var(--panel-2); color:var(--muted); font-size:13px}
-.swatch-pick{position:relative; display:inline-flex; align-items:center; justify-content:center;
-  cursor:pointer; overflow:hidden}
 .swatch-pick input{position:absolute; inset:0; opacity:0; cursor:pointer; border:none; padding:0}
 .swatch-pick span{font-size:17px; color:var(--muted)}
 .tintrow{display:flex; align-items:center; gap:10px; margin-top:10px}
@@ -1833,8 +1780,7 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 
 /* binary tasks */
 .binary .bin-row{display:flex; gap:4px; align-items:center; flex-wrap:nowrap; overflow-x:auto; padding:2px 0}
-.bin-place{min-width:38px; text-align:center; font-family:var(--mono); font-size:12px; color:var(--muted)}
-.bin-placelabel,.bin-lead{display:block; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+.bin-place{min-width:38px; text-align:center; font-family:var(--mono); font-size:12px; color:var(--muted)}.bin-lead{display:block; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
   color:var(--dim); font-weight:600; margin-bottom:4px}
 .bin-bit{min-width:38px; height:38px; line-height:38px; text-align:center; font-family:var(--mono);
   font-size:17px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px}
@@ -1892,10 +1838,8 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 /* headings inside the builder follow the theme rather than staying black */
 .bcard input,.bcard textarea,.qsub input,.qsub textarea,
 .bhead input,.bfield input,.bfield textarea{ color:var(--text); background:var(--panel) }
-.btype,.bhead b,.bcard label,.qsub label{ color:var(--text) }
-
-/* every search box looks the same wherever it is */
-.searchbox,.search,input[type=search],.pickersearch{
+.btype,.bhead b,.bcard label,.qsub label{ color:var(--text) }/* every search box looks the same wherever it is */
+.searchbox, .search, input[type=search]{
   height:42px; padding:0 14px; border:1.5px solid var(--line-2); border-radius:10px;
   background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px;
 }
@@ -2003,3 +1947,13 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 /* the year beside a student name in the bar */
 .whoyear{color:var(--muted); font-size:14px}
 select.offname{text-align-last:center; cursor:pointer}
+
+/* the backup button asks for attention once a week */
+.iconbtn.due{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 14%, var(--panel))}
+.iconbtn.due::after{content:""; position:absolute; top:4px; right:4px; width:8px; height:8px;
+  border-radius:50%; background:var(--amber)}
+.iconbtn{position:relative}
+/* how full the database is */
+.meter{height:10px; background:var(--panel-2); border:1px solid var(--line); overflow:hidden; margin:8px 0 14px}
+.meter-bar{height:100%; background:var(--amber)}
+[data-stale=yes]{color:var(--amber-dark); font-weight:600}

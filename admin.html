@@ -17,6 +17,7 @@
 <div class="homebar" id="topbar" hidden>
   <div class="title">Computing Teacher Console</div>
   <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
+  <button class="btn-ghost iconbtn" id="keepBtn" title="Backups and end of year">&#128190;</button>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
@@ -138,6 +139,49 @@
   </div>
 
   <!-- ============ lessons + release ============ -->
+  <div id="keepView" hidden>
+    <h2 style="margin:22px 0 4px">Backups and end of year</h2>
+    <p class="hint" style="margin:0 0 18px">Everything here works on the whole database, not one class.</p>
+
+    <section class="station" style="margin-bottom:18px">
+      <h3 style="margin:0 0 4px">Weekly backup</h3>
+      <p class="hint" id="backupWhen"></p>
+      <p class="modal-text">Downloads the entire database as one file. Keep it somewhere safe \u2014 if
+        something goes badly wrong, it is what you would put back.</p>
+      <button class="btn-primary" id="backupBtn">Download a backup</button>
+      <p class="hint" id="backupMsg"></p>
+    </section>
+
+    <section class="station" style="margin-bottom:18px">
+      <h3 style="margin:0 0 4px">How much room is being used</h3>
+      <p class="modal-text">There is 5GB in total, shared by every year. Screenshots take up far
+        more room than anything else.</p>
+      <button class="btn-ghost" id="storeBtn">Check</button>
+      <div id="storeOut"></div>
+    </section>
+
+    <section class="station">
+      <h3 style="margin:0 0 4px">End of year</h3>
+      <p class="modal-text">Save last year's work to a file, then remove it from the database.
+        Lessons, units and year groups are kept \u2014 they are next year's teaching.</p>
+      <div class="bfield" style="max-width:280px">
+        <label for="purgeDate">Remove work saved before</label>
+        <input type="date" id="purgeDate">
+      </div>
+      <div class="bfield">
+        <label>Classes that have left the school</label>
+        <p class="bhelp">Their students, work and seating plans are removed as well. Leave all
+          unticked to keep every student.</p>
+        <div id="purgeGroups"></div>
+      </div>
+      <div class="toolrow">
+        <button class="btn-primary" id="exportBtn">1. Save it to a file</button>
+        <button class="btn-ghost" id="purgeBtn" disabled>2. Remove it from the database</button>
+      </div>
+      <p class="hint" id="purgeMsg"></p>
+    </section>
+  </div>
+
   <div id="pwView" hidden>
     <button class="crumb" id="backFromPw">&larr; Back</button>
     <h2 style="margin:14px 0 4px">Password updates</h2>
@@ -196,7 +240,6 @@ function el(tag, cls, text){
   return e;
 }
 function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, ""); }
-function esc(s){ return String(s); }
 
 let KEY = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
 let workCache = { key: "", rows: [], t: 0 };
@@ -229,7 +272,6 @@ const toClass   = () => openClass(cls);
 const toUnits   = () => { show("unitsView"); paintClassUnits(); };
 const toHub     = () => { show("hubView"); paintYears(); };
 const toHubYear = () => openYear(hubYear);
-const toUnit    = () => openUnit(unit);
 function paintCrumbs(){
   const v = VIEWS.find(x => !$(x).hidden);
   if (v === "keyView"){ crumbs(null); return; }
@@ -246,13 +288,14 @@ function paintCrumbs(){
   if (v === "classView") return crumbs([top, home, { name: cls }]);
   if (v === "studentsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Students" }]);
   if (v === "unitsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units" }]);
+  if (v === "keepView") return crumbs([top, home, { name:"Backups and end of year" }]);
   if (v === "lessonsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
                                           { name: unit || "Not in a unit" }]);
   crumbs([top]);
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","pwView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","keepView","pwView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
@@ -402,6 +445,7 @@ on("whoGo", "click", async () => {
   await refreshGroups();
   paintClasses();
   show("homeView");
+  nudgeBackup();           // the once-a-week reminder to take a backup
 });
 /* changing who you are, without signing in again */
 function changeTeacher(){ show("whoView", true); }
@@ -497,6 +541,173 @@ async function saveClassTeachers(group, codes){
       body: JSON.stringify({ group: group, codes: codes }) });
   }catch(e){}
 }
+
+/* ==================================================================
+   Backups, and clearing out at the end of the year
+   ================================================================== */
+function niceBytes(n){
+  n = Number(n) || 0;
+  if (n > 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
+  if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
+  if (n > 1024) return Math.round(n / 1024) + " KB";
+  return n + " bytes";
+}
+function saveJson(obj, name){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+
+on("keepBtn", "click", () => { show("keepView"); paintBackupWhen(); paintPurgeGroups(); });
+/* A quiet reminder once a week, rather than a pop-up in the way. */
+function nudgeBackup(){
+  const last = Number(localStorage.getItem("hub_backup_when") || 0);
+  const days = last ? Math.floor((Date.now() - last) / 86400000) : 999;
+  const btn = $("keepBtn");
+  if (btn) btn.classList.toggle("due", days >= 7);
+  if (btn) btn.title = days >= 7 ? "Backups and end of year — a backup is due" : "Backups and end of year";
+}
+function paintBackupWhen(){
+  const last = localStorage.getItem("hub_backup_when");
+  const loadScreen = $("backupWhen");
+  if (!last){ loadScreen.textContent = "No backup taken from this computer yet."; return; }
+  const days = Math.floor((Date.now() - Number(last)) / 86400000);
+  loadScreen.textContent = days === 0 ? "Last backup: today."
+    : "Last backup: " + days + " day" + (days === 1 ? "" : "s") + " ago."
+      + (days >= 7 ? "  Worth taking another." : "");
+  loadScreen.dataset.stale = days >= 7 ? "yes" : "no";
+}
+on("backupBtn", "click", async () => {
+  $("backupMsg").textContent = "Collecting everything\u2026";
+  try{
+    const r = await fetch(API + "/api/teacher/backup", { headers: H(), cache:"no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not take a backup.");
+    saveJson(d, "computing-hub-backup-" + stamp() + ".json");
+    localStorage.setItem("hub_backup_when", String(Date.now()));
+    paintBackupWhen();
+    const rows = Object.values(d.counts || {}).reduce((a, b) => a + b, 0);
+    $("backupMsg").textContent = "Saved. " + rows + " rows across " +
+      Object.keys(d.tables || {}).length + " tables.";
+  }catch(e){ $("backupMsg").textContent = e.message; }
+});
+
+on("storeBtn", "click", async () => {
+  const out = $("storeOut");
+  out.innerHTML = '<p class="hint">Checking\u2026</p>';
+  try{
+    const r = await fetch(API + "/api/teacher/storage", { headers: H(), cache:"no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not check.");
+    out.innerHTML = "";
+    const used = (d.totals && d.totals.work && d.totals.work.bytes) || 0;
+    const pct = Math.min(100, (used / (5 * 1024 * 1024 * 1024)) * 100);
+    out.appendChild(el("p","modal-text", "Saved work takes up " + niceBytes(used) +
+      " \u2014 about " + (pct < 0.1 ? "less than 0.1" : pct.toFixed(1)) + "% of the 5GB."));
+    const bar = el("div","meter");
+    const fill = el("div","meter-bar");
+    fill.style.width = Math.max(1, pct) + "%";
+    bar.appendChild(fill);
+    out.appendChild(bar);
+    if ((d.lessons || []).length){
+      out.appendChild(el("p","unit-head","Biggest lessons"));
+      d.lessons.slice(0, 8).forEach(l => {
+        const row = el("div","importrow");
+        row.appendChild(el("b","", titleOf(l.lesson_id) || l.lesson_id));
+        row.appendChild(el("span","", niceBytes(l.bytes) + " \u00b7 " + l.rows + " students"));
+        out.appendChild(row);
+      });
+    }
+  }catch(e){ out.innerHTML = ""; out.appendChild(el("p","hint", e.message)); }
+});
+
+function paintPurgeGroups(){
+  const box = $("purgeGroups");
+  box.innerHTML = "";
+  (groups || []).forEach(g => {
+    const row = el("label","opt");
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = g.name; cb.className = "purgegroup";
+    row.appendChild(cb);
+    row.appendChild(el("span","", g.name + "  (" + g.students + " student" + (g.students === 1 ? "" : "s") + ")"));
+    box.appendChild(row);
+  });
+  if (!groups.length) box.appendChild(el("p","hint","No classes."));
+  /* a sensible default: the end of the summer term just gone */
+  if (!$("purgeDate").value){
+    const now = new Date();
+    const year = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+    $("purgeDate").value = year + "-08-31";
+  }
+}
+let exportedFor = "";      // nothing is removed until it has been saved
+on("exportBtn", "click", async () => {
+  const before = $("purgeDate").value;
+  if (!before){ $("purgeMsg").textContent = "Pick a date first."; return; }
+  $("purgeMsg").textContent = "Collecting\u2026";
+  try{
+    const r = await fetch(API + "/api/teacher/year-export?before=" + encodeURIComponent(before),
+                          { headers: H(), cache:"no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not export.");
+    saveJson(d, "computing-hub-" + before + "-and-earlier.json");
+    exportedFor = before;
+    $("purgeBtn").disabled = false;
+    $("purgeMsg").textContent = "Saved " + d.counts.work + " pieces of work and " +
+      d.counts.results + " results. Check the file opens before going on.";
+  }catch(e){ $("purgeMsg").textContent = e.message; }
+});
+on("purgeBtn", "click", () => {
+  const before = $("purgeDate").value;
+  if (exportedFor !== before){
+    $("purgeMsg").textContent = "Save it to a file first \u2014 the date has changed since you did.";
+    $("purgeBtn").disabled = true;
+    return;
+  }
+  const gone = Array.from(document.querySelectorAll(".purgegroup"))
+    .filter(c => c.checked).map(c => c.value);
+  openModal(box => {
+    box.appendChild(el("h2","","Remove it from the database?"));
+    box.appendChild(el("p","modal-text",
+      "Work and results saved before " + before + " will be deleted." +
+      (gone.length ? " These classes will be removed altogether: " + gone.join(", ") + "." : "")));
+    box.appendChild(el("p","modal-text","This cannot be undone. Type DELETE to go ahead."));
+    const w = el("div","bfield");
+    const inp = el("input");
+    inp.placeholder = "DELETE";
+    w.appendChild(inp);
+    box.appendChild(w);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Remove it");
+    go.style.background = "var(--red)";
+    go.style.borderColor = "var(--red)";
+    go.addEventListener("click", async () => {
+      if (inp.value.trim() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; return; }
+      msg.textContent = "Removing\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/year-purge", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ before, groups: gone, confirm: "DELETE" }) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Could not remove it.");
+        closeModal();
+        $("purgeMsg").textContent = "Removed " + d.removed.work + " pieces of work, " +
+          d.removed.results + " results" +
+          (d.removed.students ? " and " + d.removed.students + " students" : "") + ".";
+        $("purgeBtn").disabled = true;
+        exportedFor = "";
+        await refreshGroups();
+        paintPurgeGroups();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    const no = el("button","btn-ghost modal-stay","Keep it");
+    no.addEventListener("click", closeModal);
+    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
+  });
+});
 
 /* ---------- the lesson hub: year groups, then units, then lessons ---------- */
 let assigns = [];
@@ -847,10 +1058,10 @@ function deleteLesson(id, then){
     yes.style.background = "var(--red)";
     yes.addEventListener("click", () => {
       closeModal();
-      openModal(box2 => {
-        modalTitle(box2, "Really delete it?");
-        box2.appendChild(el("p","modal-text","This cannot be undone. Type the word DELETE to confirm."));
-        const inp = fieldRow(box2, "", "text", "");
+      openModal(popup => {
+        modalTitle(popup, "Really delete it?");
+        popup.appendChild(el("p","modal-text","This cannot be undone. Type the word DELETE to confirm."));
+        const inp = fieldRow(popup, "", "text", "");
         const msg = el("p","hint","");
         const go = el("button","btn-primary modal-cta","Delete for ever");
         go.style.background = "var(--red)";
@@ -867,7 +1078,7 @@ function deleteLesson(id, then){
         });
         const no = el("button","btn-ghost modal-stay","Keep it");
         no.addEventListener("click", closeModal);
-        box2.appendChild(go); box2.appendChild(no); box2.appendChild(msg);
+        popup.appendChild(go); popup.appendChild(no); popup.appendChild(msg);
       });
     });
     const no = el("button","btn-ghost modal-stay","Cancel");
@@ -1175,12 +1386,12 @@ on("addManyBtn", "click", () => {
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Add students");
     go.addEventListener("click", async () => {
-      const rows = ta.value.split("\n").map(l => l.split(",").map(x => x.trim())).filter(p2 => p2[0]);
+      const rows = ta.value.split("\n").map(l => l.split(",").map(x => x.trim())).filter(printMatch => printMatch[0]);
       /* Two columns = username + display name (no password, they pick their own).
          Three columns = username, password, display name. */
-      const list = rows.map(p2 => p2.length >= 3
-        ? { group: cls, username: p2[0], password: p2[1] || "", displayName: p2[2] || p2[0] }
-        : { group: cls, username: p2[0], password: "", displayName: p2[1] || p2[0] });
+      const list = rows.map(printMatch => printMatch.length >= 3
+        ? { group: cls, username: printMatch[0], password: printMatch[1] || "", displayName: printMatch[2] || printMatch[0] }
+        : { group: cls, username: printMatch[0], password: "", displayName: printMatch[1] || printMatch[0] });
       if (!list.length){ msg.textContent = "Nothing to add yet."; return; }
       msg.textContent = "Adding\u2026";
       try{
@@ -1216,8 +1427,8 @@ async function fetchCatalogue(){
   }catch(e){}
   // lessons built in the builder live in the database, not in the file
   try{
-    const r2 = await fetch(API + "/api/teacher/lessons", { headers: H(), cache: "no-store" });
-    const d2 = await r2.json();
+    const reply = await fetch(API + "/api/teacher/lessons", { headers: H(), cache: "no-store" });
+    const d2 = await reply.json();
     (d2.lessons || []).forEach(l => {
       const seen = fileLessons.find(f => f.id === l.id);
       if (seen){ seen.title = l.title || seen.title; seen.unit = l.unit || seen.unit; }
@@ -1432,9 +1643,9 @@ async function fetchLesson(id){
     const r = await fetch("lessons/" + id + ".json", { cache: "no-store" });
     if (r.ok) return await r.json();
   }catch(e){}
-  const r2 = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(id), { headers: H(), cache: "no-store" });
-  const d = await r2.json();
-  if (!r2.ok) throw new Error(d.error || "Could not open that lesson.");
+  const reply = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(id), { headers: H(), cache: "no-store" });
+  const d = await reply.json();
+  if (!reply.ok) throw new Error(d.error || "Could not open that lesson.");
   return d.lesson;
 }
 
@@ -2033,55 +2244,6 @@ function handOff(rows, idx){
   }));
 }
 
-/* change what a question was marked, and the total with it */
-function editMarks(row, then){
-  openModal(box => {
-    box.classList.add("wide");
-    modalTitle(box, "Marks for " + row.name);
-    const qs = assessmentQuestions();
-    if (!qs.length){ box.appendChild(el("p","modal-text","This assessment has no marked questions.")); return; }
-    const changed = {};
-    let total = 0, outOf = 0;
-    const totalLine = el("p","modal-text","");
-    qs.forEach(q => {
-      const m = row.marks[q.id] || { got:0, max:1 };
-      outOf += m.max;
-      total += m.got;
-      const line = el("div","markrow");
-      line.appendChild(el("span","mr-q", q.label));
-      line.appendChild(el("span","mr-t", q.title));
-      const inp = el("input"); inp.type = "number"; inp.min = "0"; inp.max = String(m.max);
-      inp.value = String(m.got); inp.className = "mr-in";
-      inp.addEventListener("input", () => {
-        const v = Math.max(0, Math.min(m.max, parseInt(inp.value, 10) || 0));
-        changed[q.id] = v;
-        total = qs.reduce((sum, qq) => {
-          const base = row.marks[qq.id] || { got:0, max:1 };
-          return sum + (changed[qq.id] !== undefined ? changed[qq.id] : base.got);
-        }, 0);
-        totalLine.textContent = "Total: " + total + " out of " + outOf;
-      });
-      line.appendChild(inp);
-      line.appendChild(el("span","mr-max","/ " + m.max));
-      box.appendChild(line);
-    });
-    totalLine.textContent = "Total: " + total + " out of " + outOf;
-    box.appendChild(totalLine);
-    const msg = el("p","hint","");
-    const go = el("button","btn-primary modal-cta","Save marks");
-    go.addEventListener("click", async () => {
-      msg.textContent = "Saving\u2026";
-      try{
-        const r = await fetch(API + "/api/teacher/set-mark", { method:"POST", headers: HJ(),
-          body: JSON.stringify({ username: row.username, lesson: lessonId,
-                                 overrides: changed, score: total, outOf: outOf }) });
-        if (!r.ok) throw new Error((await r.json()).error || "Could not save.");
-        closeModal(); if (then) then();
-      }catch(e){ msg.textContent = e.message; }
-    });
-    box.appendChild(go); box.appendChild(msg);
-  });
-}
 
 function inspect(rows, idx, stepIdx){
   handOff(rows, idx);
