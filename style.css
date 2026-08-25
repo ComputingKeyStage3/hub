@@ -1395,10 +1395,10 @@ pre, code{overflow-wrap:anywhere}
 
 
 /* scheduling, marks and feedback */
-.periodgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px}
+.periodgrid{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px}
 .periodbtn{text-align:left; padding:10px 12px; border:1.5px solid var(--line-2); border-radius:10px;
   background:var(--panel); cursor:pointer; font-family:var(--body)}
-.periodbtn b{display:block; font-size:15px; color:var(--text)}
+.periodbtn b{display:block; font-size:14.5px; color:var(--text)}
 .periodbtn span{display:block; font-size:12px; color:var(--muted); margin-top:2px}
 .periodbtn.on{border-color:var(--amber); background:var(--panel-2)}
 .statechip.wait{background:color-mix(in srgb, var(--amber) 12%, var(--panel)); color:var(--amber-dark); border-color:var(--amber)}
@@ -2099,3 +2099,47 @@ select.offname{text-align-last:center; cursor:pointer}
   .btn-primary, .btn-ghost{ font-size:13.5px; padding:0 0.8em }
   .page{ padding-left:8px; padding-right:8px }
 }
+
+/* the row of buttons at the top of Manage stays on one line on a desktop */
+.modal .toolrow{flex-wrap:wrap}
+@media (min-width:901px){ .modal .toolrow{flex-wrap:nowrap} }
+
+/* the state pill: says when on hover, and can be pressed */
+.statechip{border:1px solid transparent; cursor:default; font-family:var(--body)}
+.chip-live{cursor:pointer; transition:background .15s ease, color .15s ease, max-width .2s ease}
+.chip-live:hover,.chip-live:focus-visible{background:var(--mint); color:#fff; border-color:var(--mint); outline:none}
+.chip-live:hover::after{content:" " attr(data-when)}
+.statechip.wait.chip-live:hover{background:var(--amber); border-color:var(--amber); color:var(--amber-ink)}
+.statechip.shut.chip-live:hover{background:var(--muted); border-color:var(--muted); color:var(--panel)}
+
+/* the period buttons, laid out two to a row */
+.periodbtn{position:relative; padding:9px 12px}
+.period-at{display:block; font-size:13px; color:var(--muted); font-family:var(--mono)}
+.period-yr{display:block; font-size:11.5px; color:var(--dim); margin-top:2px}
+.anytime{display:flex; align-items:center; gap:10px; margin-top:10px; padding:9px 12px;
+  border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel)}
+.anytime.on{border-color:var(--amber); background:var(--panel-2)}
+.anytime label{font-size:14px; color:var(--muted); flex:1}
+.anytime input{width:130px !important}
+@media (max-width:640px){ .periodgrid{grid-template-columns:minmax(0,1fr)} }
+
+
+/* the checklist above a coding task */
+.checklist-wrap{margin:0 0 14px}
+.checklist{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:12px 14px}
+.checklist-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px}
+.checklist-head b{font-size:14px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
+.checklist-score{font-weight:700; font-size:14px; color:var(--muted)}
+.checklist-items{list-style:none; margin:0; padding:0}
+.check{display:flex; align-items:flex-start; gap:9px; padding:5px 0; font-size:15.5px; line-height:1.45}
+.check-mark{flex:none; width:20px; height:20px; border-radius:50%; display:inline-flex;
+  align-items:center; justify-content:center; font-size:12px; font-weight:800;
+  border:1.5px solid var(--line-2); color:var(--muted); margin-top:2px}
+.check[data-state=yes] .check-mark{background:var(--mint); border-color:var(--mint); color:#fff}
+.check[data-state=yes] .check-text{color:var(--muted); text-decoration:line-through}
+.check[data-state=no] .check-mark{border-color:var(--amber); color:var(--amber-dark)}
+.check[data-state=broken] .check-mark{background:var(--red); border-color:var(--red); color:#fff}
+.check-note{flex:1 1 100%; margin-left:29px; font-size:14px; color:var(--muted)}
+.check[data-state=broken] .check-note{color:var(--red)}
+.check-run{margin-top:10px}
+.checklist[data-all-done=yes]{border-color:var(--mint)}

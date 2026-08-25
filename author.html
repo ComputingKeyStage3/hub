@@ -363,6 +363,10 @@ function compileOne(b, id, target){
     }
     else if (b.type === "ide"){
       const blk = { type:"ide", id, starter: b.starter || "" };
+      if (Array.isArray(b.checks) && b.checks.length){
+        blk.checks = b.checks.filter(c => (c.label || "").trim());
+        if (b.checksRequired === false) blk.checksRequired = false;
+      }
       if (b.title) blk.title = b.title;              // headings stay optional
       if (b.task) blk.task = b.task;
       if (b.turtle) blk.turtle = true;
@@ -383,6 +387,10 @@ function compileOne(b, id, target){
       const blk = { type:"web", id, html: b.html || "", css: b.css || "", js: b.js || "",
                     files: (b.files && b.files.length) ? b.files : ["html","css","js"] };
       if (b.addFiles === true) blk.addFiles = true;
+      if (Array.isArray(b.checks) && b.checks.length){
+        blk.checks = b.checks.filter(c => (c.label || "").trim());
+        if (b.checksRequired === false) blk.checksRequired = false;
+      }
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
       if (b.expect) blk.expect = b.expect;
@@ -1005,6 +1013,29 @@ function card(b, i, arr){
     listField("Items in the CORRECT order", "items", "Students see them shuffled.");
     if (lesson.assessment) F("Topic tag", "topic");
   }
+  if (b.type === "code" || b.type === "ide" || b.type === "web"){
+    const isWeb = b.lang === "web" || b.type === "web";
+    if (!Array.isArray(b.checks)) b.checks = [];
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Checklist"));
+    w.appendChild(el("p","bhelp",
+      "Students see these above the editor and press Check my work. Leave empty for no checklist."));
+    const n = b.checks.length;
+    const open2 = el("button","btn-ghost bmini2",
+      n ? "Edit the checklist (" + n + ")" : "+ Add a checklist");
+    open2.addEventListener("click", () => checklistPopup(b, isWeb));
+    w.appendChild(open2);
+    if (n){
+      const row = el("div","brow");
+      const on = b.checksRequired !== false;
+      const need = el("button","btn-ghost bmini2" + (on ? " right" : ""),
+                      "Must all pass first: " + (on ? "on" : "off"));
+      need.addEventListener("click", () => { b.checksRequired = !on; render(); schedulePreview(); });
+      row.appendChild(need);
+      w.appendChild(row);
+    }
+    body.appendChild(w);
+  }
   if (b.type === "binary" || b.type === "binadd"){
     F("Heading (optional)", "title");
     F("Instruction (optional)", "task", { area:true, rows:2 });
@@ -1198,6 +1229,153 @@ function rubricPopup(){
     box.appendChild(add);
     const done = el("button","btn-primary modal-cta","Done");
     done.addEventListener("click", () => { closeModal(); render(); schedulePreview(); });
+    box.appendChild(done);
+  });
+}
+
+/* The kinds of check a teacher can add, worded as a sentence they finish. */
+const PY_CHECKS = [
+  ["uses",       "Uses a...",              "which"],
+  ["codeHas",    "The code contains...",   "text"],
+  ["codeLacks",  "The code avoids...",     "text"],
+  ["defines",    "Defines a function...",  "name"],
+  ["calls",      "Calls...",               "name"],
+  ["outputHas",  "The output contains...", "text"],
+  ["outputIs",   "The output is exactly...","text"],
+  ["lineCount",  "At least this many lines","number"]
+];
+const WEB_CHECKS = [
+  ["tag",        "Has this tag...",        "tag"],
+  ["classOrId",  "Has this class or id...","selector"],
+  ["attr",       "An element has this attribute...","selector"],
+  ["contentHas", "The page shows...",      "text"],
+  ["cssHas",     "A CSS rule sets...",     "selector"],
+  ["fileHas",    "A file contains...",     "text"]
+];
+const USES_OPTIONS = ["for loop","while loop","if","else","elif","input","print",
+                      "list","function","variable","comment","random","turtle"];
+
+function checklistPopup(block, isWeb){
+  const kinds = isWeb ? WEB_CHECKS : PY_CHECKS;
+  openModal(box => {
+    box.classList.add("wide");
+    box.appendChild(el("h2","","Checklist"));
+    box.appendChild(el("p","modal-text",
+      "Each line becomes something the student can tick off. Keep the wording plain \u2014 " +
+      "it is what they read when they are stuck."));
+    const list = el("div");
+    box.appendChild(list);
+
+    function paint(){
+      list.innerHTML = "";
+      if (!block.checks.length)
+        list.appendChild(el("p","hint","Nothing yet \u2014 press \u201c+ New check\u201d."));
+      block.checks.forEach((c, i) => {
+        const card = el("div","qsub");
+        const head = el("div","qsub-head");
+        const label = el("input"); label.className = "gradename";
+        label.value = c.label || "";
+        label.placeholder = "What the student sees";
+        label.addEventListener("input", () => { c.label = label.value; saveDraft(); });
+        head.appendChild(label);
+        const tools = el("span","btools");
+        [["\u2191","Move up", () => { if (i){ block.checks.splice(i-1,0,block.checks.splice(i,1)[0]); saveDraft(); paint(); } }],
+         ["\u2193","Move down", () => { if (i<block.checks.length-1){ block.checks.splice(i+1,0,block.checks.splice(i,1)[0]); saveDraft(); paint(); } }],
+         ["\u2715","Remove", () => { block.checks.splice(i,1); saveDraft(); paint(); }]
+        ].forEach(t => {
+          const btn = el("button","btn-ghost bmini", t[0]);
+          btn.title = t[1];
+          btn.addEventListener("click", t[2]);
+          tools.appendChild(btn);
+        });
+        head.appendChild(tools);
+        card.appendChild(head);
+
+        const row = el("div","bfield");
+        row.appendChild(el("label","","What to look for"));
+        const pick = document.createElement("select");
+        kinds.forEach(k => {
+          const o = document.createElement("option");
+          o.value = k[0]; o.textContent = k[1];
+          pick.appendChild(o);
+        });
+        pick.value = c.kind || kinds[0][0];
+        pick.addEventListener("change", () => { c.kind = pick.value; saveDraft(); paint(); });
+        row.appendChild(pick);
+        card.appendChild(row);
+
+        /* the fields this kind of check needs */
+        const needs = (name, key, help) => {
+          const f = el("div","bfield");
+          f.appendChild(el("label","", name));
+          const inp = el("input");
+          inp.value = c[key] || "";
+          if (help) inp.placeholder = help;
+          inp.addEventListener("input", () => { c[key] = inp.value; saveDraft(); });
+          f.appendChild(inp);
+          card.appendChild(f);
+        };
+        const kind = c.kind || kinds[0][0];
+        if (kind === "uses"){
+          const f = el("div","bfield");
+          f.appendChild(el("label","","Which one"));
+          const sel = document.createElement("select");
+          USES_OPTIONS.forEach(o2 => {
+            const o = document.createElement("option");
+            o.value = o2; o.textContent = o2;
+            sel.appendChild(o);
+          });
+          sel.value = c.value || USES_OPTIONS[0];
+          sel.addEventListener("change", () => { c.value = sel.value; saveDraft(); });
+          f.appendChild(sel);
+          card.appendChild(f);
+        }
+        else if (kind === "lineCount") needs("How many lines", "count", "5");
+        else if (kind === "tag") needs("Tag name", "selector", "h1");
+        else if (kind === "classOrId") needs("Class or id", "selector", ".title or #header");
+        else if (kind === "attr"){
+          needs("Element", "selector", "img");
+          needs("Attribute", "attr", "src");
+          needs("Value (optional)", "value", "cat.png");
+        }
+        else if (kind === "cssHas"){
+          needs("Selector", "selector", ".title");
+          needs("Property", "property", "color");
+          needs("Value (optional)", "value", "red");
+        }
+        else if (kind === "fileHas"){
+          const f = el("div","bfield");
+          f.appendChild(el("label","","Which file"));
+          const sel = document.createElement("select");
+          [["html","HTML"],["css","CSS"],["js","JavaScript"]].forEach(o2 => {
+            const o = document.createElement("option");
+            o.value = o2[0]; o.textContent = o2[1];
+            sel.appendChild(o);
+          });
+          sel.value = c.file || "html";
+          sel.addEventListener("change", () => { c.file = sel.value; saveDraft(); });
+          f.appendChild(sel);
+          card.appendChild(f);
+          needs("Text to look for", "value", "console.log");
+        }
+        else needs("Text to look for", "value", "");
+
+        list.appendChild(card);
+      });
+    }
+    paint();
+
+    const add = el("button","btn-ghost bmini2","+ New check");
+    add.addEventListener("click", () => {
+      block.checks.push({ label:"", kind: kinds[0][0], value:"" });
+      saveDraft(); paint();
+    });
+    box.appendChild(add);
+    const done = el("button","btn-primary modal-cta","Done");
+    done.addEventListener("click", () => {
+      block.checks = block.checks.filter(c => (c.label || "").trim());
+      closeModal(); render(); schedulePreview();
+    });
     box.appendChild(done);
   });
 }

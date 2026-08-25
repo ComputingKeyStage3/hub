@@ -153,6 +153,19 @@
     </section>
 
     <section class="station" style="margin-bottom:18px">
+      <h3 style="margin:0 0 4px">Put a backup back</h3>
+      <p class="modal-text">Only if something has gone wrong. Take a fresh backup first, so you
+        can undo this if it makes things worse.</p>
+      <div class="dropfile" id="restoreDrop">
+        <b>Drop a backup file here</b>
+        <span>or</span>
+        <button class="btn-ghost" id="restoreBrowse">Browse for a file</button>
+      </div>
+      <div id="restoreCheck"></div>
+      <p class="hint" id="restoreMsg"></p>
+    </section>
+
+    <section class="station" style="margin-bottom:18px">
       <h3 style="margin:0 0 4px">How much room is being used</h3>
       <p class="modal-text">There is 5GB in total, shared by every year. Screenshots take up far
         more room than anything else.</p>
@@ -163,7 +176,7 @@
     <section class="station">
       <h3 style="margin:0 0 4px">End of year</h3>
       <p class="modal-text">Save last year's work to a file, then remove it from the database.
-        Lessons, units and year groups are kept \u2014 they are next year's teaching.</p>
+        Lessons, units and year groups are kept &mdash; they are next year's teaching.</p>
       <div class="bfield" style="max-width:280px">
         <label for="purgeDate">Remove work saved before</label>
         <input type="date" id="purgeDate">
@@ -595,6 +608,100 @@ on("backupBtn", "click", async () => {
       Object.keys(d.tables || {}).length + " tables.";
   }catch(e){ $("backupMsg").textContent = e.message; }
 });
+
+/* ---- putting a backup back ---- */
+let backupToRestore = null;
+function readBackup(file){
+  const msg = $("restoreMsg"), out = $("restoreCheck");
+  out.innerHTML = ""; backupToRestore = null;
+  if (!file) return;
+  msg.textContent = "Reading\u2026";
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed = null;
+    try{ parsed = JSON.parse(reader.result); }
+    catch(e){ msg.textContent = "That file is not a backup \u2014 it could not be read."; return; }
+    if (!parsed || !parsed.tables){ msg.textContent = "That file is not a backup from this site."; return; }
+    backupToRestore = parsed;
+    msg.textContent = "";
+    /* show what is in it, so nobody restores the wrong file */
+    out.appendChild(el("p","unit-head","What is in this file"));
+    if (parsed.taken_at)
+      out.appendChild(el("p","modal-text","Taken " + new Date(parsed.taken_at).toLocaleString("en-GB") + "."));
+    Object.keys(parsed.tables).forEach(t => {
+      const n = (parsed.tables[t] || []).length;
+      if (!n) return;
+      const row = el("div","importrow");
+      row.appendChild(el("b","", t));
+      row.appendChild(el("span","", n + " row" + (n === 1 ? "" : "s")));
+      out.appendChild(row);
+    });
+    const fresh = Number(localStorage.getItem("hub_backup_when") || 0);
+    const hoursAgo = fresh ? (Date.now() - fresh) / 3600000 : 999;
+    const go = el("button","btn-primary","Put this back");
+    if (hoursAgo > 1){
+      /* a fresh backup is the only way out if this goes wrong */
+      out.appendChild(el("p","warnline",
+        "Take a backup first. There is no undo, and a backup taken now is the only way back."));
+      go.disabled = true;
+    }
+    go.addEventListener("click", confirmRestore);
+    out.appendChild(go);
+  };
+  reader.readAsText(file);
+}
+on("restoreBrowse", "click", () => {
+  const pick = document.createElement("input");
+  pick.type = "file"; pick.accept = ".json";
+  pick.addEventListener("change", () => readBackup(pick.files && pick.files[0]));
+  pick.click();
+});
+["dragenter","dragover"].forEach(ev => on("restoreDrop", ev, (e) => {
+  e.preventDefault(); $("restoreDrop").classList.add("over");
+}));
+["dragleave","drop"].forEach(ev => on("restoreDrop", ev, (e) => {
+  e.preventDefault(); $("restoreDrop").classList.remove("over");
+}));
+on("restoreDrop", "drop", (e) => {
+  readBackup(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+});
+function confirmRestore(){
+  if (!backupToRestore) return;
+  openModal(box => {
+    box.appendChild(el("h2","","Put this backup back?"));
+    box.appendChild(el("p","modal-text",
+      "Every row in the file is written over what is in the database now. Anything saved " +
+      "since the backup was taken is replaced. Work added since, and not in the file, is left alone."));
+    box.appendChild(el("p","modal-text","This cannot be undone. Type RESTORE to go ahead."));
+    const w = el("div","bfield");
+    const inp = el("input"); inp.placeholder = "RESTORE";
+    w.appendChild(inp); box.appendChild(w);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Put it back");
+    go.style.background = "var(--red)"; go.style.borderColor = "var(--red)";
+    go.addEventListener("click", async () => {
+      if (inp.value.trim() !== "RESTORE"){ msg.textContent = "Type RESTORE to confirm."; return; }
+      msg.textContent = "Putting it back\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/restore", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ backup: backupToRestore, confirm: "RESTORE" }) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Could not put it back.");
+        const total = Object.values(d.restored || {}).reduce((a, b) => a + b, 0);
+        closeModal();
+        $("restoreMsg").textContent = "Put back " + total + " rows." +
+          (d.skipped && d.skipped.length ? "  Some rows in " + d.skipped.join(", ") + " could not be written." : "");
+        $("restoreCheck").innerHTML = "";
+        backupToRestore = null;
+        catLoaded = false;
+        await refreshGroups();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
+  });
+}
 
 on("storeBtn", "click", async () => {
   const out = $("storeOut");
@@ -1585,8 +1692,20 @@ function paintLessonGrid(){
     const card = el("div","lessonpill");
     const head = el("div","lp-head");
     head.appendChild(el("b","", titleOf(l.lesson_id)));
-    head.appendChild(el("span","statechip " + (waiting ? "wait" : live ? "open" : "shut"),
-      waiting ? "Scheduled" : closed ? "Closed" : live ? "Published" : "Draft"));
+    const chip = el("button","statechip " + (waiting ? "wait" : closed ? "shut" : live ? "open" : "shut"),
+      waiting ? "Scheduled" : closed ? "Closed" : live ? "Open" : "Draft");
+    if (live && a){
+      /* the pill says when, and opens the scheduler when pressed */
+      const when = waiting ? "Opens " + niceDate(a.release_at) + " at " + (a.release_at || "").slice(11, 16)
+                 : closed  ? "Closed " + niceDate(a.close_on)
+                 : sameDay(a.release_at) ? "Opened today at " + (a.release_at || "").slice(11, 16)
+                 : "Closes " + niceDate(a.close_on);
+      chip.title = when;
+      chip.dataset.when = when;
+      chip.classList.add("chip-live");
+    }
+    chip.addEventListener("click", (e) => { e.stopPropagation(); schedulePopup(l.lesson_id); });
+    head.appendChild(chip);
     if (a && a.release_at && waiting)
       card.appendChild(el("p","lp-note","Opens " + niceDate(a.release_at) + " at " + a.release_at.slice(11, 16)));
     else if (a && a.close_on && live)
@@ -1695,6 +1814,7 @@ const PERIODS = [
   ["12:55","Period 4","Year 7, 8, 11, 12"],
   ["13:55","Period 5",""]
 ];
+const sameDay = (iso) => String(iso || "").slice(0, 10) === new Date().toISOString().slice(0, 10);
 const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
 function niceDate(iso){
   if (!iso) return "";
@@ -1711,8 +1831,14 @@ async function setPublish(id, on, releaseAt, closeOn){
 }
 function schedulePopup(id){
   openModal(box => {
-    modalTitle(box, "Publish \u201c" + titleOf(id) + "\u201d to " + cls);
-    let date = ymd(new Date()), time = "", close = "";
+    const already = assignOf(id);
+    const live = already && already.published;
+    modalTitle(box, (live ? "When \u201c" : "Publish \u201c") + titleOf(id) + "\u201d" +
+                    (live ? " is open for " : " to ") + cls);
+    /* start from what is already set, so this edits rather than replaces */
+    let date = (already && already.release_at) ? already.release_at.slice(0, 10) : ymd(new Date());
+    let time = (already && already.release_at) ? already.release_at.slice(11, 16) : "";
+    let close = (already && already.close_on) ? already.close_on : "";
     const summary = el("p","modal-text","");
     const dateRow = el("div","bfield");
     dateRow.appendChild(el("label","","Opens on"));
@@ -1722,19 +1848,41 @@ function schedulePopup(id){
     const timeRow = el("div","bfield");
     timeRow.appendChild(el("label","","At"));
     const grid = el("div","periodgrid");
+    const clearPicked = () => {
+      Array.from(grid.children).forEach(c => c.classList.remove("on"));
+      customTime.classList.remove("on");
+    };
     PERIODS.forEach(p => {
       const b = el("button","periodbtn");
-      b.appendChild(el("b","", p[1] + " (" + p[0] + ")"));
-      if (p[2]) b.appendChild(el("span","", p[2]));
+      b.appendChild(el("b","", p[1]));
+      b.appendChild(el("span","period-at", p[0]));
+      if (p[2]) b.appendChild(el("span","period-yr", p[2]));
+      if (time === p[0]) b.classList.add("on");
       b.addEventListener("click", () => {
         time = p[0];
-        Array.from(grid.children).forEach(c => c.classList.remove("on"));
+        clearPicked();
         b.classList.add("on");
+        anyTime.value = "";
         refresh();
       });
       grid.appendChild(b);
     });
-    timeRow.appendChild(grid); box.appendChild(timeRow);
+    timeRow.appendChild(grid);
+
+    /* anything that is not a normal period */
+    const customTime = el("div","anytime");
+    customTime.appendChild(el("label","","Or any other time"));
+    const anyTime = el("input"); anyTime.type = "time";
+    if (time && !PERIODS.some(p => p[0] === time)){ anyTime.value = time; customTime.classList.add("on"); }
+    anyTime.addEventListener("input", () => {
+      if (!anyTime.value) return;
+      time = anyTime.value;
+      clearPicked();
+      customTime.classList.add("on");
+      refresh();
+    });
+    customTime.appendChild(anyTime);
+    timeRow.appendChild(customTime); box.appendChild(timeRow);
 
     const closeRow = el("div","bfield");
     closeRow.appendChild(el("label","","Closes at the end of"));
@@ -1743,7 +1891,7 @@ function schedulePopup(id){
     closeRow.appendChild(el("p","bhelp","Set to match the opening day. Change it for a longer piece of work."));
     box.appendChild(closeRow);
 
-    let closeTouched = false;
+    let closeTouched = !!close;
     cIn.addEventListener("input", () => { closeTouched = true; close = cIn.value; refresh(); });
     dIn.addEventListener("input", () => {
       date = dIn.value;
@@ -1759,14 +1907,14 @@ function schedulePopup(id){
     close = date; cIn.value = date; refresh();
     box.appendChild(summary);
 
-    const go = el("button","btn-primary modal-cta","Schedule lesson");
+    const go = el("button","btn-primary modal-cta", live ? "Save these dates" : "Schedule lesson");
     go.addEventListener("click", async () => {
       if (!time){ summary.textContent = "Pick a period first."; return; }
       const at = new Date(date + "T" + time + ":00");
       closeModal();
       await setPublish(id, true, at.toISOString(), close);
     });
-    const now = el("button","btn-ghost modal-stay","Publish now");
+    const now = el("button","btn-ghost modal-stay", live ? "Open it now instead" : "Publish now");
     now.addEventListener("click", async () => { closeModal(); await setPublish(id, true); });
     box.appendChild(go); box.appendChild(now);
   });
@@ -1854,14 +2002,15 @@ function openManage(){
       mb.addEventListener("click", () => openMarkbook(true));
       bar.appendChild(mb);
     }
-    box.appendChild(bar);
-    const tools = el("div","toolrow");
+    const sch = el("button","btn-ghost","Schedule");
+    sch.addEventListener("click", () => { closeModal(); schedulePopup(lessonId); });
+    bar.appendChild(sch);
     if (!lessonJson.assessment){
       const oa = el("button","btn-ghost","Open all tasks"); oa.addEventListener("click", () => postLocks(new Set()));
       const la = el("button","btn-ghost","Lock all tasks"); la.addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i))));
-      tools.appendChild(oa); tools.appendChild(la);
+      bar.appendChild(oa); bar.appendChild(la);
     }
-    box.appendChild(tools);
+    box.appendChild(bar);
     box.appendChild(el("p","hint","")).id = "relMsg";
     const list = el("div"); list.id = "taskList"; box.appendChild(list);
     const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
