@@ -6,6 +6,7 @@
 <title>Viewing student work</title>
 <link rel="stylesheet" href="style.css">
 <script src="config.js"></script>
+<script src="offlinebar.js"></script>
 </head>
 <body class="workpage">
 
@@ -184,9 +185,9 @@ async function fetchLesson(){
     const r = await fetch("lessons/" + encodeURIComponent(lessonId) + ".json", { cache:"no-store" });
     if (r.ok) return await r.json();
   }catch(e){}
-  const r2 = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(lessonId), { headers: H(), cache:"no-store" });
-  const d = await r2.json();
-  if (!r2.ok) throw new Error(d.error || "Could not open that lesson.");
+  const reply = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(lessonId), { headers: H(), cache:"no-store" });
+  const d = await reply.json();
+  if (!reply.ok) throw new Error(d.error || "Could not open that lesson.");
   return d.lesson;
 }
 async function fetchRoster(){

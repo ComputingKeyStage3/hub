@@ -157,8 +157,6 @@ function el(tag, cls, text){
   return e;
 }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-/* words only — used where a task's own text is shown as a summary */
-function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, "").trim(); }
 
 /* ---------------- the lesson being built ---------------- */
 let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical:false, homework:false, topics:{}, responses:{}, extensions:[], blocks:[] };
@@ -264,12 +262,6 @@ function migrate(arr){
 function inline(s){
   return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
 }
-/* Empty text fields can go, but arrays the lesson page reads (options, items)
-   must stay — otherwise a half-finished card breaks the preview. */
-function withRequired(o, b){
-  if (b && b.required === false) o.required = false;
-  return o;
-}
 function keepArrays(o){
   Object.keys(o).forEach(k => {
     const v = o[k];
@@ -277,11 +269,6 @@ function keepArrays(o){
     if (Array.isArray(v) && !v.length && (k === "distractors" || k === "keywords")) delete o[k];
   });
   return o;
-}
-function compileBlock(b, id){
-  const out = [];
-  compileOne(b, id, out);
-  return out[0];
 }
 function compile(){
   const out = { title: lesson.title || "Untitled lesson", blocks: [] };
@@ -1253,9 +1240,9 @@ function markingSetup(into){
     w.appendChild(el("p","bhelp", n
       ? n + " grade" + (n === 1 ? "" : "s") + " set up."
       : "No grades yet."));
-    const open2 = el("button","btn-ghost bmini2","Edit the rubric");
-    open2.addEventListener("click", rubricPopup);
-    w.appendChild(open2);
+    const editBtn = el("button","btn-ghost bmini2","Edit the rubric");
+    editBtn.addEventListener("click", rubricPopup);
+    w.appendChild(editBtn);
     body.appendChild(w);
   }
   card.appendChild(body);
@@ -1356,85 +1343,33 @@ function paintResponseTopics(into){
   into.appendChild(ext);
 }
 
-function taskRows(into, arr, topic){
-  arr.forEach((task, i) => {
-    const row = el("button","ov-row");
-    row.appendChild(el("span","t", LABEL[task.type] || task.type));
-    row.appendChild(el("span","p", stripTags(task.prompt || task.title || task.heading || task.q || "")));
-    row.addEventListener("click", () => { closeModal(); editResponses(topic, i); });
-    const move = (d) => (e) => {
-      e.stopPropagation();
-      const j = i + d;
-      if (j < 0 || j >= arr.length) return;
-      arr.splice(j, 0, arr.splice(i, 1)[0]);
-      saveDraft(); schedulePreview(); render();
-    };
-    const up = el("button","btn-ghost bmini","\u2191");
-    up.addEventListener("click", move(-1));
-    const down = el("button","btn-ghost bmini","\u2193");
-    down.addEventListener("click", move(1));
-    const rm = el("button","btn-ghost bmini","\u2715");
-    rm.addEventListener("click", (e) => {
-      e.stopPropagation();
-      arr.splice(i, 1);
-      saveDraft(); schedulePreview(); render();
-    });
-    row.appendChild(up); row.appendChild(down); row.appendChild(rm);
-    into.appendChild(row);
-  });
-}
-/* the same choice of tasks as anywhere else in a lesson */
-function addButtons(arr, topic){
-  const add = el("div","pageadd");
-  [["page","Page of tasks"],["text","Paragraph"],["picture","Image"],["question","Written answer"],
-   ["quiz","Quiz"],["code","Coding task"],["blanks","Fill the gaps"],["order","Put in order"],
-   ["short","Short answer"],["image","Screenshot"],["embed","Video"],["link","Link to a site"],
-   ["pastelink","Paste a link"],["frame","Embedded page"]].forEach(pair => {
-    const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
-    btn.addEventListener("click", () => {
-      arr.push(BLANK[pair[0]]());
-      saveDraft(); schedulePreview(); render();
-    });
-    add.appendChild(btn);
-  });
-  return add;
-}
 
-/* open one topic's tasks, and highlight the one that was clicked */
-function editResponses(topic, index){
-  respEditing = topic;
-  render();
-  const cards = $("list").querySelectorAll(".bcard");
-  const card = (typeof index === "number") ? cards[index] : null;
-  const target = card || $("list");
-  if (target && target.scrollIntoView) target.scrollIntoView({ behavior:"smooth", block:"center" });
-  if (card){
-    card.classList.add("justopened");
-    setTimeout(() => card.classList.remove("justopened"), 1800);
-  }
-}
 let respEditing = null;
 let assessTab = "questions";   // questions | targets | responses
 
 /* Sections start folded away, so the list stays short. Which ones are open
    is remembered between visits. */
 function wirePalette(){
-  let open2 = {};
-  try{ open2 = JSON.parse(localStorage.getItem("hub_pal") || "{}"); }catch(e){}
-  document.querySelectorAll(".palgroup").forEach(g => {
-    const head = g.querySelector(".pal-head");
-    const body = g.querySelector(".palbody");
-    if (!head || !body) return;
-    const key = g.dataset.group;
-    const show = (on) => {
-      body.hidden = !on;
-      head.classList.toggle("open", on);
-      open2[key] = on;
-      try{ localStorage.setItem("hub_pal", JSON.stringify(open2)); }catch(e){}
+  /* Which sections the teacher had open last time, so the palette opens the
+     way they left it. */
+  let openSections = {};
+  try{ openSections = JSON.parse(localStorage.getItem("hub_pal") || "{}"); }catch(e){}
+
+  document.querySelectorAll(".palgroup").forEach(group => {
+    const heading = group.querySelector(".pal-head");
+    const tasks = group.querySelector(".palbody");
+    if (!heading || !tasks) return;
+    const name = group.dataset.group;
+
+    const setOpen = (open) => {
+      tasks.hidden = !open;
+      heading.classList.toggle("open", open);
+      openSections[name] = open;
+      try{ localStorage.setItem("hub_pal", JSON.stringify(openSections)); }catch(e){}
     };
-    body.hidden = !open2[key];
-    head.classList.toggle("open", !!open2[key]);
-    head.addEventListener("click", () => show(body.hidden));
+
+    setOpen(!!openSections[name]);
+    heading.addEventListener("click", () => setOpen(tasks.hidden));
   });
 }
 wirePalette();
@@ -1502,13 +1437,13 @@ on("titleBtn", "click", () => {
     w1.appendChild(el("label","","Lesson title"));
     const t1 = el("input"); t1.value = lesson.title || "";
         w1.appendChild(t1); box.appendChild(w1);
-    const w2 = el("div","bfield");
-    w2.appendChild(el("label","","One line for the home page"));
-    const t2 = el("input"); t2.value = lesson.intro || "";
-    w2.appendChild(t2); box.appendChild(w2);
+    const field = el("div","bfield");
+    field.appendChild(el("label","","One line for the home page"));
+    const table = el("input"); table.value = lesson.intro || "";
+    field.appendChild(table); box.appendChild(field);
     const go = el("button","btn-primary modal-cta","Done");
     go.addEventListener("click", () => {
-      lesson.title = t1.value; lesson.intro = t2.value;
+      lesson.title = t1.value; lesson.intro = table.value;
       saveDraft(); showTitle(); schedulePreview(); closeModal();
     });
     box.appendChild(go);
@@ -1843,11 +1778,11 @@ on("delLesson", "click", () => {
     yes.style.background = "var(--red)";
     yes.addEventListener("click", () => {
       closeModal();
-      openModal(box2 => {
-        box2.appendChild(el("h2","","Really delete it?"));
-        box2.appendChild(el("p","modal-text","This cannot be undone. Type DELETE to confirm."));
+      openModal(popup => {
+        popup.appendChild(el("h2","","Really delete it?"));
+        popup.appendChild(el("p","modal-text","This cannot be undone. Type DELETE to confirm."));
         const w = el("div","bfield");
-        const inp = el("input"); w.appendChild(inp); box2.appendChild(w);
+        const inp = el("input"); w.appendChild(inp); popup.appendChild(w);
         const msg = el("p","hint","");
         const go = el("button","btn-primary modal-cta","Delete for ever");
         go.style.background = "var(--red)";
@@ -1870,7 +1805,7 @@ on("delLesson", "click", () => {
         });
         const no = el("button","btn-ghost modal-stay","Keep it");
         no.addEventListener("click", closeModal);
-        box2.appendChild(go); box2.appendChild(no); box2.appendChild(msg);
+        popup.appendChild(go); popup.appendChild(no); popup.appendChild(msg);
       });
     });
     const no = el("button","btn-ghost modal-stay","Cancel");

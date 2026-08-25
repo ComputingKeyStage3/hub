@@ -201,11 +201,11 @@ function marksButton(res){
   const btn = el("button","btn-primary","View my work");
   btn.addEventListener("click", () => {
     const back = el("div","modal-back");
-    const box2 = el("div","modal wide");
+    const popup = el("div","modal wide");
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", () => back.remove());
-    box2.appendChild(x);
-    box2.appendChild(el("h2","","Your work"));
+    popup.appendChild(x);
+    popup.appendChild(el("h2","","Your work"));
     const holder = el("div","allpages");
     res.perQ.forEach(q => {
       const sec = el("div","allpage markedq" +
@@ -216,12 +216,12 @@ function marksButton(res){
       head.appendChild(el("span","qmark-n", q.pts + " / " + q.max));
       sec.appendChild(head);
       /* the question itself, exactly as they answered it */
-      const st2 = steps.find(x => x.qid === q.id);
-      if (st2 && st2.section){ st2.section.hidden = false; sec.appendChild(st2.section); }
+      const stepFor = steps.find(x => x.qid === q.id);
+      if (stepFor && stepFor.section){ stepFor.section.hidden = false; sec.appendChild(stepFor.section); }
       holder.appendChild(sec);
     });
-    box2.appendChild(holder);
-    back.appendChild(box2);
+    popup.appendChild(holder);
+    back.appendChild(popup);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   });
@@ -235,25 +235,25 @@ function workButton(){
   const btn = el("button","btn-primary","View my work");
   btn.addEventListener("click", () => {
     const back = el("div","modal-back");
-    const box2 = el("div","modal wide");
+    const popup = el("div","modal wide");
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", () => back.remove());
-    box2.appendChild(x);
-    box2.appendChild(el("h2","","Your work"));
+    popup.appendChild(x);
+    popup.appendChild(el("h2","","Your work"));
     const holder = el("div","allpages");
-    steps.forEach((st2, i) => {
-      const b = (typeof st2.brief === "function") ? st2.brief() : st2.brief;
+    steps.forEach((stepFor, i) => {
+      const b = (typeof stepFor.brief === "function") ? stepFor.brief() : stepFor.brief;
       const sec = el("div","allpage");
       const head = el("div","allpage-head");
       head.appendChild(el("span","allpage-n", String(i + 1)));
       if (b && b.title) head.appendChild(el("b","", b.title));
       sec.appendChild(head);
-      st2.section.hidden = false;
-      sec.appendChild(st2.section);
+      stepFor.section.hidden = false;
+      sec.appendChild(stepFor.section);
       holder.appendChild(sec);
     });
-    box2.appendChild(holder);
-    back.appendChild(box2);
+    popup.appendChild(holder);
+    back.appendChild(popup);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   });
@@ -864,14 +864,6 @@ async function manualSave(){
   else { btn.textContent = "Try again"; btn.classList.add("flash-bad"); }
   flashTimer = setTimeout(() => { btn.textContent = "Save Work"; btn.classList.remove("flash-ok","flash-bad"); }, 2500);
 }
-function paintHandin(state){
-  const el2 = $("handinLine");
-  if (!el2) return;
-  el2.textContent = state === "done" ? "✓ Sent to your teacher"
-                  : state === "offline" ? "Sign in so your work can be sent to your teacher"
-                  : "Could not reach the server — press Save Work to try again";
-  el2.dataset.state = state;
-}
 function finishLesson(){
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
   finished = true;
@@ -1310,9 +1302,9 @@ function checkPython(code){
     const sq = (raw.replace(/\\./g, "").match(/'/g) || []).length;
     if (dq % 2 || sq % 2) issues.push({ line:n, msg:"A quote mark is missing from this line." });
 
-    const p2 = /^(\s*)print\s+(?!\()(.+)$/.exec(raw);
-    if (p2) issues.push({ line:n, msg:"In Python 3, print needs brackets around what it prints.",
-                          fix:() => p2[1] + 'print(' + p2[2].trim() + ')' });
+    const printMatch = /^(\s*)print\s+(?!\()(.+)$/.exec(raw);
+    if (printMatch) issues.push({ line:n, msg:"In Python 3, print needs brackets around what it prints.",
+                          fix:() => printMatch[1] + 'print(' + printMatch[2].trim() + ')' });
 
     const opener = /^\s*(if|elif|else|for|while|def|class|try|except|finally|with)\b/.exec(t);
     if (opener && !/:\s*$/.test(t.trim())){
@@ -3380,9 +3372,9 @@ function markEditor(res){
     const overrides = {};
     rows.forEach(r => { overrides[r.id] = Math.max(0, Math.min(r.max, parseInt(r.input.value, 10) || 0)); });
     try{
-      const r2 = await teacherPost("set-mark", { username: who.username, lesson: lessonId,
+      const reply = await teacherPost("set-mark", { username: who.username, lesson: lessonId,
         overrides: overrides, score: sum(), outOf: outOf });
-      if (!r2.ok) throw new Error((await r2.json()).error || "Could not save.");
+      if (!reply.ok) throw new Error((await reply.json()).error || "Could not save.");
       msg.textContent = "Saved.";
     }catch(e){ msg.textContent = e.message; }
   });
@@ -3506,27 +3498,6 @@ function showPdfView(){
   }
 }
 
-/* Kept from the old export: every task on one long page. */
-function showPrintable(){
-  $("dock").classList.add("gone");
-  const wrap = el("div","printwrap");
-  const head = el("div","print-head");
-  head.appendChild(el("h1","", lesson.title || lessonId));
-  head.appendChild(el("p","", (inspectName || "Student") + "  \u00b7  " + new Date().toLocaleDateString("en-GB")));
-  wrap.appendChild(head);
-  steps.forEach((st, i) => {
-    const bb = (typeof st.brief === "function") ? st.brief() : (st.brief || {});
-    const t = el("div","print-task");
-    t.appendChild(el("h3","print-h", (i + 1) + ". " + (bb.title || "Task")));
-    st.section.hidden = false;
-    t.appendChild(st.section);
-    wrap.appendChild(t);
-  });
-  $("blocks").appendChild(wrap);
-  $("briefTitle").textContent = lesson.title || "";
-  $("briefText").hidden = true;
-  setTimeout(() => { if (window.print) window.print(); }, 600);
-}
 
 /* ---------- completion screens ---------- */
 function confetti(){
@@ -3763,33 +3734,6 @@ function clip(s, n){
   return t.length > n ? t.slice(0, n - 1) + "..." : t;
 }
 
-/* ---- PDF export is retired from the interface but kept below, dormant.
-   To bring it back: re-add the jsPDF <script> tag and wire a button to
-   downloadPdf(). Nothing calls it today. ---- */
-function downloadPdf(){
-  save();
-  submitWork().then(paintHandin);
-  if (!(window.jspdf && window.jspdf.jsPDF)){
-    alert("Could not build the PDF automatically, so the print window will open instead.\n\nChoose 'Save as PDF' as the printer.");
-    window.print();
-    markHandedIn();
-    return;
-  }
-  try{
-    buildPdf().save(fileName());
-    markHandedIn();
-  }catch(err){
-    console.error("PDF build failed:", err);
-    alert("Could not build the PDF, so the print window will open instead.\n\nChoose 'Save as PDF' as the printer.");
-    window.print();
-    markHandedIn();
-  }
-}
-function markHandedIn(){
-  pdfDone = true;
-  document.body.classList.add("pdf-done");
-
-}
 function fileName(){
   /* Offline the student names it themselves: their name, year and lesson,
      so a folder of handed-in PDFs sorts sensibly. */
