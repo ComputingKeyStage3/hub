@@ -1957,3 +1957,72 @@ select.offname{text-align-last:center; cursor:pointer}
 .meter{height:10px; background:var(--panel-2); border:1px solid var(--line); overflow:hidden; margin:8px 0 14px}
 .meter-bar{height:100%; background:var(--amber)}
 [data-stale=yes]{color:var(--amber-dark); font-weight:600}
+
+
+/* =====================================================================
+   SMALL SCREENS, LAST WORD
+   Everything added after the original breakpoints was overriding them,
+   because later rules win. This block sits at the end of the file so the
+   phone rules are the ones that apply.
+   ===================================================================== */
+@media (max-width:900px){
+  /* nothing may be wider than the screen, whatever set its width */
+  .modal, .modal.wide, .fullprev{ max-width:100% !important; width:100% !important }
+  .fullprev{ height:88vh }
+
+  /* side-by-side layouts become one column */
+  .worksplit, .seatwrap, .ide-wrap, .build{ grid-template-columns:minmax(0,1fr) !important }
+  .workside{ min-width:0; max-width:100% }
+  .workside{ width:auto }
+  .build-preview{ grid-column:1 / -1 }
+
+  /* the work page can scroll rather than trapping itself at screen height */
+  body.workpage{ height:auto; overflow:auto }
+  .workwrap{ overflow:visible; padding-left:14px; padding-right:14px }
+  .workframe{ height:60vh }
+
+  /* the seating plan holds its own scroll, rather than stretching the page */
+  .seatgrid{ max-width:100%; overflow:auto }
+  .seatpool{ flex-direction:row; flex-wrap:wrap; max-height:180px }
+  .seatpool .seat{ min-width:140px; flex:0 0 auto }
+
+  /* rows of controls wrap instead of running off the edge */
+  .toolrow, .workbar, .lp-acts, .bhead, .brow, .tabs, .subtabs, .worktabs{
+    flex-wrap:wrap; max-width:100%
+  }
+  .workbar select{ max-width:100% }
+  .sizer{ flex:0 0 auto }
+}
+
+@media (max-width:640px){
+  /* the page itself, and anything claiming a fixed width inside it */
+  .page, .workwrap{ padding-left:12px; padding-right:12px }
+  .brief{ width:calc(100% - 24px) }
+  .station{ padding:18px 16px }
+
+  /* buttons: never wider than the screen, and readable when they wrap */
+  .btn-primary, .btn-ghost{ max-width:100%; font-size:14.5px }
+  .lp-acts{ gap:6px }
+  .lp-acts button{ flex:1 1 auto; min-width:0 }
+
+  /* binary tasks scroll sideways on their own instead of stretching */
+  .binary .bin-row{ max-width:100%; overflow-x:auto }
+  .bin-cell, .bin-bit, .bin-place{ min-width:30px; width:30px }
+  .bin-cell{ width:30px !important; height:32px }
+  .bin-in{ width:100px !important }
+
+  /* wide tables scroll within their own box */
+  .mbscroll, .stutable, .rubricstrip, .mbtable{ max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch }
+  .rubriccol{ flex:0 0 78vw }
+
+  /* the code editor */
+  .ide-editor, .web-preview{ max-width:100% }
+  .ide-bar{ flex-wrap:wrap }
+
+  /* the top bar on the work page */
+  body.workpage .homebar{ flex-wrap:wrap; gap:8px }
+  .worktabs{ order:3; width:100% }
+
+  /* the settings panel */
+  .swatches{ flex-wrap:wrap }
+}
