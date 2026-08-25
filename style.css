@@ -2026,3 +2026,76 @@ select.offname{text-align-last:center; cursor:pointer}
   /* the settings panel */
   .swatches{ flex-wrap:wrap }
 }
+
+
+/* =====================================================================
+   PHONES: SMALLER, AND NOTHING WIDER THAN THE SCREEN
+   Two things were making pages too wide. Controls carried hard
+   min-widths — a 220px dropdown next to two buttons does not fit on a
+   320px phone — and buttons sized for a mouse made the bars tall enough
+   to push everything down. Both are relaxed here.
+   ===================================================================== */
+@media (max-width:640px){
+
+  /* --- buttons sized for a thumb, not a mouse --- */
+  .btn-primary, .btn-ghost{
+    line-height:1.9; font-size:14px; padding:0 0.95em;
+  }
+  .iconbtn, .btn-ghost.iconbtn, .btn-primary.iconbtn{
+    width:32px; min-width:32px; height:32px; min-height:32px; font-size:14px;
+  }
+  .bmini{ width:26px; min-width:26px; height:26px; min-height:26px; font-size:12px }
+  .bmini2{ font-size:12.5px; line-height:1.9 }
+
+  /* --- the bar across the top stays one line --- */
+  .homebar, .topbar{
+    padding:6px 12px; gap:8px; flex-wrap:nowrap; min-height:0;
+  }
+  .homebar .title, .topbar .title{
+    font-size:15px; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  /* the settings and lock buttons keep only their icon */
+  .homebar .btn-ghost, .topbar .btn-ghost{ font-size:0; padding:0 }
+  .homebar .iconbtn, .topbar .iconbtn{ font-size:14px }
+  .homebar .auth{ font-size:13px }
+  .homebar .who b{ font-size:13px }
+  .crumbbar{ padding:6px 12px; font-size:13px }
+
+  /* --- the bar at the bottom of a lesson --- */
+  .dock{ padding:8px 12px; gap:6px }
+  .btn-continue{ font-size:15px; padding:9px 14px }
+  .done-save{ font-size:14px }
+
+  /* --- nothing may insist on being wider than the screen --- */
+  .build-titles, .rt-palette, .rt-nummenu, .menu, .workbar select,
+  .blank-select, .ide-helpword, .mbstat, .seat, .seatpool .seat{
+    min-width:0 !important; max-width:100%;
+  }
+  .workbar select{ width:100%; flex:1 1 100% }
+  .rt-palette, .rt-nummenu{ max-width:calc(100vw - 24px) }
+  .rubriccol{ flex:0 0 80vw }
+  .stepnum{ width:64px !important }
+  .bin-in{ width:88px !important }
+  .result-card .sc{ min-width:0 }
+  .brief{ width:calc(100% - 20px); padding:8px 14px 10px }
+
+  /* --- rows of controls stack rather than squeeze --- */
+  .toolrow{ gap:6px }
+  .toolrow > *{ flex:0 1 auto; max-width:100% }
+  .seatpool{ max-height:150px }
+
+  /* --- text scaled down a touch so lines break less awkwardly --- */
+  body{ font-size:15.5px }
+  h1{ font-size:clamp(22px,6vw,26px) }
+  h2{ font-size:clamp(19px,5vw,22px) }
+  h3{ font-size:clamp(17px,4.5vw,19px) }
+  .station{ padding:16px 14px }
+  .page{ padding-left:10px; padding-right:10px }
+}
+
+/* very small phones */
+@media (max-width:360px){
+  .homebar .title, .topbar .title{ font-size:14px }
+  .btn-primary, .btn-ghost{ font-size:13.5px; padding:0 0.8em }
+  .page{ padding-left:8px; padding-right:8px }
+}
