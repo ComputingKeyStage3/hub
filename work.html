@@ -249,7 +249,7 @@ function paintSeats(){
   const pool = $("seatPool"), grid = $("seatGrid");
   pool.innerHTML = ""; grid.innerHTML = "";
   /* One big board of squares. The size setting decides how many fit on the
-     screen — about ten across at the default. */
+     screen, about ten across at the default. */
   grid.style.gridTemplateColumns = "repeat(" + SPAN + ", " + Math.round(plan.size * (plan.w || 1)) + "px)";
   grid.style.gridAutoRows = Math.round(plan.size * (plan.h || 1)) + "px";
   for (let r = 0; r < SPAN; r++){
@@ -379,7 +379,7 @@ function showStudent(i, step){
   $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
     "&view=1&embed=1" + (allPages ? "&all=1" : "") +
     (step !== undefined && !allPages ? "&step=" + step : "") + "&t=" + Date.now();
-  $("fbWho").textContent = st.display_name + (row ? "" : " \u2014 nothing saved yet");
+  $("fbWho").textContent = st.display_name + (row ? "" : ", nothing saved yet");
   /* a practical assessment is marked by hand, so the boxes appear */
   paintMarking(st.username);
   loadFeedback(row);

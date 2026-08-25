@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lesson builder — Prince Henry's Computing KS3</title>
+<title>Lesson builder, Prince Henry's Computing KS3</title>
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
@@ -211,7 +211,7 @@ function toEmbed(raw){
    closed with work that has not been saved to the site. */
 let dirty = false;
 function saveDraft(){ dirty = true; }
-function loadDraft(){ /* deliberately empty — see the note above */ }
+function loadDraft(){ /* deliberately empty, see the note above */ }
 try{
   window.addEventListener("beforeunload", (e) => {
     if (!dirty) return;
@@ -400,7 +400,7 @@ function compileOne(b, id, target){
       if (b.tooltips === false) blk.tooltips = false;
       push(blk);
     }
-    else if (b.type === "code"){ /* not chosen yet — nothing to build */ }
+    else if (b.type === "code"){ /* not chosen yet, nothing to build */ }
     else if (b.type === "binary")
       push(keepArrays({ type:"binary", id, title: b.title || "", task: b.task || "",
         mode: b.mode || "toDenary", bits: Number(b.bits) || 8, count: Number(b.count) || 4,
@@ -514,7 +514,7 @@ function render(){
     const arr = respEditing === "__ext" ? (lesson.extensions || [])
                                         : (lesson.responses[respEditing] || []);
     if (!arr.length){
-      const empty = el("p","hint dropzone","No tasks here yet — drag one from the left, or click it.");
+      const empty = el("p","hint dropzone","No tasks here yet, drag one from the left, or click it.");
       list.appendChild(empty);
     }
     arr.forEach((b, i) => list.appendChild(card(b, i, arr)));
@@ -533,8 +533,8 @@ function render(){
   }
   if (!lesson.blocks.length)
     list.appendChild(el("p","hint", lesson.assessment
-      ? "No questions yet — add one from the left."
-      : "Nothing here yet — add a task or a page from the left."));
+      ? "No questions yet, add one from the left."
+      : "Nothing here yet, add a task or a page from the left."));
   lesson.blocks.forEach((b, i) => list.appendChild(card(b, i, lesson.blocks)));
   saveDraft();
 }
@@ -616,8 +616,8 @@ function card(b, i, arr){
     const locked = b.startLocked !== false;
     const lk = el("button","btn-ghost bmini lockbtn" + (locked ? "" : " open"), locked ? "\u{1F512}" : "\u{1F513}");
     lk.title = isFirst ? "The first page always starts unlocked"
-             : locked ? "Starts locked when a class gets this lesson \u2014 click to start it unlocked"
-                      : "Starts unlocked \u2014 click to start it locked";
+             : locked ? "Starts locked when a class gets this lesson, click to start it unlocked"
+                      : "Starts unlocked, click to start it locked";
     lk.addEventListener("click", (e) => {
       e.stopPropagation();
       if (isFirst){
@@ -870,7 +870,7 @@ function card(b, i, arr){
         row.appendChild(inp);
         const isRight = q.answers.indexOf(k) >= 0;
         const pick = el("button","btn-ghost bmini" + (isRight ? " right" : ""), "\u2713");
-        pick.title = isRight ? "A correct answer \u2014 click to unmark" : "Mark as a correct answer";
+        pick.title = isRight ? "A correct answer, click to unmark" : "Mark as a correct answer";
         pick.addEventListener("click", () => {
           const at = q.answers.indexOf(k);
           if (at >= 0){ if (q.answers.length > 1) q.answers.splice(at, 1); }
@@ -905,26 +905,6 @@ function card(b, i, arr){
     const addQ = el("button","btn-ghost bmini2","+ Add another question");
     addQ.addEventListener("click", () => { b.questions.push({ q:"", options:["",""], answer:0, hint:"" }); render(); schedulePreview(); });
     body.appendChild(addQ);
-  }
-  if (b.type === "code"){
-    body.appendChild(el("p","bhelp","Which kind of coding is this?"));
-    const pick = el("div","brow");
-    const py = el("button","btn-primary bmini2","Python");
-    py.addEventListener("click", () => {
-      const made = BLANK.ide();
-      Object.keys(b).forEach(k => delete b[k]);
-      Object.assign(b, made);
-      render(); schedulePreview();
-    });
-    const web = el("button","btn-primary bmini2","HTML + CSS + JavaScript");
-    web.addEventListener("click", () => {
-      const made = BLANK.web();
-      Object.keys(b).forEach(k => delete b[k]);
-      Object.assign(b, made);
-      render(); schedulePreview();
-    });
-    pick.appendChild(py); pick.appendChild(web);
-    body.appendChild(pick);
   }
   if (b.type === "web"){
     F("Heading (optional)", "title");
@@ -982,7 +962,7 @@ function card(b, i, arr){
   if (b.type === "embed"){
     F("YouTube link, video id, or the whole embed code", "url", { area:true, rows:2 });
     const shown = toEmbed(b.url);
-    const note = el("p","bhelp", shown ? "Will be embedded as: " + shown : "Paste any YouTube address \u2014 it gets tidied up automatically.");
+    const note = el("p","bhelp", shown ? "Will be embedded as: " + shown : "Paste any YouTube address, it gets tidied up automatically.");
     if (shown && !/youtube\.com\/embed\//.test(shown)) note.className = "bhelp warn";
     body.appendChild(note);
     F("Heading (optional)", "title");
@@ -1013,8 +993,8 @@ function card(b, i, arr){
     listField("Items in the CORRECT order", "items", "Students see them shuffled.");
     if (lesson.assessment) F("Topic tag", "topic");
   }
-  if (b.type === "code" || b.type === "ide" || b.type === "web"){
-    const isWeb = b.lang === "web" || b.type === "web";
+  if (b.type === "ide" || b.type === "web"){          // once Python or web has been chosen
+    const isWeb = b.type === "web";
     if (!Array.isArray(b.checks)) b.checks = [];
     const w = el("div","bfield");
     w.appendChild(el("label","","Checklist"));
@@ -1072,8 +1052,8 @@ function card(b, i, arr){
   }
   if (b.type === "short"){
     F("Question", "prompt", { area:true, rows:2 });
-    F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by , — e.g. loop, repeat; count" });
-    F("What each group means", "keywordLabels", { help:"One phrase per group, separated by ; — students see these when they check their answer." });
+    F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by ,, e.g. loop, repeat; count" });
+    F("What each group means", "keywordLabels", { help:"One phrase per group, separated by ;, students see these when they check their answer." });
     F("Model answer", "model", { area:true, rows:2 });
     if (lesson.assessment) F("Topic tag", "topic");
   }
@@ -1112,7 +1092,7 @@ function askDelete(what, done){
 }
 
 /* ---------- lesson or assessment ---------- */
-/* Three kinds: a lesson, a marked assessment, and a practical one — built
+/* Three kinds: a lesson, a marked assessment, and a practical one, built
    like a lesson but marked by hand and shown to students as an assessment. */
 function setMode(assess, practical){
   lesson.assessment = !!assess;
@@ -1184,7 +1164,7 @@ function rubricPopup(){
     box.appendChild(list);
     function paint(){
       list.innerHTML = "";
-      if (!lesson.rubric.length) list.appendChild(el("p","hint","No grades yet \u2014 press \u201c+ New grade\u201d."));
+      if (!lesson.rubric.length) list.appendChild(el("p","hint","No grades yet, press \u201c+ New grade\u201d."));
       lesson.rubric.forEach((g, i) => {
         const card = el("div","qsub");
         const head = el("div","qsub-head");
@@ -1258,10 +1238,10 @@ const USES_OPTIONS = ["for loop","while loop","if","else","elif","input","print"
 function checklistPopup(block, isWeb){
   const kinds = isWeb ? WEB_CHECKS : PY_CHECKS;
   openModal(box => {
-    box.classList.add("wide");
+    box.classList.add("narrow");
     box.appendChild(el("h2","","Checklist"));
     box.appendChild(el("p","modal-text",
-      "Each line becomes something the student can tick off. Keep the wording plain \u2014 " +
+      "Each line becomes something the student can tick off. Keep the wording plain, " +
       "it is what they read when they are stuck."));
     const list = el("div");
     box.appendChild(list);
@@ -1269,11 +1249,11 @@ function checklistPopup(block, isWeb){
     function paint(){
       list.innerHTML = "";
       if (!block.checks.length)
-        list.appendChild(el("p","hint","Nothing yet \u2014 press \u201c+ New check\u201d."));
+        list.appendChild(el("p","hint","Nothing yet, press \u201c+ New check\u201d."));
       block.checks.forEach((c, i) => {
         const card = el("div","qsub");
         const head = el("div","qsub-head");
-        const label = el("input"); label.className = "gradename";
+        const label = el("input"); label.className = "checkname";
         label.value = c.label || "";
         label.placeholder = "What the student sees";
         label.addEventListener("input", () => { c.label = label.value; saveDraft(); });
@@ -1446,8 +1426,8 @@ function paintTargets(into){
   into.appendChild(addBtn);
   if (!names.length && !Object.keys(lesson.topics || {}).length){
     into.appendChild(el("p","hint", lesson.practical
-      ? "No topics yet \u2014 press \u201c+ New topic\u201d."
-      : "No topics yet \u2014 press \u201c+ New topic\u201d, or tag some questions."));
+      ? "No topics yet, press \u201c+ New topic\u201d."
+      : "No topics yet, press \u201c+ New topic\u201d, or tag some questions."));
     return;
   }
   names.forEach(name => {
@@ -1793,6 +1773,22 @@ on("copyBtn", "click", () => {
 function fileName(){
   return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40) + ".json";
 }
+/* Puts everything except the cross and the final buttons into a part that
+   scrolls on its own. */
+function scrollBody(box){
+  if (box.querySelector(".modal-scroll")) return;
+  const kids = Array.from(box.children);
+  const middle = kids.filter(n =>
+    !n.classList.contains("modal-x") &&
+    !n.classList.contains("modal-cta") &&
+    !n.classList.contains("modal-stay"));
+  if (middle.length < 2) return;
+  const scroller = el("div","modal-scroll");
+  const first = middle[0];
+  box.insertBefore(scroller, first);
+  middle.forEach(n => scroller.appendChild(n));
+}
+
 function openModal(build){
   const box = $("mBox");
   box.innerHTML = "";
@@ -1804,6 +1800,9 @@ function openModal(build){
     x.addEventListener("click", closeModal);
     box.insertBefore(x, box.firstChild);
   }
+  /* Everything between the cross and the closing button scrolls, so a long
+     pop-up never pushes its own buttons off the screen. */
+  scrollBody(box);
   $("mBack").hidden = false;
 }
 function closeModal(){ $("mBack").hidden = true; }
@@ -1861,7 +1860,7 @@ function askForKey(then){
 }
 function lessonId(){
   /* A lesson keeps the name it was saved under. Renaming it changes the
-     title, not which lesson it is — otherwise editing would quietly leave a
+     title, not which lesson it is, otherwise editing would quietly leave a
      copy of the old one behind, still sitting in whichever classes had it. */
   if (lesson.savedAs) return lesson.savedAs;
   return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50);
@@ -1933,7 +1932,7 @@ async function saveToSite(){
     if (!r.ok) throw new Error(d.error || "Could not save it.");
     lesson.savedAs = d.id;
     dirty = false;                       // saved, and nothing changed since
-    say(d.published ? "Saved \u2014 it's live" : "Saved to the site",
+    say(d.published ? "Saved, it's live" : "Saved to the site",
         d.published
           ? "Students in classes that already have this lesson will see the new version straight away."
           : "It's in your teacher console under " + lesson.unit + ". Press Publish there when a class should see it.");
@@ -1942,7 +1941,7 @@ async function saveToSite(){
 }
 on("saveSite", "click", saveToSite);
 
-/* deleting from here asks twice too — it is the same job as in the console */
+/* deleting from here asks twice too, it is the same job as in the console */
 
 on("delLesson", "click", () => {
   $("moreMenu").hidden = true;

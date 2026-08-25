@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Teacher console — Prince Henry's Computing KS3</title>
+<title>Teacher console, Prince Henry's Computing KS3</title>
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
@@ -146,7 +146,7 @@
     <section class="station" style="margin-bottom:18px">
       <h3 style="margin:0 0 4px">Weekly backup</h3>
       <p class="hint" id="backupWhen"></p>
-      <p class="modal-text">Downloads the entire database as one file. Keep it somewhere safe \u2014 if
+      <p class="modal-text">Downloads the entire database as one file. Keep it somewhere safe if
         something goes badly wrong, it is what you would put back.</p>
       <button class="btn-primary" id="backupBtn">Download a backup</button>
       <p class="hint" id="backupMsg"></p>
@@ -350,6 +350,22 @@ try{
 }catch(e){}
 
 /* ---------- modal ---------- */
+/* Puts everything except the cross and the final buttons into a part that
+   scrolls on its own. */
+function scrollBody(box){
+  if (box.querySelector(".modal-scroll")) return;
+  const kids = Array.from(box.children);
+  const middle = kids.filter(n =>
+    !n.classList.contains("modal-x") &&
+    !n.classList.contains("modal-cta") &&
+    !n.classList.contains("modal-stay"));
+  if (middle.length < 2) return;
+  const scroller = el("div","modal-scroll");
+  const first = middle[0];
+  box.insertBefore(scroller, first);
+  middle.forEach(n => scroller.appendChild(n));
+}
+
 function openModal(build){
   const box = $("tmodalBox");
   box.innerHTML = "";
@@ -363,6 +379,9 @@ function openModal(build){
     x.addEventListener("click", closeModal);
     box.insertBefore(x, box.firstChild);
   }
+  /* Everything between the cross and the closing button scrolls, so a long
+     pop-up never pushes its own buttons off the screen. */
+  scrollBody(box);
   $("tmodal").hidden = false;
 }
 function closeModal(){ $("tmodal").hidden = true; }
@@ -427,7 +446,7 @@ async function tryKey(){
       box.appendChild(el("h2","","The console needs the server"));
       box.appendChild(el("p","modal-text",
         "This copy of the site is running without a server, so there are no classes, " +
-        "no saved work and no marking. Building lessons still works \u2014 the lesson builder " +
+        "no saved work and no marking. Building lessons still works, the lesson builder " +
         "saves a file you put into the lessons folder."));
       const go = el("button","btn-primary modal-cta","Open the lesson builder");
       go.addEventListener("click", () => { location.href = "author.html"; });
@@ -471,7 +490,7 @@ function paintClasses(){
   if (!mine.length){
     g.appendChild(el("p","hint", meCode
       ? "No classes are set to " + meCode + " yet. Choose All teachers, or set who teaches a class when you rename it."
-      : "No students yet \u2014 open a class after adding some, or add them from any class page."));
+      : "No students yet, open a class after adding some, or add them from any class page."));
   }
   mine.forEach(gr => {
     const t = el("button","classtile");
@@ -582,7 +601,7 @@ function nudgeBackup(){
   const days = last ? Math.floor((Date.now() - last) / 86400000) : 999;
   const btn = $("keepBtn");
   if (btn) btn.classList.toggle("due", days >= 7);
-  if (btn) btn.title = days >= 7 ? "Backups and end of year — a backup is due" : "Backups and end of year";
+  if (btn) btn.title = days >= 7 ? "Backups and end of year, a backup is due" : "Backups and end of year";
 }
 function paintBackupWhen(){
   const last = localStorage.getItem("hub_backup_when");
@@ -620,7 +639,7 @@ function readBackup(file){
   reader.onload = () => {
     let parsed = null;
     try{ parsed = JSON.parse(reader.result); }
-    catch(e){ msg.textContent = "That file is not a backup \u2014 it could not be read."; return; }
+    catch(e){ msg.textContent = "That file is not a backup, it could not be read."; return; }
     if (!parsed || !parsed.tables){ msg.textContent = "That file is not a backup from this site."; return; }
     backupToRestore = parsed;
     msg.textContent = "";
@@ -714,7 +733,7 @@ on("storeBtn", "click", async () => {
     const used = (d.totals && d.totals.work && d.totals.work.bytes) || 0;
     const pct = Math.min(100, (used / (5 * 1024 * 1024 * 1024)) * 100);
     out.appendChild(el("p","modal-text", "Saved work takes up " + niceBytes(used) +
-      " \u2014 about " + (pct < 0.1 ? "less than 0.1" : pct.toFixed(1)) + "% of the 5GB."));
+      ", about " + (pct < 0.1 ? "less than 0.1" : pct.toFixed(1)) + "% of the 5GB."));
     const bar = el("div","meter");
     const fill = el("div","meter-bar");
     fill.style.width = Math.max(1, pct) + "%";
@@ -771,7 +790,7 @@ on("exportBtn", "click", async () => {
 on("purgeBtn", "click", () => {
   const before = $("purgeDate").value;
   if (exportedFor !== before){
-    $("purgeMsg").textContent = "Save it to a file first \u2014 the date has changed since you did.";
+    $("purgeMsg").textContent = "Save it to a file first, the date has changed since you did.";
     $("purgeBtn").disabled = true;
     return;
   }
@@ -818,7 +837,7 @@ on("purgeBtn", "click", () => {
 
 /* ---------- the lesson hub: year groups, then units, then lessons ---------- */
 let assigns = [];
-let teacherCodes = [];        // HTS, SNG, EJL — from the database, not the code
+let teacherCodes = [];        // HTS, SNG, EJL, from the database, not the code
 let classTeachers = {};       // class -> [codes]
 let meCode = "";              // who is signed in
 
@@ -902,7 +921,7 @@ function paintYears(){
     g.appendChild(t);
   }
   if (!years.length && !unfiled)
-    g.appendChild(el("p","hint","No year groups yet — press “+ New year group”."));
+    g.appendChild(el("p","hint","No year groups yet, press “+ New year group”."));
 }
 
 function openYear(y){
@@ -931,7 +950,7 @@ function paintHubUnits(){
     g.appendChild(t);
   }
   if (!units.length && !(!hubYear && unfiled))
-    g.appendChild(el("p","hint","No units here yet — press “+ New unit”."));
+    g.appendChild(el("p","hint","No units here yet, press “+ New unit”."));
 }
 
 function openHubUnit(u){
@@ -947,7 +966,7 @@ function openHubUnit(u){
 /* the lesson cards, used for a unit and for search results */
 function lessonCards(list, box){
   box.innerHTML = "";
-  if (!list.length){ box.appendChild(el("p","hint","No lessons here yet — press “+ Build a new lesson”.")); return; }
+  if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build a new lesson”.")); return; }
   const grid = el("div","lessongrid");
   list.forEach(l => {
     const card = el("div","lessonpill");
@@ -1074,7 +1093,7 @@ on("renameYearBtn", "click", () => {
 on("deleteYearBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Delete " + hubYear + "?");
-    box.appendChild(el("p","modal-text","The units inside it are kept — they just stop belonging to a year group. No lessons are deleted."));
+    box.appendChild(el("p","modal-text","The units inside it are kept, they just stop belonging to a year group. No lessons are deleted."));
     const yes = el("button","btn-primary modal-cta","Delete year group");
     yes.style.background = "var(--red)";
     yes.addEventListener("click", async () => {
@@ -1104,7 +1123,7 @@ on("renameHubUnitBtn", "click", () => {
 on("deleteHubUnitBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Delete " + hubUnit + "?");
-    box.appendChild(el("p","modal-text","The lessons are kept — they just stop belonging to a unit. Nothing students have done is affected."));
+    box.appendChild(el("p","modal-text","The lessons are kept, they just stop belonging to a unit. Nothing students have done is affected."));
     const yes = el("button","btn-primary modal-cta","Delete unit");
     yes.style.background = "var(--red)";
     yes.addEventListener("click", async () => {
@@ -1133,7 +1152,7 @@ function distribute(id){
       cb.checked = !!already;
       picks[g.name] = { cb: cb, already: !!already };
       row.appendChild(cb);
-      row.appendChild(el("span","", g.name + (already ? (already.published ? " — published" : " — draft") : "")));
+      row.appendChild(el("span","", g.name + (already ? (already.published ? ", published" : ", draft") : "")));
       box.appendChild(row);
     });
     if (!myClasses(groups || []).length) box.appendChild(el("p","modal-text","There are no classes to give this to."));
@@ -1291,7 +1310,7 @@ async function loadStudents(){
     if (!r.ok) throw new Error(d.error || "Could not load students.");
     students = d.students || [];
     paintStudents();
-    $("stuMsg").textContent = students.length ? "" : "No students in " + cls + " yet \u2014 add the first above.";
+    $("stuMsg").textContent = students.length ? "" : "No students in " + cls + " yet, add the first above.";
   }catch(e){ $("stuMsg").textContent = e.message; }
 }
 function paintStudents(){
@@ -1329,7 +1348,7 @@ function editStudent(st){
     const d = fieldRow(box, "Display name", "text", st.display_name);
     const u = fieldRow(box, "Username", "text", st.username);
     const p = pwField(box, "Set a new password");
-    box.appendChild(el("p","subnote","Existing passwords are stored scrambled and can't be shown \u2014 type a new one here to reset it, and use the eye to check your typing."));
+    box.appendChild(el("p","subnote","Existing passwords are stored scrambled and can't be shown, type a new one here to reset it, and use the eye to check your typing."));
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Save changes");
     go.addEventListener("click", async () => {
@@ -1372,7 +1391,7 @@ on("addOneBtn", "click", () => {
     modalTitle(box, "Add a student to " + cls);
     const d = fieldRow(box, "Display name", "text", "");
     const u = fieldRow(box, "Username", "text", "");
-    const p = pwField(box, "Password (leave empty \u2014 recommended)");
+    const p = pwField(box, "Password (leave empty, recommended)");
     box.appendChild(el("p","subnote","Leave the password empty and the student picks their own the first time they sign in. Only set one here if you need to."));
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Add student");
@@ -1398,7 +1417,7 @@ on("importBtn", "click", () => {
     modalTitle(box, "Import " + cls + " from Arbor");
     box.appendChild(el("p","modal-text",
       "In Arbor, export the class list with two columns: First name and Email address (main). " +
-      "Drop that file below \u2014 the username is taken from the email address, so doej26@\u2026 becomes doej26."));
+      "Drop that file below, the username is taken from the email address, so doej26@\u2026 becomes doej26."));
 
     const drop = el("div","dropfile");
     drop.appendChild(el("b","","Drop the spreadsheet here"));
@@ -1487,7 +1506,7 @@ on("importBtn", "click", () => {
 on("addManyBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Add many to " + cls);
-    box.appendChild(el("p","modal-text","One student per line: username, display name \u2014 they choose their own password at first sign-in. (You can still use username, password, display name if you want to set one.)"));
+    box.appendChild(el("p","modal-text","One student per line: username, display name, they choose their own password at first sign-in. (You can still use username, password, display name if you want to set one.)"));
     const ta = el("textarea"); ta.rows = 8; ta.placeholder = "jsmith, Jamie Smith\nlkhan, Layla Khan"; ta.style.width = "100%";
     box.appendChild(ta);
     const msg = el("p","hint","");
@@ -1631,8 +1650,8 @@ on("addLessonBtn", "click", () => {
     const holder = el("div"); box.appendChild(holder);
     const msg = el("p","hint",""); box.appendChild(msg);
 
-    /* A lesson "belongs" to this unit if its own file says so — that is what
-       the builder writes — even before it has been filed here. */
+    /* A lesson "belongs" to this unit if its own file says so, that is what
+       the builder writes, even before it has been filed here. */
     function paint(){
       holder.innerHTML = "";
       const t = term.trim().toLowerCase();
@@ -1646,7 +1665,7 @@ on("addLessonBtn", "click", () => {
       if (!rows.length){
         holder.appendChild(el("p","modal-text", showAll
           ? "No other lessons match."
-          : "No lessons name this unit yet \u2014 press \u201cShow every lesson\u201d, or build a new one."));
+          : "No lessons name this unit yet, press \u201cShow every lesson\u201d, or build a new one."));
       }
       rows.forEach(l => {
         const row = el("button","ov-row");
@@ -1680,7 +1699,7 @@ function paintLessonGrid(){
      assigned anywhere, still show what was published to everyone) */
   const mine = (cat.lessons || []).filter(l => (l.unit || "") === unit && assignOf(l.lesson_id));
   if (!mine.length){
-    g.appendChild(el("p","hint","No lessons here yet for " + cls + " \u2014 add one from the hub above."));
+    g.appendChild(el("p","hint","No lessons here yet for " + cls + ", add one from the hub above."));
     return;
   }
   mine.sort((a, b) => (a.position || 0) - (b.position || 0));
@@ -1692,18 +1711,19 @@ function paintLessonGrid(){
     const card = el("div","lessonpill");
     const head = el("div","lp-head");
     head.appendChild(el("b","", titleOf(l.lesson_id)));
-    const chip = el("button","statechip " + (waiting ? "wait" : closed ? "shut" : live ? "open" : "shut"),
-      waiting ? "Scheduled" : closed ? "Closed" : live ? "Open" : "Draft");
-    if (live && a){
-      /* the pill says when, and opens the scheduler when pressed */
-      const when = waiting ? "Opens " + niceDate(a.release_at) + " at " + (a.release_at || "").slice(11, 16)
-                 : closed  ? "Closed " + niceDate(a.close_on)
-                 : sameDay(a.release_at) ? "Opened today at " + (a.release_at || "").slice(11, 16)
-                 : "Closes " + niceDate(a.close_on);
-      chip.title = when;
-      chip.dataset.when = when;
-      chip.classList.add("chip-live");
-    }
+    /* The pill shows its state, and swaps to the date when pointed at —
+       two spans rather than appended text, so nothing reads twice. */
+    const chip = el("button","statechip chip-live " +
+      (waiting ? "wait" : closed ? "shut" : live ? "open" : "shut"));
+    const state = waiting ? "Scheduled" : closed ? "Closed" : live ? "Open" : "Draft";
+    const when = !live               ? "Schedule"
+               : waiting             ? "Edit schedule"
+               : closed              ? niceDate(a.close_on)
+               : sameDay(a && a.release_at) ? "Opened " + (a.release_at || "").slice(11, 16)
+               : niceDate(a && a.release_at);
+    chip.appendChild(el("span","chip-state", state));
+    chip.appendChild(el("span","chip-when", when));
+    chip.title = when;
     chip.addEventListener("click", (e) => { e.stopPropagation(); schedulePopup(l.lesson_id); });
     head.appendChild(chip);
     if (a && a.release_at && waiting)
@@ -1768,7 +1788,7 @@ async function fetchLesson(id){
   return d.lesson;
 }
 
-/* Taking a lesson away from a class leaves it in the hub — unless it was
+/* Taking a lesson away from a class leaves it in the hub, unless it was
    built for this class alone, in which case there would be nothing left. */
 function removeFromClass(l){
   const id = l.lesson_id;
@@ -1777,7 +1797,7 @@ function removeFromClass(l){
   openModal(box => {
     modalTitle(box, "Remove \u201c" + titleOf(id) + "\u201d from " + cls + "?");
     if (onlyHere){
-      box.appendChild(el("p","modal-text","This lesson was made for " + cls + " and no other class has it, so removing it here deletes it completely \u2014 including the students' work."));
+      box.appendChild(el("p","modal-text","This lesson was made for " + cls + " and no other class has it, so removing it here deletes it completely, including the students' work."));
       const yes = el("button","btn-primary modal-cta","Delete it completely");
       yes.style.background = "var(--red)";
       yes.addEventListener("click", () => { closeModal(); deleteLesson(id, async () => { await loadCatalogue(); paintLessonGrid(); }); });
@@ -2067,7 +2087,7 @@ function paintTasks(){
     const base = locks.size === 0 ? "Every task is open for " + cls + "."
       : locks.size === lessonJson.blocks.length ? "Every task is locked for " + cls + "."
       : locks.size + " task" + (locks.size === 1 ? "" : "s") + " locked for " + cls + ".";
-    msg.textContent = usingDefaults ? base + " (starting pattern \u2014 unlock as you teach)" : base;
+    msg.textContent = usingDefaults ? base + " (starting pattern, unlock as you teach)" : base;
   }
   lessonJson.blocks.forEach((b, i) => {
     const open = lessonJson.assessment ? true : !locks.has(i);
@@ -2099,7 +2119,7 @@ function paintTasks(){
 
 /* ---------- markbook for an assessment ---------- */
 function niceTime(sec){
-  if (!sec) return "\u2014";
+  if (!sec) return "";
   const m = Math.floor(sec / 60), r = sec % 60;
   return m ? (m + "m " + r + "s") : (r + "s");
 }
@@ -2177,7 +2197,7 @@ async function openMarkbook(backToManage){
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", () => { closeModal(); if (backToManage) openManage(); });
     box.appendChild(x);
-    modalTitle(box, "Markbook \u2014 " + titleOf(lessonId) + " \u00b7 " + cls);
+    modalTitle(box, "Markbook, " + titleOf(lessonId) + " \u00b7 " + cls);
     const holder = el("div"); box.appendChild(holder);
     holder.appendChild(el("p","hint","Loading\u2026"));
     try{
@@ -2256,10 +2276,10 @@ function paintMarkbook(holder){
   const avg = (a) => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0;
   const stats = el("div","mbstats");
   [["Finished", done.length + " of " + markbookRows.length],
-   ["Average", pcts.length ? avg(pcts) + "%" : "\u2014"],
-   ["Lowest", pcts.length ? Math.min.apply(null, pcts) + "%" : "\u2014"],
-   ["Highest", pcts.length ? Math.max.apply(null, pcts) + "%" : "\u2014"],
-   ["Average time", times.length ? niceTime(avg(times)) : "\u2014"]].forEach(p => {
+   ["Average", pcts.length ? avg(pcts) + "%" : ""],
+   ["Lowest", pcts.length ? Math.min.apply(null, pcts) + "%" : ""],
+   ["Highest", pcts.length ? Math.max.apply(null, pcts) + "%" : ""],
+   ["Average time", times.length ? niceTime(avg(times)) : ""]].forEach(p => {
     const c = el("div","mbstat");
     c.appendChild(el("b","", p[1]));
     c.appendChild(el("span","", p[0]));
@@ -2281,13 +2301,13 @@ function paintMarkbook(holder){
   markbookRows.forEach(r => {
     const tr = el("tr");
     tr.appendChild(el("td","", r.name));
-    tr.appendChild(el("td","", r.score === null ? "\u2014" : r.score + " / " + r.outOf));
-    tr.appendChild(el("td","", r.pct === null ? "\u2014" : r.pct + "%"));
+    tr.appendChild(el("td","", r.score === null ? "" : r.score + " / " + r.outOf));
+    tr.appendChild(el("td","", r.pct === null ? "" : r.pct + "%"));
     tr.appendChild(el("td","", niceTime(r.seconds)));
     markbookQs.forEach(q => {
       const m = r.marks[q.id];
       const td = el("td","mbtick");
-      if (!m) td.appendChild(el("span","none","\u2014"));
+      if (!m) td.appendChild(el("span","none",""));
       else if (m.got === m.max) td.appendChild(el("span","yes", m.max > 1 ? m.got + "/" + m.max : "\u2713"));
       else if (m.got > 0) td.appendChild(el("span","part", m.got + "/" + m.max));
       else td.appendChild(el("span","no","\u2717"));
@@ -2333,7 +2353,7 @@ async function getResults(){
   if (!r.ok) throw new Error(d.error || "Could not load results.");
   return d.rows || [];
 }
-/* Excel opens a table like this directly — no add-ins, nothing to install. */
+/* Excel opens a table like this directly, no add-ins, nothing to install. */
 function exportMarkbook(){
   const head = ["Student","Username","Mark","Out of","Percent","Time taken","Strength","Target"];
   markbookQs.forEach(q => head.push(q.label + " " + q.title));
@@ -2404,7 +2424,7 @@ function printWork(rows, idx){
 }
 async function whoDone(i, b, backToManage){
   openModal(async (box) => {
-    modalTitle(box, "Task " + (i+1) + " \u2014 who's done it?");
+    modalTitle(box, "Task " + (i+1) + ", who's done it?");
     box.appendChild(el("p","modal-text", stepTitle(b, i)));
     const holder = el("div"); box.appendChild(holder);
     holder.appendChild(el("p","hint","Loading\u2026"));
@@ -2434,7 +2454,7 @@ async function whoDone(i, b, backToManage){
 }
 
 /* ---------- password updates ----------
-   Polls while the page is open, but only for a minute at a time — an
+   Polls while the page is open, but only for a minute at a time, an
    abandoned tab shouldn't sit there hammering the database all lesson. */
 let pwPoll = null, pwStop = 0, pwFrom = "classesView";
 function showPwView(){
@@ -2460,7 +2480,7 @@ function stopPwPolling(showRefresh){
   clearInterval(pwPoll); pwPoll = null;
   if (showRefresh){
     $("pwRefresh").hidden = false;
-    $("pwPollMsg").textContent = "Stopped checking \u2014 press Refresh to look again.";
+    $("pwPollMsg").textContent = "Stopped checking, press Refresh to look again.";
   }
 }
 async function loadResetQueue(){

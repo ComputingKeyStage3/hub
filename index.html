@@ -71,7 +71,7 @@
       <p class="modal-text" id="rsWho"></p>
       <div class="field"><label for="rp1">New password (12–25 characters)</label><input type="password" id="rp1" autocomplete="new-password"></div>
       <div class="field"><label for="rp2">Type it again</label><input type="password" id="rp2" autocomplete="new-password"></div>
-      <p class="subnote">Tip: three random words joined together — like <b>otter-lamp-window</b>.</p>
+      <p class="subnote">Tip: three random words joined together, like <b>otter-lamp-window</b>.</p>
       <button class="btn-primary modal-cta" id="rsGo">Update password</button>
       <button class="btn-ghost modal-stay" id="rsCancel">Cancel</button>
       <p class="hint" id="rsMsg" style="margin-top:10px"></p>
@@ -79,7 +79,7 @@
     <div id="rsStep2" hidden>
       <h2 style="margin-top:0">Waiting for your teacher</h2>
       <div class="load-dots" style="margin:18px 0"><span></span><span></span><span></span></div>
-      <p class="modal-text">Put your hand up — your teacher needs to approve this. Keep this window open.</p>
+      <p class="modal-text">Put your hand up, your teacher needs to approve this. Keep this window open.</p>
       <p class="handin" id="rsCount"></p>
       <button class="btn-ghost modal-stay" id="rsGiveUp">Cancel</button>
     </div>
@@ -92,7 +92,7 @@
     <p class="modal-text" id="pwWho"></p>
     <div class="field"><label for="np1">New password (12–25 characters)</label><input type="password" id="np1" autocomplete="new-password"></div>
     <div class="field"><label for="np2">Type it again</label><input type="password" id="np2" autocomplete="new-password"></div>
-    <p class="subnote">Tip: three random words joined together — like <b>otter-lamp-window</b> — is long, strong and easy to remember. Keep it to yourself.</p>
+    <p class="subnote">Tip: three random words joined together, like <b>otter-lamp-window</b>, is long, strong and easy to remember. Keep it to yourself.</p>
     <button class="btn-primary modal-cta" id="npGo">Save my password</button>
     <p class="hint" id="npMsg" style="margin-top:10px"></p>
   </div>
@@ -225,7 +225,7 @@ on("loginBtn", "click", async () => {
     if (!r.ok) throw new Error(d.error || "Sign-in failed.");
     /* Shared computers: if this is a DIFFERENT student from the last one to
        sign in here, drop the cached work so nobody sees someone else's answers.
-       (Signing out deliberately leaves the cache alone — the same student
+       (Signing out deliberately leaves the cache alone, the same student
        coming back keeps working offline-fast.) */
     const uname = $("u").value.trim().toLowerCase();
     if (localStorage.getItem("hub_user") !== uname) clearStudentCache();
@@ -355,7 +355,7 @@ function paintLessons(byId){
 
   if (!visible.length){
     box.innerHTML = '<p class="hint">' + (showing === "done"
-      ? "Nothing here yet — lessons move here once they close, or once you finish them."
+      ? "Nothing here yet, lessons move here once they close, or once you finish them."
       : (cat.length ? "No lessons are open right now. Your teacher will publish them when you need them."
                     : "No lessons have been published yet.")) + '</p>';
     return;
@@ -462,7 +462,7 @@ function clearStudentCache(){
 
 /* ---- first sign-in (or after a teacher approves a reset): choose a password ---- */
 function forcePassword(name){
-  $("pwWho").textContent = "Hello " + String(name || "").split(" ")[0] + " — before you start, pick a password only you know.";
+  $("pwWho").textContent = "Hello " + String(name || "").split(" ")[0] + ", before you start, pick a password only you know.";
   $("pwModal").hidden = false;
   $("np1").focus();
 }
@@ -483,7 +483,7 @@ on("npGo", "click", async () => {
   }catch(e){ $("npMsg").textContent = e.message; }
 });
 
-/* our own message box — never the browser's grey pop-up */
+/* our own message box, never the browser's grey pop-up */
 function say(title, text, then){
   $("sayTitle").textContent = title;
   $("sayText").textContent = text || "";
@@ -495,7 +495,7 @@ on("sayModal", "mousedown", (e) => { if (e.target === $("sayModal")) $("sayModal
 
 /* ---- forgot password ----
    Check the username, let them choose the new password there and then, and
-   hold it until their teacher approves it — no emails, no teacher typing. */
+   hold it until their teacher approves it, no emails, no teacher typing. */
 let rsUser = "", rsTicket = "", rsPoll = null, rsDeadline = 0;
 
 on("forgotBtn", "click", async () => {
@@ -511,7 +511,7 @@ on("forgotBtn", "click", async () => {
     if (!r.ok) throw new Error(d.error || "Could not check that.");
     if (!d.exists){
       say("We can't find that username",
-          "There's no account called \u201c" + u + "\u201d. Check the spelling and try again \u2014 your teacher can tell you your exact username.");
+          "There's no account called \u201c" + u + "\u201d. Check the spelling and try again, your teacher can tell you your exact username.");
       return;
     }
     rsUser = u;

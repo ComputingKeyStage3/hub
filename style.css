@@ -1905,8 +1905,13 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   font-family:var(--mono) !important; font-size:17px !important; border-radius:8px }
 
 /* the strip above an editor's output */
+/* The strip above the output belongs to the editor, so it takes the
+   editor's colours rather than the page's. */
 .ide-outbar{ display:flex; align-items:center; gap:8px; padding:6px 10px;
-  border-bottom:1px solid var(--line); background:var(--panel-2); font-size:13px; color:var(--muted) }
+  border-bottom:1px solid var(--ed-line); background:var(--ed-bar, var(--ed-bg));
+  font-size:13px; color:var(--ed-gut) }
+.ide-outbar .ide-small{ color:var(--ed-gut) }
+.ide-outbar .ide-small:hover{ color:var(--ed-fg) }
 
 /* the wrapper used when printing a student's work */
 .printwrap{ background:var(--panel); color:var(--text); padding:24px }
@@ -2108,7 +2113,6 @@ select.offname{text-align-last:center; cursor:pointer}
 .statechip{border:1px solid transparent; cursor:default; font-family:var(--body)}
 .chip-live{cursor:pointer; transition:background .15s ease, color .15s ease, max-width .2s ease}
 .chip-live:hover,.chip-live:focus-visible{background:var(--mint); color:#fff; border-color:var(--mint); outline:none}
-.chip-live:hover::after{content:" " attr(data-when)}
 .statechip.wait.chip-live:hover{background:var(--amber); border-color:var(--amber); color:var(--amber-ink)}
 .statechip.shut.chip-live:hover{background:var(--muted); border-color:var(--muted); color:var(--panel)}
 
@@ -2143,3 +2147,57 @@ select.offname{text-align-last:center; cursor:pointer}
 .check[data-state=broken] .check-note{color:var(--red)}
 .check-run{margin-top:10px}
 .checklist[data-all-done=yes]{border-color:var(--mint)}
+
+/* the pill swaps its wording when pointed at, rather than adding to it */
+.statechip{cursor:pointer; font-family:var(--body); border:1px solid transparent}
+.chip-when{display:none}
+.chip-live:hover .chip-state,.chip-live:focus-visible .chip-state{display:none}
+.chip-live:hover .chip-when,.chip-live:focus-visible .chip-when{display:inline}
+.chip-live:hover,.chip-live:focus-visible{background:var(--mint); color:#fff; border-color:var(--mint); outline:none}
+.statechip.wait.chip-live:hover,.statechip.wait.chip-live:focus-visible{background:var(--amber); border-color:var(--amber); color:var(--amber-ink)}
+.statechip.shut.chip-live:hover,.statechip.shut.chip-live:focus-visible{background:var(--muted); border-color:var(--muted); color:var(--panel)}
+
+
+/* =====================================================================
+   POP-UPS
+   The pop-up itself scrolls, not the page behind it, and the button at
+   the bottom stays put so it can always be reached. The close cross sits
+   in the top right of every one.
+   ===================================================================== */
+.modal{
+  position:relative;
+  max-height:88vh;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  padding-top:52px;
+}
+/* everything except the cross and the final button scrolls */
+.modal > *{ flex:0 0 auto }
+.modal > .modal-scroll{ flex:1 1 auto; overflow-y:auto; min-height:0 }
+
+.modal-x{
+  position:absolute; top:12px; right:12px; z-index:6;
+  background:var(--panel); border:1.5px solid var(--line-2);
+}
+.modal-x:hover{ background:var(--panel-2); border-color:var(--amber) }
+
+/* the button that finishes a pop-up sits against the bottom */
+.modal-cta, .modal-stay{
+  position:sticky; bottom:0; z-index:5;
+}
+.modal .modal-cta{ margin-top:14px }
+
+/* a pop-up for writing a list is not a wide one */
+.modal.narrow{ max-width:560px }
+
+@media (max-width:640px){
+  .modal, .modal.wide, .modal.narrow{ max-height:100vh; border-radius:0 }
+}
+
+/* the name of a check reads like every other field */
+.checkname{width:100%; height:40px; padding:0 12px; margin-right:10px;
+  border:1.5px solid var(--line-2); border-radius:10px; background:var(--panel);
+  color:var(--text); font-family:var(--body); font-size:15px}
+.checkname:focus{border-color:var(--amber); outline:none;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent)}

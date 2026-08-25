@@ -41,9 +41,9 @@
 
 <div class="stage" id="stage">
   <button class="btn-ghost backdone no-print" id="backToDone" hidden>Back to my summary →</button>
-  <p class="signin-hint no-print" id="signinHint" hidden data-online-only>Not signed in — work stays on this computer only. <a href="index.html">Sign in</a></p>
+  <p class="signin-hint no-print" id="signinHint" hidden data-online-only>Not signed in, work stays on this computer only. <a href="index.html">Sign in</a></p>
   <div class="banner banner-ok no-print" id="resumeNote" hidden>
-    ↩︎ Welcome back — your saved work has been put back on the page.
+    ↩︎ Welcome back, your saved work has been put back on the page.
   </div>
   <div id="blocks"></div>
 </div>
@@ -85,7 +85,7 @@
    This version saves entirely inside the student's own browser
    (localStorage). There is no login and no server.
    localStorage is written to disk, so work survives a crash, a power cut
-   or an accidental tab close — but it is tied to THIS computer and THIS
+   or an accidental tab close, but it is tied to THIS computer and THIS
    browser, and school PCs that wipe profiles on logout will clear it.
    The PDF is the thing that gets handed in.
    --------------------------------------------------------------------- */
@@ -299,11 +299,11 @@ function hideLoader(msg){
   if (el2.classList) el2.classList.add("gone");
 }
 function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!==undefined)e.innerHTML=html; return e; }
-/* Same, but the words are shown exactly as written — so "<h1>" appears as
+/* Same, but the words are shown exactly as written, so "<h1>" appears as
    "<h1>" instead of turning into a heading. Used for anything that talks
    ABOUT code: error messages, help entries, tooltips. */
 function tel(tag, cls, text){ const e=document.createElement(tag); if(cls)e.className=cls; if(text!==undefined)e.textContent=text; return e; }
-/* Saving is deliberately silent. Any badge — even a warning — made students
+/* Saving is deliberately silent. Any badge, even a warning, made students
    think their work was safe somewhere. The PDF is the only hand-in, and the
    finish pop-up says so plainly. The one exception is a genuine storage
    failure while adding a picture, which is loud because it is actionable. */
@@ -319,7 +319,7 @@ function stripTags(s){ return String(s || "").replace(/<[^>]*>/g, " ").replace(/
 let saveTimer = null, lastSaved = "";
 /* Nothing may be written until the student's saved work has been fetched and
    put back on the page. A save landing before that would replace real answers
-   with the empty boxes that are on screen at the time — which is how work was
+   with the empty boxes that are on screen at the time, which is how work was
    being lost. */
 let restoreDone = false;
 
@@ -356,7 +356,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
    Checked on demand, not on a timer. The student presses Continue; only then
    do we ask the backend whether the next task is open. A student who is working
    makes no requests at all, and one who is waiting makes at most one every ten
-   seconds — and only if they keep trying. The teacher tells the class when to
+   seconds, and only if they keep trying. The teacher tells the class when to
    move on, so the click is the natural moment to check.
    If the backend can't be reached we fall back to the last state we knew, and
    failing that we let them through. A network blip must never strand a class. */
@@ -443,7 +443,7 @@ function defaultLocks(){
   for (let i = firstDo + 1; i < blocks.length; i++) out.add(i);
   return out;
 }
-/* Offline or signed out, nothing is locked — never strand a student. */
+/* Offline or signed out, nothing is locked, never strand a student. */
 const isLocked = (i) => !bypassed && !!apiReady && !!token && lockedSet.has(i);
 /* First unlocked index walking in a direction; null if there isn't one. */
 function nextOpen(from, dir){
@@ -454,7 +454,7 @@ function nextOpen(from, dir){
 }
 
 /* Where should Continue land? A single locked task is skipped (the teacher
-   shut just that one); when everything ahead is locked, that's pacing — wait. */
+   shut just that one); when everything ahead is locked, that's pacing, wait. */
 async function continueTarget(){
   if (bypassed || !apiReady || !token) return step + 1;
   await fetchRelease();                 // freshen; offline keeps the last known
@@ -561,8 +561,8 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
       }
       const vb = el("div","viewbar");
       const backBit = el("button","vb-back", viewParam !== null
-        ? "Viewing " + (inspectName || "a student") + "'s work \u2014 click here to go back"
-        : "Teacher preview \u2014 this is what students will see \u00b7 click here to go back");
+        ? "Viewing " + (inspectName || "a student") + "'s work, click here to go back"
+        : "Teacher preview, this is what students will see \u00b7 click here to go back");
       backBit.type = "button";
       backBit.addEventListener("click", () => {
         if (window.close) window.close();
@@ -595,7 +595,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
         nav.appendChild(prev); nav.appendChild(sel); nav.appendChild(next);
         vb.appendChild(nav);
       }
-      document.body.appendChild(vb);           // position:fixed — order doesn't matter
+      document.body.appendChild(vb);           // position:fixed, order doesn't matter
       const home = $("homeLink");
       if (home){ home.textContent = "\u2190 Teacher console"; home.href = "admin.html"; }
       hideLoader();
@@ -611,7 +611,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     }
     if (wasDone){
       /* A practical is marked by hand afterwards, so fetch the mark before
-         drawing the summary — otherwise it shows as unmarked. */
+         drawing the summary, otherwise it shows as unmarked. */
       if (lesson.practical) await loadMyMark();
       hideLoader();
       if (lesson.assessment){ renderAssessmentComplete(false); }
@@ -635,7 +635,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     const why = e.message === "missing" ? "missing" : e.message === "badjson" ? "badjson" : "other";
     const msg = forTeacher
       ? { missing: "There is no lesson with this id yet. Save it from the builder first.",
-          badjson: "This lesson file has a mistake in it \u2014 check the JSON.",
+          badjson: "This lesson file has a mistake in it, check the JSON.",
           other:   "This lesson could not be built: " + e.message }[why]
       : { missing: "This lesson could not be found. Tell your teacher.",
           badjson: "This lesson could not be opened. Tell your teacher.",
@@ -676,10 +676,10 @@ async function loadSaved(){
     }
     return;
   }
-  /* Priority: 1) this browser's saved copy — costs nothing, no network.
+  /* Priority: 1) this browser's saved copy, costs nothing, no network.
      2) only if that is EMPTY and the student is signed in, ask the server
         once (covers wiped profiles and switching computers). A first-ever
-        open also lands here — the one small read is how we find out it is
+        open also lands here, the one small read is how we find out it is
         the first time, and it returns nothing. */
   try{
     const raw = localStorage.getItem(WORK_KEY);
@@ -751,7 +751,7 @@ function showStep(i){
   // else. Show it on that first render only, then never again.
   $("resumeNote").hidden = true;
   /* Someone who has finished and gone back into a task does not need telling
-     their work was saved — they need a way back to the summary. */
+     their work was saved, they need a way back to the summary. */
   if (restoredWork && !resumeShown && !wasDone){
     const note = $("resumeNote");
     note.hidden = false;
@@ -824,7 +824,7 @@ $("softModal").addEventListener("mousedown", (e) => { if (e.target === $("softMo
 
 function paintTracker(){
   Array.from($("tracker").children).forEach((seg, n) => {
-    // Once finished, every segment is complete — including the last one, which
+    // Once finished, every segment is complete, including the last one, which
     // previously stayed amber forever because "n < step" can never include it.
     seg.className = "seg" + (finished ? " done" : n < step ? " done" : n === step ? " now" : "")
                   + (isLocked(n) && !finished ? " locked-seg" : "");
@@ -836,7 +836,7 @@ async function submitWork(){
   if (spectate) return "offline";
   if (!restoreDone) return "offline";      // never send blanks over real work
   /* Writes to the database only when something actually changed since the
-     last successful write — pressing Save Work twice costs nothing. */
+     last successful write, pressing Save Work twice costs nothing. */
   if (!token || !apiReady) return "offline";
   const payload = JSON.stringify(snapshot());
   if (payload === lastSubmittedPayload) return "done";
@@ -852,7 +852,7 @@ async function submitWork(){
   }catch(e){ return "failed"; }
 }
 
-/* Mid-lesson manual save — for lessons that run out of time. */
+/* Mid-lesson manual save, for lessons that run out of time. */
 let flashTimer = null;
 async function manualSave(){
   save();
@@ -905,7 +905,7 @@ function askBypass(){
 
 /* ---------- renderers: { section, check, brief } ---------- */
 let qCounter = 0;
-/* Builds one activity without putting it on the page — used both for ordinary
+/* Builds one activity without putting it on the page, used both for ordinary
    steps and for the several activities that share a "page". */
 function buildBlock(b, i){
   if (!b.id) b.id = b.type + "_" + i;
@@ -925,7 +925,7 @@ function buildBlock(b, i){
 }
 
 /* A page: several activities stacked together, one Continue at the end.
-   This is how a Trinket-style page works — explanation, code, then questions. */
+   This is how a Trinket-style page works, explanation, code, then questions. */
 function rPage(b){
   const s = el("section","pagegroup");
   const kids = [];
@@ -966,7 +966,7 @@ function renderBlock(b, i){
   const built = buildBlock(b, i);
   if (!built) return;
   /* A teacher can turn off the "finish this first" rule on any task. The
-     task still works and is still saved — it just never blocks Continue. */
+     task still works and is still saved, it just never blocks Continue. */
   if (b.required === false){
     built.check = () => ({ ok:true });
     built.soft = () => ({ ok:true });
@@ -1173,7 +1173,7 @@ function rPython(b){
 }
 
 /* ======================================================================
-   BUILT-IN PYTHON IDE  —  replaces Trinket
+   BUILT-IN PYTHON IDE ,  replaces Trinket
    {"type":"ide", "task":"...", "starter":"...", "turtle":true,
     "inputs":"Ada\n12", "expect":"Hello", "height":320, "readOnly":false}
    Runs entirely in the browser through Pyodide. Turtle graphics, input()
@@ -1242,7 +1242,7 @@ const PY_HELP = {
   int:"Turns something into a whole number, like \"7\" into 7.",
   str:"Turns something into text.",
   float:"Turns something into a decimal number, like 2.5.",
-  len:"Tells you how long something is \u2014 how many letters or items.",
+  len:"Tells you how long something is, how many letters or items.",
   range:"Makes a list of numbers to count through, like range(5) for 0 to 4.",
   list:"Makes a list, which holds several things in order.",
   dict:"Makes a dictionary, which stores pairs like name \u2192 value.",
@@ -1270,11 +1270,11 @@ const PY_HELP = {
   or:"True when at least one of the things is true.",
   True:"The value for yes.",
   False:"The value for no.",
-  None:"Means nothing at all \u2014 no value yet.",
+  None:"Means nothing at all, no value yet.",
   try:"Attempts something that might go wrong.",
   except:"What to do if the code in try went wrong.",
   class:"Makes a new kind of thing, with its own information and commands.",
-  pass:"Does nothing \u2014 a placeholder to keep the code valid.",
+  pass:"Does nothing, a placeholder to keep the code valid.",
   global:"Lets a command change a variable made outside it.",
   lambda:"A tiny command written on one line.",
   with:"Uses something and tidies it away afterwards.",
@@ -1514,7 +1514,7 @@ function rIDE(b){
   function setTheme(k, chosen){
     s.dataset.idetheme = k;
     Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
-    /* only remember it when the student picked it — otherwise the editor would
+    /* only remember it when the student picked it, otherwise the editor would
        stop following the site's colours after the first paint */
     if (chosen){ const p = idePrefs(); p.theme = k; p.chosen = true; saveIdePrefs(p); }
   }
@@ -1611,7 +1611,7 @@ function rIDE(b){
       const good = lastOut.toLowerCase().includes(String(b.expect).toLowerCase());
       note.hidden = false;
       note.className = "ide-note " + (good ? "ok" : "no");
-      note.textContent = good ? "That's the output we were looking for \u2713" : "Not quite yet \u2014 keep going.";
+      note.textContent = good ? "That's the output we were looking for \u2713" : "Not quite yet, keep going.";
     }
     markDirty();
     return true;
@@ -1738,7 +1738,7 @@ function rIDE(b){
 }
 
 /* ======================================================================
-   BUILT-IN WEB EDITOR — HTML, CSS and JavaScript
+   BUILT-IN WEB EDITOR, HTML, CSS and JavaScript
    {"type":"web", "title":"...", "task":"...",
     "html":"<p>Hello</p>", "css":"p{color:red}", "js":"console.log(1)",
     "files":["html","css","js"], "run":true, "edit":true, "help":true,
@@ -2008,7 +2008,7 @@ function rWeb(b){
   function setTheme(k, chosen){
     s.dataset.idetheme = k;
     Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
-    /* only remember it when the student picked it — otherwise the editor would
+    /* only remember it when the student picked it, otherwise the editor would
        stop following the site's colours after the first paint */
     if (chosen){ const p = idePrefs(); p.theme = k; p.chosen = true; saveIdePrefs(p); }
   }
@@ -2160,7 +2160,7 @@ function rWeb(b){
       const good = (code.html + code.css + code.js).toLowerCase().includes(String(b.expect).toLowerCase());
       note.hidden = false;
       note.className = "ide-note " + (good ? "ok" : "no");
-      note.textContent = good ? "That looks right \u2713" : "Not quite yet \u2014 keep going.";
+      note.textContent = good ? "That looks right \u2713" : "Not quite yet, keep going.";
     }
     markDirty();
   }
@@ -2329,7 +2329,7 @@ function rBinary(b){
       a.fb.dataset.ok = ok ? "yes" : "no";
       a.fb.textContent = ok ? "Correct"
         : got === "" ? "Have a go at this one"
-        : "Not yet \u2014 " + (a.toDenary ? "add up the place values above the 1s."
+        : "Not yet, " + (a.toDenary ? "add up the place values above the 1s."
                                          : "which place values add up to " + a.n + "?");
       if (ok) right++;
     });
@@ -2458,8 +2458,8 @@ function rBinAdd(b){
       r.fb.dataset.ok = ok ? "yes" : "no";
       r.fb.textContent = ok ? "Correct"
         : got.length < bits ? "Fill in every box"
-        : tooBig ? "This one overflows " + bits + " bits \u2014 that is the answer to give."
-        : "Not yet \u2014 remember 1 + 1 is 0 with 1 carried.";
+        : tooBig ? "This one overflows " + bits + " bits, that is the answer to give."
+        : "Not yet, remember 1 + 1 is 0 with 1 carried.";
       if (ok) right++;
     });
     allRight = right === rows.length;
@@ -2558,7 +2558,7 @@ function rQuiz(b){
     fb.hidden = false;
     fb.dataset.verdict = ok ? "correct" : "incorrect";
     fb.innerHTML = "";
-    const title = el("b","", ok ? "Correct" : "Not quite — try again");
+    const title = el("b","", ok ? "Correct" : "Not quite, try again");
     const why = el("span","", ok ? (q.why || "")
       : (q.hint || (multi(q) ? "Check you have ticked every right answer, and nothing else."
                              : "Read the question again and pick a different answer.")));
@@ -2611,7 +2611,7 @@ function rQuiz(b){
 
 function rPassword(b){
   const s = el("section");
-  s.appendChild(el("p","warnline","🔒 Test made-up passwords only — never a real one. Nothing you type here is sent anywhere or saved."));
+  s.appendChild(el("p","warnline","🔒 Test made-up passwords only, never a real one. Nothing you type here is sent anywhere or saved."));
   const inp = el("input"); inp.type = "text"; inp.autocomplete = "off"; inp.placeholder = "Try a password…";
   s.appendChild(inp);
   const meter = el("div","meter"); const bar = el("div","meter-bar"); meter.appendChild(bar); s.appendChild(meter);
@@ -2638,8 +2638,8 @@ function rPassword(b){
     });
     bar.style.width = (p ? (k / rules.length) * 100 : 0) + "%";
     bar.dataset.level = k <= 2 ? "weak" : k <= 4 ? "ok" : "strong";
-    verdict.textContent = !p ? "" : k <= 2 ? "Weak — a hacker's computer could guess this very quickly."
-                        : k <= 4 ? "Getting better — keep going." : "Strong — well done!";
+    verdict.textContent = !p ? "" : k <= 2 ? "Weak, a hacker's computer could guess this very quickly."
+                        : k <= 4 ? "Getting better, keep going." : "Strong, well done!";
     if (k > best) best = k;
     markDirty();
   }
@@ -2713,7 +2713,7 @@ function rCaesar(b){
    A block with a "lockCode" stays shut until the teacher reads out the code.
    No server, no database: the code's hash lives in the lesson file, so the
    code itself can't be found by viewing the page source. It's a pacing tool,
-   not security — a determined student could poke at browser storage.        */
+   not security, a determined student could poke at browser storage.        */
 function applyLock(b, built){
   if (!b.lockCode) return built;
   const KEY = "hub_unlock_" + lessonId + "_" + b.id;
@@ -2860,10 +2860,10 @@ function rImage(b){
    Used in lessons flagged "assessment": true. Unlike lesson quizzes there
    is no right/wrong feedback while answering and no retry-until-correct:
    students answer once, and everything is marked together at the end,
-   like a Microsoft Form — but marked instantly on screen.
+   like a Microsoft Form, but marked instantly on screen.
    ===================================================================== */
 
-/* "a, b and c" — reads better than a list of ticks */
+/* "a, b and c", reads better than a list of ticks */
 function joinWords(list){
   if (list.length === 1) return list[0];
   return list.slice(0, -1).join(", ") + " and " + list[list.length - 1];
@@ -2956,7 +2956,7 @@ function rOrder(b){
            brief:{ eyebrow:"Put in order", title:stripTags(b.prompt) || "", text:b.note || "" } };
 }
 
-/* Fill in the blanks — a dropdown per gap. The choices are every gap's
+/* Fill in the blanks, a dropdown per gap. The choices are every gap's
    answer plus any "distractors" from the lesson file, shuffled the same way
    on every load. */
 function rBlanks(b){
@@ -2987,7 +2987,7 @@ function rBlanks(b){
                    set:(v) => { if (!Array.isArray(v)) return;
                      v.forEach((x, i) => {
                        const sel = selects[i]; if (!sel || !x) return;
-                       // older saves may hold typed words — keep them selectable
+                       // older saves may hold typed words, keep them selectable
                        if (!Array.from(sel.children).some(o => o.value === x)){
                          const o = el("option","", x); o.value = x; sel.appendChild(o);
                        }
@@ -3040,7 +3040,7 @@ function rShort(b){
         if (missing.length && b.keywordLabels)
           fb.appendChild(el("span","", "Still to add: " + joinWords(missing) + "."));
         else if (missing.length)
-          fb.appendChild(el("span","", "There is still something missing \u2014 try to say a bit more."));
+          fb.appendChild(el("span","", "There is still something missing, try to say a bit more."));
         if (b.model) fb.appendChild(el("span","", "A good answer mentions: " + b.model));
       }
       markDirty();
@@ -3119,13 +3119,13 @@ function computeST(byTopic){
   if (pct(best) === 0){
     /* nothing right anywhere, so praise the effort rather than a topic */
     strength = (lesson && lesson.zeroStrength) ||
-      "You made a start on every question \u2014 that is the hardest part.";
+      "You made a start on every question, that is the hardest part.";
   } else {
     strength = bBank.strength || ("Strong work on " + (bBank.label || best[0]) + ".");
   }
   let target;
   if (pct(worst) === 1){
-    target = (lesson && lesson.perfectTarget) || "Full marks \u2014 stretch yourself with the response tasks below.";
+    target = (lesson && lesson.perfectTarget) || "Full marks, stretch yourself with the response tasks below.";
   } else {
     target = wBank.target || ("Keep practising " + (wBank.label || worst[0]) + ".");
   }
@@ -3154,7 +3154,7 @@ async function assessmentFinish(){
   if (spectate){ renderAssessmentComplete(false); return; }
   finished = true;
   save();
-  /* A practical is marked by hand, so it never adds up a score — but how long
+  /* A practical is marked by hand, so it never adds up a score, but how long
      it took is still worth recording. */
   if (lesson.practical){
     const secs = Math.round((Date.now() - assessStarted) / 1000);
@@ -3245,7 +3245,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   const heading = resultHeading(pct);
   const box = doneShell(heading);
 
-  // hero + score — the tick appears whatever the score
+  // hero + score, the tick appears whatever the score
   const hero = heroBits(heading, lesson.title);
   hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
   hero.appendChild(el("div","done-pct", pct + "%"));
@@ -3318,13 +3318,13 @@ function renderAssessmentComplete(justFinished, res, st, sent){
         if (/^\[\[.*\]\]$/.test(part)){
           const it = q.review.items[gi++] || { given:"", ok:false, expected:"" };
           sent2.appendChild(el("span","blank-fill " + (it.ok ? "ok" : "no"),
-            it.ok ? it.given : ((it.given === "(blank)" ? "\u2014" : it.given) + " \u2192 " + it.expected)));
+            it.ok ? it.given : ((it.given === "(blank)" ? "" : it.given) + " \u2192 " + it.expected)));
         } else if (part){
           sent2.appendChild(el("span","", part.replace(/</g,"&lt;")));
         }
       });
       body.appendChild(sent2);
-      body.appendChild(el("span","why", q.pts + " of " + q.max + " gaps correct \u2014 one mark per gap."));
+      body.appendChild(el("span","why", q.pts + " of " + q.max + " gaps correct, one mark per gap."));
     }
 
     if (q.type === "short"){
@@ -3421,7 +3421,7 @@ function renderResponses(container, targetTopic, statusEl){
   const bank = (lesson && lesson.responses) || {};
   let list = bank[targetTopic] || [];
   /* Full marks means no weakest topic worth working on, so they get a topic
-     picked at random instead — different students get different practice. */
+     picked at random instead, different students get different practice. */
   if (!list.length || !targetTopic){
     const topics = Object.keys(bank).filter(k => (bank[k] || []).length);
     if (topics.length){
@@ -3433,7 +3433,7 @@ function renderResponses(container, targetTopic, statusEl){
   if (!list.length && !extras.length) return;
   const wrap = el("div","responses");
   wrap.appendChild(el("h2","sect-head","Response tasks"));
-  wrap.appendChild(el("p","resp-sub","Chosen from your target. Work through them \u2014 press Save Work when you're done."));
+  wrap.appendChild(el("p","resp-sub","Chosen from your target. Work through them, press Save Work when you're done."));
   list.forEach((b, i) => {
     if (!b.id) b.id = "resp_" + targetTopic + "_" + i;
     const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort,
@@ -3480,7 +3480,7 @@ function renderResponses(container, targetTopic, statusEl){
 }
 
 /* Builds the PDF in the browser and shows it inside the page. Nothing is
-   downloaded and nothing is stored — the file only exists in memory. */
+   downloaded and nothing is stored, the file only exists in memory. */
 /* Every page, one after another, for a teacher who wants to skim. */
 function showEverything(){
   hideLoader();
@@ -3580,7 +3580,7 @@ function doneShell(title){
   finished = true; paintTracker();
   return box;
 }
-/* every score gets the tick — the words change with the result */
+/* every score gets the tick, the words change with the result */
 function resultHeading(pct){
   if (pct > 75) return "Exceptional work! Keep it up.";
   if (pct < 25) return "Submitted! Let's aim higher next time.";
@@ -3599,7 +3599,7 @@ function saveButton(statusEl){
   if (OFFLINE){
     const btn = el("button","btn-primary done-save","Save my work as a PDF");
     btn.addEventListener("click", () => {
-      /* built here and downloaded — no print dialogue to get lost in */
+      /* built here and downloaded, no print dialogue to get lost in */
       btn.textContent = "Making the PDF\u2026";
       setTimeout(() => {
         try{
@@ -3607,7 +3607,7 @@ function saveButton(statusEl){
           const doc = buildPdf();
           doc.save(fileName());
           btn.textContent = "\u2713 Saved as a PDF";
-          if (statusEl) statusEl.textContent = "Saved as " + fileName() + " \u2014 hand that in.";
+          if (statusEl) statusEl.textContent = "Saved as " + fileName() + ", hand that in.";
         }catch(e){
           btn.textContent = "Save my work as a PDF";
           if (statusEl) statusEl.textContent = e.message;
@@ -3633,13 +3633,13 @@ function paintStatus(elm, state){
   if (!elm) return;                 // some screens have no status line
   if (OFFLINE){
     elm.dataset.state = "offline";
-    elm.textContent = "Kept in this browser \u2014 save a PDF to hand it in";
+    elm.textContent = "Kept in this browser, save a PDF to hand it in";
     return;
   }
   elm.dataset.state = state;
   elm.textContent = state === "done" ? "\u2713 Sent to your teacher"
                   : state === "offline" ? "Sign in so your work can be sent to your teacher"
-                  : "Could not reach the server \u2014 press Save Work to try again";
+                  : "Could not reach the server, press Save Work to try again";
 }
 
 function showLessonComplete(revisit, justFinished){
@@ -3672,7 +3672,7 @@ function taskPreview(b){
   const empty = v === null || v === undefined || v === "" ||
     (Array.isArray(v) && !v.some(x => x)) ||
     (typeof v === "object" && v !== null && !Object.keys(v).length);
-  return empty ? "\u2014" : "Done \u2713";
+  return empty ? "" : "Done \u2713";
 }
 function buildOverview(box){
   const ov = el("div","ov");
@@ -3728,7 +3728,7 @@ async function runPython(code, out, err){
 $("saveBtn").addEventListener("click", manualSave);
 
 /* ---------- build the PDF and download it, no dialog ----------
-   window.print() ALWAYS opens the browser's print dialog — no site can stop
+   window.print() ALWAYS opens the browser's print dialog, no site can stop
    that. So we build the document ourselves with jsPDF and save it straight
    to disk. It's assembled from what the student actually did, so it captures
    every activity rather than a screenshot of whatever happened to be on
@@ -3746,7 +3746,7 @@ function pdfSafe(s){
   return String(s == null ? "" : s)
     .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
     .replace(/[\u201C\u201D\u201E]/g, '"')
-    .replace(/[\u2013\u2014\u2212]/g, "-")
+    .replace(/[\u2013\u2212]/g, "-")
     .replace(/\u2026/g, "...")
     .replace(/\u00A0/g, " ")
     .replace(/[^\x20-\xFF]/g, "")
