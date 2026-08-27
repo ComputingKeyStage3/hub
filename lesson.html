@@ -214,11 +214,9 @@ function marksButton(res, review){
   return { open: open2 };
 }
 
-function workButton(){
-  const wrap = el("div","st-card");
-  wrap.appendChild(el("h2","sect-head","Your work"));
-  const btn = el("button","btn-primary","View my work");
-  btn.addEventListener("click", () => {
+/* Everything they did, on one scrollable page, in a pop-up. */
+function openWorkPopup(){
+  {
     const back = el("div","modal-back");
     const popup = el("div","modal wide");
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
@@ -241,9 +239,7 @@ function workButton(){
     back.appendChild(popup);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
-  });
-  wrap.appendChild(btn);
-  return wrap;
+  }
 }
 
 function feedbackCard(f){
@@ -924,6 +920,7 @@ function buildBlock(b, i){
 function rPage(b){
   const s = el("section","pagegroup");
   const kids = [];
+  const items = [];      // each task on this page, so we can move on to the next
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
     const built = buildBlock(child, j);
@@ -942,7 +939,30 @@ function rPage(b){
     item.appendChild(built.section);
     s.appendChild(item);
     kids.push(built);
+    items.push({ item, built });
   });
+
+  /* When a task is finished and there is another below it on the same page,
+     bring that one into view so nobody has to hunt for it. */
+  let lastDone = -1;
+  const nudgeAlong = () => {
+    items.forEach((entry, i) => {
+      if (i <= lastDone) return;
+      let ok = false;
+      try{ ok = entry.built.check().ok; }catch(e){ ok = false; }
+      if (!ok) return;
+      lastDone = i;
+      const next = items[i + 1];
+      if (!next) return;
+      setTimeout(() => {
+        next.item.scrollIntoView({ behavior:"smooth", block:"center" });
+        next.item.classList.add("justopened");
+        setTimeout(() => next.item.classList.remove("justopened"), 1400);
+      }, 320);
+    });
+  };
+  s.addEventListener("input", nudgeAlong);
+  s.addEventListener("click", nudgeAlong);
   return {
     section: s,
     check: () => {
@@ -2529,6 +2549,10 @@ function rQuiz(b){
                                  : (q.answer === undefined || q.answer === null ? [] : [q.answer]));
   const multi = (q) => rightSet(q).size > 1;
 
+  /* shown in place of the button once every question is right */
+  const doneNote = el("p","quiz-done","All done \u2713");
+  doneNote.hidden = true;
+
   function draw(){
     const q = qs[qi];
     if (!q){ head.textContent = ""; qtext.textContent = "No questions yet."; opts.innerHTML = ""; return; }
@@ -2578,8 +2602,12 @@ function rQuiz(b){
       : (q.hint || (multi(q) ? "Check you have ticked every right answer, and nothing else."
                              : "Read the question again and pick a different answer.")));
     fb.appendChild(title); fb.appendChild(why);
-    if (ok && qi < n - 1) btn.textContent = "Next question →";
-    else if (ok) btn.textContent = "All done ✓";
+    if (ok && qi < n - 1){ btn.textContent = "Next question →"; btn.hidden = false; }
+    else if (ok){
+      /* nothing left to press, so it reads as a note rather than a button */
+      btn.hidden = true;
+      doneNote.hidden = false;
+    }
   }
 
   btn.addEventListener("click", () => {
@@ -3061,7 +3089,8 @@ function rShort(b){
       markDirty();
     });
     ta.addEventListener("input", () => { fb.hidden = true; });
-    s.appendChild(btn); s.appendChild(fb);
+    s.appendChild(btn);
+  s.appendChild(doneNote); s.appendChild(fb);
   }
 
   fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; } };
@@ -3233,6 +3262,11 @@ function renderPracticalComplete(){
     hero.appendChild(rb);
   }
 
+  /* the same way into their work as a marked assessment has */
+  const seeBtn = el("button","btn-primary done-save fadein","View my work");
+  seeBtn.addEventListener("click", () => openWorkPopup());
+  hero.appendChild(seeBtn);
+
   const layout = el("div","done-layout");
   const heroCol = el("div","done-hero-col");
   heroCol.appendChild(hero);
@@ -3243,9 +3277,15 @@ function renderPracticalComplete(){
 
   const fb = feedbackCard(teacherNote);
   if (fb){ fb.classList.add("flyin"); cards.appendChild(fb); }
+
+  layout.classList.add("staged");
   setTimeout(() => {
-    Array.from(cards.children).forEach((c, i) => setTimeout(() => c.classList.add("in"), i * 140));
-  }, 260);
+    layout.classList.remove("staged");
+    Array.from(cards.children).forEach((c, i) => setTimeout(() => c.classList.add("in"), 450 + i * 700));
+    setTimeout(() => {
+      box.querySelectorAll(".fadein").forEach(n => n.classList.add("in"));
+    }, 450 + cards.children.length * 700 + 400);
+  }, 900);
 
   /* practice only makes sense once they have been told how they did */
   if (marked){
@@ -3274,9 +3314,9 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   const hero = heroBits(heading, lesson.title);
   hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
   hero.appendChild(el("div","done-pct", pct + "%"));
-  /* Where the "result saved" line used to sit: a way straight into the
-     marked work, which is what a student actually wants there. */
-  const seeBtn = el("button","btn-primary done-save","View my assessment");
+  /* A way straight into the marked work, where the "result saved" line used
+     to sit. It fades in last, once the cards have settled. */
+  const seeBtn = el("button","btn-primary done-save fadein","View my assessment");
   hero.appendChild(seeBtn);
 
   /* The hero and the two cards sit side by side, and the cards slide in
@@ -3386,7 +3426,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   const respCard = el("div","st-card flyin");
   respCard.appendChild(el("h2","sect-head","Response"));
   respCard.appendChild(el("p","modal-text","Some practice on the topic your target is about."));
-  const jump = el("button","btn-primary","Start response tasks \u2193");
+  const jump = el("button","btn-primary fadein","Start response tasks \u2193");
   respCard.appendChild(jump);
   cards.appendChild(respCard);
 
@@ -3413,12 +3453,18 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   if (respHolder.dataset && respHolder.dataset.allDone === "yes") markDone();
   respHolder.addEventListener("hubResponsesDone", markDone);
 
-  /* the cards slide in once the score has settled */
+  /* It happens in beats, so there is time to read each one:
+     the score alone, then it moves aside as the feedback arrives,
+     then the response card, then the two buttons. */
+  layout.classList.add("staged");
   setTimeout(() => {
-    Array.from(cards.children).forEach((c, i) => {
-      setTimeout(() => c.classList.add("in"), i * 140);
-    });
-  }, 260);
+    layout.classList.remove("staged");           // the score slides to the left
+    setTimeout(() => stCard.classList.add("in"), 450);
+    setTimeout(() => respCard.classList.add("in"), 1150);
+    setTimeout(() => {
+      box.querySelectorAll(".fadein").forEach(n => n.classList.add("in"));
+    }, 1850);
+  }, 900);
 }
 
 /* ---- what a teacher can do while looking at a student's work ---- */

@@ -1282,7 +1282,12 @@ function checklistPopup(block, isWeb){
           pick.appendChild(o);
         });
         pick.value = c.kind || kinds[0][0];
-        pick.addEventListener("change", () => { c.kind = pick.value; saveDraft(); paint(); });
+        pick.addEventListener("change", () => {
+          c.kind = pick.value;
+          /* so a check is never left with nothing to look for */
+          if (c.kind === "uses" && !c.value) c.value = USES_OPTIONS[0];
+          saveDraft(); paint();
+        });
         row.appendChild(pick);
         card.appendChild(row);
 
@@ -1349,13 +1354,15 @@ function checklistPopup(block, isWeb){
 
     const add = el("button","btn-ghost bmini2","+ New check");
     add.addEventListener("click", () => {
-      block.checks.push({ label:"", kind: kinds[0][0], value:"" });
+      const first = kinds[0][0];
+      block.checks.push({ label:"", kind: first, value: first === "uses" ? USES_OPTIONS[0] : "" });
       saveDraft(); paint();
     });
     box.appendChild(add);
     const done = el("button","btn-primary modal-cta","Done");
     done.addEventListener("click", () => {
       block.checks = block.checks.filter(c => (c.label || "").trim());
+      block.checks.forEach(c => { if (c.kind === "uses" && !c.value) c.value = USES_OPTIONS[0]; });
       closeModal(); render(); schedulePreview();
     });
     box.appendChild(done);

@@ -162,6 +162,8 @@ function renderAuth(){
       input.autocomplete = "off";
       field.appendChild(input);
       const go = document.createElement("button");
+      go.className = "btn-primary offstart";
+      go.textContent = "Start";
       const years = (window.HUB && window.HUB.YEARS) || ["Year 7","Year 8","Year 9"];
       const pick = document.createElement("select");
       pick.className = "offname";

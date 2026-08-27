@@ -1,5 +1,5 @@
 /* =====================================================================
-   autograder.js — the checklist a student sees above their code.
+   autograder.js, the checklist a student sees above their code.
 
    A teacher writes a list of checks in the lesson builder. Each one is a
    small object saying what to look for. This file runs them against
@@ -30,7 +30,7 @@
      fileHas      file,value          a named file contains this
 
    Nothing here touches the network, and a broken check never stops the
-   student working — it reports itself as needing the teacher's attention.
+   student working, it reports itself as needing the teacher's attention.
    ===================================================================== */
 (function(){
   "use strict";
@@ -52,12 +52,30 @@
       .join("\n");
   }
 
+  /* A condition that assigns rather than compares is a mistake, not an if
+     statement. "if x = 5:" does not run, so it should not tick anything off. */
+  function conditionLooksRight(line){
+    const cond = (line.split(":")[0] || "").replace(/^\s*(if|elif|while)\b/, "");
+    /* strip the comparisons that legitimately contain = */
+    const rest = cond.replace(/[=!<>]=|<|>/g, "");
+    return !/=/.test(rest);
+  }
+  /* Looks for a keyword on a line that is actually written correctly. */
+  function soundLine(code, word){
+    return code.split("\n").some(line => {
+      const re = new RegExp("^\\s*" + word + "\\b");
+      if (!re.test(line)) return false;
+      if (!/:\s*$/.test(line.trimEnd()) && !/:/.test(line)) return false;
+      return conditionLooksRight(line);
+    });
+  }
+
   const PY_PATTERNS = {
-    "for loop":    /\bfor\s+\w+\s+in\b/,
-    "while loop":  /\bwhile\b.*:/,
-    "if":          /\bif\b.*:/,
+    "for loop":    /\bfor\s+\w+\s+in\b.*:/,
+    "while loop":  (code) => soundLine(code, "while"),
+    "if":          (code) => soundLine(code, "if"),
     "else":        /\belse\s*:/,
-    "elif":        /\belif\b.*:/,
+    "elif":        (code) => soundLine(code, "elif"),
     "input":       /\binput\s*\(/,
     "print":       /\bprint\s*\(/,
     "list":        /=\s*\[|\.append\s*\(/,
@@ -100,10 +118,18 @@
       }
 
       case "uses": {
-        const re = PY_PATTERNS[String(value).toLowerCase()];
-        if (!re) return broken(label, "Unknown thing to look for: " + value);
-        return re.test(bare) ? pass(label)
-          : fail(label, "Your code does not use a " + value + " yet.");
+        /* No choice made in the builder means the first one, rather than a
+           check that can never pass. */
+        const which = String(value || "for loop").toLowerCase();
+        const test = PY_PATTERNS[which];
+        if (!test) return broken(label, "Unknown thing to look for: " + which);
+        const found = typeof test === "function" ? test(bare) : test.test(bare);
+        if (found) return pass(label);
+        /* say so when the right word is there but written wrongly */
+        const nearly = new RegExp("\\b" + which.split(" ")[0] + "\\b").test(bare);
+        return fail(label, nearly
+          ? "There is a " + which + " there, but it is not quite right yet."
+          : "Your code does not use a " + which + " yet.");
       }
 
       case "outputHas":
@@ -122,7 +148,7 @@
         const want = parseInt(check.count, 10) || 1;
         const got = bare.split("\n").filter(l => l.trim()).length;
         return got >= want ? pass(label)
-          : fail(label, "Only " + got + " line" + (got === 1 ? "" : "s") + " so far \u2014 " + want + " are needed.");
+          : fail(label, "Only " + got + " line" + (got === 1 ? "" : "s") + " so far, " + want + " are needed.");
       }
 
       default:
@@ -166,7 +192,7 @@
         catch(e){ return broken(label, "That tag name cannot be searched for."); }
         return found.length >= want ? pass(label)
           : fail(label, found.length
-              ? "Found " + found.length + " \u2014 " + want + " are needed."
+              ? "Found " + found.length + ", " + want + " are needed."
               : "There is no <" + selector + "> yet.");
       }
 
