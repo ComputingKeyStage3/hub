@@ -3278,14 +3278,10 @@ function renderPracticalComplete(){
   const fb = feedbackCard(teacherNote);
   if (fb){ fb.classList.add("flyin"); cards.appendChild(fb); }
 
-  layout.classList.add("staged");
-  setTimeout(() => {
-    layout.classList.remove("staged");
-    Array.from(cards.children).forEach((c, i) => setTimeout(() => c.classList.add("in"), 450 + i * 700));
-    setTimeout(() => {
-      box.querySelectorAll(".fadein").forEach(n => n.classList.add("in"));
-    }, 450 + cards.children.length * 700 + 400);
-  }, 900);
+  /* A practical has no mark or response tasks when it is handed in, so
+     there is nothing worth announcing. It simply appears. */
+  Array.from(cards.children).forEach(c => c.classList.add("in"));
+  box.querySelectorAll(".fadein").forEach(n => n.classList.add("in"));
 
   /* practice only makes sense once they have been told how they did */
   if (marked){
@@ -3439,7 +3435,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   seeBtn.addEventListener("click", () => review2.open());
 
   // response tasks for the target topic
-  const respHolder = el("div","responses-anchor");
+  const respHolder = el("div","responses-anchor fadelast");
   box.appendChild(respHolder);
   renderResponses(respHolder, st.targetTopic, null);
   jump.addEventListener("click", () => {
@@ -3453,18 +3449,29 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   if (respHolder.dataset && respHolder.dataset.allDone === "yes") markDone();
   respHolder.addEventListener("hubResponsesDone", markDone);
 
-  /* It happens in beats, so there is time to read each one:
-     the score alone, then it moves aside as the feedback arrives,
-     then the response card, then the two buttons. */
-  layout.classList.add("staged");
-  setTimeout(() => {
-    layout.classList.remove("staged");           // the score slides to the left
-    setTimeout(() => stCard.classList.add("in"), 450);
-    setTimeout(() => respCard.classList.add("in"), 1150);
+  /* The arrival only happens the moment they finish. Coming back to look
+     again should just show the page, not perform. */
+  const showEverything = () => {
+    layout.classList.remove("staged");
+    stCard.classList.add("in");
+    respCard.classList.add("in");
+    box.querySelectorAll(".fadein").forEach(n => n.classList.add("in"));
+    respHolder.classList.add("in");
+  };
+  if (!justFinished){ showEverything(); }
+  else {
+    /* In beats, so there is time to read each one: the score alone, then it
+       slides aside as the feedback arrives, then the response card, then the
+       buttons, and last of all the tasks themselves. */
+    layout.classList.add("staged");
     setTimeout(() => {
-      box.querySelectorAll(".fadein").forEach(n => n.classList.add("in"));
-    }, 1850);
-  }, 900);
+      layout.classList.remove("staged");
+      setTimeout(() => stCard.classList.add("in"), 500);
+      setTimeout(() => respCard.classList.add("in"), 1250);
+      setTimeout(() => box.querySelectorAll(".fadein").forEach(n => n.classList.add("in")), 2050);
+      setTimeout(() => respHolder.classList.add("in"), 2750);
+    }, 950);
+  }
 }
 
 /* ---- what a teacher can do while looking at a student's work ---- */

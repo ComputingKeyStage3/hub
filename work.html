@@ -72,7 +72,7 @@
     <aside class="workside">
       <h3>Feedback</h3>
       <p class="hint" id="fbWho"></p>
-      <div class="bfield"><label>Comment</label><textarea id="fbComment" rows="5"></textarea></div>
+      <div class="bfield"><label>Comment</label><textarea id="fbComment" rows="3"></textarea></div>
       <div class="bfield" id="fbStrengthWrap" hidden>
         <label>Strength</label><textarea id="fbStrength" rows="3"></textarea>
         <div class="bank" id="bankStrength"></div>
@@ -458,19 +458,99 @@ function paintBank(which){
   const holder = $("bank" + which);
   if (!holder) return;
   holder.innerHTML = "";
+  if (!bankFor(which).length) return;
+  const open2 = el("button","btn-ghost bmini2","From your bank\u2026");
+  open2.addEventListener("click", () => bankPopup(which));
+  holder.appendChild(open2);
+}
+
+/* Joins chosen sentences into one that reads properly, rather than a run of
+   full stops. A full sentence keeps its own punctuation; a fragment is
+   joined on with "and". */
+function joinSentences(lines){
+  const tidy = lines.map(t => String(t).trim()).filter(Boolean);
+  if (!tidy.length) return "";
+  if (tidy.length === 1) return tidy[0];
+  const ended = (t) => /[.!?]$/.test(t);
+  let out = "";
+  tidy.forEach((line, i) => {
+    if (!out){ out = line; return; }
+    if (ended(out)){
+      /* a new sentence: capital letter, and keep them apart */
+      out += " " + line.charAt(0).toUpperCase() + line.slice(1);
+    } else {
+      /* still mid-sentence: join with a comma, and "and" before the last */
+      const joiner = (i === tidy.length - 1) ? " and " : ", ";
+      out += joiner + line.charAt(0).toLowerCase() + line.slice(1);
+    }
+  });
+  if (!ended(out)) out += ".";
+  return out;
+}
+
+/* The bank, with a search box and tick boxes so several can be combined. */
+function bankPopup(which){
   const items = bankFor(which);
-  if (!items.length) return;
-  holder.appendChild(el("p","bankhead", "From your bank"));
-  items.forEach(it => {
-    const b = el("button","bankpick");
-    b.appendChild(el("b","", it.topic));
-    b.appendChild(el("span","", it.line));
-    b.addEventListener("click", () => {
-      const box = $("fb" + which);
-      box.value = box.value.trim() ? (box.value.trim() + " " + it.line) : it.line;
-      box.focus();
+  const chosen = new Set();
+  openModal(box => {
+    box.classList.add("narrow");
+    box.appendChild(el("h2","", which === "Strength" ? "Strengths you have written"
+                                                     : "Targets you have written"));
+    box.appendChild(el("p","modal-text",
+      "Tick as many as you like. They are joined into one sentence, which you can then reword."));
+
+    const find = el("input","searchbox bankfind");
+    find.placeholder = "Search";
+    box.appendChild(find);
+
+    const list = el("div","banklist");
+    box.appendChild(list);
+
+    const preview = el("p","bankpreview","");
+    box.appendChild(preview);
+
+    function refresh(){
+      const text = joinSentences(items.filter(it => chosen.has(it.line)).map(it => it.line));
+      preview.textContent = text;
+      preview.hidden = !text;
+      add.disabled = !text;
+    }
+    function paint(){
+      const term = (find.value || "").trim().toLowerCase();
+      list.innerHTML = "";
+      const shown = items.filter(it =>
+        !term || it.line.toLowerCase().includes(term) || it.topic.toLowerCase().includes(term));
+      if (!shown.length) list.appendChild(el("p","hint","Nothing matches that."));
+      shown.forEach(it => {
+        const row = el("label","opt bankrow");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = chosen.has(it.line);
+        cb.addEventListener("change", () => {
+          if (cb.checked) chosen.add(it.line); else chosen.delete(it.line);
+          refresh();
+        });
+        row.appendChild(cb);
+        const words = el("span","bankwords");
+        words.appendChild(el("b","", it.topic));
+        words.appendChild(el("span","", it.line));
+        row.appendChild(words);
+        list.appendChild(row);
+      });
+    }
+    find.addEventListener("input", paint);
+
+    const add = el("button","btn-primary modal-cta","Add to the box");
+    add.disabled = true;
+    add.addEventListener("click", () => {
+      const target = $("fb" + which);
+      const text = joinSentences(items.filter(it => chosen.has(it.line)).map(it => it.line));
+      target.value = target.value.trim() ? joinSentences([target.value, text]) : text;
+      closeModal();
+      target.focus();
     });
-    holder.appendChild(b);
+    box.appendChild(add);
+    paint(); refresh();
   });
 }
 on("addStrength", "click", () => toggleFb("Strength"));

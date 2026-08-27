@@ -279,7 +279,7 @@ function compile(){
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
   if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
   if (lesson.practical){
-    out.marking = lesson.marking || "score";
+    out.marking = lesson.marking || "rubric";
     if (out.marking === "score") out.outOf = lesson.outOf || 20;
     else out.rubric = (lesson.rubric || []).filter(g => g.name);
   }
@@ -288,7 +288,7 @@ function compile(){
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
   if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
   if (lesson.practical){
-    out.marking = lesson.marking || "score";
+    out.marking = lesson.marking || "rubric";
     if (out.marking === "score") out.outOf = lesson.outOf || 20;
     else out.rubric = (lesson.rubric || []).filter(g => g.name);
   }
@@ -1171,7 +1171,7 @@ function rubricPopup(){
         const card = el("div","qsub");
         const head = el("div","qsub-head");
         const nameIn = el("input"); nameIn.value = g.name || "";
-        nameIn.className = "gradename";
+        nameIn.className = "checkname";
         nameIn.addEventListener("input", () => { g.name = nameIn.value; saveDraft(); });
         head.appendChild(nameIn);
         const tools = el("span","btools");
@@ -1370,7 +1370,7 @@ function checklistPopup(block, isWeb){
 }
 
 function markingSetup(into){
-  if (!lesson.marking) lesson.marking = "score";
+  if (!lesson.marking) lesson.marking = "rubric";   // the usual way to mark a practical
   const card = el("div","bcard");
   const head = el("div","bhead");
   head.appendChild(el("b","btype","How this is marked"));
@@ -1378,7 +1378,7 @@ function markingSetup(into){
   const body = el("div","bbody");
 
   const row = el("div","brow");
-  [["score","A mark out of a total"],["rubric","A grade from a rubric"]].forEach(pair => {
+  [["rubric","A grade from a rubric"],["score","A mark out of a total"]].forEach(pair => {
     const b = el("button","btn-ghost bmini2" + (lesson.marking === pair[0] ? " right" : ""), pair[1]);
     b.addEventListener("click", () => { lesson.marking = pair[0]; saveDraft(); render(); schedulePreview(); });
     row.appendChild(b);

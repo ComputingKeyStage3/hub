@@ -1652,7 +1652,6 @@ body.workpage .grow{flex:1}
 #setModal .btn-primary + .btn-ghost{margin-top:10px}
 
 /* the rubric editor */
-.gradename{flex:1; margin-right:10px}
 .qsub-head .btools{display:flex; gap:4px; flex:none}
 
 /* the markbook tables scroll once they get long */
@@ -2210,12 +2209,14 @@ select.offname{text-align-last:center; cursor:pointer}
 
 
 /* the finished screen: the score, with cards arriving beside it */
-.done-layout{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start;
-  transition:grid-template-columns .7s cubic-bezier(.2,.7,.3,1)}
-/* the score sits alone in the middle first */
-.done-layout.staged{grid-template-columns:minmax(0,1fr) 0fr}
-.done-layout.staged .done-hero-col{text-align:center}
-.done-layout.staged .done-cards{opacity:0}
+/* The columns never change size. The score simply starts shifted into the
+   middle and slides back, which the browser can do smoothly; animating the
+   grid itself cannot be. */
+.done-layout{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start}
+.done-hero-col{transition:transform .8s cubic-bezier(.25,.8,.3,1)}
+.done-layout.staged .done-hero-col{transform:translateX(calc(50% + 10px))}
+.done-layout.staged .done-cards{opacity:0; pointer-events:none}
+.done-cards{transition:opacity .4s ease}
 .done-hero-col{min-width:0}
 .done-cards{display:flex; flex-direction:column; gap:14px; min-width:0; overflow:hidden}
 .flyin{opacity:0; transform:translateX(60px); transition:opacity .6s ease, transform .6s cubic-bezier(.2,.7,.3,1)}
@@ -2238,3 +2239,19 @@ select.offname{text-align-last:center; cursor:pointer}
 /* the button that starts an offline session */
 .offstart{min-width:180px; margin-top:4px}
 @media (max-width:640px){ .offstart{width:100%; min-width:0} }
+
+/* the tasks themselves arrive after the buttons */
+.fadelast{opacity:0; transition:opacity .6s ease}
+.fadelast.in{opacity:1}
+@media (prefers-reduced-motion:reduce){ .fadelast{transition:none; opacity:1} }
+
+/* picking from the bank of strengths and targets */
+.bankfind{width:100%; margin-bottom:10px}
+.banklist{max-height:46vh; overflow-y:auto; margin-bottom:10px}
+.bankrow{display:flex; align-items:flex-start; gap:10px; padding:9px 10px; cursor:pointer}
+.bankrow input{margin-top:3px; flex:none}
+.bankwords{display:flex; flex-direction:column; gap:2px; min-width:0}
+.bankwords b{font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--amber-dark)}
+.bankwords span{font-size:14.5px; line-height:1.45; color:var(--text)}
+.bankpreview{padding:11px 13px; margin:0 0 6px; background:var(--panel-2);
+  border:1px solid var(--line); border-radius:10px; font-size:15px; line-height:1.5}
