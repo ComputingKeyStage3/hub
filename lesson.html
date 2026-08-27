@@ -97,7 +97,8 @@ const stepParam = qs.get("step");
 const pdfParam = qs.get("pdf");                                  // teacher wants the PDF view
 const builderParam = qs.get("builder");
 const allParam = qs.get("all");                                  // every page on one scroll
-const embedParam = qs.get("embed");                              // shown inside the teacher console                          // preview inside the lesson builder
+const embedParam = qs.get("embed");
+const summaryParam = qs.get("summary");   // show the finished screen instead of a task                              // shown inside the teacher console                          // preview inside the lesson builder
 const spectate = previewParam !== null || viewParam !== null || pdfParam !== null || builderParam !== null;
 let inspectName = "";
 let inspectList = null, inspectIdx = 0, keepStep = null, inspectUser = "";
@@ -541,6 +542,11 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
            student would see */
         const home = $("homeLink"); if (home) home.hidden = true;
         hideLoader();                       // otherwise the work stays behind it
+        if (summaryParam !== null){
+          if (lesson.assessment) renderAssessmentComplete(false);
+          else showLessonComplete(true);
+          return;
+        }
         bypassed = true;                    // nothing to run, nothing to tick
         if (document.body.classList) document.body.classList.add("bypassed");
         if (!steps.length){
@@ -842,12 +848,22 @@ let lastSubmittedPayload = "";
    browser decides the wording; all we can say is that there is something
    unsaved. Comparing against the last thing successfully sent means a
    change made after saving counts as unsaved again. */
+/* Two snapshots of identical work still differ, because each one stamps the
+   time it was taken. Comparing without that is what tells us whether the
+   work itself has changed. */
+function workOnly(payload){
+  try{
+    const o = JSON.parse(payload);
+    delete o.__saved;
+    return JSON.stringify(o);
+  }catch(e){ return payload; }
+}
 window.addEventListener("beforeunload", (e) => {
   if (spectate || OFFLINE || !restoreDone) return;
   if (!token || !apiReady) return;
   let now = "";
   try{ now = JSON.stringify(snapshot()); }catch(err){ return; }
-  if (now === lastSubmittedPayload) return;
+  if (workOnly(now) === workOnly(lastSubmittedPayload)) return;
   e.preventDefault();
   e.returnValue = "";
 });
@@ -3639,6 +3655,12 @@ function renderResponses(container, targetTopic, statusEl){
 function showEverything(){
   hideLoader();
   $("dock").classList.add("gone");
+  /* Nothing to navigate to from in here: the page around it does that. */
+  document.body.classList.add("allmode");
+  ["homeLink","setBtn","backBtn"].forEach(id => {
+    const n = $(id);
+    if (n) n.hidden = true;
+  });
   const wrap = el("div","allpages");
   steps.forEach((st, i) => {
     const b = (typeof st.brief === "function") ? st.brief() : st.brief;
@@ -3840,10 +3862,64 @@ function openTaskPopup(){
   const x = el("button","btn-ghost iconbtn modal-x","\u2715");
   x.addEventListener("click", () => back.remove());
   popup.appendChild(x);
-  popup.appendChild(el("h2","","Your work"));
-  const holder = el("div","");
-  buildOverview(holder, () => back.remove());
-  popup.appendChild(holder);
+  const heading = el("h2","","Your work");
+  popup.appendChild(heading);
+
+  const listView = el("div","");
+  const editView = el("div",""); editView.hidden = true;
+  popup.appendChild(listView);
+  popup.appendChild(editView);
+
+  /* which tasks have been changed since the pop-up opened */
+  const updated = new Set();
+
+  function showList(){
+    heading.textContent = "Your work";
+    editView.hidden = true; editView.innerHTML = "";
+    listView.hidden = false;
+    listView.innerHTML = "";
+    buildOverview(listView, null, (i) => openOne(i), updated);
+  }
+
+  /* One task on its own, with no Continue and no bar along the bottom:
+     there is nowhere to continue to from in here. */
+  function openOne(i){
+    const stp = steps[i];
+    if (!stp) return;
+    listView.hidden = true;
+    editView.hidden = false;
+    editView.innerHTML = "";
+
+    const b = (typeof stp.brief === "function") ? stp.brief() : (stp.brief || {});
+    heading.textContent = b.title || "Task " + (i + 1);
+    if (b.text) editView.appendChild(el("p","modal-text", b.text));
+
+    stp.section.hidden = false;
+    editView.appendChild(stp.section);
+
+    const bar = el("div","toolrow taskedit-bar");
+    const save = el("button","btn-primary","Save & Go Back");
+    const msg = el("p","hint","");
+    save.addEventListener("click", async () => {
+      save.disabled = true;
+      save.textContent = "Saving\u2026";
+      const state = await submitWork();
+      save.disabled = false;
+      save.textContent = "Save & Go Back";
+      if (state === "done" || state === "offline"){
+        updated.add(i);
+        showList();
+      } else {
+        msg.textContent = "That did not reach your teacher. Try again in a moment.";
+      }
+    });
+    bar.appendChild(save);
+    editView.appendChild(bar);
+    editView.appendChild(msg);
+    popup.scrollTop = 0;
+  }
+
+  showList();
   back.appendChild(popup);
   back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
   document.body.appendChild(back);
@@ -3864,7 +3940,7 @@ function taskPreview(b){
     (typeof v === "object" && v !== null && !Object.keys(v).length);
   return empty ? "" : "Done \u2713";
 }
-function buildOverview(box, onPick){
+function buildOverview(box, onPick, openHere, updated){
   const ov = el("div","ov");
   steps.forEach((stp, i) => {
     const b = lesson.blocks[i] || {};
@@ -3874,7 +3950,9 @@ function buildOverview(box, onPick){
     row.appendChild(el("span","t", bb.title || b.type || "Task"));
     row.appendChild(el("span","p", taskPreview(b)));
     row.appendChild(el("span","edit", spectate ? "View \u2192" : "Edit \u270E"));
+    if (updated && updated.has(i)) row.appendChild(el("span","ov-updated","Updated"));
     row.addEventListener("click", () => {
+      if (openHere){ openHere(i); return; }    // stay in the pop-up
       if (onPick) onPick();          // close the pop-up before going to the task
       $("doneScreen").hidden = true;
       $("dock").classList.remove("gone");

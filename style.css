@@ -2268,3 +2268,19 @@ body.workpage .homebar .grow{flex:1}
 /* the pop-up showing every task */
 .taskpopup{min-height:70vh}
 .taskpopup .ov-row{cursor:pointer}
+
+/* every page at once: no bars, nothing to press but the work itself */
+body.allmode .homebar,body.allmode .topbar,body.allmode .dock,
+body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:none !important}
+/* the task buttons under the preview, with the summary at the end */
+.tasknav-btn.summary{min-width:auto; padding:8px 14px}
+.ov-updated{margin-left:auto; font-size:12px; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--mint)}
+.taskedit-bar{margin-top:14px; justify-content:flex-end}
+
+/* while the class is still being fetched */
+.loadpane{align-items:center; justify-content:center}
+.loadmsg{color:var(--muted); font-size:17px}
+/* a seat for someone with nothing handed in */
+.seat.nowork{background:var(--panel-2); border-style:dashed; color:var(--muted)}
+.seat.nowork b{color:var(--muted)}

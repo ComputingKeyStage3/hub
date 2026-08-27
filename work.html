@@ -20,7 +20,11 @@
 </div>
 
 <!-- ================= seating plan ================= -->
-<div id="seatPane" class="workwrap">
+<div id="loadPane" class="workwrap loadpane">
+  <p class="loadmsg">Loading the class\u2019s work\u2026</p>
+</div>
+
+<div id="seatPane" class="workwrap" hidden>
   <div class="toolrow">
     <button class="btn-primary" id="saveSeats">Save seating plan</button>
     <button class="btn-ghost" id="clearSeats">Clear the plan</button>
@@ -172,9 +176,13 @@ async function boot(){
     document.title = "Student work \u2022 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
     paintSeats();
     paintPicker();
+    $("loadPane").hidden = true;
     tab("work");            // looking at work is the usual reason to be here
     $("seatMsg").textContent = "";
-  }catch(e){ $("seatMsg").textContent = e.message; }
+  }catch(e){
+    $("loadPane").querySelector(".loadmsg").textContent = e.message;
+    $("seatMsg").textContent = e.message;
+  }
 }
 async function fetchLesson(){
   try{
@@ -209,6 +217,7 @@ async function fetchSeating(){
 
 /* ---------------- which half of the page is showing ---------------- */
 function tab(which){
+  if (!$("loadPane").hidden) return;      // nothing to show yet
   const seats = which === "seats";
   $("seatPane").hidden = !seats;
   $("workPane").hidden = seats;
@@ -221,7 +230,10 @@ on("tabWork", "click", () => tab("work"));
 
 /* ---------------- the seating plan ---------------- */
 function seatCard(st){
-  const card = el("div","seat");
+  const hasWork = rows.some(r => r.username === st.username && r.data &&
+                                 Object.keys(r.data).length);
+  const card = el("div","seat" + (hasWork ? "" : " nowork"));
+  if (!hasWork) card.title = st.display_name + " has not saved any work for this lesson.";
   card.draggable = true;
   card.dataset.user = st.username;
   card.appendChild(el("b","", st.display_name));
@@ -338,7 +350,10 @@ on("saveSeats", "click", async () => {
       body: JSON.stringify({ group: cls, layout: plan }) });
     if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
     $("seatMsg").textContent = "Saved.";
-  }catch(e){ $("seatMsg").textContent = e.message; }
+  }catch(e){
+    $("loadPane").querySelector(".loadmsg").textContent = e.message;
+    $("seatMsg").textContent = e.message;
+  }
 });
 
 /* ---------------- one student's work ---------------- */
@@ -403,6 +418,15 @@ function paintTaskNav(){
     btn.addEventListener("click", () => { lastStep = i; showStudent(idx, i); });
     nav.appendChild(btn);
   });
+  /* the finished screen, at the end where it belongs */
+  const sum = el("button","tasknav-btn summary","Summary");
+  sum.title = "What they saw when they finished";
+  sum.addEventListener("click", () => {
+    lastStep = blocks.length;
+    $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
+      "&view=1&embed=1&summary=1&t=" + Date.now();
+  });
+  nav.appendChild(sum);
 }
 
 /* ---------------- feedback ---------------- */
