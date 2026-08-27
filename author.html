@@ -80,6 +80,15 @@
           <button class="pal" data-add="code"><b>Coding task</b><span>Python, or HTML + CSS + JS</span></button>
         </div>
       </div>
+      <div class="palgroup" data-group="thinking">
+        <button class="pal-head" type="button">Thinking and notes</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="notes"><b>Notes</b><span>Their own notes, with formatting</span></button>
+          <button class="pal" data-add="mindmap"><b>Mind map</b><span>A middle idea with branches</span></button>
+          <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
+          <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
+        </div>
+      </div>
       <div class="palgroup" data-group="binary">
         <button class="pal-head" type="button">Binary</button>
         <div class="palbody" hidden>
@@ -183,6 +192,10 @@ const BLANK = {
   mc:       () => ({ type:"mc", prompt:"", options:["",""], answer:0, topic:"" }),
   blanks:   () => ({ type:"blanks", prompt:"Fill in the gaps", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
   order:    () => ({ type:"order", prompt:"Put these in order", items:["","",""], topic:"" }),
+  notes:    () => ({ type:"notes", title:"", task:"", starter:"" }),
+  mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
+  board:    () => ({ type:"board", title:"", task:"", height:420 }),
+  label:    () => ({ type:"label", title:"", task:"", image:"", words:"", spots:[] }),
   binary:   () => ({ type:"binary", title:"", task:"", mode:"toDenary", bits:8, count:4,
                      showPlace:true, numbers:"" }),
   binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
@@ -191,7 +204,7 @@ const BLANK = {
 };
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", code:"Coding task", web:"Web page" };
+                short:"Short answer", page:"Page", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", code:"Coding task", web:"Web page" };
 
 /* A YouTube address in any of its usual shapes -> the embeddable one. */
 function toEmbed(raw){
@@ -401,6 +414,21 @@ function compileOne(b, id, target){
       push(blk);
     }
     else if (b.type === "code"){ /* not chosen yet, nothing to build */ }
+    else if (b.type === "notes")
+      push(keepArrays({ type:"notes", id, title: b.title || "", task: b.task || "",
+        starter: b.starter || "" }));
+    else if (b.type === "mindmap")
+      push(keepArrays({ type:"mindmap", id, title: b.title || "", task: b.task || "",
+        centre: b.centre || "", lockCentre: b.lockCentre === true,
+        starter: Array.isArray(b.starter) ? b.starter : [] }));
+    else if (b.type === "board")
+      push(keepArrays({ type:"board", id, title: b.title || "", task: b.task || "",
+        height: Number(b.height) || 420 }));
+    else if (b.type === "label")
+      push(keepArrays({ type:"label", id, title: b.title || "", task: b.task || "",
+        image: b.image || "",
+        words: String(b.words || "").split(",").map(w => w.trim()).filter(Boolean),
+        spots: (b.spots || []).filter(sp => sp.answer) }));
     else if (b.type === "binary")
       push(keepArrays({ type:"binary", id, title: b.title || "", task: b.task || "",
         mode: b.mode || "toDenary", bits: Number(b.bits) || 8, count: Number(b.count) || 4,
@@ -1018,6 +1046,40 @@ function card(b, i, arr){
     }
     body.appendChild(w);
   }
+  if (b.type === "notes"){
+    F("Heading (optional)", "title");
+    F("Instruction (optional)", "task", { area:true, rows:2 });
+    F("Something to start them off (optional)", "starter", { area:true, rows:3 });
+  }
+  if (b.type === "mindmap"){
+    F("Heading (optional)", "title");
+    F("Instruction (optional)", "task", { area:true, rows:2 });
+    F("The idea in the middle", "centre", { help:"Left empty, they choose their own." });
+    toggleRow([["lockCentre","Students cannot change the middle", false]]);
+  }
+  if (b.type === "board"){
+    F("Heading (optional)", "title");
+    F("Instruction (optional)", "task", { area:true, rows:2 });
+    F("How tall, in pixels", "height", { num:true });
+    body.appendChild(el("p","bhelp",
+      "What they draw is kept as the strokes themselves, not a picture, so it takes very little room."));
+  }
+  if (b.type === "label"){
+    F("Heading (optional)", "title");
+    F("Instruction (optional)", "task", { area:true, rows:2 });
+    F("Picture address", "image", { help:"A link to the image they will label." });
+    F("Words to drag", "words", { help:"Separated by commas." });
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Where the labels go"));
+    const n = (b.spots || []).length;
+    w.appendChild(el("p","bhelp", n
+      ? n + " box" + (n === 1 ? "" : "es") + " drawn on the picture."
+      : "None yet. Draw a box for each label."));
+    const open2 = el("button","btn-ghost bmini2", n ? "Edit the boxes" : "Draw the boxes");
+    open2.addEventListener("click", () => labelBoxes(b));
+    w.appendChild(open2);
+    body.appendChild(w);
+  }
   if (b.type === "binary" || b.type === "binadd"){
     F("Heading (optional)", "title");
     F("Instruction (optional)", "task", { area:true, rows:2 });
@@ -1365,6 +1427,96 @@ function checklistPopup(block, isWeb){
       block.checks.forEach(c => { if (c.kind === "uses" && !c.value) c.value = USES_OPTIONS[0]; });
       closeModal(); render(); schedulePreview();
     });
+    box.appendChild(done);
+  });
+}
+
+/* Draw a box for each label, straight onto the picture. */
+function labelBoxes(block){
+  if (!Array.isArray(block.spots)) block.spots = [];
+  openModal(box => {
+    box.classList.add("wide");
+    box.appendChild(el("h2","","Where the labels go"));
+    box.appendChild(el("p","modal-text",
+      "Drag on the picture to draw a box, then type the word that belongs in it."));
+    if (!block.image){
+      box.appendChild(el("p","warnline","Add a picture address first."));
+      return;
+    }
+    const holder = el("div","label-pic label-edit");
+    const img = el("img");
+    img.src = block.image;
+    holder.appendChild(img);
+    box.appendChild(holder);
+
+    const list = el("div");
+    box.appendChild(list);
+
+    function paint(){
+      holder.querySelectorAll(".label-spot").forEach(n => n.remove());
+      list.innerHTML = "";
+      block.spots.forEach((sp, i) => {
+        const mark = el("div","label-spot");
+        mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
+        mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
+        mark.textContent = sp.answer || String(i + 1);
+        holder.appendChild(mark);
+
+        const row = el("div","brow");
+        const word = el("input");
+        word.value = sp.answer || "";
+        word.placeholder = "The word for box " + (i + 1);
+        word.addEventListener("input", () => { sp.answer = word.value; saveDraft(); mark.textContent = word.value || String(i + 1); });
+        const rm = el("button","btn-ghost bmini","\u2715");
+        rm.title = "Remove this box";
+        rm.addEventListener("click", () => { block.spots.splice(i, 1); saveDraft(); paint(); });
+        row.appendChild(word); row.appendChild(rm);
+        list.appendChild(row);
+      });
+      if (!block.spots.length) list.appendChild(el("p","hint","No boxes yet."));
+    }
+
+    /* dragging on the picture makes a box, kept as percentages so it holds
+       its place whatever size the picture is shown at */
+    let from = null;
+    const ghost = el("div","label-ghost");
+    ghost.hidden = true;
+    holder.appendChild(ghost);
+    const pct = (e) => {
+      const r = holder.getBoundingClientRect();
+      return { x: ((e.clientX - r.left) / r.width) * 100,
+               y: ((e.clientY - r.top) / r.height) * 100 };
+    };
+    holder.addEventListener("pointerdown", (e) => {
+      if (e.target.classList.contains("label-spot")) return;
+      from = pct(e);
+      ghost.hidden = false;
+      ghost.style.left = from.x + "%"; ghost.style.top = from.y + "%";
+      ghost.style.width = "0%"; ghost.style.height = "0%";
+    });
+    holder.addEventListener("pointermove", (e) => {
+      if (!from) return;
+      const now = pct(e);
+      ghost.style.left = Math.min(from.x, now.x) + "%";
+      ghost.style.top = Math.min(from.y, now.y) + "%";
+      ghost.style.width = Math.abs(now.x - from.x) + "%";
+      ghost.style.height = Math.abs(now.y - from.y) + "%";
+    });
+    holder.addEventListener("pointerup", (e) => {
+      if (!from) return;
+      const now = pct(e);
+      const spot = { x: Math.min(from.x, now.x), y: Math.min(from.y, now.y),
+                     w: Math.abs(now.x - from.x), h: Math.abs(now.y - from.y), answer:"" };
+      from = null;
+      ghost.hidden = true;
+      if (spot.w < 3 || spot.h < 3) return;      // a stray click, not a box
+      block.spots.push(spot);
+      saveDraft(); paint();
+    });
+
+    paint();
+    const done = el("button","btn-primary modal-cta","Done");
+    done.addEventListener("click", () => { closeModal(); render(); schedulePreview(); });
     box.appendChild(done);
   });
 }

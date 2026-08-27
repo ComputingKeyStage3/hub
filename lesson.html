@@ -10,8 +10,10 @@
 <script src="pyhub.js"></script>
 <script src="webhub.js"></script>
 <script src="autograder.js"></script>
+<script src="tasks-extra.js"></script>
 <script src="webhub.js"></script>
 <script src="autograder.js"></script>
+<script src="tasks-extra.js"></script>
 <script src="config.js"></script>
 <script src="offlinebar.js"></script>
 <script src="settings.js"></script>
@@ -323,6 +325,7 @@ function snapshot(){
 }
 function markDirty(){
   if (spectate || !restoreDone) return;
+  unsavedTyping = true;
   refreshGate();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 400);
@@ -848,22 +851,15 @@ let lastSubmittedPayload = "";
    browser decides the wording; all we can say is that there is something
    unsaved. Comparing against the last thing successfully sent means a
    change made after saving counts as unsaved again. */
-/* Two snapshots of identical work still differ, because each one stamps the
-   time it was taken. Comparing without that is what tells us whether the
-   work itself has changed. */
-function workOnly(payload){
-  try{
-    const o = JSON.parse(payload);
-    delete o.__saved;
-    return JSON.stringify(o);
-  }catch(e){ return payload; }
-}
+/* Whether there is anything worth warning about. Comparing snapshots does
+   not work: each one stamps the time, and the finished screen registers the
+   response tasks, so the snapshot changes without the student typing a
+   thing. Tracking their typing directly is the honest measure. */
+let unsavedTyping = false;
 window.addEventListener("beforeunload", (e) => {
   if (spectate || OFFLINE || !restoreDone) return;
   if (!token || !apiReady) return;
-  let now = "";
-  try{ now = JSON.stringify(snapshot()); }catch(err){ return; }
-  if (workOnly(now) === workOnly(lastSubmittedPayload)) return;
+  if (!unsavedTyping) return;
   e.preventDefault();
   e.returnValue = "";
 });
@@ -874,7 +870,7 @@ async function submitWork(){
      last successful write, pressing Save Work twice costs nothing. */
   if (!token || !apiReady) return "offline";
   const payload = JSON.stringify(snapshot());
-  if (payload === lastSubmittedPayload) return "done";
+  if (payload === lastSubmittedPayload){ unsavedTyping = false; return "done"; }
   try{
     const r = await fetch(API + "/api/submit", {
       method: "POST",
@@ -883,6 +879,7 @@ async function submitWork(){
     });
     if (!r.ok) return "failed";
     lastSubmittedPayload = payload;
+    unsavedTyping = false;          // it has reached the teacher
     return "done";
   }catch(e){ return "failed"; }
 }
@@ -947,7 +944,8 @@ function buildBlock(b, i){
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
               picture:rPicture, pastelink:rPasteLink, frame:rFrame, web:rWeb,
-              binary:rBinary, binadd:rBinAdd, web:rWeb,
+              binary:rBinary, binadd:rBinAdd,
+              board:rBoardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
@@ -2573,6 +2571,25 @@ function rBinAdd(b){
              : { ok:false, message:"Check your answers before carrying on" },
            brief:{ eyebrow:"Binary addition", title:b.title || "", text:b.task || "" } };
 }
+
+/* The four in tasks-extra.js return a plain object, so this puts the usual
+   clothes on them: a field that saves, and a rule for carrying on. */
+function wrapExtra(b, build, eyebrow){
+  const made = build(b, { changed: markDirty });
+  fields[b.id] = { get: made.get, set: made.set };
+  return {
+    section: made.section,
+    check: () => (b.required === false || made.done())
+      ? { ok:true }
+      : { ok:false, message:"Have a go at this before carrying on" },
+    soft: () => ({ ok: b.required === false || made.done() }),
+    brief: { eyebrow: eyebrow, title: b.title || "", text: b.task || "" }
+  };
+}
+const rBoardTask   = (b) => wrapExtra(b, window.rBoard,   "Whiteboard");
+const rLabelTask   = (b) => wrapExtra(b, window.rLabel,   "Labelling");
+const rNotesTask   = (b) => wrapExtra(b, window.rNotes,   "Notes");
+const rMindmapTask = (b) => wrapExtra(b, window.rMindmap, "Mind map");
 
 function rQuiz(b){
   const s = el("section");

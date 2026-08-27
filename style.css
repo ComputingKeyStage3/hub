@@ -2284,3 +2284,48 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 /* a seat for someone with nothing handed in */
 .seat.nowork{background:var(--panel-2); border-style:dashed; color:var(--muted)}
 .seat.nowork b{color:var(--muted)}
+
+
+/* whiteboard */
+.board-bar{display:flex; flex-wrap:wrap; gap:6px; padding:8px; background:var(--panel-2);
+  border:1px solid var(--line); border-bottom:none; border-radius:12px 12px 0 0}
+.board-tool{width:34px; height:34px; border:1.5px solid var(--line-2); border-radius:9px;
+  background:var(--panel); cursor:pointer; font-size:15px; color:var(--text)}
+.board-tool.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, var(--panel))}
+.board-colour{width:26px; height:26px; border-radius:50%; border:2px solid var(--panel);
+  box-shadow:0 0 0 1.5px var(--line-2); cursor:pointer; align-self:center}
+.board-stage{height:420px; border:1px solid var(--line); border-radius:0 0 12px 12px;
+  overflow:hidden; background:#FFFFFF}
+.board-canvas{display:block; touch-action:none; cursor:crosshair}
+
+/* labelling a picture */
+.label-pic{position:relative; display:inline-block; max-width:100%}
+.label-pic img{max-width:100%; display:block; border-radius:12px}
+.label-spot{position:absolute; border:2px dashed var(--amber); border-radius:8px;
+  background:color-mix(in srgb, var(--amber) 10%, transparent); display:flex;
+  align-items:center; justify-content:center; font-size:14px; font-weight:600;
+  color:var(--text); cursor:pointer; text-align:center; padding:2px}
+.label-spot[data-filled=yes]{background:var(--panel); border-style:solid}
+.label-spot[data-verdict=yes]{border-color:var(--mint); background:var(--mint-dim)}
+.label-spot[data-verdict=no]{border-color:var(--red); background:var(--red-dim)}
+.label-spot.over{background:color-mix(in srgb, var(--amber) 28%, transparent)}
+.label-words{display:flex; flex-wrap:wrap; gap:8px; margin:12px 0}
+.label-word{padding:7px 13px; background:var(--panel); border:1.5px solid var(--line-2);
+  border-radius:999px; cursor:grab; font-size:15px}
+.label-word:hover{border-color:var(--amber)}
+.label-note{margin-top:10px; font-weight:600}
+.label-edit{cursor:crosshair; touch-action:none}
+.label-ghost{position:absolute; border:2px dashed var(--amber); border-radius:8px;
+  background:color-mix(in srgb, var(--amber) 14%, transparent); pointer-events:none}
+
+/* notes */
+.notes-box{min-height:190px}
+.notes-count{margin:6px 0 0; font-size:13px; color:var(--muted)}
+
+/* mind map */
+.map-holder{padding:6px 0}
+.map-row{display:flex; align-items:center; gap:6px; margin:4px 0}
+.map-text{flex:1; max-width:340px; height:38px; padding:0 12px; border:1.5px solid var(--line-2);
+  border-radius:10px; background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px}
+.map-node.depth-0 > .map-row .map-text{font-weight:700; font-size:17px; border-color:var(--amber)}
+.map-branch{margin-left:22px; padding-left:16px; border-left:2px solid var(--line)}
