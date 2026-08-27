@@ -194,41 +194,24 @@ function showRubric(){
 }
 
 /* Their answers, with what each one scored beside it. */
-function marksButton(res){
-  const wrap = el("div","st-card");
-  wrap.appendChild(el("h2","sect-head","Your work"));
-  const got = res.perQ.reduce((n, q) => n + q.pts, 0);
-  const outOf = res.perQ.reduce((n, q) => n + q.max, 0);
-  wrap.appendChild(el("p","modal-text", "You scored " + got + " out of " + outOf + "."));
-  const btn = el("button","btn-primary","View my work");
-  btn.addEventListener("click", () => {
+/* The marked work, opened from the button in the hero. */
+function marksButton(res, review){
+  function open2(){
     const back = el("div","modal-back");
     const popup = el("div","modal wide");
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", () => back.remove());
     popup.appendChild(x);
-    popup.appendChild(el("h2","","Your work"));
-    const holder = el("div","allpages");
-    res.perQ.forEach(q => {
-      const sec = el("div","allpage markedq" +
-        (q.pts === q.max ? " full" : q.pts > 0 ? " part" : " none"));
-      const head = el("div","allpage-head");
-      head.appendChild(el("span","allpage-n", String(q.n)));
-      head.appendChild(el("b","", q.title));
-      head.appendChild(el("span","qmark-n", q.pts + " / " + q.max));
-      sec.appendChild(head);
-      /* the question itself, exactly as they answered it */
-      const stepFor = steps.find(x => x.qid === q.id);
-      if (stepFor && stepFor.section){ stepFor.section.hidden = false; sec.appendChild(stepFor.section); }
-      holder.appendChild(sec);
-    });
-    popup.appendChild(holder);
+    popup.appendChild(el("h2","","Your assessment"));
+    const got = res.perQ.reduce((n, q) => n + q.pts, 0);
+    const outOf = res.perQ.reduce((n, q) => n + q.max, 0);
+    popup.appendChild(el("p","modal-text", "You scored " + got + " out of " + outOf + "."));
+    if (review) popup.appendChild(review);
     back.appendChild(popup);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
-  });
-  wrap.appendChild(btn);
-  return wrap;
+  }
+  return { open: open2 };
 }
 
 function workButton(){
@@ -3250,9 +3233,19 @@ function renderPracticalComplete(){
     hero.appendChild(rb);
   }
 
+  const layout = el("div","done-layout");
+  const heroCol = el("div","done-hero-col");
+  heroCol.appendChild(hero);
+  layout.appendChild(heroCol);
+  const cards = el("div","done-cards");
+  layout.appendChild(cards);
+  box.appendChild(layout);
+
   const fb = feedbackCard(teacherNote);
-  if (fb) box.appendChild(fb);
-  box.appendChild(workButton());
+  if (fb){ fb.classList.add("flyin"); cards.appendChild(fb); }
+  setTimeout(() => {
+    Array.from(cards.children).forEach((c, i) => setTimeout(() => c.classList.add("in"), i * 140));
+  }, 260);
 
   /* practice only makes sense once they have been told how they did */
   if (marked){
@@ -3281,18 +3274,26 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   const hero = heroBits(heading, lesson.title);
   hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
   hero.appendChild(el("div","done-pct", pct + "%"));
-  const status = el("p","handin");
-  if (justFinished) paintStatus(status, sent === "done" ? "done" : sent);
-  else if (token){ status.dataset.state = "done"; status.textContent = "Result saved earlier \u2713"; }
-  hero.appendChild(status);
-  box.appendChild(hero);
+  /* Where the "result saved" line used to sit: a way straight into the
+     marked work, which is what a student actually wants there. */
+  const seeBtn = el("button","btn-primary done-save","View my assessment");
+  hero.appendChild(seeBtn);
+
+  /* The hero and the two cards sit side by side, and the cards slide in
+     from the right once the score has landed. */
+  const layout = el("div","done-layout");
+  const heroCol = el("div","done-hero-col");
+  heroCol.appendChild(hero);
+  layout.appendChild(heroCol);
+  const cards = el("div","done-cards");
+  layout.appendChild(cards);
+  box.appendChild(layout);
   /* Only when they have just finished, and never when nothing was earned —
      a celebration over a blank score reads as mockery. */
   if (justFinished && res.score > 0) confetti();
 
   // per-question review, shown the way the questions looked
   const rev = el("div","review");
-  rev.appendChild(el("h2","sect-head","Your work"));
   res.perQ.forEach(q => {
     const b = lesson.blocks.find(x => x.id === q.id) || {};
     const v = fields[q.id] ? fields[q.id].get() : null;
@@ -3369,24 +3370,55 @@ function renderAssessmentComplete(justFinished, res, st, sent){
     row.appendChild(body);
     rev.appendChild(row);
   });
-  box.appendChild(rev);
+  /* the review lives inside the pop-up now, not on the page */
 
   // what each question scored
-  if (res && res.perQ && res.perQ.length) box.appendChild(marksButton(res));
-
-  // strength + target
-  const stCard = el("div","st-card");
-  stCard.appendChild(el("h2","sect-head","Your feedback"));
+  /* one card for the feedback, one for what to do next */
+  // strength and target, in the first card
+  const stCard = el("div","st-card flyin");
+  stCard.appendChild(el("h2","sect-head","Strength and Target"));
   const sRow = el("p","st-strength"); sRow.innerHTML = "<b>Strength</b>"; sRow.appendChild(el("span","", " " + st.strength));
   const tRow = el("p","st-target"); tRow.innerHTML = "<b>Target</b>"; tRow.appendChild(el("span","", " " + st.target));
   stCard.appendChild(sRow); stCard.appendChild(tRow);
-  box.appendChild(stCard);
+  cards.appendChild(stCard);
+
+  // what to do about it, in the second
+  const respCard = el("div","st-card flyin");
+  respCard.appendChild(el("h2","sect-head","Response"));
+  respCard.appendChild(el("p","modal-text","Some practice on the topic your target is about."));
+  const jump = el("button","btn-primary","Start response tasks \u2193");
+  respCard.appendChild(jump);
+  cards.appendChild(respCard);
+
   const teacherCard = feedbackCard(teacherNote);
-  if (teacherCard) box.appendChild(teacherCard);   // nothing at all when none has been left
+  if (teacherCard) cards.appendChild(teacherCard);
   if (teacherTools) box.appendChild(markEditor(res));   // marks stay here; feedback is in the console
 
+  // the marked work, opened from the hero button
+  const review2 = marksButton(res, rev);
+  seeBtn.addEventListener("click", () => review2.open());
+
   // response tasks for the target topic
-  renderResponses(box, st.targetTopic, status);
+  const respHolder = el("div","responses-anchor");
+  box.appendChild(respHolder);
+  renderResponses(respHolder, st.targetTopic, null);
+  jump.addEventListener("click", () => {
+    respHolder.scrollIntoView({ behavior:"smooth", block:"start" });
+  });
+  /* the button says so once the practice is done */
+  const markDone = () => {
+    jump.textContent = "Response tasks \u2713";
+    respCard.dataset.done = "yes";
+  };
+  if (respHolder.dataset && respHolder.dataset.allDone === "yes") markDone();
+  respHolder.addEventListener("hubResponsesDone", markDone);
+
+  /* the cards slide in once the score has settled */
+  setTimeout(() => {
+    Array.from(cards.children).forEach((c, i) => {
+      setTimeout(() => c.classList.add("in"), i * 140);
+    });
+  }, 260);
 }
 
 /* ---- what a teacher can do while looking at a student's work ---- */
@@ -3449,6 +3481,11 @@ function markEditor(res){
 }
 
 function renderResponses(container, targetTopic, statusEl){
+  /* the summary listens for this so its button can say the practice is done */
+  const announceDone = () => {
+    container.dataset.allDone = "yes";
+    try{ container.dispatchEvent(new Event("hubResponsesDone")); }catch(e){}
+  };
 
   const bank = (lesson && lesson.responses) || {};
   let list = bank[targetTopic] || [];
@@ -3507,7 +3544,12 @@ function renderResponses(container, targetTopic, statusEl){
       }catch(e){ console.error("extension task failed:", e); }
     });
   }
-  if (!spectate) wrap.appendChild(saveButton(statusEl));
+  if (!spectate){
+    const save = saveButton(statusEl);
+    /* saving the practice is what counts as having done it */
+    save.addEventListener("click", announceDone);
+    wrap.appendChild(save);
+  }
   container.appendChild(wrap);
 }
 

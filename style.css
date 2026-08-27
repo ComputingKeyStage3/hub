@@ -2208,3 +2208,20 @@ select.offname{text-align-last:center; cursor:pointer}
 
 /* the icon inside a bar button */
 .homebar .btn-ghost .ico{ display:inline-block }
+
+
+/* the finished screen: the score, with cards arriving beside it */
+.done-layout{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start}
+.done-hero-col{min-width:0}
+.done-cards{display:flex; flex-direction:column; gap:14px; min-width:0; overflow:hidden}
+.flyin{opacity:0; transform:translateX(40px); transition:opacity .45s ease, transform .45s cubic-bezier(.2,.7,.3,1)}
+.flyin.in{opacity:1; transform:translateX(0)}
+.st-card[data-done=yes]{border-color:var(--mint)}
+.done-save{margin-top:14px}
+@media (prefers-reduced-motion:reduce){
+  .flyin{transition:none; opacity:1; transform:none}
+}
+@media (max-width:900px){
+  .done-layout{grid-template-columns:minmax(0,1fr)}
+  .done-cards{overflow:visible}
+}

@@ -153,15 +153,10 @@
     </section>
 
     <section class="station" style="margin-bottom:18px">
-      <h3 style="margin:0 0 4px">Put a backup back</h3>
-      <p class="modal-text">Only if something has gone wrong. Take a fresh backup first, so you
-        can undo this if it makes things worse.</p>
-      <div class="dropfile" id="restoreDrop">
-        <b>Drop a backup file here</b>
-        <span>or</span>
-        <button class="btn-ghost" id="restoreBrowse">Browse for a file</button>
-      </div>
-      <div id="restoreCheck"></div>
+      <h3 style="margin:0 0 4px">Import backup</h3>
+      <p class="modal-text">Only if something has gone wrong. Take a backup first, so there is a
+        way back if this makes things worse.</p>
+      <button class="btn-ghost" id="importBackupBtn">Import a backup</button>
       <p class="hint" id="restoreMsg"></p>
     </section>
 
@@ -630,8 +625,9 @@ on("backupBtn", "click", async () => {
 
 /* ---- putting a backup back ---- */
 let backupToRestore = null;
-function readBackup(file){
-  const msg = $("restoreMsg"), out = $("restoreCheck");
+function readBackup(file, box){
+  const msg = (box && box.querySelector("#restoreMsg2")) || $("restoreMsg");
+  const out = (box && box.querySelector("#restoreCheck")) || $("restoreCheck");
   out.innerHTML = ""; backupToRestore = null;
   if (!file) return;
   msg.textContent = "Reading\u2026";
@@ -655,34 +651,50 @@ function readBackup(file){
       row.appendChild(el("span","", n + " row" + (n === 1 ? "" : "s")));
       out.appendChild(row);
     });
-    const fresh = Number(localStorage.getItem("hub_backup_when") || 0);
-    const hoursAgo = fresh ? (Date.now() - fresh) / 3600000 : 999;
-    const go = el("button","btn-primary","Put this back");
-    if (hoursAgo > 1){
-      /* a fresh backup is the only way out if this goes wrong */
-      out.appendChild(el("p","warnline",
-        "Take a backup first. There is no undo, and a backup taken now is the only way back."));
-      go.disabled = true;
-    }
+    /* getting this far already required a backup from within the hour */
+    const go = el("button","btn-primary modal-cta","Import this backup");
     go.addEventListener("click", confirmRestore);
     out.appendChild(go);
   };
   reader.readAsText(file);
 }
-on("restoreBrowse", "click", () => {
-  const pick = document.createElement("input");
-  pick.type = "file"; pick.accept = ".json";
-  pick.addEventListener("change", () => readBackup(pick.files && pick.files[0]));
-  pick.click();
-});
-["dragenter","dragover"].forEach(ev => on("restoreDrop", ev, (e) => {
-  e.preventDefault(); $("restoreDrop").classList.add("over");
-}));
-["dragleave","drop"].forEach(ev => on("restoreDrop", ev, (e) => {
-  e.preventDefault(); $("restoreDrop").classList.remove("over");
-}));
-on("restoreDrop", "drop", (e) => {
-  readBackup(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+on("importBackupBtn", "click", () => {
+  const last = Number(localStorage.getItem("hub_backup_when") || 0);
+  const hoursAgo = last ? (Date.now() - last) / 3600000 : 999;
+  /* A backup from within the hour is the only way back, so without one
+     there is nothing to talk about yet. */
+  if (hoursAgo > 1){
+    say("Take a backup first",
+        "Importing writes over what is in the database now. Download a backup, then come back here.");
+    return;
+  }
+  openModal(box => {
+    box.classList.add("narrow");
+    box.appendChild(el("h2","","Import a backup"));
+    box.appendChild(el("p","modal-text",
+      "Every row in the file is written over what is in the database now."));
+    const drop = el("div","dropfile");
+    drop.appendChild(el("b","","Drop a backup file here"));
+    drop.appendChild(el("span","","or"));
+    const browse = el("button","btn-ghost","Browse for a file");
+    const picker = document.createElement("input");
+    picker.type = "file"; picker.accept = ".json"; picker.style.display = "none";
+    browse.addEventListener("click", () => picker.click());
+    picker.addEventListener("change", () => readBackup(picker.files && picker.files[0], box));
+    drop.appendChild(browse); drop.appendChild(picker);
+    ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, (e) => {
+      e.preventDefault(); drop.classList.add("over");
+    }));
+    ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, (e) => {
+      e.preventDefault(); drop.classList.remove("over");
+    }));
+    drop.addEventListener("drop", (e) => {
+      readBackup(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0], box);
+    });
+    box.appendChild(drop);
+    box.appendChild(el("div","","")).id = "restoreCheck";
+    box.appendChild(el("p","hint","")).id = "restoreMsg2";
+  });
 });
 function confirmRestore(){
   if (!backupToRestore) return;

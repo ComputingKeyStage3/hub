@@ -270,15 +270,19 @@ let showing = "active";
 let lessonsLoaded = false;
 async function loadLessons(force){
   if (lessonsLoaded && !force){ paintLessons(lastById); return; }
-  await fetchLessons();
-  lessonsLoaded = true;
+  /* Only count it as loaded once lessons have actually arrived. Marking it
+     loaded after a fetch that returned early, or failed, left the list empty
+     for the rest of the visit. */
+  const got = await fetchLessons();
+  lessonsLoaded = !!got;
 }
 let lastById = {};
 async function fetchLessons(){
+  let loadedOk = false;
   const box = $("lessonList");
   const token = localStorage.getItem("hub_token");
-  if (!OFFLINE && !token){ box.innerHTML = ""; return; }   // signing in comes first
-  if (OFFLINE && !(localStorage.getItem("hub_name") && localStorage.getItem("hub_year"))){ box.innerHTML = ""; return; }
+  if (!OFFLINE && !token){ box.innerHTML = ""; return false; }   // signing in comes first
+  if (OFFLINE && !(localStorage.getItem("hub_name") && localStorage.getItem("hub_year"))){ box.innerHTML = ""; return false; }
   box.innerHTML = '<p class="hint">Loading…</p>';
   const group = localStorage.getItem("hub_group") || "";
   try{
@@ -338,8 +342,13 @@ async function fetchLessons(){
       }catch(e){}
     }
     lastById = byId;
-  paintLessons(byId);
-  }catch(e){ console.error("lesson list failed:", e); box.innerHTML = '<p class="hint">Could not load the lesson list.</p>'; }
+    loadedOk = true;
+    paintLessons(byId);
+  }catch(e){
+    console.error("lesson list failed:", e);
+    box.innerHTML = '<p class="hint">Could not load the lesson list. Pull down or press refresh to try again.</p>';
+  }
+  return loadedOk;
 }
 
 function paintLessons(byId){
