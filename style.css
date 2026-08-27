@@ -2322,10 +2322,59 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .notes-box{min-height:190px}
 .notes-count{margin:6px 0 0; font-size:13px; color:var(--muted)}
 
-/* mind map */
-.map-holder{padding:6px 0}
-.map-row{display:flex; align-items:center; gap:6px; margin:4px 0}
-.map-text{flex:1; max-width:340px; height:38px; padding:0 12px; border:1.5px solid var(--line-2);
-  border-radius:10px; background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px}
-.map-node.depth-0 > .map-row .map-text{font-weight:700; font-size:17px; border-color:var(--amber)}
-.map-branch{margin-left:22px; padding-left:16px; border-left:2px solid var(--line)}
+
+
+/* mind map: the middle in the middle, branches either side */
+.map-holder{overflow-x:auto; padding:10px 0}
+.map-radial{display:flex; align-items:center; justify-content:center; gap:18px; min-width:min-content}
+.map-side{display:flex; flex-direction:column; gap:12px; justify-content:center}
+.map-centre{flex:none}
+.map-node{display:flex; align-items:center; gap:4px}
+.map-text{height:38px; padding:0 12px; border:1.5px solid var(--line-2); border-radius:999px;
+  background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px; min-width:120px}
+.map-node.is-centre .map-text{height:52px; font-size:18px; font-weight:700; min-width:180px;
+  border-color:var(--amber); border-width:2.5px; text-align:center}
+.map-tools{display:flex; gap:2px; opacity:0; transition:opacity .15s ease}
+.map-node:hover .map-tools,.map-node:focus-within .map-tools{opacity:1}
+.map-btn{width:26px; height:26px; border-radius:50%; border:1.5px solid var(--line-2);
+  background:var(--panel); cursor:pointer; font-size:13px; color:var(--muted); padding:0}
+.map-btn:hover{border-color:var(--amber); color:var(--amber-dark)}
+.map-limb{position:relative; padding-left:18px}
+.map-limb::before{content:""; position:absolute; left:0; top:19px; width:14px; height:2px; background:var(--line-2)}
+.map-right .map-limb,.map-limb.map-right{padding-left:18px}
+.map-left .map-limb::before{left:auto; right:0}
+.map-left .map-limb{padding-left:0; padding-right:18px}
+.map-twigs{margin-left:20px; padding-left:14px; border-left:2px solid var(--line); margin-top:8px}
+.map-left .map-twigs{margin-left:0; margin-right:20px; padding-left:0; padding-right:14px;
+  border-left:none; border-right:2px solid var(--line)}
+.map-left .map-node{flex-direction:row-reverse}
+.map-left{text-align:right}
+
+/* whiteboard extras */
+.board-bar{align-items:center}
+.board-tool{flex:0 0 auto}
+.board-stage{position:relative}
+.board-zoom{position:absolute; left:10px; bottom:10px; display:flex; align-items:center; gap:6px;
+  background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px 8px}
+.board-zoomat{font-size:13px; color:var(--muted); min-width:42px; text-align:center}
+.board-picktools{position:absolute; display:flex; gap:4px; background:var(--panel);
+  border:1px solid var(--line-2); border-radius:10px; padding:4px; box-shadow:0 4px 12px rgba(0,0,0,.14)}
+.board-typing{position:absolute; height:30px; padding:0 8px; border:1.5px solid var(--amber);
+  border-radius:8px; background:var(--panel); font-size:18px; font-family:var(--body); min-width:140px}
+
+/* drawing label boxes onto a picture */
+.label-edit img{user-select:none; -webkit-user-drag:none; pointer-events:none}
+.label-edit{position:relative; display:block; width:100%}
+
+/* a mind map on a phone: narrower nodes, and branches stacked */
+@media (max-width:640px){
+  .map-node.is-centre .map-text{min-width:0; width:100%}
+  .map-text{min-width:0}
+  .map-radial{flex-direction:column; align-items:stretch; gap:12px}
+  .map-left{text-align:left}
+  .map-left .map-node{flex-direction:row}
+  .map-left .map-limb{padding-left:18px; padding-right:0}
+  .map-left .map-limb::before{left:0; right:auto}
+  .map-left .map-twigs{margin-left:20px; margin-right:0; padding-left:14px; padding-right:0;
+    border-left:2px solid var(--line); border-right:none}
+}

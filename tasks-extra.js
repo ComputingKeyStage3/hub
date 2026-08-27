@@ -36,15 +36,109 @@
     let undone = [];
     let view = { x: 0, y: 0, scale: 1 };
     let tool = "pen", colour = "#1D1D1B", width = 3;
-    let drawing = null, panning = null;
+    let drawing = null, panning = null, moving = null, chosen = null;
+
+    /* --- picking things up, and typing straight onto the board --- */
+
+    /* what is under the pointer, taking the topmost thing */
+    function topmostAt(where){
+      for (let i = strokes.length - 1; i >= 0; i--){
+        const st = strokes[i];
+        if (st.kind === "text"){
+          const w = String(st.text).length * (st.size || 20) * 0.55;
+          if (where[0] >= st.x && where[0] <= st.x + w &&
+              where[1] >= st.y - (st.size || 20) && where[1] <= st.y + 6) return st;
+        } else if (st.points){
+          const near = st.points.some(p =>
+            Math.abs(p[0] - where[0]) < 10 && Math.abs(p[1] - where[1]) < 10);
+          if (near) return st;
+        }
+      }
+      return null;
+    }
+    function shift(item, dx, dy){
+      if (item.kind === "text"){ item.x += dx; item.y += dy; return; }
+      (item.points || []).forEach(p => { p[0] += dx; p[1] += dy; });
+    }
+
+    /* a small strip beside whatever has been picked up */
+    let pickTools = null;
+    function hidePickTools(){
+      if (pickTools && pickTools.parentNode) pickTools.parentNode.removeChild(pickTools);
+      pickTools = null;
+    }
+    function showPickTools(e){
+      hidePickTools();
+      if (!chosen) return;
+      pickTools = make("div", "board-picktools");
+      const rect = stage.getBoundingClientRect();
+      pickTools.style.left = (e.clientX - rect.left) + "px";
+      pickTools.style.top = (e.clientY - rect.top - 44) + "px";
+      const moveBtn = make("button", "board-tool", "\u2725");
+      moveBtn.title = "Drag to move it";
+      moveBtn.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+        moving = at(ev);
+        moveBtn.setPointerCapture(ev.pointerId);
+      });
+      moveBtn.addEventListener("pointermove", (ev) => {
+        if (!moving || !chosen) return;
+        const now = at(ev);
+        shift(chosen, now[0] - moving[0], now[1] - moving[1]);
+        moving = now;
+        draw();
+      });
+      moveBtn.addEventListener("pointerup", () => { moving = null; ctx.changed(); });
+      const binBtn = make("button", "board-tool", "\u2715");
+      binBtn.title = "Remove it";
+      binBtn.addEventListener("click", () => {
+        strokes = strokes.filter(x => x !== chosen);
+        chosen = null;
+        hidePickTools();
+        draw(); ctx.changed();
+      });
+      pickTools.appendChild(moveBtn); pickTools.appendChild(binBtn);
+      stage.appendChild(pickTools);
+    }
+
+    /* type where they clicked, rather than in a browser pop-up */
+    function typeHere(where, e){
+      const rect = stage.getBoundingClientRect();
+      const box = make("input", "board-typing");
+      box.style.left = (e.clientX - rect.left) + "px";
+      box.style.top = (e.clientY - rect.top - 14) + "px";
+      box.style.color = colour;
+      stage.appendChild(box);
+      box.focus();
+      const finish = (keep) => {
+        const words = box.value.trim();
+        if (box.parentNode) box.parentNode.removeChild(box);
+        if (keep && words){
+          strokes.push({ kind:"text", text: words, x: where[0], y: where[1],
+                         colour: colour, size: 20 });
+          undone = [];
+          draw(); ctx.changed();
+        }
+      };
+      box.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter"){ ev.preventDefault(); finish(true); }
+        if (ev.key === "Escape"){ finish(false); }
+      });
+      box.addEventListener("blur", () => finish(true));
+    }
 
     const ctx2 = canvas.getContext("2d");
+    /* The canvas has to be told its size in real pixels and in css pixels
+       separately. Letting css stretch it was what put the ink to the right
+       of the pointer. */
     function fit(){
       const rect = stage.getBoundingClientRect();
-      canvas.width = Math.max(320, rect.width) * devicePixelRatio;
-      canvas.height = Math.max(220, rect.height) * devicePixelRatio;
-      canvas.style.width = "100%";
-      canvas.style.height = "100%";
+      const w = Math.max(280, Math.round(rect.width));
+      const h = Math.max(200, Math.round(rect.height));
+      canvas.width = Math.round(w * devicePixelRatio);
+      canvas.height = Math.round(h * devicePixelRatio);
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
       draw();
     }
     function draw(){
@@ -54,15 +148,21 @@
                         view.scale * devicePixelRatio,
                         view.x * devicePixelRatio, view.y * devicePixelRatio);
       strokes.forEach(st => {
+        const lit = st === chosen;
         if (st.kind === "text"){
           ctx2.fillStyle = st.colour;
           ctx2.font = (st.size || 20) + "px system-ui, sans-serif";
           ctx2.fillText(st.text, st.x, st.y);
+          if (lit){
+            ctx2.strokeStyle = "#2F6BAE"; ctx2.lineWidth = 1;
+            const w = String(st.text).length * (st.size || 20) * 0.55;
+            ctx2.strokeRect(st.x - 3, st.y - (st.size || 20), w + 6, (st.size || 20) + 8);
+          }
           return;
         }
         if (!st.points || st.points.length < 2) return;
-        ctx2.strokeStyle = st.colour;
-        ctx2.lineWidth = st.width;
+        ctx2.strokeStyle = lit ? "#2F6BAE" : st.colour;
+        ctx2.lineWidth = lit ? st.width + 2 : st.width;
         ctx2.lineCap = "round";
         ctx2.lineJoin = "round";
         ctx2.beginPath();
@@ -85,14 +185,14 @@
         return;
       }
       if (tool === "text"){
-        const where = at(e);
-        const words = prompt("What should it say?");
-        if (words){
-          strokes.push({ kind:"text", text: words, x: where[0], y: where[1],
-                         colour: colour, size: 20 });
-          undone = [];
-          draw(); ctx.changed();
-        }
+        typeHere(at(e), e);
+        return;
+      }
+      if (tool === "pick"){
+        const hit = topmostAt(at(e));
+        chosen = hit;
+        showPickTools(e);
+        draw();
         return;
       }
       drawing = { kind:"line", colour: tool === "rub" ? "#FFFFFF" : colour,
@@ -101,22 +201,41 @@
     });
     canvas.addEventListener("pointermove", (e) => {
       if (panning){ view.x = e.clientX - panning.x; view.y = e.clientY - panning.y; draw(); return; }
+      if (moving && chosen){
+        const now = at(e);
+        shift(chosen, now[0] - moving[0], now[1] - moving[1]);
+        moving = now;
+        draw();
+        return;
+      }
       if (!drawing) return;
       drawing.points.push(at(e));
       draw();
     });
     const stop = () => {
       if (drawing){ drawing = null; undone = []; ctx.changed(); }
+      if (moving){ moving = null; ctx.changed(); }
       panning = null;
     };
     canvas.addEventListener("pointerup", stop);
     canvas.addEventListener("pointerleave", stop);
-    canvas.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      const step = e.deltaY < 0 ? 1.1 : 0.9;
-      view.scale = Math.max(0.3, Math.min(4, view.scale * step));
+    /* Zoom sits on its own buttons: taking over the wheel makes the page
+       impossible to scroll past. */
+    const zoomBox = make("div", "board-zoom");
+    const zoomIn = make("button", "board-tool", "+");
+    zoomIn.title = "Zoom in";
+    const zoomOut = make("button", "board-tool", "\u2212");
+    zoomOut.title = "Zoom out";
+    const zoomAt = make("span", "board-zoomat", "100%");
+    const setZoom = (next) => {
+      view.scale = Math.max(0.3, Math.min(4, next));
+      zoomAt.textContent = Math.round(view.scale * 100) + "%";
       draw();
-    }, { passive:false });
+    };
+    zoomIn.addEventListener("click", () => setZoom(view.scale * 1.2));
+    zoomOut.addEventListener("click", () => setZoom(view.scale / 1.2));
+    zoomBox.appendChild(zoomOut); zoomBox.appendChild(zoomAt); zoomBox.appendChild(zoomIn);
+    stage.appendChild(zoomBox);
 
     /* the tools along the top */
     function toolBtn(name, label, title){
@@ -133,7 +252,8 @@
     toolBtn("pen", "\u270E", "Draw");
     toolBtn("rub", "\u25FD", "Rub out");
     toolBtn("text", "T", "Add words");
-    toolBtn("move", "\u2725", "Move around");
+    toolBtn("move", "\u2725", "Move around the board");
+    toolBtn("pick", "\u2196", "Pick something up");
 
     ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
       const dot = make("button", "board-colour");
@@ -340,61 +460,87 @@
       : [{ id:"root", text: b.centre || "The big idea", parent:null }];
     let nextId = 1;
 
-    function childrenOf(id){ return nodes.filter(n => n.parent === id); }
+    const childrenOf = (id) => nodes.filter(n => n.parent === id);
 
-    function drawNode(node, depth){
-      const wrap = make("div", "map-node depth-" + Math.min(depth, 3));
-      const row = make("div", "map-row");
+    /* A real map rather than a list: the middle sits in the centre and the
+       first branches go around it, each with its own branches below. */
+    function paint(){
+      holder.innerHTML = "";
+      const root = nodes.find(n => n.parent === null) || nodes[0];
+      if (!root) return;
 
+      const map = make("div", "map-radial");
+      const first = childrenOf(root.id);
+      /* half the branches to each side, so the middle stays in the middle */
+      const half = Math.ceil(first.length / 2);
+      const left = make("div", "map-side map-left");
+      const right = make("div", "map-side map-right");
+      first.slice(0, half).forEach(n => left.appendChild(limb(n, "left")));
+      first.slice(half).forEach(n => right.appendChild(limb(n, "right")));
+
+      map.appendChild(left);
+      map.appendChild(centre(root));
+      map.appendChild(right);
+      holder.appendChild(map);
+    }
+
+    function nodeBox(node, cls){
+      const wrap = make("div", "map-node " + cls);
       const text = make("input", "map-text");
       text.value = node.text;
-      text.readOnly = node.id === "root" && !!b.centre && b.lockCentre === true;
+      text.placeholder = node.parent === null ? "The idea in the middle" : "A branch";
+      text.readOnly = node.parent === null && b.lockCentre === true;
       text.addEventListener("input", () => { node.text = text.value; ctx.changed(); });
-      row.appendChild(text);
+      wrap.appendChild(text);
 
-      const add = make("button", "btn-ghost bmini", "+");
+      const tools = make("span", "map-tools");
+      const add = make("button", "map-btn", "+");
       add.title = "Add a branch from here";
       add.addEventListener("click", () => {
         nodes.push({ id: "n" + (nextId++) + "-" + Date.now(), text: "", parent: node.id });
         paint(); ctx.changed();
       });
-      row.appendChild(add);
-
-      if (node.id !== "root"){
-        const del = make("button", "btn-ghost bmini", "\u2715");
-        del.title = "Remove this and anything under it";
+      tools.appendChild(add);
+      if (node.parent !== null){
+        const del = make("button", "map-btn", "\u2715");
+        del.title = "Remove this and anything on it";
         del.addEventListener("click", () => {
-          /* take the branch and everything hanging off it */
           const doomed = new Set([node.id]);
           let grew = true;
           while (grew){
             grew = false;
             nodes.forEach(n => {
-              if (n.parent && doomed.has(n.parent) && !doomed.has(n.id)){
-                doomed.add(n.id); grew = true;
-              }
+              if (n.parent && doomed.has(n.parent) && !doomed.has(n.id)){ doomed.add(n.id); grew = true; }
             });
           }
           nodes = nodes.filter(n => !doomed.has(n.id));
           paint(); ctx.changed();
         });
-        row.appendChild(del);
+        tools.appendChild(del);
       }
+      wrap.appendChild(tools);
+      return wrap;
+    }
 
-      wrap.appendChild(row);
+    function centre(root){
+      const mid = make("div", "map-centre");
+      mid.appendChild(nodeBox(root, "is-centre"));
+      return mid;
+    }
+
+    /* a branch, with anything growing off it underneath */
+    function limb(node, side){
+      const wrap = make("div", "map-limb map-" + side);
+      wrap.appendChild(nodeBox(node, "is-branch"));
       const kids = childrenOf(node.id);
       if (kids.length){
-        const branch = make("div", "map-branch");
-        kids.forEach(k => branch.appendChild(drawNode(k, depth + 1)));
-        wrap.appendChild(branch);
+        const twigs = make("div", "map-twigs");
+        kids.forEach(k => twigs.appendChild(limb(k, side)));
+        wrap.appendChild(twigs);
       }
       return wrap;
     }
-    function paint(){
-      holder.innerHTML = "";
-      const root = nodes.find(n => n.parent === null) || nodes[0];
-      if (root) holder.appendChild(drawNode(root, 0));
-    }
+
     paint();
 
     return {

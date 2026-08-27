@@ -205,7 +205,11 @@
     <button class="crumb" id="backClass2">&larr; <span class="bk"></span></button>
     <button class="btn-ghost iconbtn refresh" id="refUnits" title="Refresh">&#8635;</button>
     <h2 style="margin:14px 0 4px">Units</h2>
-    <p class="hint" style="margin:0">Lessons live inside units. Choose one to publish and pace its lessons.</p>
+    <p class="hint" style="margin:0 0 12px">Lessons live inside units. Choose one to publish and pace its lessons.</p>
+    <div class="toolrow">
+      <button class="btn-primary" id="addUnitBtn">+ Add an existing unit</button>
+      <button class="btn-ghost" id="newUnitBtn2">+ New unit</button>
+    </div>
     <div class="classgrid" id="unitGrid"></div>
   </div>
 
@@ -1498,16 +1502,22 @@ on("importBtn", "click", () => {
 
     go.addEventListener("click", async () => {
       msg.textContent = "Adding \u2026";
-      let done = 0, failed = [];
+      let done = 0, failed = [], clashed = [];
       for (const st of found){
         try{
           const r = await fetch(API + "/api/teacher/students", { method:"POST", headers: HJ(),
             body: JSON.stringify({ group: cls, name: st.name, username: st.username }) });
-          if (!r.ok) throw new Error((await r.json()).error || "failed");
-          done++;
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || "failed");
+          if (d.clashes && d.clashes.length){
+            clashed.push(st.username + " (" + d.clashes[0].group + ")");
+          } else done++;
         }catch(e){ failed.push(st.username); }
       }
-      msg.textContent = done + " added." + (failed.length ? " Could not add: " + failed.join(", ") : "");
+      msg.textContent = done + " added." +
+        (failed.length ? "  Could not add: " + failed.join(", ") + "." : "") +
+        (clashed.length ? "  Already in another class: " + clashed.join(", ") +
+                          ".  Remove them from there first." : "");
       await loadStudents();
       if (!failed.length) closeModal();
     });
@@ -1950,6 +1960,71 @@ function schedulePopup(id){
     now.addEventListener("click", async () => { closeModal(); await setPublish(id, true); });
     box.appendChild(go); box.appendChild(now);
   });
+}
+
+/* Units belong to a year group. This offers the ones from this class's year
+   that are not already showing, the same way lessons are added. */
+on("addUnitBtn", "click", () => {
+  const mine = new Set((catalogue.units || [])
+    .filter(u => unitHasLessonFor(u.name))
+    .map(u => u.name.toLowerCase()));
+  const year = yearOfClass();
+  const offer = (catalogue.units || [])
+    .filter(u => !year || !u.year || u.year === year)
+    .filter(u => !mine.has(u.name.toLowerCase()));
+  openModal(box => {
+    box.classList.add("narrow");
+    modalTitle(box, "Add a unit to " + cls);
+    if (!offer.length){
+      box.appendChild(el("p","modal-text", year
+        ? "Every unit in " + year + " is already here."
+        : "There are no other units yet."));
+      return;
+    }
+    const find = el("input","searchbox bankfind");
+    find.placeholder = "Search";
+    box.appendChild(find);
+    const list = el("div","banklist");
+    box.appendChild(list);
+    function paint(){
+      const term = (find.value || "").trim().toLowerCase();
+      list.innerHTML = "";
+      const shown = offer.filter(u => !term || u.name.toLowerCase().includes(term));
+      if (!shown.length) list.appendChild(el("p","hint","Nothing matches that."));
+      shown.forEach(u => {
+        const row = el("button","ov-row");
+        row.appendChild(el("span","t", u.name));
+        const n = (catalogue.lessons || []).filter(l => l.unit === u.name).length;
+        row.appendChild(el("span","hint", n + " lesson" + (n === 1 ? "" : "s")));
+        row.addEventListener("click", () => { closeModal(); addWholeUnit(u.name); });
+        list.appendChild(row);
+      });
+    }
+    find.addEventListener("input", paint);
+    paint();
+  });
+});
+on("newUnitBtn2", "click", () => newUnitPrompt(yearOfClass(), () => { paintClassUnits(); }));
+
+/* which year this class is in, worked out from the units it already has */
+function yearOfClass(){
+  const first = (catalogue.units || []).find(u => unitHasLessonFor(u.name));
+  return first ? first.year : "";
+}
+function unitHasLessonFor(name){
+  return (catalogue.lessons || []).some(l => l.unit === name && assignOf(l.lesson_id));
+}
+/* giving a class every lesson in a unit is what "adding" it means */
+async function addWholeUnit(name){
+  const lessons = (catalogue.lessons || []).filter(l => l.unit === name);
+  if (!lessons.length){ say("Nothing in that unit", "It has no lessons yet."); return; }
+  try{
+    for (const l of lessons){
+      await catPost({ op:"assign", id: l.lesson_id, groups:[cls] });
+    }
+    await loadCatalogue(true);
+    paintClassUnits();
+  }catch(e){ say("Could not add that unit", e.message); }
 }
 
 /* ---------- managing one lesson (big pop-up) ---------- */

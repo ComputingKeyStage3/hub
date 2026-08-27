@@ -1446,8 +1446,11 @@ function labelBoxes(block){
     const holder = el("div","label-pic label-edit");
     const img = el("img");
     img.src = block.image;
+    img.draggable = false;              // dragging the picture would fight with drawing
+    img.addEventListener("load", paintLater);
     holder.appendChild(img);
     box.appendChild(holder);
+    function paintLater(){ setTimeout(paint, 0); }
 
     const list = el("div");
     box.appendChild(list);
@@ -1487,8 +1490,12 @@ function labelBoxes(block){
       return { x: ((e.clientX - r.left) / r.width) * 100,
                y: ((e.clientY - r.top) / r.height) * 100 };
     };
+    /* The pointer has to be captured, or moving over the image itself stops
+       the events reaching us and no box is ever drawn. */
     holder.addEventListener("pointerdown", (e) => {
       if (e.target.classList.contains("label-spot")) return;
+      e.preventDefault();
+      holder.setPointerCapture(e.pointerId);
       from = pct(e);
       ghost.hidden = false;
       ghost.style.left = from.x + "%"; ghost.style.top = from.y + "%";
@@ -1838,16 +1845,25 @@ function paintPickers(){
   const yNew = document.createElement("option");
   yNew.value = "__new"; yNew.textContent = "+ New year group"; ys.appendChild(yNew);
 
+  /* Units belong to a year, so until one is chosen there is nothing sensible
+     to offer. Listing them all let the browser pick the first by itself. */
   us.innerHTML = "";
   const u0 = document.createElement("option");
-  u0.value = ""; u0.textContent = "Unit…"; us.appendChild(u0);
-  (cat.units || []).filter(u => !lesson.year || (u.year || "") === lesson.year).forEach(u => {
-    const o = document.createElement("option"); o.value = u.name; o.textContent = u.name;
-    if (u.name === lesson.unit) o.selected = true;
-    us.appendChild(o);
-  });
-  const uNew = document.createElement("option");
-  uNew.value = "__new"; uNew.textContent = "+ New unit"; us.appendChild(uNew);
+  u0.value = "";
+  u0.textContent = lesson.year ? "Unit\u2026" : "Choose a year group first";
+  us.appendChild(u0);
+  us.disabled = !lesson.year;
+  us.title = lesson.year ? "" : "Pick a year group before the unit";
+  if (lesson.year){
+    (cat.units || []).filter(u => (u.year || "") === lesson.year).forEach(u => {
+      const o = document.createElement("option"); o.value = u.name; o.textContent = u.name;
+      if (u.name === lesson.unit) o.selected = true;
+      us.appendChild(o);
+    });
+    const uNew = document.createElement("option");
+    uNew.value = "__new"; uNew.textContent = "+ New unit"; us.appendChild(uNew);
+  }
+  us.value = lesson.unit && lesson.year ? lesson.unit : "";
 }
 
 /* ---------------- live preview ---------------- */
