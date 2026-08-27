@@ -40,7 +40,7 @@
 </div>
 
 <div class="stage" id="stage">
-  <button class="btn-ghost backdone no-print" id="backToDone" hidden>Back to my summary →</button>
+  <button class="btn-ghost backdone no-print" id="backToDone" hidden>Back</button>
   <p class="signin-hint no-print" id="signinHint" hidden data-online-only>Not signed in, work stays on this computer only. <a href="index.html">Sign in</a></p>
   <div class="banner banner-ok no-print" id="resumeNote" hidden>
     ↩︎ Welcome back, your saved work has been put back on the page.
@@ -148,6 +148,19 @@ function parseFeedback(raw){
   return f;
 }
 /* a practical is marked by hand, so the mark comes from the results list */
+/* Feedback can be left long after the work was handed in, so it is fetched
+   fresh rather than trusted from whatever was saved with the work. */
+async function loadMyFeedback(){
+  if (!token || !apiReady) return;
+  try{
+    const r = await fetch(API + "/api/work?lesson=" + encodeURIComponent(lessonId),
+                          { headers:{ Authorization:"Bearer " + token }, cache:"no-store" });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d && d.feedback) showFeedback(d.feedback);
+  }catch(e){}
+}
+
 async function loadMyMark(){
   const token = localStorage.getItem("hub_token");
   if (!token || !apiReady) return;
@@ -589,9 +602,10 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
       return;
     }
     if (wasDone){
-      /* A practical is marked by hand afterwards, so fetch the mark before
-         drawing the summary, otherwise it shows as unmarked. */
+      /* A mark or feedback added after they finished has to be fetched before
+         the summary is drawn, or it shows as though nothing was left. */
       if (lesson.practical) await loadMyMark();
+      if (!teacherNote) await loadMyFeedback();
       hideLoader();
       if (lesson.assessment){ renderAssessmentComplete(false); }
       else { showLessonComplete(true); }
@@ -823,6 +837,20 @@ function paintTracker(){
 }
 
 let lastSubmittedPayload = "";
+
+/* Warn before leaving with work that has not reached the teacher. The
+   browser decides the wording; all we can say is that there is something
+   unsaved. Comparing against the last thing successfully sent means a
+   change made after saving counts as unsaved again. */
+window.addEventListener("beforeunload", (e) => {
+  if (spectate || OFFLINE || !restoreDone) return;
+  if (!token || !apiReady) return;
+  let now = "";
+  try{ now = JSON.stringify(snapshot()); }catch(err){ return; }
+  if (now === lastSubmittedPayload) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 async function submitWork(){
   if (spectate) return "offline";
   if (!restoreDone) return "offline";      // never send blanks over real work
@@ -3267,16 +3295,15 @@ function renderPracticalComplete(){
   seeBtn.addEventListener("click", () => openWorkPopup());
   hero.appendChild(seeBtn);
 
-  const layout = el("div","done-layout");
+  const fb = feedbackCard(teacherNote);
+  /* Nothing to put beside it until a teacher has been, so it sits alone. */
+  const layout = el("div","done-layout" + (fb ? "" : " alone"));
   const heroCol = el("div","done-hero-col");
   heroCol.appendChild(hero);
   layout.appendChild(heroCol);
   const cards = el("div","done-cards");
-  layout.appendChild(cards);
+  if (fb){ fb.classList.add("flyin"); cards.appendChild(fb); layout.appendChild(cards); }
   box.appendChild(layout);
-
-  const fb = feedbackCard(teacherNote);
-  if (fb){ fb.classList.add("flyin"); cards.appendChild(fb); }
 
   /* A practical has no mark or response tasks when it is handed in, so
      there is nothing worth announcing. It simply appears. */
@@ -3775,15 +3802,51 @@ function showLessonComplete(revisit, justFinished){
   const status = el("p","handin");
   hero.appendChild(status);
   if (!revisit && !spectate) hero.appendChild(saveButton(status));
-  const fb = feedbackCard(teacherNote);
-  if (fb) box.appendChild(fb);
-  if (justFinished) confetti();      // only the moment they finish, not every visit
+
+  /* Their work opens in a pop-up, where the list of tasks used to sit on
+     the page. This takes the place of "Back to Home". */
+  if (!spectate){
+    const see = el("button","btn-primary done-save","View my work");
+    see.addEventListener("click", () => openTaskPopup());
+    hero.appendChild(see);
+  }
   const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
   if (!spectate) hero.appendChild(back);
-  box.appendChild(hero);
+
+  /* With feedback there are two columns, as an assessment has. Without, the
+     score sits on its own in the middle. */
+  const fb = feedbackCard(teacherNote);
+  const layout = el("div","done-layout" + (fb ? "" : " alone"));
+  const heroCol = el("div","done-hero-col");
+  heroCol.appendChild(hero);
+  layout.appendChild(heroCol);
+  if (fb){
+    const cards = el("div","done-cards");
+    fb.classList.add("flyin","in");
+    cards.appendChild(fb);
+    layout.appendChild(cards);
+  }
+  box.appendChild(layout);
+
+  if (justFinished) confetti();      // only the moment they finish, not every visit
   if (!revisit && !spectate){ submitWork().then(st => paintStatus(status, st)); }
   else if (revisit && token && !spectate){ status.dataset.state = "done"; status.textContent = "Saved earlier \u2713"; }
-  buildOverview(box);
+}
+
+/* Every task, in a pop-up big enough to work in. */
+function openTaskPopup(){
+  const back = el("div","modal-back");
+  const popup = el("div","modal wide taskpopup");
+  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+  x.addEventListener("click", () => back.remove());
+  popup.appendChild(x);
+  popup.appendChild(el("h2","","Your work"));
+  const holder = el("div","");
+  buildOverview(holder, () => back.remove());
+  popup.appendChild(holder);
+  back.appendChild(popup);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+  document.body.appendChild(back);
 }
 
 /* every task, clickable to reopen and edit */
@@ -3801,9 +3864,8 @@ function taskPreview(b){
     (typeof v === "object" && v !== null && !Object.keys(v).length);
   return empty ? "" : "Done \u2713";
 }
-function buildOverview(box){
+function buildOverview(box, onPick){
   const ov = el("div","ov");
-  ov.appendChild(el("h2","sect-head","Your tasks"));
   steps.forEach((stp, i) => {
     const b = lesson.blocks[i] || {};
     const bb = (typeof stp.brief === "function") ? stp.brief() : (stp.brief || {});
@@ -3813,6 +3875,7 @@ function buildOverview(box){
     row.appendChild(el("span","p", taskPreview(b)));
     row.appendChild(el("span","edit", spectate ? "View \u2192" : "Edit \u270E"));
     row.addEventListener("click", () => {
+      if (onPick) onPick();          // close the pop-up before going to the task
       $("doneScreen").hidden = true;
       $("dock").classList.remove("gone");
       showStep(i);

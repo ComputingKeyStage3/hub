@@ -135,6 +135,7 @@ function renderAuth(){
       $("auth").querySelector(".whoyear").textContent = localStorage.getItem("hub_year") || "";
       on("outBtn", "click", () => {
         ["hub_name","hub_year"].forEach(k => localStorage.removeItem(k));
+        forgetEverything();
         renderAuth();
       });
       $("loginCard").hidden = true;
@@ -182,6 +183,7 @@ function renderAuth(){
         const v = (input.value || "").trim();
         if (!v){ input.focus(); return; }
         if (!pick.value){ pick.focus(); return; }
+        forgetEverything();          // never inherit the last student's data
         localStorage.setItem("hub_name", v);
         localStorage.setItem("hub_year", pick.value);
         renderAuth();
@@ -199,6 +201,7 @@ function renderAuth(){
     $("auth").querySelector("b").textContent = name;
     on("outBtn", "click", () => {
       ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
+      forgetEverything();
       renderAuth();
     });
     $("loginCard").hidden = true;
@@ -232,6 +235,7 @@ on("loginBtn", "click", async () => {
     const uname = $("u").value.trim().toLowerCase();
     if (localStorage.getItem("hub_user") !== uname) clearStudentCache();
     localStorage.setItem("hub_user", uname);
+    forgetEverything();          // never inherit the last student's data
     localStorage.setItem("hub_token", d.token);
     localStorage.setItem("hub_name", d.name);
     localStorage.setItem("hub_group", d.group || "");
@@ -452,6 +456,24 @@ on("tabLessons", "click", () => switchTab("lessons"));
 on("tabResults", "click", () => switchTab("results"));
 let resultsLoaded = false;
 let openTab = "lessons";
+
+/* Signing out has to forget everything held in memory as well as the token.
+   Leaving these behind showed the next student the last one's marks. */
+function forgetEverything(){
+  lessonsLoaded = false;
+  resultsLoaded = false;
+  lastById = {};
+  lessonTitles = {};
+  doneLessons = new Set();
+  lockedLessons = new Set();
+  catalogue = null;
+  showing = "active";
+  openTab = "lessons";
+  const list = $("lessonList"), res = $("resultList");
+  if (list) list.innerHTML = "";
+  if (res) res.innerHTML = "";
+}
+
 function switchTab(which){
   openTab = which;
   $("tabLessons").classList.toggle("on", which === "lessons");
@@ -577,7 +599,8 @@ async function pollReset(){
       stopReset();
       if (localStorage.getItem("hub_user") !== rsUser.toLowerCase()) clearStudentCache();
       localStorage.setItem("hub_user", rsUser.toLowerCase());
-      localStorage.setItem("hub_token", d.token);
+      forgetEverything();          // never inherit the last student's data
+    localStorage.setItem("hub_token", d.token);
       localStorage.setItem("hub_name", d.name);
       localStorage.setItem("hub_group", d.group || "");
       renderAuth();

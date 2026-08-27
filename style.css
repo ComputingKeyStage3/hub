@@ -2255,3 +2255,16 @@ select.offname{text-align-last:center; cursor:pointer}
 .bankwords span{font-size:14.5px; line-height:1.45; color:var(--text)}
 .bankpreview{padding:11px 13px; margin:0 0 6px; background:var(--panel-2);
   border:1px solid var(--line); border-radius:10px; font-size:15px; line-height:1.5}
+
+/* the work page top bar: tabs to the right, and buttons with centred text */
+body.workpage .homebar .grow{flex:1}
+.worktabs{margin-left:auto}
+.workbar .btn-ghost,.workbar .btn-primary{display:inline-flex; align-items:center;
+  justify-content:center; line-height:1}
+
+/* a finished screen with nothing beside it sits in the middle */
+.done-layout.alone{grid-template-columns:minmax(0,1fr); justify-items:center; text-align:center}
+.done-layout.alone .done-hero-col{max-width:640px}
+/* the pop-up showing every task */
+.taskpopup{min-height:70vh}
+.taskpopup .ov-row{cursor:pointer}

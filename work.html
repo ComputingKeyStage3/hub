@@ -12,12 +12,11 @@
 
 <div class="homebar">
   <div class="title" id="barTitle">Computing Teacher Console</div>
-  <div class="subtabs worktabs">
-    <button class="on" id="tabSeats">Seating plan</button>
-    <button id="tabWork">View work</button>
-  </div>
   <span class="grow"></span>
-  <button class="btn-ghost" id="closeBtn">Close</button>
+  <div class="subtabs worktabs">
+    <button class="on" id="tabWork">View work</button>
+    <button id="tabSeats">Seating plan</button>
+  </div>
 </div>
 
 <!-- ================= seating plan ================= -->
@@ -72,19 +71,6 @@
     <aside class="workside">
       <h3>Feedback</h3>
       <p class="hint" id="fbWho"></p>
-      <div class="bfield"><label>Comment</label><textarea id="fbComment" rows="3"></textarea></div>
-      <div class="bfield" id="fbStrengthWrap" hidden>
-        <label>Strength</label><textarea id="fbStrength" rows="3"></textarea>
-        <div class="bank" id="bankStrength"></div>
-      </div>
-      <div class="bfield" id="fbTargetWrap" hidden>
-        <label>Target</label><textarea id="fbTarget" rows="3"></textarea>
-        <div class="bank" id="bankTarget"></div>
-      </div>
-      <div class="toolrow">
-        <button class="btn-ghost" id="addStrength">+ Strength</button>
-        <button class="btn-ghost" id="addTarget">+ Target</button>
-      </div>
       <div class="bfield" id="markWrap" hidden>
         <label id="markLabel">Mark</label>
         <span class="markrow2" id="scoreRow">
@@ -93,6 +79,15 @@
         <select id="fbGrade" class="bigselect" hidden></select>
         <p class="bhelp" id="gradeHelp"></p>
       </div>
+      <div class="bfield" id="fbStrengthWrap">
+        <label>Strength</label><textarea id="fbStrength" rows="3"></textarea>
+        <div class="bank" id="bankStrength"></div>
+      </div>
+      <div class="bfield" id="fbTargetWrap">
+        <label>Target</label><textarea id="fbTarget" rows="3"></textarea>
+        <div class="bank" id="bankTarget"></div>
+      </div>
+      <div class="bfield"><label>General comment</label><textarea id="fbComment" rows="2"></textarea></div>
       <button class="btn-primary wide" id="saveFb">Save feedback</button>
       <p class="hint" id="fbMsg"></p>
     </aside>
@@ -177,6 +172,7 @@ async function boot(){
     document.title = "Student work \u2022 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
     paintSeats();
     paintPicker();
+    tab("work");            // looking at work is the usual reason to be here
     $("seatMsg").textContent = "";
   }catch(e){ $("seatMsg").textContent = e.message; }
 }
@@ -222,7 +218,6 @@ function tab(which){
 }
 on("tabSeats", "click", () => tab("seats"));
 on("tabWork", "click", () => tab("work"));
-on("closeBtn", "click", () => { window.close(); setTimeout(() => { location.href = "admin.html"; }, 150); });
 
 /* ---------------- the seating plan ---------------- */
 function seatCard(st){
@@ -411,11 +406,7 @@ function paintTaskNav(){
 }
 
 /* ---------------- feedback ---------------- */
-function showing(which){ return !$("fb" + which + "Wrap").hidden; }
-function paintFbButtons(){
-  $("addStrength").textContent = showing("Strength") ? "Delete strength" : "+ Strength";
-  $("addTarget").textContent = showing("Target") ? "Delete target" : "+ Target";
-}
+function showing(which){ return !!$("fb" + which).value.trim(); }
 function loadFeedback(row){
   let f = {};
   if (row && row.feedback){
@@ -424,19 +415,8 @@ function loadFeedback(row){
   $("fbComment").value = f.comment || "";
   $("fbStrength").value = f.strength || "";
   $("fbTarget").value = f.target || "";
-  $("fbStrengthWrap").hidden = !f.strength;
-  $("fbTargetWrap").hidden = !f.target;
-  paintFbButtons();
   paintBank("Strength"); paintBank("Target");
   $("fbMsg").textContent = "";
-}
-/* Hiding one keeps whatever was typed, so it comes back if they change
-   their mind. Only what is on screen is saved. */
-function toggleFb(which){
-  const wrap = $("fb" + which + "Wrap");
-  wrap.hidden = !wrap.hidden;
-  paintFbButtons();
-  if (!wrap.hidden){ paintBank(which); $("fb" + which).focus(); }
 }
 /* The sentences written in the builder, offered as a starting point. Picking
    one fills the box, which the teacher can then reword. */
@@ -553,10 +533,10 @@ function bankPopup(which){
     paint(); refresh();
   });
 }
-on("addStrength", "click", () => toggleFb("Strength"));
-on("addTarget", "click", () => toggleFb("Target"));
 on("saveFb", "click", () => {
-  const hasS = showing("Strength"), hasT = showing("Target");
+  /* Both boxes are on screen, so a missing one is a choice rather than an
+     oversight. Only say something when exactly one has been filled in. */
+  const hasS = !!$("fbStrength").value.trim(), hasT = !!$("fbTarget").value.trim();
   if (hasS && !hasT) return askMissing("target", "strength");
   if (hasT && !hasS) return askMissing("strength", "target");
   saveFeedback();
@@ -566,10 +546,10 @@ function askMissing(missing, given){
     box.appendChild(el("h2","", "Add a " + missing + " as well?"));
     box.appendChild(el("p","modal-text",
       "You have written a " + given + " but no " + missing + ". Students get the most from having both."));
-    const add = el("button","btn-primary modal-cta","Add a " + missing);
+    const add = el("button","btn-primary modal-cta","Write a " + missing);
     add.addEventListener("click", () => {
       closeModal();
-      toggleFb(missing === "target" ? "Target" : "Strength");
+      $("fb" + (missing === "target" ? "Target" : "Strength")).focus();
     });
     const anyway = el("button","btn-ghost modal-stay","Save feedback without " + missing);
     anyway.addEventListener("click", () => { closeModal(); saveFeedback(); });
