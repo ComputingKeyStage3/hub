@@ -365,7 +365,7 @@ function compileOne(b, id, target){
       const blk = { type:"ide", id, starter: b.starter || "" };
       if (Array.isArray(b.checks) && b.checks.length){
         blk.checks = b.checks.filter(c => (c.label || "").trim());
-        if (b.checksRequired === false) blk.checksRequired = false;
+        if (b.nudge === false) blk.nudge = false;
       }
       if (b.title) blk.title = b.title;              // headings stay optional
       if (b.task) blk.task = b.task;
@@ -389,7 +389,7 @@ function compileOne(b, id, target){
       if (b.addFiles === true) blk.addFiles = true;
       if (Array.isArray(b.checks) && b.checks.length){
         blk.checks = b.checks.filter(c => (c.label || "").trim());
-        if (b.checksRequired === false) blk.checksRequired = false;
+        if (b.nudge === false) blk.nudge = false;
       }
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
@@ -1007,10 +1007,12 @@ function card(b, i, arr){
     w.appendChild(open2);
     if (n){
       const row = el("div","brow");
-      const on = b.checksRequired !== false;
+      const on = b.nudge !== false;
       const need = el("button","btn-ghost bmini2" + (on ? " right" : ""),
-                      "Must all pass first: " + (on ? "on" : "off"));
-      need.addEventListener("click", () => { b.checksRequired = !on; render(); schedulePreview(); });
+                      "Nudge to finish it: " + (on ? "on" : "off"));
+      need.title = on ? "They are encouraged to finish the checklist before moving on"
+                      : "They can move on without a word about it";
+      need.addEventListener("click", () => { b.nudge = !on; render(); schedulePreview(); });
       row.appendChild(need);
       w.appendChild(row);
     }

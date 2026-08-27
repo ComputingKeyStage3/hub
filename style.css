@@ -2059,9 +2059,13 @@ select.offname{text-align-last:center; cursor:pointer}
   .homebar .title, .topbar .title{
     font-size:15px; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  /* the settings and lock buttons keep only their icon */
-  .homebar .btn-ghost, .topbar .btn-ghost{ font-size:0; padding:0 }
-  .homebar .iconbtn, .topbar .iconbtn{ font-size:14px }
+  /* On a phone the bar buttons show their icon only. The wording is
+     hidden rather than the button, which is what made them disappear. */
+  .homebar .btn-ghost .lbl, .topbar .btn-ghost .lbl{ display:none }
+  .homebar .btn-ghost, .topbar .btn-ghost{
+    min-width:32px; padding:0 8px; font-size:15px;
+  }
+  .homebar .btn-ghost .ico, .topbar .btn-ghost .ico{ font-size:15px; line-height:1 }
   .homebar .auth{ font-size:13px }
   .homebar .who b{ font-size:13px }
   .crumbbar{ padding:6px 12px; font-size:13px }
@@ -2145,7 +2149,7 @@ select.offname{text-align-last:center; cursor:pointer}
 .check[data-state=broken] .check-mark{background:var(--red); border-color:var(--red); color:#fff}
 .check-note{flex:1 1 100%; margin-left:29px; font-size:14px; color:var(--muted)}
 .check[data-state=broken] .check-note{color:var(--red)}
-.check-run{margin-top:10px}
+
 .checklist[data-all-done=yes]{border-color:var(--mint)}
 
 /* the pill swaps its wording when pointed at, rather than adding to it */
@@ -2201,3 +2205,6 @@ select.offname{text-align-last:center; cursor:pointer}
   color:var(--text); font-family:var(--body); font-size:15px}
 .checkname:focus{border-color:var(--amber); outline:none;
   box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent)}
+
+/* the icon inside a bar button */
+.homebar .btn-ghost .ico{ display:inline-block }

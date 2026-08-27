@@ -803,7 +803,10 @@ async function tryContinue(){
     return;
   }
   const st = steps[step];
-  if (st && st.soft && !softSkip && !st.soft().ok){ showSoftModal(); return; }
+  if (st && st.soft && !softSkip){
+    const res = st.soft();
+    if (!res.ok){ showSoftModal(res.words); return; }
+  }
   softSkip = false;
   if (step === steps.length - 1){ finishLesson(); return; }
 
@@ -816,7 +819,16 @@ async function tryContinue(){
 }
 $("nextBtn").addEventListener("click", tryContinue);
 
-function showSoftModal(){ $("softModal").hidden = false; $("softStay").focus(); }
+function showSoftModal(words){
+  const w = words || {};
+  $("softTitle").textContent = w.title || "Keep typing";
+  $("softModal").querySelector(".modal-text").textContent =
+    w.text || "Add a bit more to your answer before moving on.";
+  $("softStay").textContent = w.stay || "Keep writing";
+  $("softGo").textContent = w.go || "Continue anyway";
+  $("softModal").hidden = false;
+  $("softStay").focus();
+}
 function hideSoftModal(){ $("softModal").hidden = true; }
 $("softStay").addEventListener("click", hideSoftModal);
 $("softGo").addEventListener("click", () => { hideSoftModal(); softSkip = true; tryContinue(); });
@@ -1369,19 +1381,26 @@ function saveIdePrefs(p){ try{ localStorage.setItem("hub_ide", JSON.stringify(p)
 function attachChecklist(section, checks, runner){
   if (!checks || !checks.length || !window.buildChecklist) return null;
   const list = window.buildChecklist(checks);
-  const btn = el("button","btn-ghost check-run","Check my work");
   const holder = el("div","checklist-wrap");
   holder.appendChild(list);
-  holder.appendChild(btn);
   if (section.firstChild) section.insertBefore(holder, section.firstChild);
   else section.appendChild(holder);
-  btn.addEventListener("click", () => {
-    const results = runner();
+
+  /* The list is ticked off every time they run their code, so there is
+     nothing extra to remember to press. */
+  function refresh(){
+    let results;
+    try{ results = runner(); }
+    catch(e){
+      console.warn("A check could not run", e);
+      return false;
+    }
+    if (!Array.isArray(results)) return false;
     const all = list.show(results);
-    btn.textContent = all ? "\u2713 All done" : "Check my work";
     markDirty();
-  });
-  return { list, done: () => list.dataset.allDone === "yes" };
+    return all;
+  }
+  return { list, refresh, done: () => list.dataset.allDone === "yes" };
 }
 
 function rIDE(b){
@@ -1607,6 +1626,7 @@ function rIDE(b){
     askRow.hidden = true;
     if (!lastOut) out.textContent = "(your program printed nothing)";
     ran = true;
+    if (checklist) checklist.refresh();
     if (b.expect && res.ok){
       const good = lastOut.toLowerCase().includes(String(b.expect).toLowerCase());
       note.hidden = false;
@@ -1616,6 +1636,11 @@ function rIDE(b){
     markDirty();
     return true;
   }
+  /* the teacher's checklist, if this task has one. Declared before run()
+     so it can tick itself off when the code has finished. */
+  const checklist = attachChecklist(s, b.checks,
+    () => window.runPythonChecks(b.checks, ta.value, lastOut));
+
   async function run(){
     runBtn.disabled = true;
     const label = runBtn.textContent;
@@ -1633,6 +1658,8 @@ function rIDE(b){
       note.textContent = "Python could not start here: " + (e.message || "unknown problem") + ".";
     }finally{
       runBtn.disabled = false; runBtn.textContent = label;
+      /* the checklist keeps up on its own */
+      if (checklist) checklist.refresh();
     }
   }
   askIn.addEventListener("keydown", async (e) => {
@@ -1720,14 +1747,14 @@ function rIDE(b){
   ta.addEventListener("blur", () => { setTimeout(() => { tip.hidden = true; }, 120); });
   tip.addEventListener("mousedown", (e) => { e.preventDefault(); tip.hidden = true; });
 
-  /* the teacher's checklist, if this task has one */
-  const checklist = attachChecklist(s, b.checks,
-    () => window.runPythonChecks(b.checks, code.value, lastOut));
-
   return { section:s,
+           /* An unfinished checklist is worth a word, not a locked door. */
+           soft:() => (b.checks && b.checks.length && b.nudge !== false && checklist && !checklist.done())
+             ? { ok:false, words:{ title:"Keep coding",
+                                   text:"There are still things on your checklist to try.",
+                                   stay:"Keep coding", go:"Move on anyway" } }
+             : { ok:true },
            check:() => {
-             if (b.checks && b.checks.length && b.checksRequired !== false && checklist && !checklist.done())
-               return { ok:false, message:"Work through the checklist before carrying on" };
              if (!canRun) return { ok:true };            // nothing to run, nothing to wait for
              if (!ran) return { ok:false, message:"Press Run to try your code" };
              if (b.expect && !lastOut.toLowerCase().includes(String(b.expect).toLowerCase()))
@@ -2142,6 +2169,11 @@ function rWeb(b){
       logLine(d.kind, d.text);
     });
   }
+  /* the teacher's checklist, run against all three files. Declared before
+     run() so it can tick itself off once the page has been built. */
+  const checklist = attachChecklist(s, b.checks,
+    () => window.runWebChecks(b.checks, { html: code.html, css: code.css, js: code.js }));
+
   function run(){
     code[current] = ta.value;
     out.innerHTML = ""; lastOut = "";
@@ -2156,6 +2188,7 @@ function rWeb(b){
       : (code[mainName] || "");
     frame.srcdoc = page;
     ran = true;
+    if (checklist) checklist.refresh();
     if (b.expect){
       const good = (code.html + code.css + code.js).toLowerCase().includes(String(b.expect).toLowerCase());
       note.hidden = false;
@@ -2220,14 +2253,13 @@ function rWeb(b){
     }
   };
 
-  /* the teacher's checklist, run against all three files */
-  const checklist = attachChecklist(s, b.checks,
-    () => window.runWebChecks(b.checks, { html: code.html, css: code.css, js: code.js }));
-
   return { section:s,
+           soft:() => (b.checks && b.checks.length && b.nudge !== false && checklist && !checklist.done())
+             ? { ok:false, words:{ title:"Keep coding",
+                                   text:"There are still things on your checklist to try.",
+                                   stay:"Keep coding", go:"Move on anyway" } }
+             : { ok:true },
            check:() => {
-             if (b.checks && b.checks.length && b.checksRequired !== false && checklist && !checklist.done())
-               return { ok:false, message:"Work through the checklist before carrying on" };
              if (!canRun) return { ok:true };
              if (!ran) return { ok:false, message:"Press Run to see your page" };
              return { ok:true };

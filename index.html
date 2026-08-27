@@ -14,7 +14,7 @@
 
 <div class="homebar">
   <div class="title">Prince Henry's Computing KS3</div>
-  <button class="btn-ghost settings-btn" id="setBtn">&#9881;&#65038; Settings</button>
+  <button class="btn-ghost settings-btn" id="setBtn"><span class="ico">&#9881;&#65038;</span><span class="lbl"> Settings</span></button>
   <div class="auth" id="auth"></div>
 </div>
 
@@ -130,7 +130,7 @@ function renderAuth(){
      they are so their work can be told apart on this computer. */
   if (OFFLINE){
     if (name){
-      $("auth").innerHTML = '<span class="who"><b></b> <span class="whoyear"></span></span> <button class="btn-ghost" id="outBtn">Not me</button>';
+      $("auth").innerHTML = '<span class="who"><b></b> <span class="whoyear"></span></span> <button class="btn-ghost" id="outBtn"><span class="ico">&#9099;</span><span class="lbl"> Not me</span></button>';
       $("auth").querySelector("b").textContent = name;
       $("auth").querySelector(".whoyear").textContent = localStorage.getItem("hub_year") || "";
       on("outBtn", "click", () => {
@@ -193,7 +193,7 @@ function renderAuth(){
     return;
   }
   if (name && localStorage.getItem("hub_token")){
-    $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn">Sign out</button>';
+    $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn"><span class="ico">&#9099;</span><span class="lbl"> Sign out</span></button>';
     $("auth").querySelector("b").textContent = name;
     on("outBtn", "click", () => {
       ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
