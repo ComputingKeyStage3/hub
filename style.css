@@ -2329,45 +2329,6 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 
 
 
-/* mind map: the middle in the middle, branches either side */
-.map-holder{overflow-x:auto; padding:10px 0}
-.map-radial{display:flex; align-items:center; justify-content:center; gap:18px; min-width:min-content}
-.map-side{display:flex; flex-direction:column; gap:12px; justify-content:center}
-.map-centre{flex:none; display:flex; align-items:center; gap:8px}
-.map-grow{opacity:.55}
-.map-grow:hover{opacity:1}
-.map-node{display:flex; align-items:center; gap:4px}
-.map-text{height:38px; padding:0 12px; border:1.5px solid var(--line-2); border-radius:999px;
-  background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px; min-width:120px}
-.map-node.is-centre .map-text{height:52px; font-size:18px; font-weight:700; min-width:180px;
-  border-color:var(--amber); border-width:2.5px; text-align:center}
-.map-tools{display:flex; gap:2px; opacity:0; transition:opacity .15s ease}
-.map-node:hover .map-tools,.map-node:focus-within .map-tools{opacity:1}
-.map-btn{width:26px; height:26px; border-radius:50%; border:1.5px solid var(--line-2);
-  background:var(--panel); cursor:pointer; font-size:13px; color:var(--muted); padding:0}
-.map-btn:hover{border-color:var(--amber); color:var(--amber-dark)}
-/* every branch is joined to what it grows from */
-.map-limb{position:relative; padding-left:22px}
-.map-limb::before{content:""; position:absolute; left:0; top:19px; width:18px; height:2px;
-  background:var(--line-2)}
-.map-side{position:relative}
-/* the spine each side runs from, so branches are not floating */
-.map-right::before,.map-left::before{content:""; position:absolute; top:19px; bottom:19px;
-  width:2px; background:var(--line-2)}
-.map-right::before{left:0}
-.map-left::before{right:0}
-.map-side:empty::before{display:none}
-.map-right .map-limb,.map-limb.map-right{padding-left:18px}
-.map-left .map-limb::before{left:auto; right:0}
-.map-left .map-limb{padding-left:0; padding-right:18px}
-/* branches off a branch, joined the same way rather than just indented */
-.map-twigs{position:relative; margin-left:26px; padding-left:20px; margin-top:8px}
-.map-twigs::before{content:""; position:absolute; left:0; top:-8px; bottom:19px; width:2px;
-  background:var(--line-2)}
-.map-left .map-twigs{margin-left:0; margin-right:26px; padding-left:0; padding-right:20px}
-.map-left .map-twigs::before{left:auto; right:0}
-.map-left .map-node{flex-direction:row-reverse}
-.map-left{text-align:right}
 
 /* whiteboard extras */
 .board-bar{align-items:center}
@@ -2394,9 +2355,7 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
   .map-left .map-node{flex-direction:row}
   .map-left .map-limb{padding-left:18px; padding-right:0}
   .map-left .map-limb::before{left:0; right:auto}
-  .map-left .map-twigs{margin-left:20px; margin-right:0; padding-left:14px; padding-right:0;
-    border-left:2px solid var(--line); border-right:none}
-}
+  }
 
 /* labelling: a picture that reads well rather than filling the screen */
 .labeltask .label-pic{max-width:520px}
@@ -2417,3 +2376,109 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 }
 .searchbox input{border:none !important; background:transparent !important; padding:0 !important;
   height:auto; font-size:15px}
+
+
+/* =====================================================================
+   MIND MAP
+   The middle sits in the centre. Branches grow outwards to left and
+   right, and each branch's own branches grow further out beside it,
+   joined by lines rather than indented like a list.
+   ===================================================================== */
+.map-holder{overflow-x:auto; padding:14px 0}
+.map-radial{display:flex; align-items:center; justify-content:center; min-width:min-content}
+
+.map-centre{flex:none; display:flex; align-items:center; gap:8px; z-index:2}
+.map-grow{opacity:.55}
+.map-grow:hover{opacity:1}
+
+.map-node{display:flex; align-items:center; gap:4px}
+.map-text{height:38px; padding:0 12px; border:1.5px solid var(--line-2); border-radius:999px;
+  background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px;
+  min-width:120px; max-width:200px}
+.map-node.is-centre .map-text{height:52px; font-size:18px; font-weight:700; min-width:170px;
+  border-color:var(--amber); border-width:2.5px; text-align:center}
+.map-tools{display:flex; gap:2px; opacity:0; transition:opacity .15s ease}
+.map-node:hover .map-tools,.map-node:focus-within .map-tools{opacity:1}
+.map-btn{width:26px; min-width:26px; height:26px; flex:0 0 auto; border-radius:50%;
+  border:1.5px solid var(--line-2); background:var(--panel); cursor:pointer; font-size:13px;
+  color:var(--muted); padding:0; display:inline-flex; align-items:center; justify-content:center}
+.map-btn:hover{border-color:var(--amber); color:var(--amber-dark)}
+
+/* each side is a column of branches, joined to the middle by one spine */
+.map-side{position:relative; display:flex; flex-direction:column; gap:14px; justify-content:center}
+.map-side:not(:empty){padding:0 26px}
+.map-side:not(:empty)::before{content:""; position:absolute; top:22px; bottom:22px; width:2px;
+  background:var(--line-2)}
+.map-right:not(:empty)::before{left:12px}
+.map-left:not(:empty)::before{right:12px}
+
+/* a branch: itself, then its own branches beside it */
+.map-limb{position:relative; display:flex; align-items:center}
+.map-own{position:relative; flex:none}
+/* the line joining this branch back to the spine */
+.map-own::before{content:""; position:absolute; top:50%; width:14px; height:2px;
+  background:var(--line-2)}
+.map-right .map-own::before{left:-14px}
+.map-left .map-own::before{right:-14px}
+
+/* branches off a branch, further out rather than indented under it */
+.map-twigs{position:relative; display:flex; flex-direction:column; gap:10px; justify-content:center}
+.map-right .map-twigs{margin-left:26px; padding-left:14px}
+.map-left  .map-twigs{margin-right:26px; padding-right:14px; order:-1}
+.map-twigs::before{content:""; position:absolute; top:22px; bottom:22px; width:2px;
+  background:var(--line-2)}
+.map-right .map-twigs::before{left:0}
+.map-left  .map-twigs::before{right:0}
+/* and the line out to them from their branch */
+.map-limb.has-twigs > .map-own::after{content:""; position:absolute; top:50%; width:26px; height:2px;
+  background:var(--line-2)}
+.map-right .map-limb.has-twigs > .map-own::after{right:-26px}
+.map-left  .map-limb.has-twigs > .map-own::after{left:-26px}
+
+.map-left .map-limb{flex-direction:row}
+.map-left .map-node{flex-direction:row-reverse}
+
+@media (max-width:640px){
+  .map-radial{flex-direction:column; align-items:stretch; gap:14px}
+  .map-side:not(:empty){padding:0 0 0 20px}
+  .map-side:not(:empty)::before{left:6px; right:auto}
+  .map-left .map-node{flex-direction:row}
+  .map-left .map-own::before{left:-14px; right:auto}
+  .map-left .map-twigs{margin-right:0; margin-left:26px; padding-right:0; padding-left:14px; order:0}
+  .map-left .map-twigs::before{right:auto; left:0}
+  .map-left .map-limb.has-twigs > .map-own::after{left:auto; right:-26px}
+  .map-text{min-width:0; max-width:none}
+  .map-node.is-centre .map-text{min-width:0}
+}
+
+/* the whiteboard tools: bigger marks, and colours that stay circles */
+.board-tool{font-size:17px}
+.board-wipe{margin-left:auto}
+.board-colour{width:26px !important; min-width:26px; max-width:26px; height:26px; min-height:26px;
+  padding:0; border-radius:50%; flex:0 0 auto}
+/* asking before wiping the board, inside the board itself */
+.board-ask{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:8px; text-align:center; padding:20px;
+  background:color-mix(in srgb, var(--panel) 92%, transparent); z-index:5}
+.board-ask b{font-size:18px}
+.board-ask p{margin:0; color:var(--muted); font-size:15px}
+.board-askrow{display:flex; gap:10px; margin-top:6px}
+
+/* a whiteboard or notes box does not need the whole width */
+.board, .notestask{max-width:80%; margin-left:auto; margin-right:auto}
+@media (max-width:900px){ .board, .notestask{max-width:100%} }
+/* notes: eight lines, then it scrolls rather than growing forever */
+.notes-box{min-height:190px; max-height:calc(8 * 1.6em + 60px); overflow-y:auto}
+/* a labelled picture, centred and readable */
+.labeltask .label-pic{max-width:640px; margin:0 auto; display:block}
+.label-edit{max-width:560px; margin:0 auto}
+
+/* a picture pasted into writing */
+.rt-box img{max-width:100%; height:auto; border-radius:8px; margin:6px 0; cursor:pointer}
+.rt{position:relative}
+.rt-imgsize{position:absolute; z-index:20; display:flex; gap:4px; padding:4px;
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:10px;
+  box-shadow:0 4px 12px rgba(0,0,0,.14)}
+.rt-imgsize button{padding:5px 10px; border:1px solid var(--line); border-radius:8px;
+  background:var(--panel-2); cursor:pointer; font-size:13px; font-family:var(--body); color:var(--text)}
+.rt-imgsize button:hover{border-color:var(--amber)}

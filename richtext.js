@@ -8,7 +8,7 @@
 (function(){
   "use strict";
 
-  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1 };
+  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1, IMG:1 };
   /* A swatch like the ones in Office: a row of hues, each with lighter and
      darker versions underneath. */
   const HUES = [
@@ -55,6 +55,13 @@
           if (colour) keep.style.color = colour;
           const size = n.style && n.style.fontSize;
           if (size) keep.style.fontSize = size;
+        }
+        if (tag === "IMG"){
+          /* keep where it points and how big it was made */
+          const src = n.getAttribute ? n.getAttribute("src") : "";
+          if (src) keep.setAttribute("src", src);
+          if (n.style && n.style.width) keep.style.width = n.style.width;
+          if (n.style && n.style.height) keep.style.height = n.style.height;
         }
         if (tag === "OL" || tag === "UL"){
           const kind = n.style && n.style.listStyleType;
@@ -354,6 +361,75 @@
         list.style.listStyleType = (above === "lower-alpha") ? "decimal" : "lower-alpha";
       }
     }
+
+    /* A picture on the clipboard becomes part of the writing. It is kept as
+       a data url, which is only sensible for something small, so anything
+       large is scaled down before it goes in. */
+    box.addEventListener("paste", (e) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      for (const item of items){
+        if (item.type && item.type.indexOf("image") === 0){
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const probe = new Image();
+            probe.onload = () => {
+              /* no wider than 900px, so a screenshot does not fill the database */
+              const scale = Math.min(1, 900 / probe.width);
+              const c = document.createElement("canvas");
+              c.width = Math.round(probe.width * scale);
+              c.height = Math.round(probe.height * scale);
+              c.getContext("2d").drawImage(probe, 0, 0, c.width, c.height);
+              const img = document.createElement("img");
+              img.src = c.toDataURL("image/jpeg", 0.82);
+              img.style.width = Math.min(420, c.width) + "px";
+              box.focus();
+              document.execCommand("insertHTML", false, img.outerHTML);
+              fire();
+            };
+            probe.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+          return;
+        }
+      }
+    });
+
+    /* Clicking a picture offers a size to change it to. */
+    box.addEventListener("click", (e) => {
+      if (!e.target || e.target.tagName !== "IMG") return;
+      const img = e.target;
+      const old = box.querySelector(".rt-imgsize");
+      if (old) old.remove();
+      const tools = document.createElement("span");
+      tools.className = "rt-imgsize";
+      tools.contentEditable = "false";
+      [["Small", 220], ["Medium", 420], ["Large", 680]].forEach(pair => {
+        const b2 = document.createElement("button");
+        b2.type = "button";
+        b2.textContent = pair[0];
+        b2.addEventListener("mousedown", (ev) => ev.preventDefault());
+        b2.addEventListener("click", () => {
+          img.style.width = pair[1] + "px";
+          img.style.height = "auto";
+          tools.remove();
+          fire();
+        });
+        tools.appendChild(b2);
+      });
+      const r = img.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      tools.style.left = (r.left - wrapRect.left) + "px";
+      tools.style.top = (r.bottom - wrapRect.top + 4) + "px";
+      wrap.appendChild(tools);
+      setTimeout(() => {
+        document.addEventListener("pointerdown", function away(ev){
+          if (!tools.contains(ev.target)){ tools.remove(); document.removeEventListener("pointerdown", away); }
+        });
+      }, 0);
+    });
 
     box.addEventListener("paste", (e) => {
       e.preventDefault();

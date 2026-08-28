@@ -249,11 +249,12 @@
       if (name === "pen") btn.classList.add("on");
       bar.appendChild(btn);
     }
-    toolBtn("pen", "\u270E", "Draw");
-    toolBtn("rub", "\u25FD", "Rub out");
-    toolBtn("text", "T", "Add words");
-    toolBtn("move", "\u2725", "Move around the board");
-    toolBtn("pick", "\u2196", "Pick something up");
+    /* In the order they are reached for, with the pen ready to go. */
+    toolBtn("pick", "\u2B1A", "Select something");
+    toolBtn("move", "\u270B", "Move around the board");
+    toolBtn("pen",  "\u270F", "Draw");
+    toolBtn("rub",  "\u232B", "Rub out");
+    toolBtn("text", "T",       "Add words");
 
     ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
       const dot = make("button", "board-colour");
@@ -277,10 +278,38 @@
       strokes.push(undone.pop());
       draw(); ctx.changed();
     });
-    const reset = make("button", "board-tool", "\u2302");
+    const reset = make("button", "board-tool", "\u2316");
     reset.title = "Back to the middle";
     reset.addEventListener("click", () => { view = { x:0, y:0, scale:1 }; draw(); });
-    bar.appendChild(undo); bar.appendChild(redo); bar.appendChild(reset);
+
+    const wipe = make("button", "board-tool board-wipe", "\u1F5D1");
+    wipe.textContent = "\uD83D\uDDD1";
+    wipe.title = "Clear the whole board";
+    wipe.addEventListener("click", () => {
+      if (!strokes.length) return;
+      /* asked here rather than through the browser, and only on this board */
+      const ask = make("div", "board-ask");
+      ask.appendChild(make("b", "", "Clear the whole board?"));
+      ask.appendChild(make("p", "", "Everything drawn here goes. This cannot be undone."));
+      const row = make("div", "board-askrow");
+      const yes = make("button", "btn-primary", "Clear it");
+      yes.style.background = "var(--red)";
+      yes.style.borderColor = "var(--red)";
+      yes.addEventListener("click", () => {
+        undone = strokes.slice();
+        strokes = [];
+        chosen = null;
+        ask.remove();
+        draw(); ctx.changed();
+      });
+      const no = make("button", "btn-ghost", "Keep it");
+      no.addEventListener("click", () => ask.remove());
+      row.appendChild(yes); row.appendChild(no);
+      ask.appendChild(row);
+      stage.appendChild(ask);
+    });
+
+    bar.appendChild(undo); bar.appendChild(redo); bar.appendChild(reset); bar.appendChild(wipe);
 
     if (b.height) stage.style.height = parseInt(b.height, 10) + "px";
     setTimeout(fit, 0);
@@ -440,8 +469,9 @@
       get: () => (box.getHtml ? box.getHtml() : box.value),
       set: (v) => {
         if (v === undefined || v === null) return;
+        /* setHtml puts it in the editable part. Setting innerHTML on the
+           wrapper would throw the toolbar away with it. */
         if (box.setHtml) box.setHtml(String(v));
-        else if (box.getHtml) box.innerHTML = String(v);
         else box.value = String(v);
         tick();
       },
@@ -548,15 +578,21 @@
       return mid;
     }
 
-    /* a branch, with anything growing off it underneath */
+    /* A branch and whatever grows off it, laid out sideways: the branch on
+       one side, its own branches beside it, so it reads as a map rather than
+       an indented list. */
     function limb(node, side){
       const wrap = make("div", "map-limb map-" + side);
-      wrap.appendChild(nodeBox(node, "is-branch"));
+      const own = make("div", "map-own");
+      own.appendChild(nodeBox(node, "is-branch"));
+      wrap.appendChild(own);
+
       const kids = childrenOf(node.id);
       if (kids.length){
         const twigs = make("div", "map-twigs");
         kids.forEach(k => twigs.appendChild(limb(k, side)));
         wrap.appendChild(twigs);
+        wrap.classList.add("has-twigs");
       }
       return wrap;
     }

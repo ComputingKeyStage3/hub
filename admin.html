@@ -1965,11 +1965,11 @@ function schedulePopup(id){
 /* Units belong to a year group. This offers the ones from this class's year
    that are not already showing, the same way lessons are added. */
 on("addUnitBtn", "click", () => {
-  const mine = new Set((catalogue.units || [])
+  const mine = new Set((cat.units || [])
     .filter(u => unitHasLessonFor(u.name))
     .map(u => u.name.toLowerCase()));
   const year = yearOfClass();
-  const offer = (catalogue.units || [])
+  const offer = (cat.units || [])
     .filter(u => !year || !u.year || u.year === year)
     .filter(u => !mine.has(u.name.toLowerCase()));
   openModal(box => {
@@ -1994,7 +1994,7 @@ on("addUnitBtn", "click", () => {
       shown.forEach(u => {
         const row = el("button","ov-row");
         row.appendChild(el("span","t", u.name));
-        const n = (catalogue.lessons || []).filter(l => l.unit === u.name).length;
+        const n = (cat.lessons || []).filter(l => l.unit === u.name).length;
         row.appendChild(el("span","hint", n + " lesson" + (n === 1 ? "" : "s")));
         row.addEventListener("click", () => { closeModal(); addWholeUnit(u.name); });
         list.appendChild(row);
@@ -2008,15 +2008,15 @@ on("newUnitBtn2", "click", () => newUnitPrompt(yearOfClass(), () => { paintClass
 
 /* which year this class is in, worked out from the units it already has */
 function yearOfClass(){
-  const first = (catalogue.units || []).find(u => unitHasLessonFor(u.name));
+  const first = (cat.units || []).find(u => unitHasLessonFor(u.name));
   return first ? first.year : "";
 }
 function unitHasLessonFor(name){
-  return (catalogue.lessons || []).some(l => l.unit === name && assignOf(l.lesson_id));
+  return (cat.lessons || []).some(l => l.unit === name && assignOf(l.lesson_id));
 }
 /* giving a class every lesson in a unit is what "adding" it means */
 async function addWholeUnit(name){
-  const lessons = (catalogue.lessons || []).filter(l => l.unit === name);
+  const lessons = (cat.lessons || []).filter(l => l.unit === name);
   if (!lessons.length){ say("Nothing in that unit", "It has no lessons yet."); return; }
   try{
     for (const l of lessons){

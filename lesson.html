@@ -784,10 +784,11 @@ function refreshGate(){
   const s = steps[step];
   if (!s) return;
   const res = bypassed ? { ok:true } : s.check();
-  // The teacher's gate is checked when Continue is pressed, not here, so a
-  // student who has finished sees a normal, inviting button either way.
-  $("nextBtn").disabled = !res.ok;
-  $("lockMsg").textContent = res.ok ? "" : (res.message || "Finish this activity to continue.");
+  /* Continue is never locked. A task that is not finished says so quietly
+     under the button, and pressing it brings up a word of encouragement they
+     can move past. Being stuck with no way forward helps nobody. */
+  $("nextBtn").disabled = false;
+  $("lockMsg").textContent = res.ok ? "" : (res.message || "There is still something to do here.");
   $("lockMsg").hidden = res.ok;
 }
 $("backBtn").addEventListener("click", () => {
@@ -797,15 +798,24 @@ $("backBtn").addEventListener("click", () => {
 let softSkip = false;
 async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
-  if ($("nextBtn").disabled) return;               // activity itself isn't finished
   if (spectate){                                   // teachers roam freely
     if (step === steps.length - 1){ finishLesson(); } else { showStep(step + 1); }
     return;
   }
   const st = steps[step];
-  if (st && st.soft && !softSkip){
-    const res = st.soft();
-    if (!res.ok){ showSoftModal(res.words); return; }
+  if (st && !softSkip){
+    /* whichever the task offers: its own encouragement, or the plain check */
+    let res = { ok:true };
+    if (st.soft) res = st.soft();
+    else if (st.check) res = st.check();
+    if (!res.ok){
+      showSoftModal(res.words || {
+        title: "Nearly there",
+        text: res.message || "There is still something to do on this page.",
+        stay: "Let me finish", go: "Move on anyway"
+      });
+      return;
+    }
   }
   softSkip = false;
   if (step === steps.length - 1){ finishLesson(); return; }
