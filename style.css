@@ -2337,7 +2337,7 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .board-zoom{position:absolute; left:10px; bottom:10px; display:flex; align-items:center; gap:6px;
   background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px 8px}
 .board-zoomat{font-size:13px; color:var(--muted); min-width:42px; text-align:center}
-.board-picktools{position:absolute; display:flex; gap:4px; background:var(--panel);
+.board-picktools{position:absolute; z-index:6; display:flex; gap:4px; pointer-events:auto; background:var(--panel);
   border:1px solid var(--line-2); border-radius:10px; padding:4px; box-shadow:0 4px 12px rgba(0,0,0,.14)}
 .board-typing{position:absolute; height:30px; padding:0 8px; border:1.5px solid var(--amber);
   border-radius:8px; background:var(--panel); font-size:18px; font-family:var(--body); min-width:140px}
@@ -2482,3 +2482,28 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .rt-imgsize button{padding:5px 10px; border:1px solid var(--line); border-radius:8px;
   background:var(--panel-2); cursor:pointer; font-size:13px; font-family:var(--body); color:var(--text)}
 .rt-imgsize button:hover{border-color:var(--amber)}
+
+/* a Save button that has nothing to save looks settled rather than urgent */
+.done-save[data-saved=yes],.resp-save[data-saved=yes]{
+  background:transparent; color:var(--mint); border-color:var(--mint)}
+.done-save[data-saved=yes]:hover,.resp-save[data-saved=yes]:hover{
+  background:var(--mint); color:#fff}
+
+/* whiteboard icons, drawn rather than typed */
+.board-tool svg{width:17px; height:17px; fill:currentColor; display:block; pointer-events:none}
+.board-tool.on svg{fill:var(--amber-dark)}
+.board-canvas{cursor:crosshair}
+/* mind map tools take no room until they are wanted */
+.map-tools{position:absolute; left:100%; margin-left:4px; display:flex; gap:2px;
+  opacity:0; pointer-events:none; transition:opacity .15s ease}
+.map-node{position:relative}
+.map-node:hover .map-tools,.map-node:focus-within .map-tools{opacity:1; pointer-events:auto}
+.map-left .map-tools{left:auto; right:100%; margin-left:0; margin-right:4px}
+/* these tasks sit in the middle of the column */
+.notestask,.board,.labeltask{max-width:80%; margin-left:auto; margin-right:auto}
+.labeltask{text-align:center}
+.labeltask .label-pic{max-width:100%; width:100%}
+.labeltask .label-words,.labeltask .label-list{justify-content:center}
+.labeltask .btn-primary{margin:0 auto}
+.labeltask .label-spot{text-align:center}
+@media (max-width:900px){ .notestask,.board,.labeltask{max-width:100%} }

@@ -36,7 +36,8 @@
     let undone = [];
     let view = { x: 0, y: 0, scale: 1 };
     let tool = "pen", colour = "#1D1D1B", width = 3;
-    let drawing = null, panning = null, moving = null, chosen = null;
+    let drawing = null, panning = null, moving = null, marquee = null;
+    let picked = [];        // everything currently selected
 
     /* --- picking things up, and typing straight onto the board --- */
 
@@ -56,6 +57,17 @@
       }
       return null;
     }
+    /* everything wholly or partly inside the rectangle */
+    function insideBox(box){
+      const x1 = Math.min(box.from[0], box.to[0]), x2 = Math.max(box.from[0], box.to[0]);
+      const y1 = Math.min(box.from[1], box.to[1]), y2 = Math.max(box.from[1], box.to[1]);
+      return strokes.filter(st => {
+        if (st.kind === "text"){
+          return st.x >= x1 && st.x <= x2 && st.y >= y1 && st.y <= y2;
+        }
+        return (st.points || []).some(p => p[0] >= x1 && p[0] <= x2 && p[1] >= y1 && p[1] <= y2);
+      });
+    }
     function shift(item, dx, dy){
       if (item.kind === "text"){ item.x += dx; item.y += dy; return; }
       (item.points || []).forEach(p => { p[0] += dx; p[1] += dy; });
@@ -67,33 +79,40 @@
       if (pickTools && pickTools.parentNode) pickTools.parentNode.removeChild(pickTools);
       pickTools = null;
     }
-    function showPickTools(e){
-      hidePickTools();
-      if (!chosen) return;
-      pickTools = make("div", "board-picktools");
+    function movePickTools(e){
+      if (!pickTools) return;
       const rect = stage.getBoundingClientRect();
       pickTools.style.left = (e.clientX - rect.left) + "px";
-      pickTools.style.top = (e.clientY - rect.top - 44) + "px";
-      const moveBtn = make("button", "board-tool", "\u2725");
-      moveBtn.title = "Drag to move it";
+      pickTools.style.top = (e.clientY - rect.top - 46) + "px";
+    }
+    function showPickTools(e){
+      hidePickTools();
+      if (!picked.length) return;
+      pickTools = make("div", "board-picktools");
+      movePickTools(e);
+      const moveBtn = make("button", "board-tool");
+      moveBtn.innerHTML = ICONS.move;
+      moveBtn.title = "Drag to move";
       moveBtn.addEventListener("pointerdown", (ev) => {
         ev.stopPropagation();
         moving = at(ev);
         moveBtn.setPointerCapture(ev.pointerId);
       });
       moveBtn.addEventListener("pointermove", (ev) => {
-        if (!moving || !chosen) return;
+        if (!moving || !picked.length) return;
         const now = at(ev);
-        shift(chosen, now[0] - moving[0], now[1] - moving[1]);
+        picked.forEach(item => shift(item, now[0] - moving[0], now[1] - moving[1]));
         moving = now;
+        movePickTools(ev);
         draw();
       });
       moveBtn.addEventListener("pointerup", () => { moving = null; ctx.changed(); });
-      const binBtn = make("button", "board-tool", "\u2715");
-      binBtn.title = "Remove it";
+      const binBtn = make("button", "board-tool");
+      binBtn.innerHTML = ICONS.wipe;
+      binBtn.title = picked.length > 1 ? "Remove these" : "Remove it";
       binBtn.addEventListener("click", () => {
-        strokes = strokes.filter(x => x !== chosen);
-        chosen = null;
+        strokes = strokes.filter(x => picked.indexOf(x) < 0);
+        picked = [];
         hidePickTools();
         draw(); ctx.changed();
       });
@@ -148,7 +167,7 @@
                         view.scale * devicePixelRatio,
                         view.x * devicePixelRatio, view.y * devicePixelRatio);
       strokes.forEach(st => {
-        const lit = st === chosen;
+        const lit = picked.indexOf(st) >= 0;
         if (st.kind === "text"){
           ctx2.fillStyle = st.colour;
           ctx2.font = (st.size || 20) + "px system-ui, sans-serif";
@@ -170,6 +189,17 @@
         for (let i = 1; i < st.points.length; i++) ctx2.lineTo(st.points[i][0], st.points[i][1]);
         ctx2.stroke();
       });
+      if (marquee){
+        const x1 = Math.min(marquee.from[0], marquee.to[0]), x2 = Math.max(marquee.from[0], marquee.to[0]);
+        const y1 = Math.min(marquee.from[1], marquee.to[1]), y2 = Math.max(marquee.from[1], marquee.to[1]);
+        ctx2.strokeStyle = "#2F6BAE";
+        ctx2.lineWidth = 1 / view.scale;
+        ctx2.setLineDash([6 / view.scale, 4 / view.scale]);
+        ctx2.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        ctx2.setLineDash([]);
+        ctx2.fillStyle = "rgba(47,107,174,.12)";
+        ctx2.fillRect(x1, y1, x2 - x1, y2 - y1);
+      }
     }
     /* where a pointer is, in board coordinates rather than screen ones */
     function at(e){
@@ -189,9 +219,25 @@
         return;
       }
       if (tool === "pick"){
-        const hit = topmostAt(at(e));
-        chosen = hit;
-        showPickTools(e);
+        const where = at(e);
+        const hit = topmostAt(where);
+        if (hit && picked.indexOf(hit) >= 0){
+          /* already selected, so this is the start of dragging it */
+          moving = where;
+          showPickTools(e);
+          return;
+        }
+        if (hit){
+          picked = [hit];
+          moving = where;
+          showPickTools(e);
+          draw();
+          return;
+        }
+        /* nothing under the pointer, so draw a rectangle around things */
+        marquee = { from: where, to: where };
+        picked = [];
+        hidePickTools();
         draw();
         return;
       }
@@ -201,10 +247,16 @@
     });
     canvas.addEventListener("pointermove", (e) => {
       if (panning){ view.x = e.clientX - panning.x; view.y = e.clientY - panning.y; draw(); return; }
-      if (moving && chosen){
+      if (marquee){
+        marquee.to = at(e);
+        draw();
+        return;
+      }
+      if (moving && picked.length){
         const now = at(e);
-        shift(chosen, now[0] - moving[0], now[1] - moving[1]);
+        picked.forEach(item => shift(item, now[0] - moving[0], now[1] - moving[1]));
         moving = now;
+        movePickTools(e);        // the little strip travels with them
         draw();
         return;
       }
@@ -212,9 +264,15 @@
       drawing.points.push(at(e));
       draw();
     });
-    const stop = () => {
+    const stop = (e) => {
       if (drawing){ drawing = null; undone = []; ctx.changed(); }
       if (moving){ moving = null; ctx.changed(); }
+      if (marquee){
+        picked = insideBox(marquee);
+        marquee = null;
+        draw();
+        if (picked.length && e) showPickTools(e);
+      }
       panning = null;
     };
     canvas.addEventListener("pointerup", stop);
@@ -238,8 +296,22 @@
     stage.appendChild(zoomBox);
 
     /* the tools along the top */
+    /* Drawn rather than typed: a character that renders differently on every
+       machine is no use as a button. */
+    const ICONS = {
+      pick: '<svg viewBox="0 0 20 20"><path d="M4 3l12 6-5 1.6L8.6 16z"/></svg>',
+      move: '<svg viewBox="0 0 20 20"><path d="M10 2l2.5 2.5h-1.7v4.6h4.6V7.5L18 10l-2.6 2.5v-1.7h-4.6v4.6h1.7L10 18l-2.5-2.6h1.7v-4.6H4.6v1.7L2 10l2.6-2.5v1.7h4.6V4.5H7.5z"/></svg>',
+      pen:  '<svg viewBox="0 0 20 20"><path d="M14.5 2.5l3 3L7 16 3 17l1-4z"/></svg>',
+      rub:  '<svg viewBox="0 0 20 20"><path d="M8 16H4l-2-2 8-8 6 6-4 4z" opacity=".55"/><path d="M2 17h16v1.6H2z"/></svg>',
+      text: '<svg viewBox="0 0 20 20"><path d="M3 3h14v3h-1.6V4.6h-4V16H13v1.5H7V16h1.6V4.6h-4V6H3z"/></svg>',
+      undo: '<svg viewBox="0 0 20 20"><path d="M6 7h6a5 5 0 010 10h-3v-2h3a3 3 0 000-6H6v3L1.5 8 6 4z"/></svg>',
+      redo: '<svg viewBox="0 0 20 20"><path d="M14 7H8a5 5 0 000 10h3v-2H8a3 3 0 010-6h6v3l4.5-4L14 4z"/></svg>',
+      home: '<svg viewBox="0 0 20 20"><path d="M10 2l8 7h-2.4v9h-4v-5h-3.2v5h-4V9H2z"/></svg>',
+      wipe: '<svg viewBox="0 0 20 20"><path d="M7 2h6v2h4v2H3V4h4zM5 7h10l-.8 11H5.8z"/></svg>'
+    };
     function toolBtn(name, label, title){
-      const btn = make("button", "board-tool", label);
+      const btn = make("button", "board-tool");
+      btn.innerHTML = ICONS[name] || label;
       btn.title = title || label;
       btn.addEventListener("click", () => {
         tool = name;
@@ -250,11 +322,11 @@
       bar.appendChild(btn);
     }
     /* In the order they are reached for, with the pen ready to go. */
-    toolBtn("pick", "\u2B1A", "Select something");
-    toolBtn("move", "\u270B", "Move around the board");
-    toolBtn("pen",  "\u270F", "Draw");
-    toolBtn("rub",  "\u232B", "Rub out");
-    toolBtn("text", "T",       "Add words");
+    toolBtn("pick", "", "Select things");
+    toolBtn("move", "", "Move around the board");
+    toolBtn("pen",  "", "Draw");
+    toolBtn("rub",  "", "Rub out");
+    toolBtn("text", "", "Add words");
 
     ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
       const dot = make("button", "board-colour");
@@ -264,26 +336,29 @@
       bar.appendChild(dot);
     });
 
-    const undo = make("button", "board-tool", "\u21B6");
+    const undo = make("button", "board-tool");
+    undo.innerHTML = ICONS.undo;
     undo.title = "Undo";
     undo.addEventListener("click", () => {
       if (!strokes.length) return;
       undone.push(strokes.pop());
       draw(); ctx.changed();
     });
-    const redo = make("button", "board-tool", "\u21B7");
+    const redo = make("button", "board-tool");
+    redo.innerHTML = ICONS.redo;
     redo.title = "Redo";
     redo.addEventListener("click", () => {
       if (!undone.length) return;
       strokes.push(undone.pop());
       draw(); ctx.changed();
     });
-    const reset = make("button", "board-tool", "\u2316");
+    const reset = make("button", "board-tool");
+    reset.innerHTML = ICONS.home;
     reset.title = "Back to the middle";
     reset.addEventListener("click", () => { view = { x:0, y:0, scale:1 }; draw(); });
 
-    const wipe = make("button", "board-tool board-wipe", "\u1F5D1");
-    wipe.textContent = "\uD83D\uDDD1";
+    const wipe = make("button", "board-tool board-wipe");
+    wipe.innerHTML = ICONS.wipe;
     wipe.title = "Clear the whole board";
     wipe.addEventListener("click", () => {
       if (!strokes.length) return;
@@ -298,7 +373,7 @@
       yes.addEventListener("click", () => {
         undone = strokes.slice();
         strokes = [];
-        chosen = null;
+        picked = [];
         ask.remove();
         draw(); ctx.changed();
       });

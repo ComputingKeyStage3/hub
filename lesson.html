@@ -323,6 +323,7 @@ function snapshot(){
 }
 function markDirty(){
   if (spectate || !restoreDone) return;
+  if (!unsavedTyping) paintSaveButtons("idle");   // they stand out again
   unsavedTyping = true;
   refreshGate();
   clearTimeout(saveTimer);
@@ -3802,6 +3803,19 @@ function heroBits(title, sub){
   if (sub) hero.appendChild(el("p","done-sub", sub));
   return hero;
 }
+/* There can be more than one Save button on the finished screen: one at the
+   top and one under the response tasks. They are the same action, so they
+   move together, and they stay looking "saved" until something changes. */
+const saveButtons = [];
+function paintSaveButtons(state){
+  saveButtons.forEach(entry => {
+    const btn = entry.btn;
+    if (state === "saving"){ btn.textContent = "Saving\u2026"; btn.disabled = true; btn.dataset.saved = "no"; }
+    else if (state === "saved"){ btn.textContent = "\u2713 Saved"; btn.disabled = false; btn.dataset.saved = "yes"; }
+    else { btn.textContent = entry.label; btn.disabled = false; btn.dataset.saved = "no"; }
+  });
+}
+
 function saveButton(statusEl){
   /* With no backend there is nothing to send work to, so handing in means
      making a PDF to give to the teacher. */
@@ -3830,11 +3844,13 @@ function saveButton(statusEl){
     return btn;
   }
   const btn = el("button","btn-primary done-save","Save Work");
+  saveButtons.push({ btn: btn, label: "Save Work" });
+  if (!unsavedTyping) btn.dataset.saved = "yes";
   btn.addEventListener("click", async () => {
-    btn.textContent = "Saving\u2026";
+    paintSaveButtons("saving");
     const st = await submitWork();
     paintStatus(statusEl, st);
-    btn.textContent = st === "done" ? "\u2713 Saved" : "Save Work";
+    paintSaveButtons(st === "done" ? "saved" : "idle");
   });
   return btn;
 }
@@ -3856,7 +3872,8 @@ function showLessonComplete(revisit, justFinished){
   const hero = heroBits("Well done!", lesson.title + " complete");
   const status = el("p","handin");
   hero.appendChild(status);
-  if (!revisit && !spectate) hero.appendChild(saveButton(status));
+  /* The work is sent as soon as this screen opens, and the line under the
+     title says so, so a Save button here only confuses. */
 
   /* Their work opens in a pop-up, where the list of tasks used to sit on
      the page. This takes the place of "Back to Home". */
