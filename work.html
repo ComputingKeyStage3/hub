@@ -103,6 +103,23 @@
 <script src="menus.js"></script>
 <script src="settings.js"></script>
 <script>
+/* Puts everything except the cross and the closing buttons into a part that
+   scrolls on its own, so a long pop-up can be read on a small screen without
+   its buttons sliding off the bottom. */
+function scrollBody(box){
+  if (!box || box.querySelector(".modal-scroll")) return;
+  const kids = Array.from(box.children);
+  const middle = kids.filter(n =>
+    !n.classList.contains("modal-x") &&
+    !n.classList.contains("modal-cta") &&
+    !n.classList.contains("modal-stay"));
+  if (middle.length < 2) return;
+  const scroller = document.createElement("div");
+  scroller.className = "modal-scroll";
+  box.insertBefore(scroller, middle[0]);
+  middle.forEach(n => scroller.appendChild(n));
+}
+
 const $ = (id) => document.getElementById(id);
 function on(id, ev, fn){
   const e = document.getElementById(id);
@@ -125,6 +142,7 @@ function openModal(build){
     x.addEventListener("click", closeModal);
     box.insertBefore(x, box.firstChild);
   }
+  scrollBody(box);
   $("mBack").hidden = false;
 }
 function closeModal(){ $("mBack").hidden = true; }

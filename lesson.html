@@ -126,6 +126,23 @@ if (!localStorage.getItem("hub_token") && location.search.indexOf("builder=") < 
     if (h) h.hidden = false;
   });
 }
+/* Puts everything except the cross and the closing buttons into a part that
+   scrolls on its own, so a long pop-up can be read on a small screen without
+   its buttons sliding off the bottom. */
+function scrollBody(box){
+  if (!box || box.querySelector(".modal-scroll")) return;
+  const kids = Array.from(box.children);
+  const middle = kids.filter(n =>
+    !n.classList.contains("modal-x") &&
+    !n.classList.contains("modal-cta") &&
+    !n.classList.contains("modal-stay"));
+  if (middle.length < 2) return;
+  const scroller = document.createElement("div");
+  scroller.className = "modal-scroll";
+  box.insertBefore(scroller, middle[0]);
+  middle.forEach(n => scroller.appendChild(n));
+}
+
 let restoredWork = false;      // did we put MEANINGFUL saved work back on the page?
 function hasContent(v){
   if (v === null || v === undefined || v === "") return false;
@@ -201,7 +218,8 @@ function showRubric(){
       strip.appendChild(col);
     });
     box.appendChild(strip);
-    back.appendChild(box);
+    scrollBody(box);
+  back.appendChild(box);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   }
@@ -221,7 +239,8 @@ function marksButton(res, review){
     const outOf = res.perQ.reduce((n, q) => n + q.max, 0);
     popup.appendChild(el("p","modal-text", "You scored " + got + " out of " + outOf + "."));
     if (review) popup.appendChild(review);
-    back.appendChild(popup);
+    scrollBody(popup);
+  back.appendChild(popup);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   }
@@ -250,7 +269,8 @@ function openWorkPopup(){
       holder.appendChild(sec);
     });
     popup.appendChild(holder);
-    back.appendChild(popup);
+    scrollBody(popup);
+  back.appendChild(popup);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   }
@@ -369,6 +389,7 @@ window.hubSay = function(title, text){
   const ok = el("button","btn-primary modal-cta","Right you are");
   ok.addEventListener("click", () => back.remove());
   popup.appendChild(ok);
+  scrollBody(popup);
   back.appendChild(popup);
   back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
   document.body.appendChild(back);
@@ -1768,7 +1789,8 @@ function rIDE(b){
     const no = el("button","btn-ghost modal-stay","Keep my code");
     no.addEventListener("click", () => back.remove());
     box.appendChild(yes); box.appendChild(no);
-    back.appendChild(box);
+    scrollBody(box);
+  back.appendChild(box);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   });
@@ -2077,7 +2099,8 @@ function rWeb(b){
     const no = tel("button","btn-ghost modal-stay","Cancel");
     no.addEventListener("click", () => back.remove());
     box.appendChild(no);
-    back.appendChild(box);
+    scrollBody(box);
+  back.appendChild(box);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   }
@@ -2102,7 +2125,8 @@ function rWeb(b){
     const no = tel("button","btn-ghost modal-stay","Keep it");
     no.addEventListener("click", () => back.remove());
     box.appendChild(yes); box.appendChild(no);
-    back.appendChild(box);
+    scrollBody(box);
+  back.appendChild(box);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   }
@@ -2294,7 +2318,8 @@ function rWeb(b){
     const no = el("button","btn-ghost modal-stay","Keep my code");
     no.addEventListener("click", () => back.remove());
     box.appendChild(yes); box.appendChild(no);
-    back.appendChild(box);
+    scrollBody(box);
+  back.appendChild(box);
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   });
@@ -3991,6 +4016,7 @@ function openTaskPopup(){
   }
 
   showList();
+  scrollBody(popup);
   back.appendChild(popup);
   back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
   document.body.appendChild(back);
