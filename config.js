@@ -20,7 +20,7 @@
    and anything already in the database is untouched.
    ===================================================================== */
 window.HUB = {
-  OFFLINE: false,
+  OFFLINE: true,
 
   // Your Vercel address — no trailing slash. Ignored entirely when OFFLINE
   // is true, so it can be left as it is.
