@@ -242,10 +242,25 @@
     }
 
     function pick(colour){
+      if (!saved) saved = lastRange;
       restore(saved);
       /* Automatic means take the colour off, never paint a see-through one */
       if (colour && !/transparent|rgba\([^)]*,\s*0\s*\)/.test(colour)){
-        if (!paintColour(saved, colour)) cmd("foreColor", colour);
+        if (saved && saved.collapsed){
+          /* Nothing selected, so they are mid-sentence: start a coloured span
+             at the cursor and carry on typing inside it, rather than stopping. */
+          const span = document.createElement("span");
+          span.style.color = colour;
+          span.appendChild(document.createTextNode("\u200B"));
+          saved.insertNode(span);
+          const sel = window.getSelection();
+          const put = document.createRange();
+          put.setStart(span.firstChild, 1);
+          put.collapse(true);
+          sel.removeAllRanges(); sel.addRange(put);
+          saved = put.cloneRange();
+        }
+        else if (!paintColour(saved, colour)) cmd("foreColor", colour);
       }
       else clearColour();
       palette.hidden = true;
@@ -330,9 +345,24 @@
     box.innerHTML = initialHtml || "";
 
     let saved = null;
+    /* The words being worked on are remembered whenever the selection moves
+       inside this box. Relying on a single mousedown to catch them was
+       fragile: if anything else handled that event first, there was nothing
+       to colour and the button appeared to do nothing at all. */
+    let lastRange = null;
+    document.addEventListener("selectionchange", () => {
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      const r = sel.getRangeAt(0);
+      if (box.contains(r.commonAncestorContainer)) lastRange = r.cloneRange();
+    });
     function save(){
       const sel = window.getSelection();
-      return (sel && sel.rangeCount) ? sel.getRangeAt(0).cloneRange() : null;
+      if (sel && sel.rangeCount){
+        const r = sel.getRangeAt(0);
+        if (box.contains(r.commonAncestorContainer)) return r.cloneRange();
+      }
+      return lastRange;      // whatever was last worked on in this box
     }
     function restore(range){
       if (!range) return;

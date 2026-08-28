@@ -341,10 +341,12 @@ function snapshot(){
   Object.entries(fields).forEach(([id, f]) => { data[id] = f.get(); });
   return data;
 }
+let dirtyCount = 0;          // goes up every time anything is typed
 function markDirty(){
   if (spectate || !restoreDone) return;
   if (!unsavedTyping) paintSaveButtons("idle");   // they stand out again
   unsavedTyping = true;
+  dirtyCount++;
   refreshGate();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 400);
@@ -3973,12 +3975,15 @@ function openTaskPopup(){
   /* which tasks have been changed since the pop-up opened */
   const updated = new Set();
 
-  /* whether the task on screen has been changed but not sent */
-  let touched = false;
+  /* Whether anything was typed while a task was open. Counting what the page
+     itself records is far more reliable than listening for events on the
+     task, which do not always reach us from a canvas or a rich text box. */
+  let openedAt = dirtyCount;
+  const touchedNow = () => dirtyCount > openedAt;
 
   /* Asked inside the pop-up, so nothing is lost by pressing the wrong thing. */
   function leaving(){
-    if (!touched){ back.remove(); return; }
+    if (!touchedNow()){ back.remove(); return; }
     const sheet = el("div","modal-ask");
     sheet.appendChild(el("h3","","You have made changes to your work."));
     sheet.appendChild(el("p","modal-text","Do you want to save them?"));
@@ -4005,7 +4010,7 @@ function openTaskPopup(){
   }
 
   function showList(){
-    touched = false;
+    openedAt = dirtyCount;
     x.textContent = "\u2715";
     x.title = "Close";
     heading.textContent = "Your work";
@@ -4020,7 +4025,7 @@ function openTaskPopup(){
   function openOne(i){
     const stp = steps[i];
     if (!stp) return;
-    touched = false;
+    openedAt = dirtyCount;
     /* from here the cross means "back to the list" */
     x.textContent = "\u2190";
     x.title = "Back to your work";
@@ -4033,8 +4038,6 @@ function openTaskPopup(){
     if (b.text) editView.appendChild(el("p","modal-text", b.text));
 
     stp.section.hidden = false;
-    stp.section.addEventListener("input", () => { touched = true; });
-    stp.section.addEventListener("change", () => { touched = true; });
     editView.appendChild(stp.section);
 
     const bar = el("div","toolrow taskedit-bar");

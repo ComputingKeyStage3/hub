@@ -142,6 +142,7 @@
           hidePickTools();
           retype(only);
         });
+        showSizes(true);
         pickTools.appendChild(editBtn);
       }
 
@@ -178,6 +179,27 @@
       typeHere([item.x, item.y], { clientX: screenX, clientY: screenY }, item);
     }
 
+    /* How big the next piece of writing will be. */
+    let textSize = 20;
+    const sizeBar = make("div", "board-sizes");
+    sizeBar.hidden = true;
+    [["Small", 14], ["Medium", 20], ["Large", 30], ["Huge", 44]].forEach(pair => {
+      const b2 = make("button", "board-size", pair[0]);
+      if (pair[1] === textSize) b2.classList.add("on");
+      b2.addEventListener("mousedown", (ev) => ev.preventDefault());
+      b2.addEventListener("click", () => {
+        textSize = pair[1];
+        sizeBar.querySelectorAll(".board-size").forEach(x => x.classList.remove("on"));
+        b2.classList.add("on");
+        /* if something is picked up, change that too */
+        const words = picked.filter(x => x.kind === "text");
+        if (words.length){ words.forEach(w => { w.size = pair[1]; }); draw(); ctx.changed(); }
+      });
+      sizeBar.appendChild(b2);
+    });
+    stage.appendChild(sizeBar);
+    function showSizes(on){ sizeBar.hidden = !on; }
+
     /* type where they clicked, rather than in a browser pop-up */
     function typeHere(where, e, existing){
       const rect = stage.getBoundingClientRect();
@@ -186,7 +208,7 @@
       box.style.top = (e.clientY - rect.top - 14) + "px";
       box.style.color = existing ? existing.colour : colour;
       /* the same face and size it will have once written, so nothing jumps */
-      const size = (existing && existing.size) || 20;
+      const size = (existing && existing.size) || textSize;
       box.style.font = (size * view.scale) + "px " + BOARD_FONT;
       if (existing){
         box.value = existing.text;
@@ -208,7 +230,7 @@
         if (keep && words){
           strokes.push({ kind:"text", text: words, x: where[0], y: where[1],
                          colour: existing ? existing.colour : colour,
-                         size: existing ? existing.size : 20 });
+                         size: existing ? existing.size : textSize });
           undone = [];
           draw(); ctx.changed();
         }
@@ -247,21 +269,35 @@
           ctx2.font = (st.size || 20) + "px " + BOARD_FONT;
           ctx2.fillText(st.text, st.x, st.y);
           if (lit){
-            ctx2.strokeStyle = "#2F6BAE"; ctx2.lineWidth = 1;
+            ctx2.save();
+            ctx2.strokeStyle = "#2F6BAE";
+            ctx2.lineWidth = Math.max(1, 1 / view.scale);
+            ctx2.setLineDash([5 / view.scale, 4 / view.scale]);
             const w = String(st.text).length * (st.size || 20) * 0.55;
             ctx2.strokeRect(st.x - 3, st.y - (st.size || 20), w + 6, (st.size || 20) + 8);
+            ctx2.restore();
           }
           return;
         }
         if (!st.points || st.points.length < 2) return;
-        ctx2.strokeStyle = lit ? "#2F6BAE" : st.colour;
-        ctx2.lineWidth = lit ? st.width + 2 : st.width;
+        ctx2.strokeStyle = st.colour;
+        ctx2.lineWidth = st.width;
         ctx2.lineCap = "round";
         ctx2.lineJoin = "round";
         ctx2.beginPath();
         ctx2.moveTo(st.points[0][0], st.points[0][1]);
         for (let i = 1; i < st.points.length; i++) ctx2.lineTo(st.points[i][0], st.points[i][1]);
         ctx2.stroke();
+        /* A thin dashed line alongside, rather than a thick one on top:
+           the highlight should not hide the colour it is marking. */
+        if (lit){
+          ctx2.save();
+          ctx2.strokeStyle = "#2F6BAE";
+          ctx2.lineWidth = Math.max(1, 1 / view.scale);
+          ctx2.setLineDash([5 / view.scale, 4 / view.scale]);
+          ctx2.stroke();
+          ctx2.restore();
+        }
       });
       if (marquee){
         const x1 = Math.min(marquee.from[0], marquee.to[0]), x2 = Math.max(marquee.from[0], marquee.to[0]);
@@ -365,6 +401,15 @@
       }
       panning = null;
     };
+    /* two quick clicks on writing opens it for changing */
+    canvas.addEventListener("dblclick", (e) => {
+      const hit = topmostAt(at(e));
+      if (hit && hit.kind === "text"){
+        picked = [];
+        hidePickTools();
+        retype(hit);
+      }
+    });
     canvas.addEventListener("pointerup", stop);
     canvas.addEventListener("pointerleave", stop);
     /* Zoom sits on its own buttons: taking over the wheel makes the page
@@ -410,6 +455,7 @@
         btn.classList.add("on");
         /* the pointer says what will happen when it is pressed */
         stage.dataset.tool = name;
+        showSizes(name === "text");
       });
       if (name === "pen") btn.classList.add("on");
       bar.appendChild(btn);
@@ -448,7 +494,11 @@
     const reset = make("button", "board-tool");
     reset.innerHTML = ICONS.home;
     reset.title = "Back to the middle";
-    reset.addEventListener("click", () => { view = { x:0, y:0, scale:1 }; draw(); });
+    reset.addEventListener("click", () => {
+      view = { x:0, y:0, scale:1 };
+      zoomAt.textContent = "100%";      // the readout has to agree
+      draw();
+    });
 
     const wipe = make("button", "board-tool board-wipe");
     wipe.innerHTML = ICONS.wipe;
