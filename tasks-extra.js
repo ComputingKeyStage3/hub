@@ -10,6 +10,9 @@
 (function(){
   "use strict";
 
+  /* One face for writing on the board, so what is typed matches what appears. */
+  const BOARD_FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+
   const make = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -70,9 +73,29 @@
         return (st.points || []).some(p => p[0] >= x1 && p[0] <= x2 && p[1] >= y1 && p[1] <= y2);
       });
     }
+    /* The board is big, but not endless: roughly two screens each way. Left
+       open, a student can drag off into nothing and their work is stored with
+       coordinates far from anywhere. */
+    const EDGE = 1600;
+    function holdInside(){
+      const rect = stage.getBoundingClientRect();
+      const w = rect.width || 600, h = rect.height || 400;
+      const most = EDGE * view.scale;
+      view.x = Math.max(-most + w * 0.2, Math.min(most - w * 0.2, view.x));
+      view.y = Math.max(-most + h * 0.2, Math.min(most - h * 0.2, view.y));
+    }
+    /* and nothing may be dragged past the edges either */
+    function clampPoint(p){
+      p[0] = Math.max(-EDGE, Math.min(EDGE, p[0]));
+      p[1] = Math.max(-EDGE, Math.min(EDGE, p[1]));
+    }
     function shift(item, dx, dy){
-      if (item.kind === "text"){ item.x += dx; item.y += dy; return; }
-      (item.points || []).forEach(p => { p[0] += dx; p[1] += dy; });
+      if (item.kind === "text"){
+        item.x = Math.max(-EDGE, Math.min(EDGE, item.x + dx));
+        item.y = Math.max(-EDGE, Math.min(EDGE, item.y + dy));
+        return;
+      }
+      (item.points || []).forEach(p => { p[0] += dx; p[1] += dy; clampPoint(p); });
     }
 
     /* a small strip beside whatever has been picked up */
@@ -109,6 +132,31 @@
         draw();
       });
       moveBtn.addEventListener("pointerup", () => { moving = null; ctx.changed(); });
+      /* words can be rewritten without starting again */
+      const only = picked.length === 1 ? picked[0] : null;
+      if (only && only.kind === "text"){
+        const editBtn = make("button", "board-tool");
+        editBtn.innerHTML = ICONS.text;
+        editBtn.title = "Change these words";
+        editBtn.addEventListener("click", () => {
+          hidePickTools();
+          retype(only);
+        });
+        pickTools.appendChild(editBtn);
+      }
+
+      /* and anything picked up can be recoloured from here */
+      ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
+        const dot = make("button", "board-colour board-pickcolour");
+        dot.style.background = c;
+        dot.title = "Change to this colour";
+        dot.addEventListener("click", () => {
+          picked.forEach(item => { item.colour = c; });
+          draw(); ctx.changed();
+        });
+        pickTools.appendChild(dot);
+      });
+
       const binBtn = make("button", "board-tool");
       binBtn.innerHTML = ICONS.wipe;
       binBtn.title = picked.length > 1 ? "Remove these" : "Remove it";
@@ -122,13 +170,31 @@
       stage.appendChild(pickTools);
     }
 
+    /* open an existing piece of writing for changing */
+    function retype(item){
+      const rect = stage.getBoundingClientRect();
+      const screenX = rect.left + item.x * view.scale + view.x;
+      const screenY = rect.top + item.y * view.scale + view.y;
+      typeHere([item.x, item.y], { clientX: screenX, clientY: screenY }, item);
+    }
+
     /* type where they clicked, rather than in a browser pop-up */
-    function typeHere(where, e){
+    function typeHere(where, e, existing){
       const rect = stage.getBoundingClientRect();
       const box = make("input", "board-typing");
       box.style.left = (e.clientX - rect.left) + "px";
       box.style.top = (e.clientY - rect.top - 14) + "px";
-      box.style.color = colour;
+      box.style.color = existing ? existing.colour : colour;
+      /* the same face and size it will have once written, so nothing jumps */
+      const size = (existing && existing.size) || 20;
+      box.style.font = (size * view.scale) + "px " + BOARD_FONT;
+      if (existing){
+        box.value = existing.text;
+        /* changing it, so the old one goes when the new one lands */
+        strokes = strokes.filter(x => x !== existing);
+        picked = [];
+        draw();
+      }
       stage.appendChild(box);
       /* focused on the next tick, once the click that made it is over */
       setTimeout(() => { box.focus(); box.select(); }, 0);
@@ -137,9 +203,12 @@
       const finish = (keep) => {
         const words = box.value.trim();
         if (box.parentNode) box.parentNode.removeChild(box);
+        /* changed their mind: put the old words back */
+        if (!keep && existing){ strokes.push(existing); draw(); }
         if (keep && words){
           strokes.push({ kind:"text", text: words, x: where[0], y: where[1],
-                         colour: colour, size: 20 });
+                         colour: existing ? existing.colour : colour,
+                         size: existing ? existing.size : 20 });
           undone = [];
           draw(); ctx.changed();
         }
@@ -175,7 +244,7 @@
         const lit = picked.indexOf(st) >= 0;
         if (st.kind === "text"){
           ctx2.fillStyle = st.colour;
-          ctx2.font = (st.size || 20) + "px system-ui, sans-serif";
+          ctx2.font = (st.size || 20) + "px " + BOARD_FONT;
           ctx2.fillText(st.text, st.x, st.y);
           if (lit){
             ctx2.strokeStyle = "#2F6BAE"; ctx2.lineWidth = 1;
@@ -252,12 +321,20 @@
         draw();
         return;
       }
+      const start = at(e);
+      clampPoint(start);
       drawing = { kind:"line", colour: tool === "rub" ? "#FFFFFF" : colour,
-                  width: tool === "rub" ? 24 : width, points: [at(e)] };
+                  width: tool === "rub" ? 24 : width, points: [start] };
       strokes.push(drawing);
     });
     canvas.addEventListener("pointermove", (e) => {
-      if (panning){ view.x = e.clientX - panning.x; view.y = e.clientY - panning.y; draw(); return; }
+      if (panning){
+        view.x = e.clientX - panning.x;
+        view.y = e.clientY - panning.y;
+        holdInside();
+        draw();
+        return;
+      }
       if (marquee){
         marquee.to = at(e);
         draw();
@@ -272,7 +349,9 @@
         return;
       }
       if (!drawing) return;
-      drawing.points.push(at(e));
+      const p = at(e);
+      clampPoint(p);
+      drawing.points.push(p);
       draw();
     });
     const stop = (e) => {
@@ -297,12 +376,13 @@
     zoomOut.title = "Zoom out";
     const zoomAt = make("span", "board-zoomat", "100%");
     const setZoom = (next) => {
-      view.scale = Math.max(0.3, Math.min(4, next));
+      /* in tens, so the number shown is always a round one */
+      view.scale = Math.max(0.3, Math.min(3, Math.round(next * 10) / 10));
       zoomAt.textContent = Math.round(view.scale * 100) + "%";
       draw();
     };
-    zoomIn.addEventListener("click", () => setZoom(view.scale * 1.2));
-    zoomOut.addEventListener("click", () => setZoom(view.scale / 1.2));
+    zoomIn.addEventListener("click", () => setZoom(view.scale + 0.1));
+    zoomOut.addEventListener("click", () => setZoom(view.scale - 0.1));
     zoomBox.appendChild(zoomOut); zoomBox.appendChild(zoomAt); zoomBox.appendChild(zoomIn);
     stage.appendChild(zoomBox);
 
@@ -328,6 +408,8 @@
         tool = name;
         bar.querySelectorAll(".board-tool").forEach(x => x.classList.remove("on"));
         btn.classList.add("on");
+        /* the pointer says what will happen when it is pressed */
+        stage.dataset.tool = name;
       });
       if (name === "pen") btn.classList.add("on");
       bar.appendChild(btn);

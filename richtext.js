@@ -120,7 +120,7 @@
     const underBtn = tool("<u>U</u>", "Underline (Ctrl+U)", () => cmd("underline"));
     tool("A<small>A</small>", "Smaller text", () => sizeBy(-1), "rt-smaller");
     tool("A<big>A</big>", "Bigger text", () => sizeBy(1), "rt-bigger");
-    tool("&bull;", "Bullet list", () => cmd("insertUnorderedList"));
+    tool("&bull;", "Bullet list", () => { cmd("insertUnorderedList"); refreshState(); }, "rt-bullet");
     /* numbered lists come in two kinds, so this one offers a choice */
     const numBtn = tool("1.", "Numbered list", () => {}, "rt-numbtn");
     const numMenu = document.createElement("div");
@@ -168,13 +168,33 @@
       try{ now = parseInt(document.queryCommandValue("fontSize"), 10) || 3; }catch(e){}
       cmd("fontSize", String(Math.max(1, Math.min(7, now + dir))));
     }
+    /* Pressing it again turns it off: the writing inside the tag is put back
+       where the tag was, which is what people expect from a toggle. */
+    function insideTag(name){
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return null;
+      let n = sel.getRangeAt(0).commonAncestorContainer;
+      while (n && n !== box){
+        if (n.nodeType === 1 && n.tagName === name) return n;
+        n = n.parentNode;
+      }
+      return null;
+    }
+    function unwrap(node){
+      const parent = node.parentNode;
+      while (node.firstChild) parent.insertBefore(node.firstChild, node);
+      parent.removeChild(node);
+    }
     if (o.code !== false) tool("&lt;/&gt;", "Show as code", () => {
+      const already = insideTag("CODE");
+      if (already){ unwrap(already); box.focus(); fire(); refreshState(); return; }
       const sel = window.getSelection();
       if (!sel || !sel.rangeCount || sel.isCollapsed) return;
       const range = sel.getRangeAt(0);
       const code = document.createElement("code");
       try{ range.surroundContents(code); }catch(e){}
-    });
+      box.focus(); fire(); refreshState();
+    }, "rt-code");
 
     /* the colour picker: a swatch that opens a small palette */
     const colourWrap = document.createElement("span");
@@ -192,19 +212,40 @@
     const palette = document.createElement("div");
     palette.className = "rt-palette";
     palette.hidden = true;
+    /* Colour is put on by hand rather than through execCommand, which is
+       deprecated and behaves differently from browser to browser: it was
+       sometimes doing nothing at all. Wrapping the chosen words in a span
+       always works, and always survives being saved and read back. */
+    function paintColour(range, colour){
+      if (!range || range.collapsed) return false;
+      let contents;
+      try{ contents = range.extractContents(); }
+      catch(e){ return false; }
+      /* anything already coloured inside loses its own, so the new one shows */
+      contents.querySelectorAll && contents.querySelectorAll("[style*='color'], font[color]")
+        .forEach(n => {
+          if (n.style) n.style.color = "";
+          if (n.removeAttribute) n.removeAttribute("color");
+        });
+      const span = document.createElement("span");
+      span.style.color = colour;
+      span.appendChild(contents);
+      range.insertNode(span);
+      /* leave the words selected, so another colour can be tried at once */
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      const after = document.createRange();
+      after.selectNodeContents(span);
+      sel.addRange(after);
+      saved = after.cloneRange();
+      return true;
+    }
+
     function pick(colour){
       restore(saved);
       /* Automatic means take the colour off, never paint a see-through one */
       if (colour && !/transparent|rgba\([^)]*,\s*0\s*\)/.test(colour)){
-        cmd("foreColor", colour);
-        /* Browsers may answer with <font color>, which loses its colour the
-           moment the writing is saved and put back. Settle it now. */
-        box.querySelectorAll("font[color]").forEach(f => {
-          const span = document.createElement("span");
-          span.style.color = f.getAttribute("color");
-          while (f.firstChild) span.appendChild(f.firstChild);
-          f.parentNode.replaceChild(span, f);
-        });
+        if (!paintColour(saved, colour)) cmd("foreColor", colour);
       }
       else clearColour();
       palette.hidden = true;
@@ -241,7 +282,9 @@
     more.textContent = "More colours";
     const picker = document.createElement("input");
     picker.type = "color";
+    picker.addEventListener("mousedown", (e) => e.stopPropagation());
     picker.addEventListener("input", () => pick(picker.value));
+    picker.addEventListener("change", () => pick(picker.value));
     more.appendChild(picker);
     palette.appendChild(more);
     document.body.appendChild(palette);
@@ -313,6 +356,17 @@
         try{ on = document.queryCommandState(name); }catch(e){}
         btn.classList.toggle("on", !!on);
       });
+      /* lists and code show as on when the cursor is inside one, so pressing
+         the button again visibly turns them off */
+      [["insertUnorderedList", ".rt-bullet"], ["insertOrderedList", ".rt-number"]].forEach(pair => {
+        const btn = bar.querySelector(pair[1]);
+        if (!btn) return;
+        let on = false;
+        try{ on = document.queryCommandState(pair[0]); }catch(e){}
+        btn.classList.toggle("on", !!on);
+      });
+      const codeBtn = bar.querySelector(".rt-code");
+      if (codeBtn) codeBtn.classList.toggle("on", !!insideTag("CODE"));
       let colour = "";
       try{ colour = document.queryCommandValue("foreColor") || ""; }catch(e){}
       swatch.style.background = normaliseColour(colour) || "transparent";

@@ -3942,16 +3942,25 @@ function showLessonComplete(revisit, justFinished){
   box.appendChild(layout);
 
   if (justFinished) confetti();      // only the moment they finish, not every visit
-  if (!revisit && !spectate){ submitWork().then(st => paintStatus(status, st)); }
-  else if (revisit && token && !spectate){ status.dataset.state = "done"; status.textContent = "Saved earlier \u2713"; }
+  if (!revisit && !spectate){
+    submitWork().then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
+  }
+  else if (revisit && token && !spectate){
+    status.dataset.state = "done";
+    status.textContent = "Saved earlier \u2713";
+    paintSaveButtons("saved");
+  }
 }
 
 /* Every task, in a pop-up big enough to work in. */
 function openTaskPopup(){
   const back = el("div","modal-back");
   const popup = el("div","modal wide taskpopup");
+  /* The cross closes the pop-up; once a task is open it becomes a way back
+     to the list, since closing everything from there loses their place. */
   const x = el("button","btn-ghost iconbtn modal-x","\u2715");
-  x.addEventListener("click", () => back.remove());
+  x.title = "Close";
+  x.addEventListener("click", () => leaving());
   popup.appendChild(x);
   const heading = el("h2","","Your work");
   popup.appendChild(heading);
@@ -3964,7 +3973,41 @@ function openTaskPopup(){
   /* which tasks have been changed since the pop-up opened */
   const updated = new Set();
 
+  /* whether the task on screen has been changed but not sent */
+  let touched = false;
+
+  /* Asked inside the pop-up, so nothing is lost by pressing the wrong thing. */
+  function leaving(){
+    if (!touched){ back.remove(); return; }
+    const sheet = el("div","modal-ask");
+    sheet.appendChild(el("h3","","You have made changes to your work."));
+    sheet.appendChild(el("p","modal-text","Do you want to save them?"));
+    const row = el("div","modal-askrow");
+    const yes = el("button","btn-primary","Yes, save them");
+    yes.addEventListener("click", async () => {
+      yes.disabled = true;
+      yes.textContent = "Saving\u2026";
+      const state = await submitWork();
+      if (state === "done" || state === "offline"){
+        paintSaveButtons("saved");
+        back.remove();
+      } else {
+        yes.disabled = false;
+        yes.textContent = "Yes, save them";
+        sheet.appendChild(el("p","hint","That did not reach your teacher. Try again in a moment."));
+      }
+    });
+    const no = el("button","btn-ghost","No, leave them");
+    no.addEventListener("click", () => back.remove());
+    row.appendChild(yes); row.appendChild(no);
+    sheet.appendChild(row);
+    popup.appendChild(sheet);
+  }
+
   function showList(){
+    touched = false;
+    x.textContent = "\u2715";
+    x.title = "Close";
     heading.textContent = "Your work";
     editView.hidden = true; editView.innerHTML = "";
     listView.hidden = false;
@@ -3977,6 +4020,10 @@ function openTaskPopup(){
   function openOne(i){
     const stp = steps[i];
     if (!stp) return;
+    touched = false;
+    /* from here the cross means "back to the list" */
+    x.textContent = "\u2190";
+    x.title = "Back to your work";
     listView.hidden = true;
     editView.hidden = false;
     editView.innerHTML = "";
@@ -3986,6 +4033,8 @@ function openTaskPopup(){
     if (b.text) editView.appendChild(el("p","modal-text", b.text));
 
     stp.section.hidden = false;
+    stp.section.addEventListener("input", () => { touched = true; });
+    stp.section.addEventListener("change", () => { touched = true; });
     editView.appendChild(stp.section);
 
     const bar = el("div","toolrow taskedit-bar");

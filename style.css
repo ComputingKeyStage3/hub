@@ -2684,3 +2684,21 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
   /* and the page itself can always be scrolled clear of the bar */
   body{ padding-bottom:env(safe-area-inset-bottom, 0px) }
 }
+
+/* the pointer matches whichever tool is in hand */
+.board-stage[data-tool=pick] .board-canvas{cursor:default}
+.board-stage[data-tool=move] .board-canvas{cursor:grab}
+.board-stage[data-tool=move] .board-canvas:active{cursor:grabbing}
+.board-stage[data-tool=pen] .board-canvas,
+.board-stage[data-tool=rub] .board-canvas{cursor:crosshair}
+.board-stage[data-tool=text] .board-canvas{cursor:text}
+/* colours inside the strip beside something picked up */
+.board-pickcolour{width:20px !important; min-width:20px; height:20px; min-height:20px}
+/* asking about unsaved changes, inside the pop-up it belongs to */
+.modal-ask{position:absolute; inset:auto 0 0 0; z-index:8; padding:16px 18px;
+  background:var(--panel); border-top:1.5px solid var(--line-2);
+  box-shadow:0 -6px 18px rgba(0,0,0,.12); text-align:center}
+.modal-ask h3{margin:0 0 4px; font-size:17px}
+.modal-askrow{display:flex; gap:10px; justify-content:center; margin-top:10px}
+/* a labelled picture can use the height of the page */
+.label-layout .label-pic img{max-height:calc(100vh - 190px); max-height:calc(100dvh - 190px)}
