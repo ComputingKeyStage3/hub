@@ -195,7 +195,17 @@
     function pick(colour){
       restore(saved);
       /* Automatic means take the colour off, never paint a see-through one */
-      if (colour && !/transparent|rgba\([^)]*,\s*0\s*\)/.test(colour)) cmd("foreColor", colour);
+      if (colour && !/transparent|rgba\([^)]*,\s*0\s*\)/.test(colour)){
+        cmd("foreColor", colour);
+        /* Browsers may answer with <font color>, which loses its colour the
+           moment the writing is saved and put back. Settle it now. */
+        box.querySelectorAll("font[color]").forEach(f => {
+          const span = document.createElement("span");
+          span.style.color = f.getAttribute("color");
+          while (f.firstChild) span.appendChild(f.firstChild);
+          f.parentNode.replaceChild(span, f);
+        });
+      }
       else clearColour();
       palette.hidden = true;
       box.focus(); fire(); refreshState();
@@ -370,6 +380,15 @@
       for (const item of items){
         if (item.type && item.type.indexOf("image") === 0){
           e.preventDefault();
+          /* Pictures belong in lessons, not in a student's notes: they would
+             fill the database, and there is a screenshot task for handing one
+             in. Nothing is pasted, and they are told why. */
+          if (o.pictures === false){
+            if (window.hubSay) window.hubSay("You cannot paste a picture here",
+              "Use a screenshot task to hand a picture in.");
+            else alert("You cannot paste a picture here.");
+            return;
+          }
           const file = item.getAsFile();
           if (!file) return;
           const reader = new FileReader();

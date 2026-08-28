@@ -209,13 +209,16 @@
     }
 
     canvas.addEventListener("pointerdown", (e) => {
+      /* Typing puts a real box on the board, and it needs the focus. Capturing
+         the pointer for the canvas first took the focus straight back, so the
+         box blurred and vanished before a word could be typed. */
+      if (tool === "text"){
+        typeHere(at(e), e);
+        return;
+      }
       canvas.setPointerCapture(e.pointerId);
       if (tool === "move" || e.button === 1){
         panning = { x: e.clientX - view.x, y: e.clientY - view.y };
-        return;
-      }
-      if (tool === "text"){
-        typeHere(at(e), e);
         return;
       }
       if (tool === "pick"){
@@ -416,12 +419,17 @@
      =================================================================== */
   window.rLabel = function(b, ctx){
     const s = make("section", "labeltask");
+    const layout = make("div", "label-layout");
     const holder = make("div", "label-pic");
     const img = make("img");
     img.src = b.image || "";
     img.alt = b.alt || "";
+    img.draggable = false;
     holder.appendChild(img);
-    s.appendChild(holder);
+    layout.appendChild(holder);
+    const side = make("div", "label-side");
+    layout.appendChild(side);
+    s.appendChild(layout);
 
     const placed = {};        // spot index -> the word in it
     const spots = (b.spots || []).map((sp, i) => {
@@ -452,12 +460,12 @@
     });
 
     const tray = make("div", "label-words");
-    s.appendChild(tray);
+    side.appendChild(tray);
     const check = make("button", "btn-primary", "Check my labels");
     const note = make("p", "label-note");
     note.hidden = true;
-    s.appendChild(check);
-    s.appendChild(note);
+    side.appendChild(check);
+    side.appendChild(note);
 
     let right = false;
     function paint(){
@@ -517,7 +525,7 @@
     const s = make("section", "notestask");
     let box;
     if (window.richText){
-      box = window.richText(b.starter || "");
+      box = window.richText(b.starter || "", null, { pictures:false });
       box.classList.add("notes-box");
       s.appendChild(box);
       box.addEventListener("input", ctx.changed);

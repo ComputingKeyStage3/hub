@@ -357,6 +357,22 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
    failing that we let them through. A network blip must never strand a class. */
 const API = (window.HUB && window.HUB.API) || "";
 const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
+/* So shared files can put a message on screen without a browser alert. */
+window.hubSay = function(title, text){
+  const back = el("div","modal-back");
+  const popup = el("div","modal narrow");
+  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+  x.addEventListener("click", () => back.remove());
+  popup.appendChild(x);
+  popup.appendChild(el("h2","", title));
+  if (text) popup.appendChild(el("p","modal-text", text));
+  const ok = el("button","btn-primary modal-cta","Right you are");
+  ok.addEventListener("click", () => back.remove());
+  popup.appendChild(ok);
+  back.appendChild(popup);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+  document.body.appendChild(back);
+};
 /* nothing that talks about signing in belongs on a site with no accounts */
 if (OFFLINE){
   document.querySelectorAll("[data-online-only]").forEach(e => { e.remove(); });
@@ -3958,6 +3974,11 @@ function openTaskPopup(){
       save.textContent = "Save & Go Back";
       if (state === "done" || state === "offline"){
         updated.add(i);
+        paintSaveButtons("saved");
+        document.querySelectorAll(".handin").forEach(n => {
+          n.dataset.state = "done";
+          n.textContent = "Saved your changes \u2713";
+        });
         showList();
       } else {
         msg.textContent = "That did not reach your teacher. Try again in a moment.";

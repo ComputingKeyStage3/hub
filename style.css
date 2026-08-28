@@ -2507,3 +2507,79 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .labeltask .btn-primary{margin:0 auto}
 .labeltask .label-spot{text-align:center}
 @media (max-width:900px){ .notestask,.board,.labeltask{max-width:100%} }
+
+
+/* =====================================================================
+   THIS ROUND'S LAYOUT
+   ===================================================================== */
+
+/* the welcome note floats in the bar, so nothing moves when it goes */
+#resumeNote{
+  position:fixed; top:10px; left:50%; transform:translateX(-50%);
+  z-index:80; margin:0; max-width:min(520px, calc(100vw - 32px));
+  padding:8px 16px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.12);
+  background:var(--panel); border:1.5px solid var(--amber); text-align:center;
+}
+
+/* mind map tools: no room taken, and reachable once shown */
+.map-tools{position:absolute; left:100%; top:50%; transform:translateY(-50%);
+  margin-left:4px; display:flex; gap:2px; opacity:0; pointer-events:none;
+  transition:opacity .15s ease}
+.map-node{position:relative}
+/* the whole branch keeps them alive, so the pointer can travel to them */
+.map-limb:hover .map-tools,.map-node:focus-within .map-tools{opacity:1; pointer-events:auto}
+.map-left .map-tools{left:auto; right:100%; margin-left:0; margin-right:4px}
+
+/* notes and whiteboard, centred in the column */
+.notestask,.board{width:80%; max-width:80%; margin-left:auto; margin-right:auto}
+@media (max-width:900px){ .notestask,.board{width:100%; max-width:100%} }
+
+/* labelling: the picture on the left, the words beside it */
+.labeltask{max-width:none; width:100%; text-align:left}
+.label-layout{display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap}
+.label-layout .label-pic{flex:0 1 auto; max-height:50vh; width:auto; max-width:100%}
+.label-layout .label-pic img{max-height:50vh; width:auto; max-width:100%}
+.label-side{flex:1 1 220px; min-width:200px; display:flex; flex-direction:column; gap:10px}
+.label-side .label-words{justify-content:flex-start; margin:0}
+@media (max-width:700px){
+  .label-layout{flex-direction:column}
+  .label-side{min-width:0; flex:1 1 auto}
+}
+
+/* a label has to fit its box */
+.label-spot{font-size:13px; line-height:1.15; overflow:hidden; padding:2px 4px}
+.label-spot span,.label-spot{white-space:nowrap; text-overflow:ellipsis}
+
+/* the toolbar stays put while the writing scrolls under it */
+.rt{display:flex; flex-direction:column}
+.rt-bar{position:sticky; top:0; z-index:5; background:var(--panel-2)}
+.rt-box{overflow-y:auto}
+
+/* search boxes centre their text like every other field */
+.searchbox,.bankfind{line-height:normal; display:flex; align-items:center}
+.searchbox input{height:100%}
+
+/* a lesson in the picker shows its unit underneath */
+.pick-lesson{display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left}
+.pick-unit{font-size:12.5px; color:var(--muted)}
+
+/* the Past tab, folded up by unit */
+.pastunit{margin-bottom:10px}
+.pastunit-head{display:flex; align-items:center; justify-content:space-between; width:100%;
+  padding:11px 14px; background:var(--panel-2); border:1px solid var(--line);
+  border-radius:12px; cursor:pointer; font-family:var(--body); font-size:15.5px;
+  font-weight:600; color:var(--text); text-align:left}
+.pastunit-head:hover{border-color:var(--amber)}
+.pastunit-head::after{content:"\203A"; font-size:18px; transform:rotate(90deg);
+  transition:transform .2s ease; color:var(--muted)}
+.pastunit-head.open::after{transform:rotate(-90deg)}
+.pastunit-body{padding-top:8px}
+.pastunit-count{font-size:13px; color:var(--muted); font-weight:400; margin-left:auto; margin-right:10px}
+
+/* the lesson picker row, with its unit on a second line */
+.ov-row .pick-lesson{flex:1 1 auto; min-width:0}
+.ov-row .pick-lesson .t{white-space:normal}
+.pick-unit{display:block; font-size:12.5px; color:var(--muted); line-height:1.3}
+/* the search box in every picker */
+.searchbox,.bankfind{height:42px; line-height:42px}
+.searchbox input,input.searchbox,input.bankfind{line-height:normal; height:100%}

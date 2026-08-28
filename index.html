@@ -385,8 +385,38 @@ function paintLessons(byId){
     return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
   });
 
-  names.forEach(unit => {
-    if (unit){ const h = document.createElement("p"); h.className = "unit-head"; h.textContent = unit; box.appendChild(h); }
+  names.forEach((unit, unitIndex) => {
+    /* Past work piles up over a year, so each unit folds away. The one most
+       recently finished is left open; the rest start closed. */
+    const foldable = showing === "past" && unit;
+    let body = box;
+    if (foldable){
+      const holder = document.createElement("div");
+      holder.className = "pastunit";
+      const head = document.createElement("button");
+      head.className = "pastunit-head";
+      head.type = "button";
+      head.appendChild(Object.assign(document.createElement("span"), { textContent: unit }));
+      const count = document.createElement("span");
+      count.className = "pastunit-count";
+      count.textContent = groups[unit].length + (groups[unit].length === 1 ? " lesson" : " lessons");
+      head.appendChild(count);
+      const inner = document.createElement("div");
+      inner.className = "pastunit-body";
+      const openFirst = unitIndex === 0;
+      inner.hidden = !openFirst;
+      if (openFirst) head.classList.add("open");
+      head.addEventListener("click", () => {
+        inner.hidden = !inner.hidden;
+        head.classList.toggle("open", !inner.hidden);
+      });
+      holder.appendChild(head);
+      holder.appendChild(inner);
+      box.appendChild(holder);
+      body = inner;
+    } else if (unit){
+      const h = document.createElement("p"); h.className = "unit-head"; h.textContent = unit; box.appendChild(h);
+    }
     const wrap = document.createElement("div"); wrap.className = "lessons";
     groups[unit].sort((a, b) => (a.position || 0) - (b.position || 0)).forEach((c, i) => {
       const l = byId[c.lesson_id];
@@ -429,7 +459,7 @@ function paintLessons(byId){
       a.appendChild(go);
       wrap.appendChild(a);
     });
-    box.appendChild(wrap);
+    body.appendChild(wrap);
   });
 }
 

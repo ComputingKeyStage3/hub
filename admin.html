@@ -130,7 +130,6 @@
     <h2 style="margin:14px 0 6px">Students</h2>
     <div class="toolrow">
       <button class="btn-primary" id="addOneBtn">+ Add student</button>
-      <button class="btn-ghost" id="addManyBtn">Add many at once</button>
       <button class="btn-ghost" id="importBtn">Import from Arbor</button>
     </div>
     <div id="resetBox"></div>
@@ -1525,34 +1524,6 @@ on("importBtn", "click", () => {
   });
 });
 
-on("addManyBtn", "click", () => {
-  openModal(box => {
-    modalTitle(box, "Add many to " + cls);
-    box.appendChild(el("p","modal-text","One student per line: username, display name, they choose their own password at first sign-in. (You can still use username, password, display name if you want to set one.)"));
-    const ta = el("textarea"); ta.rows = 8; ta.placeholder = "jsmith, Jamie Smith\nlkhan, Layla Khan"; ta.style.width = "100%";
-    box.appendChild(ta);
-    const msg = el("p","hint","");
-    const go = el("button","btn-primary modal-cta","Add students");
-    go.addEventListener("click", async () => {
-      const rows = ta.value.split("\n").map(l => l.split(",").map(x => x.trim())).filter(printMatch => printMatch[0]);
-      /* Two columns = username + display name (no password, they pick their own).
-         Three columns = username, password, display name. */
-      const list = rows.map(printMatch => printMatch.length >= 3
-        ? { group: cls, username: printMatch[0], password: printMatch[1] || "", displayName: printMatch[2] || printMatch[0] }
-        : { group: cls, username: printMatch[0], password: "", displayName: printMatch[1] || printMatch[0] });
-      if (!list.length){ msg.textContent = "Nothing to add yet."; return; }
-      msg.textContent = "Adding\u2026";
-      try{
-        const r = await fetch(API + "/api/teacher/students", { method:"POST", headers: HJ(), body: JSON.stringify({ students: list }) });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || "Could not add.");
-        msg.textContent = "Added " + j.added + (j.skipped ? " \u00b7 skipped " + j.skipped + " (missing username, or a password under 4 characters)" : "");
-        loadStudents(); refreshGroups();
-      }catch(e){ msg.textContent = e.message; }
-    });
-    box.appendChild(go); box.appendChild(msg);
-  });
-});
 
 /* ---------- catalogue: units + which lessons are published ---------- */
 let cat = { units: [], lessons: [] };     // from the database
@@ -1691,10 +1662,12 @@ on("addLessonBtn", "click", () => {
       }
       rows.forEach(l => {
         const row = el("button","ov-row");
-        row.appendChild(el("span","t", l.title || l.id));
-        const where = catOf(l.id).unit;
-        row.appendChild(el("span","p", where ? "currently in " + where
-                                             : (l.unit ? "made for " + l.unit : "not in a unit")));
+        /* the title, with its unit underneath so a long name still fits */
+        const words = el("span","pick-lesson");
+        words.appendChild(el("span","t", l.title || l.id));
+        const where = catOf(l.id).unit || l.unit;
+        words.appendChild(el("span","pick-unit", where || "Not in a unit"));
+        row.appendChild(words);
         row.appendChild(el("span","edit","Add \u2192"));
         row.addEventListener("click", async () => {
           msg.textContent = "Adding\u2026";
