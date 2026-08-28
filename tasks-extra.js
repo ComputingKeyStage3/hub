@@ -24,12 +24,14 @@
      =================================================================== */
   window.rBoard = function(b, ctx){
     const s = make("section", "board");
+    const inner = make("div", "board-inner");
+    s.appendChild(inner);
     const bar = make("div", "board-bar");
     const stage = make("div", "board-stage");
     const canvas = make("canvas", "board-canvas");
     stage.appendChild(canvas);
-    s.appendChild(bar);
-    s.appendChild(stage);
+    inner.appendChild(bar);
+    inner.appendChild(stage);
 
     /* what is on the board: each stroke is a colour, a width and points */
     let strokes = Array.isArray(b.starter) ? JSON.parse(JSON.stringify(b.starter)) : [];
@@ -128,7 +130,10 @@
       box.style.top = (e.clientY - rect.top - 14) + "px";
       box.style.color = colour;
       stage.appendChild(box);
-      box.focus();
+      /* focused on the next tick, once the click that made it is over */
+      setTimeout(() => { box.focus(); box.select(); }, 0);
+      let ready = false;
+      setTimeout(() => { ready = true; }, 150);
       const finish = (keep) => {
         const words = box.value.trim();
         if (box.parentNode) box.parentNode.removeChild(box);
@@ -143,7 +148,7 @@
         if (ev.key === "Enter"){ ev.preventDefault(); finish(true); }
         if (ev.key === "Escape"){ finish(false); }
       });
-      box.addEventListener("blur", () => finish(true));
+      box.addEventListener("blur", () => { if (ready) finish(true); });
     }
 
     const ctx2 = canvas.getContext("2d");
@@ -213,6 +218,9 @@
          the pointer for the canvas first took the focus straight back, so the
          box blurred and vanished before a word could be typed. */
       if (tool === "text"){
+        /* Without this the browser moves focus to the canvas straight after,
+           which blurs the box we are about to make and removes it again. */
+        e.preventDefault();
         typeHere(at(e), e);
         return;
       }
@@ -523,11 +531,13 @@
      =================================================================== */
   window.rNotes = function(b, ctx){
     const s = make("section", "notestask");
+    const inner = make("div", "notes-inner");
+    s.appendChild(inner);
     let box;
     if (window.richText){
       box = window.richText(b.starter || "", null, { pictures:false });
       box.classList.add("notes-box");
-      s.appendChild(box);
+      inner.appendChild(box);
       box.addEventListener("input", ctx.changed);
     } else {
       /* no formatting available, so a plain box rather than nothing */
@@ -535,10 +545,10 @@
       box.rows = 8;
       box.value = b.starter || "";
       box.addEventListener("input", ctx.changed);
-      s.appendChild(box);
+      inner.appendChild(box);
     }
     const count = make("p", "notes-count", "");
-    s.appendChild(count);
+    inner.appendChild(count);
     const words = () => {
       const t = box.getHtml ? box.getHtml().replace(/<[^>]*>/g, " ") : box.value;
       return (t.trim().match(/\S+/g) || []).length;

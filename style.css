@@ -2465,7 +2465,6 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .board-askrow{display:flex; gap:10px; margin-top:6px}
 
 /* a whiteboard or notes box does not need the whole width */
-.board, .notestask{max-width:80%; margin-left:auto; margin-right:auto}
 @media (max-width:900px){ .board, .notestask{max-width:100%} }
 /* notes: eight lines, then it scrolls rather than growing forever */
 .notes-box{min-height:190px; max-height:calc(8 * 1.6em + 60px); overflow-y:auto}
@@ -2494,13 +2493,9 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .board-tool.on svg{fill:var(--amber-dark)}
 .board-canvas{cursor:crosshair}
 /* mind map tools take no room until they are wanted */
-.map-tools{position:absolute; left:100%; margin-left:4px; display:flex; gap:2px;
-  opacity:0; pointer-events:none; transition:opacity .15s ease}
 .map-node{position:relative}
 .map-node:hover .map-tools,.map-node:focus-within .map-tools{opacity:1; pointer-events:auto}
-.map-left .map-tools{left:auto; right:100%; margin-left:0; margin-right:4px}
 /* these tasks sit in the middle of the column */
-.notestask,.board,.labeltask{max-width:80%; margin-left:auto; margin-right:auto}
 .labeltask{text-align:center}
 .labeltask .label-pic{max-width:100%; width:100%}
 .labeltask .label-words,.labeltask .label-list{justify-content:center}
@@ -2522,17 +2517,11 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 }
 
 /* mind map tools: no room taken, and reachable once shown */
-.map-tools{position:absolute; left:100%; top:50%; transform:translateY(-50%);
-  margin-left:4px; display:flex; gap:2px; opacity:0; pointer-events:none;
-  transition:opacity .15s ease}
 .map-node{position:relative}
 /* the whole branch keeps them alive, so the pointer can travel to them */
 .map-limb:hover .map-tools,.map-node:focus-within .map-tools{opacity:1; pointer-events:auto}
-.map-left .map-tools{left:auto; right:100%; margin-left:0; margin-right:4px}
 
 /* notes and whiteboard, centred in the column */
-.notestask,.board{width:80%; max-width:80%; margin-left:auto; margin-right:auto}
-@media (max-width:900px){ .notestask,.board{width:100%; max-width:100%} }
 
 /* labelling: the picture on the left, the words beside it */
 .labeltask{max-width:none; width:100%; text-align:left}
@@ -2583,3 +2572,115 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 /* the search box in every picker */
 .searchbox,.bankfind{height:42px; line-height:42px}
 .searchbox input,input.searchbox,input.bankfind{line-height:normal; height:100%}
+
+
+/* =====================================================================
+   CENTRING, DONE FROM THE MARKUP
+   The task fills its column and puts a narrower box in the middle, so it
+   does not matter what the surrounding layout happens to be.
+   ===================================================================== */
+.board, .notestask{ display:flex; justify-content:center; width:100%; max-width:none }
+.board-inner, .notes-inner{ width:80%; max-width:820px; min-width:0 }
+@media (max-width:900px){ .board-inner, .notes-inner{ width:100% } }
+
+/* the mind map tools have no gap to cross, so hover does not break */
+.map-tools{ position:absolute; left:100%; top:50%; transform:translateY(-50%);
+  margin:0; padding-left:6px; display:flex; gap:2px;
+  opacity:0; pointer-events:none; transition:opacity .12s ease .35s }
+.map-limb:hover .map-tools,.map-node:hover .map-tools,.map-node:focus-within .map-tools,
+.map-tools:hover{ opacity:1; pointer-events:auto; transition-delay:0s }
+.map-left .map-tools{ left:auto; right:100%; padding-left:0; padding-right:6px }
+
+/* =====================================================================
+   LABELLING: the picture in the middle, its words in a column beside it
+   ===================================================================== */
+.labeltask{ width:100%; max-width:none; text-align:left }
+.label-layout{ display:flex; gap:22px; align-items:flex-start; justify-content:center;
+  flex-wrap:nowrap }
+.label-layout .label-pic{ flex:0 1 auto; margin:0 }
+.label-layout .label-pic img{ max-height:50vh; width:auto; max-width:100%; display:block }
+.label-side{ flex:0 0 auto; width:250px; display:flex; flex-direction:column; gap:10px;
+  align-items:stretch }
+/* the words themselves in two or three narrow columns */
+.label-side .label-words{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:6px; margin:0; justify-content:stretch }
+.label-side .label-word{ padding:6px 8px; font-size:13.5px; text-align:center;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+/* and the button tucked under them, to the right */
+.label-side .btn-primary{ align-self:flex-end; margin:2px 0 0 }
+.label-note{ text-align:right; margin:0 }
+@media (max-width:820px){
+  .label-layout{ flex-wrap:wrap }
+  .label-side{ width:100%; flex:1 1 100% }
+  .label-side .label-words{ grid-template-columns:repeat(3, minmax(0,1fr)) }
+}
+
+/* the welcome note: a slimmer pill */
+#resumeNote{ padding:5px 14px; font-size:14px; line-height:1.35 }
+
+
+/* =====================================================================
+   PHONES: THE ADDRESS BAR
+   On a phone 100vh means the viewport with the browser's own bars hidden,
+   which is taller than what can actually be seen. Anything sized that way
+   runs underneath the address bar, so the bottom of it cannot be reached
+   or tapped.
+
+   dvh is the height that is really visible, and it changes as the bars
+   slide in and out. vh is kept first as a fallback for older browsers,
+   then dvh overrides it where it is understood.
+   ===================================================================== */
+
+/* --- pop-ups --- */
+.modal, .modal.wide, .modal.narrow{
+  max-height:88vh;
+  max-height:88dvh;
+}
+.modal-scroll{
+  overflow-y:auto;
+  /* let a finger scroll this rather than the page behind it */
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  overscroll-behavior:contain;
+}
+/* the pop-up itself never scrolls: its middle does */
+.modal{ overscroll-behavior:contain }
+
+@media (max-width:640px){
+  .modal, .modal.wide, .modal.narrow{
+    max-height:100vh;
+    max-height:100dvh;
+    border-radius:0;
+    /* clear of the address bar, and of any notch */
+    padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .modal-back{
+    align-items:stretch;
+    padding:0;
+  }
+  /* the button at the bottom sits above the address bar, not under it */
+  .modal-cta, .modal-stay{
+    bottom:env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* --- the bar along the bottom of a lesson --- */
+.dock{
+  padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
+/* --- anything else measured against the screen --- */
+.fullprev{ height:88vh; height:88dvh }
+.taskpopup{ min-height:70vh; min-height:70dvh }
+.banklist{ max-height:46vh; max-height:46dvh }
+.label-layout .label-pic img{ max-height:50vh; max-height:50dvh }
+.rubriccol{ flex-basis:78vw }
+
+@media (max-width:900px){
+  /* full-height pages measured the same way */
+  html.builder, html.builder body{ height:100vh; height:100dvh }
+  .workframe{ height:60vh; height:60dvh }
+  .board-stage{ max-height:60vh; max-height:60dvh }
+  /* and the page itself can always be scrolled clear of the bar */
+  body{ padding-bottom:env(safe-area-inset-bottom, 0px) }
+}

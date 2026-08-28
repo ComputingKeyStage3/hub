@@ -388,7 +388,7 @@ function paintLessons(byId){
   names.forEach((unit, unitIndex) => {
     /* Past work piles up over a year, so each unit folds away. The one most
        recently finished is left open; the rest start closed. */
-    const foldable = showing === "past" && unit;
+    const foldable = showing === "done" && unit;   // the Past tab
     let body = box;
     if (foldable){
       const holder = document.createElement("div");
