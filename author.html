@@ -195,7 +195,7 @@ const BLANK = {
   notes:    () => ({ type:"notes", title:"", task:"", starter:"" }),
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
-  label:    () => ({ type:"label", title:"", task:"", image:"", words:"", spots:[] }),
+  label:    () => ({ type:"label", title:"", task:"", image:"", spots:[] }),
   binary:   () => ({ type:"binary", title:"", task:"", mode:"toDenary", bits:8, count:4,
                      showPlace:true, numbers:"" }),
   binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
@@ -427,7 +427,10 @@ function compileOne(b, id, target){
     else if (b.type === "label")
       push(keepArrays({ type:"label", id, title: b.title || "", task: b.task || "",
         image: b.image || "",
-        words: String(b.words || "").split(",").map(w => w.trim()).filter(Boolean),
+        /* the words to drag are simply the answers, shuffled so their order
+           is not a clue */
+        words: (b.spots || []).map(sp => sp.answer).filter(Boolean)
+                 .sort(() => Math.random() - 0.5),
         spots: (b.spots || []).filter(sp => sp.answer) }));
     else if (b.type === "binary")
       push(keepArrays({ type:"binary", id, title: b.title || "", task: b.task || "",
@@ -1067,17 +1070,99 @@ function card(b, i, arr){
   if (b.type === "label"){
     F("Heading (optional)", "title");
     F("Instruction (optional)", "task", { area:true, rows:2 });
-    F("Picture address", "image", { help:"A link to the image they will label." });
-    F("Words to drag", "words", { help:"Separated by commas." });
+    F("Picture address", "image", { help:"Paste a link to the picture they will label." });
+    if (!Array.isArray(b.spots)) b.spots = [];
+
     const w = el("div","bfield");
-    w.appendChild(el("label","","Where the labels go"));
-    const n = (b.spots || []).length;
-    w.appendChild(el("p","bhelp", n
-      ? n + " box" + (n === 1 ? "" : "es") + " drawn on the picture."
-      : "None yet. Draw a box for each label."));
-    const open2 = el("button","btn-ghost bmini2", n ? "Edit the boxes" : "Draw the boxes");
-    open2.addEventListener("click", () => labelBoxes(b));
-    w.appendChild(open2);
+    w.appendChild(el("label","","The picture, and where the labels go"));
+    w.appendChild(el("p","bhelp","Drag on the picture to draw a box, then type the word for it below."));
+
+    if (!b.image){
+      w.appendChild(el("p","hint","Paste a picture address above to start."));
+      body.appendChild(w);
+      return;
+    }
+
+    const holder = el("div","label-pic label-edit");
+    const img = el("img");
+    img.src = b.image;
+    img.draggable = false;
+    holder.appendChild(img);
+    const ghost = el("div","label-ghost");
+    ghost.hidden = true;
+    holder.appendChild(ghost);
+    w.appendChild(holder);
+
+    const list = el("div","label-list");
+    w.appendChild(list);
+
+    function paintSpots(){
+      holder.querySelectorAll(".label-spot").forEach(n => n.remove());
+      list.innerHTML = "";
+      b.spots.forEach((sp, i) => {
+        const mark = el("div","label-spot");
+        mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
+        mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
+        mark.textContent = sp.answer || String(i + 1);
+        holder.appendChild(mark);
+
+        /* the word for this box, typed underneath rather than in a list
+           of commas somewhere else */
+        const row = el("div","label-row");
+        row.appendChild(el("span","label-num", String(i + 1)));
+        const word = el("input","checkname");
+        word.value = sp.answer || "";
+        word.placeholder = "The word that goes in box " + (i + 1);
+        word.addEventListener("input", () => {
+          sp.answer = word.value;
+          mark.textContent = word.value || String(i + 1);
+          saveDraft(); schedulePreview();
+        });
+        const rm = el("button","btn-ghost bmini","\u2715");
+        rm.title = "Remove this box";
+        rm.addEventListener("click", () => { b.spots.splice(i, 1); saveDraft(); paintSpots(); schedulePreview(); });
+        row.appendChild(word); row.appendChild(rm);
+        list.appendChild(row);
+      });
+      if (!b.spots.length) list.appendChild(el("p","hint","No boxes yet. Drag on the picture to draw one."));
+    }
+
+    let from = null;
+    const pct = (e) => {
+      const r = holder.getBoundingClientRect();
+      return { x: ((e.clientX - r.left) / r.width) * 100,
+               y: ((e.clientY - r.top) / r.height) * 100 };
+    };
+    holder.addEventListener("pointerdown", (e) => {
+      if (e.target.classList.contains("label-spot")) return;
+      e.preventDefault();
+      holder.setPointerCapture(e.pointerId);
+      from = pct(e);
+      ghost.hidden = false;
+      ghost.style.left = from.x + "%"; ghost.style.top = from.y + "%";
+      ghost.style.width = "0%"; ghost.style.height = "0%";
+    });
+    holder.addEventListener("pointermove", (e) => {
+      if (!from) return;
+      const now = pct(e);
+      ghost.style.left = Math.min(from.x, now.x) + "%";
+      ghost.style.top = Math.min(from.y, now.y) + "%";
+      ghost.style.width = Math.abs(now.x - from.x) + "%";
+      ghost.style.height = Math.abs(now.y - from.y) + "%";
+    });
+    holder.addEventListener("pointerup", (e) => {
+      if (!from) return;
+      const now = pct(e);
+      const spot = { x: Math.min(from.x, now.x), y: Math.min(from.y, now.y),
+                     w: Math.abs(now.x - from.x), h: Math.abs(now.y - from.y), answer:"" };
+      from = null;
+      ghost.hidden = true;
+      if (spot.w < 3 || spot.h < 3) return;      // a stray click, not a box
+      b.spots.push(spot);
+      saveDraft(); paintSpots(); schedulePreview();
+    });
+
+    paintSpots();
     body.appendChild(w);
   }
   if (b.type === "binary" || b.type === "binadd"){
@@ -1427,103 +1512,6 @@ function checklistPopup(block, isWeb){
       block.checks.forEach(c => { if (c.kind === "uses" && !c.value) c.value = USES_OPTIONS[0]; });
       closeModal(); render(); schedulePreview();
     });
-    box.appendChild(done);
-  });
-}
-
-/* Draw a box for each label, straight onto the picture. */
-function labelBoxes(block){
-  if (!Array.isArray(block.spots)) block.spots = [];
-  openModal(box => {
-    box.classList.add("wide");
-    box.appendChild(el("h2","","Where the labels go"));
-    box.appendChild(el("p","modal-text",
-      "Drag on the picture to draw a box, then type the word that belongs in it."));
-    if (!block.image){
-      box.appendChild(el("p","warnline","Add a picture address first."));
-      return;
-    }
-    const holder = el("div","label-pic label-edit");
-    const img = el("img");
-    img.src = block.image;
-    img.draggable = false;              // dragging the picture would fight with drawing
-    img.addEventListener("load", paintLater);
-    holder.appendChild(img);
-    box.appendChild(holder);
-    function paintLater(){ setTimeout(paint, 0); }
-
-    const list = el("div");
-    box.appendChild(list);
-
-    function paint(){
-      holder.querySelectorAll(".label-spot").forEach(n => n.remove());
-      list.innerHTML = "";
-      block.spots.forEach((sp, i) => {
-        const mark = el("div","label-spot");
-        mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
-        mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
-        mark.textContent = sp.answer || String(i + 1);
-        holder.appendChild(mark);
-
-        const row = el("div","brow");
-        const word = el("input");
-        word.value = sp.answer || "";
-        word.placeholder = "The word for box " + (i + 1);
-        word.addEventListener("input", () => { sp.answer = word.value; saveDraft(); mark.textContent = word.value || String(i + 1); });
-        const rm = el("button","btn-ghost bmini","\u2715");
-        rm.title = "Remove this box";
-        rm.addEventListener("click", () => { block.spots.splice(i, 1); saveDraft(); paint(); });
-        row.appendChild(word); row.appendChild(rm);
-        list.appendChild(row);
-      });
-      if (!block.spots.length) list.appendChild(el("p","hint","No boxes yet."));
-    }
-
-    /* dragging on the picture makes a box, kept as percentages so it holds
-       its place whatever size the picture is shown at */
-    let from = null;
-    const ghost = el("div","label-ghost");
-    ghost.hidden = true;
-    holder.appendChild(ghost);
-    const pct = (e) => {
-      const r = holder.getBoundingClientRect();
-      return { x: ((e.clientX - r.left) / r.width) * 100,
-               y: ((e.clientY - r.top) / r.height) * 100 };
-    };
-    /* The pointer has to be captured, or moving over the image itself stops
-       the events reaching us and no box is ever drawn. */
-    holder.addEventListener("pointerdown", (e) => {
-      if (e.target.classList.contains("label-spot")) return;
-      e.preventDefault();
-      holder.setPointerCapture(e.pointerId);
-      from = pct(e);
-      ghost.hidden = false;
-      ghost.style.left = from.x + "%"; ghost.style.top = from.y + "%";
-      ghost.style.width = "0%"; ghost.style.height = "0%";
-    });
-    holder.addEventListener("pointermove", (e) => {
-      if (!from) return;
-      const now = pct(e);
-      ghost.style.left = Math.min(from.x, now.x) + "%";
-      ghost.style.top = Math.min(from.y, now.y) + "%";
-      ghost.style.width = Math.abs(now.x - from.x) + "%";
-      ghost.style.height = Math.abs(now.y - from.y) + "%";
-    });
-    holder.addEventListener("pointerup", (e) => {
-      if (!from) return;
-      const now = pct(e);
-      const spot = { x: Math.min(from.x, now.x), y: Math.min(from.y, now.y),
-                     w: Math.abs(now.x - from.x), h: Math.abs(now.y - from.y), answer:"" };
-      from = null;
-      ghost.hidden = true;
-      if (spot.w < 3 || spot.h < 3) return;      // a stray click, not a box
-      block.spots.push(spot);
-      saveDraft(); paint();
-    });
-
-    paint();
-    const done = el("button","btn-primary modal-cta","Done");
-    done.addEventListener("click", () => { closeModal(); render(); schedulePreview(); });
     box.appendChild(done);
   });
 }

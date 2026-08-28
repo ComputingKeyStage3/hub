@@ -285,6 +285,11 @@
     if (b.height) stage.style.height = parseInt(b.height, 10) + "px";
     setTimeout(fit, 0);
     window.addEventListener("resize", fit);
+    /* The board can be inside something that opens later or changes size,
+       and a canvas measured at the wrong moment cannot be drawn on properly. */
+    if (window.ResizeObserver){
+      try{ new ResizeObserver(fit).observe(stage); }catch(e){}
+    }
 
     return {
       section: s,
@@ -494,13 +499,15 @@
       wrap.appendChild(text);
 
       const tools = make("span", "map-tools");
-      const add = make("button", "map-btn", "+");
-      add.title = "Add a branch from here";
-      add.addEventListener("click", () => {
-        nodes.push({ id: "n" + (nextId++) + "-" + Date.now(), text: "", parent: node.id });
-        paint(); ctx.changed();
-      });
-      tools.appendChild(add);
+      if (node.parent !== null){
+        const add = make("button", "map-btn", "+");
+        add.title = "Add a branch from here";
+        add.addEventListener("click", () => {
+          nodes.push({ id: "n" + (nextId++) + "-" + Date.now(), text: "", parent: node.id });
+          paint(); ctx.changed();
+        });
+        tools.appendChild(add);
+      }
       if (node.parent !== null){
         const del = make("button", "map-btn", "\u2715");
         del.title = "Remove this and anything on it";
@@ -524,7 +531,20 @@
 
     function centre(root){
       const mid = make("div", "map-centre");
+      /* a way to grow the map on either side, so it stays balanced */
+      const growLeft = make("button", "map-btn map-grow", "+");
+      growLeft.title = "Add a branch on the left";
+      const growRight = make("button", "map-btn map-grow", "+");
+      growRight.title = "Add a branch on the right";
+      const branchOff = () => {
+        nodes.push({ id: "n" + (nextId++) + "-" + Date.now(), text: "", parent: root.id });
+        paint(); ctx.changed();
+      };
+      growLeft.addEventListener("click", branchOff);
+      growRight.addEventListener("click", branchOff);
+      mid.appendChild(growLeft);
       mid.appendChild(nodeBox(root, "is-centre"));
+      mid.appendChild(growRight);
       return mid;
     }
 

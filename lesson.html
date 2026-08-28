@@ -979,19 +979,27 @@ function rPage(b){
     item.appendChild(built.section);
     s.appendChild(item);
     kids.push(built);
-    items.push({ item, built });
+    items.push({ item, built, type: child.type });
   });
 
-  /* When a task is finished and there is another below it on the same page,
-     bring that one into view so nobody has to hunt for it. */
-  let lastDone = -1;
+  /* When a task is definitely finished, and there is another below it on the
+     same page, bring that one into view.
+
+     Only tasks that can be finished outright count. A written answer is never
+     "done", so moving the page while somebody is still typing would be worse
+     than leaving them alone. */
+  const FINISHABLE = ["quiz","mc","order","blanks","binary","binadd","label","caesar","password"];
+  const was = items.map(entry => {
+    try{ return entry.built.check().ok; }catch(e){ return false; }
+  });
   const nudgeAlong = () => {
     items.forEach((entry, i) => {
-      if (i <= lastDone) return;
+      if (!FINISHABLE.includes(entry.type)) return;
       let ok = false;
       try{ ok = entry.built.check().ok; }catch(e){ ok = false; }
-      if (!ok) return;
-      lastDone = i;
+      if (ok === was[i]) return;          // nothing changed, so nothing to do
+      was[i] = ok;
+      if (!ok) return;                    // only ever on becoming finished
       const next = items[i + 1];
       if (!next) return;
       setTimeout(() => {
@@ -1001,8 +1009,8 @@ function rPage(b){
       }, 320);
     });
   };
-  s.addEventListener("input", nudgeAlong);
   s.addEventListener("click", nudgeAlong);
+  s.addEventListener("change", nudgeAlong);
   return {
     section: s,
     check: () => {

@@ -2287,12 +2287,17 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 
 
 /* whiteboard */
-.board-bar{display:flex; flex-wrap:wrap; gap:6px; padding:8px; background:var(--panel-2);
-  border:1px solid var(--line); border-bottom:none; border-radius:12px 12px 0 0}
-.board-tool{width:34px; height:34px; border:1.5px solid var(--line-2); border-radius:9px;
-  background:var(--panel); cursor:pointer; font-size:15px; color:var(--text)}
+.board-bar{display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:8px;
+  background:var(--panel-2); border:1px solid var(--line); border-bottom:none;
+  border-radius:12px 12px 0 0}
+/* square, and never stretched by the row they sit in */
+.board-tool{flex:0 0 auto; width:34px; min-width:34px; max-width:34px;
+  height:34px; min-height:34px; padding:0; align-self:center;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1.5px solid var(--line-2); border-radius:9px; background:var(--panel);
+  cursor:pointer; font-size:15px; line-height:1; color:var(--text); font-family:var(--body)}
 .board-tool.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, var(--panel))}
-.board-colour{width:26px; height:26px; border-radius:50%; border:2px solid var(--panel);
+.board-colour{flex:0 0 auto; width:26px; min-width:26px; height:26px; border-radius:50%; border:2px solid var(--panel);
   box-shadow:0 0 0 1.5px var(--line-2); cursor:pointer; align-self:center}
 .board-stage{height:420px; border:1px solid var(--line); border-radius:0 0 12px 12px;
   overflow:hidden; background:#FFFFFF}
@@ -2328,7 +2333,9 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .map-holder{overflow-x:auto; padding:10px 0}
 .map-radial{display:flex; align-items:center; justify-content:center; gap:18px; min-width:min-content}
 .map-side{display:flex; flex-direction:column; gap:12px; justify-content:center}
-.map-centre{flex:none}
+.map-centre{flex:none; display:flex; align-items:center; gap:8px}
+.map-grow{opacity:.55}
+.map-grow:hover{opacity:1}
 .map-node{display:flex; align-items:center; gap:4px}
 .map-text{height:38px; padding:0 12px; border:1.5px solid var(--line-2); border-radius:999px;
   background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px; min-width:120px}
@@ -2339,14 +2346,26 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .map-btn{width:26px; height:26px; border-radius:50%; border:1.5px solid var(--line-2);
   background:var(--panel); cursor:pointer; font-size:13px; color:var(--muted); padding:0}
 .map-btn:hover{border-color:var(--amber); color:var(--amber-dark)}
-.map-limb{position:relative; padding-left:18px}
-.map-limb::before{content:""; position:absolute; left:0; top:19px; width:14px; height:2px; background:var(--line-2)}
+/* every branch is joined to what it grows from */
+.map-limb{position:relative; padding-left:22px}
+.map-limb::before{content:""; position:absolute; left:0; top:19px; width:18px; height:2px;
+  background:var(--line-2)}
+.map-side{position:relative}
+/* the spine each side runs from, so branches are not floating */
+.map-right::before,.map-left::before{content:""; position:absolute; top:19px; bottom:19px;
+  width:2px; background:var(--line-2)}
+.map-right::before{left:0}
+.map-left::before{right:0}
+.map-side:empty::before{display:none}
 .map-right .map-limb,.map-limb.map-right{padding-left:18px}
 .map-left .map-limb::before{left:auto; right:0}
 .map-left .map-limb{padding-left:0; padding-right:18px}
-.map-twigs{margin-left:20px; padding-left:14px; border-left:2px solid var(--line); margin-top:8px}
-.map-left .map-twigs{margin-left:0; margin-right:20px; padding-left:0; padding-right:14px;
-  border-left:none; border-right:2px solid var(--line)}
+/* branches off a branch, joined the same way rather than just indented */
+.map-twigs{position:relative; margin-left:26px; padding-left:20px; margin-top:8px}
+.map-twigs::before{content:""; position:absolute; left:0; top:-8px; bottom:19px; width:2px;
+  background:var(--line-2)}
+.map-left .map-twigs{margin-left:0; margin-right:26px; padding-left:0; padding-right:20px}
+.map-left .map-twigs::before{left:auto; right:0}
 .map-left .map-node{flex-direction:row-reverse}
 .map-left{text-align:right}
 
@@ -2378,3 +2397,23 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
   .map-left .map-twigs{margin-left:20px; margin-right:0; padding-left:14px; padding-right:0;
     border-left:2px solid var(--line); border-right:none}
 }
+
+/* labelling: a picture that reads well rather than filling the screen */
+.labeltask .label-pic{max-width:520px}
+.label-edit{max-width:460px}
+.label-pic img{user-select:none; -webkit-user-drag:none}
+.labeltask .label-pic img{pointer-events:none}
+.label-list{margin-top:12px; display:flex; flex-direction:column; gap:8px}
+.label-row{display:flex; align-items:center; gap:8px}
+.label-num{width:26px; height:26px; flex:none; border-radius:50%; background:var(--amber);
+  color:var(--amber-ink); display:inline-flex; align-items:center; justify-content:center;
+  font-size:13px; font-weight:700}
+
+/* every search box, wherever it is, looks the same */
+.searchbox,.bankfind,input[type=search],.search{
+  width:100%; height:42px; padding:0 14px; border:1.5px solid var(--line-2); border-radius:10px;
+  background:var(--panel); color:var(--text); font-family:var(--body); font-size:15px;
+  display:block;
+}
+.searchbox input{border:none !important; background:transparent !important; padding:0 !important;
+  height:auto; font-size:15px}
