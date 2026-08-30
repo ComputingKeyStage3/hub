@@ -192,7 +192,8 @@ async function boot(){
       const rd = await rr.json();
       (rd.rows || []).forEach(r => {
         const st = (students || []).find(x => x.display_name === r.display_name);
-        if (st) marks[st.username] = { score: r.score, outOf: r.out_of, grade: r.grade || "" };
+        if (st) marks[st.username] = { score: r.score, outOf: r.out_of, grade: r.grade || "",
+                                       strength: r.strength || "", target: r.target || "" };
       });
     }catch(e){}
     if (seating && seating.seats) plan = Object.assign(plan, seating);
@@ -222,6 +223,13 @@ async function bootFromLink(){
     return shut("Open a student's work link to mark it. There is nothing to show on its own.");
   if (handedIn.kind === "broken")
     return shut("The work could not be read out of this link. It was probably cut short on its way here. Ask for it again.");
+
+  /* The student has this link too: it is the one they copied. Opening it
+     again should show them their work, not the marking screen, so the first
+     thing it asks is which of the two is holding it. */
+  if (!(await whoIsThis(handedIn.n || "the student"))){
+    return openStudentView();
+  }
 
   try{ lessonJson = await fetchLesson(); }
   catch(e){ return shut(e.message); }
@@ -500,8 +508,12 @@ function loadFeedback(row){
     try{ f = JSON.parse(row.feedback); }catch(e){ f = { comment: row.feedback }; }
   }
   $("fbComment").value = f.comment || "";
-  $("fbStrength").value = f.strength || "";
-  $("fbTarget").value = f.target || "";
+  /* An assessment marks itself and writes a strength and a target as it does.
+     A teacher is editing those rather than starting from nothing, so whatever
+     the assessment came up with fills the boxes until they write their own. */
+  const auto = (row && marks[row.username]) || {};
+  $("fbStrength").value = f.strength || auto.strength || "";
+  $("fbTarget").value = f.target || auto.target || "";
   paintBank("Strength"); paintBank("Target");
   $("fbMsg").textContent = "";
 }
@@ -723,6 +735,69 @@ async function saveFeedback(){
   }catch(e){ $("fbMsg").textContent = e.message; }
 }
 
+/* ---------------- who opened this link ----------------
+   Resolves true for a teacher and false for the student it belongs to. The
+   code is a staff-room word rather than a password: it keeps a class out of
+   the marking screen, and it sits in this file where anyone could read it, so
+   it is never the only thing protecting anything. */
+const TEACHER_CODE = "memory4";
+
+function whoIsThis(name){
+  return new Promise(resolve => {
+    const back = el("div","modal-back whogate no-print");
+    const box = el("div","modal narrow");
+    box.appendChild(el("h2","","Who are you?"));
+
+    const mine = el("button","btn-primary modal-cta", name);
+    mine.addEventListener("click", () => { back.remove(); resolve(false); });
+    box.appendChild(mine);
+
+    const asTeacher = el("button","btn-ghost modal-stay","Teacher");
+    box.appendChild(asTeacher);
+
+    /* The code box only appears once Teacher is pressed, so a student is not
+       invited to have a go at it. */
+    const codeWrap = el("div","field whocode");
+    codeWrap.hidden = true;
+    codeWrap.appendChild(el("label","","Teacher code"));
+    const code = el("input");
+    code.type = "password"; code.autocomplete = "off";
+    codeWrap.appendChild(code);
+    const err = el("p","err","");
+    const go = el("button","btn-primary wide","Open the marking view");
+
+    const check = () => {
+      if (code.value.trim().toLowerCase() === TEACHER_CODE){ back.remove(); resolve(true); return; }
+      err.textContent = "That code is not right.";
+      code.select();
+    };
+    go.addEventListener("click", check);
+    code.addEventListener("keydown", (e) => { if (e.key === "Enter") check(); });
+    code.addEventListener("input", () => { err.textContent = ""; });
+    codeWrap.appendChild(err);
+    codeWrap.appendChild(go);
+    box.appendChild(codeWrap);
+
+    asTeacher.addEventListener("click", () => {
+      codeWrap.hidden = false;
+      asTeacher.hidden = true;
+      setTimeout(() => code.focus(), 30);
+    });
+
+    back.appendChild(box);
+    document.body.appendChild(back);
+    setTimeout(() => mine.focus(), 30);
+  });
+}
+
+/* Their own work, as they last left it, with no marking anywhere near it. */
+function openStudentView(){
+  const url = new URL("lesson.html", location.href);
+  url.search = "?id=" + encodeURIComponent(lessonId);
+  url.hash = location.hash.slice(1);
+  location.replace(url.href);
+}
+
 /* ---------------- handing marked work back (no server) ----------------
    There is nowhere to save it to, so the marking goes into a new link and
    the student opens that. It carries their work as well as the marking, so
@@ -802,7 +877,17 @@ function showMarkedLink(){
 /* Marks the teacher changed question by question, sent up from the viewer. */
 let markOverrides = null;
 window.addEventListener("message", (e) => {
-  if (e && e.data && e.data.hubMarks) markOverrides = e.data.hubMarks;
+  if (!e || !e.data) return;
+  if (e.data.hubMarks) markOverrides = e.data.hubMarks;
+  /* An assessment marks itself and writes its own strength and target. They
+     arrive here so a teacher opens the boxes already holding them, ready to
+     be edited rather than written from nothing. Anything already typed, or
+     already saved against this student, is left alone. */
+  if (e.data.hubST){
+    const st = e.data.hubST;
+    if (st.strength && !$("fbStrength").value.trim()) $("fbStrength").value = st.strength;
+    if (st.target && !$("fbTarget").value.trim()) $("fbTarget").value = st.target;
+  }
 });
 
 if (window.initSettings) initSettings(null);

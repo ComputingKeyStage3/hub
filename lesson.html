@@ -40,7 +40,6 @@
 </div>
 
 <div class="stage" id="stage">
-  <button class="btn-ghost backdone no-print" id="backToDone" hidden>Back</button>
   <p class="signin-hint no-print" id="signinHint" hidden data-online-only>Not signed in, work stays on this computer only. <a href="index.html">Sign in</a></p>
   <div class="banner banner-ok no-print" id="resumeNote" hidden>
     ↩︎ Welcome back, your saved work has been put back on the page.
@@ -767,7 +766,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
         paintTopSave();
         /* Work coming back marked already knows whose it is, and they are
            not starting a lesson, so there is nothing to ask them. */
-        if (!(handedIn && handedIn.kind === "marked")) await nameGate(l.title);
+        if (!(handedIn && handedIn.kind !== "broken")) await nameGate(l.title);
       }
     }
     try{ await loadSaved(); }
@@ -812,6 +811,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
            student would see */
         const home = $("homeLink"); if (home) home.hidden = true;
         hideLoader();                       // otherwise the work stays behind it
+        sendStrengthAndTarget();            // fills the marking boxes straight away
         if (summaryParam !== null){
           if (lesson.assessment) renderAssessmentComplete(false);
           else showLessonComplete(true);
@@ -984,10 +984,11 @@ async function loadSaved(){
     }
     return;
   }
-  /* Marked work coming back to the student it belongs to. It stands in for
-     everything below: what the teacher sent is newer than anything sitting
-     in this browser, and it is the only copy carrying the feedback. */
-  if (handedIn && handedIn.kind === "marked"){
+  /* Work arriving on the address rather than out of this browser: either
+     marked work coming back, or a student reopening the link they handed in
+     from another machine. Either way it stands in for everything below,
+     being both newer and the only copy carrying any feedback. */
+  if (handedIn && (handedIn.kind === "marked" || handedIn.kind === "work")){
     applyHandedIn(handedIn);
     wasDone = true;
     return;
@@ -1079,9 +1080,6 @@ function showStep(i){
       setTimeout(() => { if (note.parentNode) note.parentNode.removeChild(note); }, 3000);
     }, 5000);
   }
-  const backBtn2 = $("backToDone");
-  if (backBtn2) backBtn2.hidden = !wasDone;
-
   const sb = steps[step].brief;
   const b = (typeof sb === "function") ? sb() : sb;
   /* an empty heading or subtitle takes up no room at all */
@@ -1333,13 +1331,6 @@ function finishLesson(){
 $("waitOk").addEventListener("click", hideWaitModal);
 $("waitModal").addEventListener("mousedown", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
 
-(function(){
-  const b = document.getElementById("backToDone");
-  if (b) b.addEventListener("click", () => {
-    if (lesson && lesson.assessment) showAssessmentComplete(true);
-    else showLessonComplete(true);
-  });
-})();
 document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); hideSoftModal(); } });
 
 /* ---------- bypass ---------- */
@@ -3928,8 +3919,14 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   // strength and target, in the first card
   const stCard = el("div","st-card flyin");
   stCard.appendChild(el("h2","sect-head","Strength and Target"));
-  const sRow = el("p","st-strength"); sRow.innerHTML = "<b>Strength</b>"; sRow.appendChild(el("span","", " " + st.strength));
-  const tRow = el("p","st-target"); tRow.innerHTML = "<b>Target</b>"; tRow.appendChild(el("span","", " " + st.target));
+  /* An assessment writes its own strength and target the moment it is marked.
+     A teacher who changes them is editing those, not adding a second opinion,
+     so their wording goes in the same card and the automatic one steps aside. */
+  const tn = teacherNote || {};
+  const shownStrength = tn.strength || st.strength;
+  const shownTarget = tn.target || st.target;
+  const sRow = el("p","st-strength"); sRow.innerHTML = "<b>Strength</b>"; sRow.appendChild(el("span","", " " + shownStrength));
+  const tRow = el("p","st-target"); tRow.innerHTML = "<b>Target</b>"; tRow.appendChild(el("span","", " " + shownTarget));
   stCard.appendChild(sRow); stCard.appendChild(tRow);
   cards.appendChild(stCard);
 
@@ -3941,13 +3938,15 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   respCard.appendChild(jump);
   cards.appendChild(respCard);
 
-  const teacherCard = feedbackCard(teacherNote);
+  /* Only what is left over once the card above has taken the wording. */
+  const teacherCard = feedbackCard({ comment: tn.comment });
   if (teacherCard) cards.appendChild(teacherCard);
   if (teacherTools) box.appendChild(markEditor(res));   // marks stay here; feedback is in the console
 
   // the marked work, opened from the hero button
   const review2 = marksButton(res, rev);
   seeBtn.addEventListener("click", () => review2.open());
+
 
   // response tasks for the target topic
   const respHolder = el("div","responses-anchor fadelast");
@@ -3987,6 +3986,21 @@ function renderAssessmentComplete(justFinished, res, st, sent){
       setTimeout(() => respHolder.classList.add("in"), 2750);
     }, 950);
   }
+}
+
+/* An assessment works out its own strength and target the moment it is
+   marked. The viewer around this page cannot do that arithmetic itself, so
+   they are worked out here and passed up, ready for a teacher to edit rather
+   than write from nothing. Done on load, not when the summary is drawn, or a
+   teacher would have to go and find the summary before the boxes filled. */
+function sendStrengthAndTarget(){
+  if (!lesson || !lesson.assessment || lesson.practical) return;
+  if (!window.parent || window.parent === window) return;
+  try{
+    const st = computeST(computeAssessment().byTopic);
+    if (!st.strength && !st.target) return;
+    window.parent.postMessage({ hubST: { strength: st.strength, target: st.target } }, "*");
+  }catch(e){ console.warn("could not work out a strength and target:", e); }
 }
 
 /* ---- what a teacher can do while looking at a student's work ---- */
@@ -4646,11 +4660,6 @@ function blockHeading(html){
   return h ? h.textContent.replace(/\s+/g, " ").trim() : "";
 }
 
-function clip(s, n){
-  const t = String(s || "");
-  return t.length > n ? t.slice(0, n - 1) + "..." : t;
-}
-
 function fileName(){
   /* Offline the student names it themselves: the name they typed at the
      start, then the lesson, so a folder of handed-in PDFs sorts sensibly.
@@ -4725,337 +4734,468 @@ function boardImage(strokes){
   }
 }
 
+/* =====================================================================
+   THE HAND-IN, AS A DOCUMENT
+
+   Built to read like the lesson itself rather than a list of field values:
+   the same panels, the same blue rule down the side of a question, the same
+   quiet grey for anything the site says rather than the student. It is laid
+   out here rather than printed, so there is no browser print dialogue and
+   nothing depends on what happened to be on screen when it was made.
+
+   Everything is measured before it is drawn, because a panel has to know how
+   tall it is before its background can go down underneath the words.
+   ===================================================================== */
+const PDF = {
+  M: 15,                       // page margin
+  BOTTOM: 297 - 16,            // last usable line
+  PAD: 5.5,                    // inside a panel
+  INK: "#1D1D1B", MUTED: "#5E5E5C", DIM: "#8A8A87",
+  LINE: "#E2E2E2", PANEL2: "#F6F7F9", WHITE: "#FFFFFF",
+  ACCENT: "#2F6BAE", GREEN: "#2E7D5B", RED: "#C0392B", AMBER: "#9A6700"
+};
+PDF.W = 210 - PDF.M * 2;
+
+/* textContent on its own runs words together wherever the html had a break
+   in it, so "account.co<br>Subject:" arrives as one word. The breaks become
+   spaces before the tags are dropped. */
+function pdfText(html){
+  return stripHtml(String(html || "")
+    .replace(/<\s*br\s*\/?>|<\/(p|div|li|h[1-6]|tr|td|blockquote)\s*>/gi, " "));
+}
+
+/* Turns a teaching block's html into the handful of shapes this can draw:
+   paragraphs, bullets and headings, in the order they appear. */
+function proseParts(html){
+  const out = [];
+  const holder = document.createElement("div");
+  holder.innerHTML = String(html || "");
+  holder.querySelectorAll("h1,h2,h3,h4,p,li,pre").forEach(node => {
+    const text = pdfText(node.innerHTML);
+    if (!text) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === "li") out.push({ t: "bullet", text: text });
+    else if (tag === "pre") out.push({ t: "box", face: "code", text: node.textContent, fill: PDF.PANEL2 });
+    else if (tag[0] === "h") out.push({ t: "text", face: "sub", text: text });
+    else out.push({ t: "text", face: "p", text: text });
+  });
+  if (!out.length){
+    const flat = stripHtml(html);
+    if (flat) out.push({ t: "text", face: "p", text: flat });
+  }
+  return out;
+}
+
 function buildPdf(){
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit:"mm", format:"a4" });
-  const M = 18, W = 210 - M*2, BOTTOM = 297 - M - 6;
-  let y = M;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const M = PDF.M, W = PDF.W, PAD = PDF.PAD;
+  let y = PDF.M;
 
-  function room(h){ if (y + h > BOTTOM){ doc.addPage(); y = M; } }
-  function write(text, opts){
-    const o = opts || {};
-    doc.setFont(o.font || "helvetica", o.style || "normal");
-    doc.setFontSize(o.size || 10.5);
-    doc.setTextColor(o.color || "#111111");
-    const lh = o.lh || 5.4;
-    /* Code has to keep its line breaks and indentation or it is unreadable,
-       so a pre block is sanitised line by line rather than flattened. */
-    const source = o.pre ? pdfCode(text) : pdfSafe(text);
-    if (!source.trim()) return;
-    (o.pre ? source.split("\n") : [source]).forEach(part => {
-      doc.splitTextToSize(part || " ", W).forEach(line => {
-        room(lh); doc.text(line, M, y); y += lh;
-      });
-    });
+  /* ---------- the small amount of typography this needs ---------- */
+  const FACE = {
+    h1:     { size: 20,   style: "bold",   lh: 8.6,  colour: PDF.INK },
+    task:   { size: 13,   style: "bold",   lh: 6.2,  colour: PDF.INK },
+    sub:    { size: 10,   style: "bold",   lh: 5.0,  colour: PDF.MUTED },
+    ask:    { size: 11.5, style: "bold",   lh: 5.8,  colour: PDF.INK },
+    p:      { size: 10,   style: "normal", lh: 5.0,  colour: PDF.INK },
+    answer: { size: 10.5, style: "normal", lh: 5.2,  colour: PDF.INK },
+    small:  { size: 8.6,  style: "normal", lh: 4.3,  colour: PDF.MUTED },
+    label:  { size: 7.2,  style: "bold",   lh: 3.8,  colour: PDF.DIM },
+    code:   { size: 8.8,  style: "normal", lh: 4.4,  colour: PDF.INK, mono: true }
+  };
+  const face = (name) => FACE[name] || FACE.p;
+  function useFace(f, colour){
+    doc.setFont(f.mono ? "courier" : "helvetica", f.style);
+    doc.setFontSize(f.size);
+    doc.setTextColor(colour || f.colour);
   }
-  function gap(n){ y += (n || 3); }
-  function rule(){ room(5); doc.setDrawColor("#DDDDDD"); doc.line(M, y, M + W, y); y += 5; }
-  function heading(t){ gap(2); write(t, { size:13, style:"bold", color:"#000000", lh:6.4 }); gap(1); }
-  function label(t){ write(t, { size:7.5, style:"bold", color:"#888888", lh:3.8 }); }
+  /* splitTextToSize measures with whatever font is currently set, so the face
+     has to be chosen before the wrapping rather than after it. */
+  function wrap(text, faceName, width){
+    const f = face(faceName);
+    useFace(f);
+    const body = f.mono ? pdfCode(text) : pdfSafe(text);
+    if (!body.trim()) return [];
+    if (!f.mono) return doc.splitTextToSize(body, width);
+    return body.split("\n").reduce((acc, line) =>
+      acc.concat(doc.splitTextToSize(line || " ", width)), []);
+  }
 
-  // ---- header ----
-  write(lesson.title, { size:18, style:"bold", lh:8.5 });
-  write("Computing lesson hub  ·  " + new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" }),
-        { size:9, color:"#777777", lh:5 });
-  rule();
+  /* ---------- measuring, so a panel knows its own height ---------- */
+  function heightOf(part, width){
+    const f = face(part.face || "p");
+    if (part.t === "gap") return part.h;
+    if (part.t === "rule") return 4;
+    if (part.t === "img") return part.h;
+    if (part.t === "bullet") return wrap(part.text, part.face || "p", width - 4).length * f.lh;
+    if (part.t === "ask")
+      return wrap(part.text, "ask", width - 6 - PAD).length * FACE.ask.lh + PAD * 1.6;
+    if (part.t === "box")
+      return wrap(part.text, part.face || "answer", width - PAD * 2).length * f.lh + PAD * 1.7;
+    return wrap(part.text, part.face || "p", width).length * f.lh;
+  }
+  const blockHeight = (parts, width) =>
+    parts.reduce((n, part) => n + heightOf(part, width), 0);
 
-  /* Lessons are made of pages now, so the tasks are one level down. This
-     walks the pages and hands each task to the same code as before. */
-  const flat = [];
-  (lesson.blocks || []).forEach(b => {
-    if (b.type === "page"){
-      if (b.title) flat.push({ type:"__page", title:b.title });
-      (b.blocks || []).forEach(child => flat.push(child));
-    } else flat.push(b);
-  });
-
-  flat.forEach((b) => {
-    if (b.type === "__page"){ gap(2); heading(b.title); return; }
-    const f = fields[b.id];
-    const v = f ? f.get() : null;
-
-    // Teaching text: heading only. The prose lives on the website; repeating
-    // it here just buries the student's actual work.
-    if (b.type === "text"){
-      const h = blockHeading(b.html);
-      if (h) heading(h);
+  /* ---------- drawing ---------- */
+  function drawText(part, x, width){
+    const f = face(part.face || "p");
+    const lines = wrap(part.text, part.face || "p", width);
+    useFace(f, part.colour);
+    lines.forEach(line => { doc.text(line, x, y + f.lh * 0.75); y += f.lh; });
+  }
+  function drawPart(part, x, width){
+    if (part.t === "gap"){ y += part.h; return; }
+    if (part.t === "rule"){
+      doc.setDrawColor(PDF.LINE); doc.setLineWidth(0.25);
+      doc.line(x, y + 2, x + width, y + 2); y += 4; return;
+    }
+    if (part.t === "img"){
+      try{ doc.addImage(part.data, part.fmt || "JPEG", x, y, part.w, part.h); }
+      catch(e){
+        useFace(FACE.small, PDF.RED);
+        doc.text("(this picture could not be added)", x, y + 4);
+      }
+      y += part.h; return;
+    }
+    if (part.t === "bullet"){
+      const f = face(part.face || "p");
+      const lines = wrap(part.text, part.face || "p", width - 4);
+      useFace(f, part.colour);
+      lines.forEach((line, i) => {
+        if (!i){
+          doc.setTextColor(PDF.ACCENT);
+          doc.text("•", x, y + f.lh * 0.75);
+          doc.setTextColor(part.colour || f.colour);
+        }
+        doc.text(line, x + 4, y + f.lh * 0.75); y += f.lh;
+      });
       return;
     }
+    /* The question, with the blue rule down its left the way the site has it. */
+    if (part.t === "ask"){
+      const h = heightOf(part, width);
+      doc.setFillColor(PDF.PANEL2);
+      doc.roundedRect(x, y, width, h, 1.6, 1.6, "F");
+      doc.setFillColor(PDF.ACCENT);
+      doc.rect(x, y, 1.4, h, "F");
+      y += PAD * 0.8;
+      const f = FACE.ask;
+      useFace(f);
+      wrap(part.text, "ask", width - 6 - PAD).forEach(line => {
+        doc.text(line, x + 6, y + f.lh * 0.75); y += f.lh;
+      });
+      y += PAD * 0.8;
+      return;
+    }
+    /* What the student wrote, in a box like the one they typed it into. */
+    if (part.t === "box"){
+      const h = heightOf(part, width);
+      doc.setFillColor(part.fill || PDF.WHITE);
+      doc.setDrawColor(part.border || PDF.LINE); doc.setLineWidth(0.3);
+      doc.roundedRect(x, y, width, h, 1.6, 1.6, "FD");
+      y += PAD * 0.85;
+      const f = face(part.face || "answer");
+      const lines = wrap(part.text, part.face || "answer", width - PAD * 2);
+      useFace(f, part.colour);
+      lines.forEach(line => { doc.text(line, x + PAD, y + f.lh * 0.75); y += f.lh; });
+      y += PAD * 0.85;
+      return;
+    }
+    drawText(part, x, width);
+  }
+
+  /* One task. A short one is kept whole rather than split over a page break;
+     a long one flows, because breaking a page of code in half beats leaving a
+     third of a page empty and then breaking it anyway. */
+  function drawBlock(parts){
+    if (!parts.length) return;
+    const h = blockHeight(parts, W);
+    if (h > PDF.BOTTOM - y && h <= PDF.BOTTOM - PDF.M){ doc.addPage(); y = PDF.M; }
+    parts.forEach(part => {
+      const need = heightOf(part, W);
+      if (y + need > PDF.BOTTOM && need <= PDF.BOTTOM - PDF.M){ doc.addPage(); y = PDF.M; }
+      drawPart(part, M, W);
+    });
+    y += 5;
+  }
+
+  /* ---------- what each kind of task turns into ---------- */
+  const label = (t) => ({ t: "text", face: "label", text: t.toUpperCase() });
+  const answerBox = (text, empty) => text
+    ? { t: "box", text: text }
+    : { t: "box", text: empty || "Nothing written", face: "small", colour: PDF.RED,
+        fill: "#FDF6F6", border: "#EFD8D8" };
+  const tick = (chose) => chose ? "[x]  " : "[  ]  ";
+
+  function partsFor(b, v, f){
+    const out = [];
+    const title = pdfText(b.title || b.heading || b.prompt);
+
+    if (b.type === "text"){
+      const h = blockHeading(b.html);
+      if (h) out.push({ t: "text", face: "task", text: h });
+      proseParts(String(b.html || "").replace(/<h2[\s\S]*?<\/h2>/i, "")).forEach(p => out.push(p));
+      return out;
+    }
+    /* A picture the teacher put there and a window onto another site are not
+       the student's work, so a hand-in says nothing about them. */
+    if (b.type === "picture" || b.type === "frame") return out;
 
     if (b.type === "embed"){
-      heading(stripHtml(b.title) || "Video");
-      write(v ? "Video watched: yes" : "Video watched: NOT ticked",
-            { size:10.5, style:"bold", color: v ? "#1B7A4B" : "#B03A2E" });
-      gap(3); return;
+      out.push({ t: "text", face: "task", text: title || "Video" });
+      out.push({ t: "text", face: "small", text: v ? "Watched, ticked" : "Not ticked",
+                 colour: v ? PDF.GREEN : PDF.RED });
+      return out;
     }
-
     if (b.type === "question"){
-      heading(stripHtml(b.prompt));
-      label("THEIR ANSWER");
-      const a = (v || "").trim();
-      write(a || "(nothing written)", { size:10.5, color: a ? "#111111" : "#B03A2E", lh:5 });
-      gap(4); return;
+      if (b.heading) out.push({ t: "text", face: "task", text: pdfText(b.heading) });
+      if (b.context) proseParts(b.context).forEach(p => out.push(p));
+      if (b.prompt) out.push({ t: "ask", text: pdfText(b.prompt) });
+      out.push(label("Their answer"));
+      out.push(answerBox(String(v || "").trim()));
+      return out;
     }
-
+    if (b.type === "short"){
+      out.push({ t: "ask", text: pdfText(b.prompt) || "Short answer" });
+      out.push(label("Their answer"));
+      out.push(answerBox(String(v || "").trim(), "Not answered"));
+      if (b.model) out.push({ t: "text", face: "small", text: "A good answer mentions: " + b.model });
+      return out;
+    }
+    if (b.type === "mc"){
+      out.push({ t: "ask", text: pdfText(b.prompt) || "Multiple choice" });
+      (b.options || []).forEach((opt, i) => {
+        const chose = i === v, right = i === b.answer;
+        out.push({ t: "text", face: "p",
+                   text: tick(chose) + pdfText(opt) + (right ? "   (correct answer)" : ""),
+                   colour: chose ? (right ? PDF.GREEN : PDF.RED) : (right ? PDF.GREEN : PDF.MUTED) });
+      });
+      if (v === null || v === undefined)
+        out.push({ t: "text", face: "small", text: "Not answered", colour: PDF.RED });
+      return out;
+    }
     if (b.type === "quiz"){
-      heading(stripHtml(b.title) || "Quiz");
       const qs = b.questions || [];
-      /* The quiz stores { picked:[[i,...],...], solved:[bool,...] }. The old
-         renderer read v.chosen, which the field never returns, so every
-         question printed as "(not answered)" no matter what the child chose. */
-      const solvedArr = (v && Array.isArray(v.solved)) ? v.solved : [];
-      const got = solvedArr.filter(Boolean).length;
-      write("Score: " + got + " out of " + qs.length,
-            { size:11, style:"bold", color: got === qs.length ? "#1B7A4B" : "#B26B00", lh:5.6 });
-      gap(2);
+      const solved = (v && Array.isArray(v.solved)) ? v.solved : [];
+      const got = solved.filter(Boolean).length;
+      out.push({ t: "text", face: "task", text: pdfText(b.title) || "Quiz" });
+      out.push({ t: "text", face: "sub", text: got + " out of " + qs.length + " right",
+                 colour: got === qs.length ? PDF.GREEN : PDF.AMBER });
       qs.forEach((q, qi) => {
-        write((qi+1) + ". " + clip(stripHtml(q.q), 190), { size:9.5, style:"bold", color:"#333333", lh:4.6 });
+        out.push({ t: "gap", h: 2 });
+        out.push({ t: "text", face: "sub", text: (qi + 1) + ". " + pdfText(q.q), colour: PDF.INK });
         let picks = [];
         if (v && Array.isArray(v.picked) && Array.isArray(v.picked[qi])) picks = v.picked[qi];
         else if (v && Array.isArray(v.chosen) && v.chosen[qi] != null) picks = [v.chosen[qi]];
-        const rightAns = Array.isArray(q.answers) ? q.answers
-                       : (q.answer === undefined || q.answer === null ? [] : [q.answer]);
-        const none = !picks.length;
-        const ok = !none && picks.length === rightAns.length && picks.every(x => rightAns.indexOf(x) >= 0);
-        const chose = none ? "(not answered)" : picks.map(i => stripHtml((q.options || [])[i])).join(", ");
-        write("Chose: " + chose + (none ? "" : ok ? "   [correct]" : "   [wrong]"),
-              { size:9.5, color: none ? "#B03A2E" : ok ? "#1B7A4B" : "#C0392B", lh:4.6 });
-        if (!none && !ok && rightAns.length)
-          write("Answer: " + rightAns.map(i => stripHtml((q.options || [])[i])).join(", "), { size:9, color:"#777777", lh:4.4 });
-        gap(1.5);
+        const right = Array.isArray(q.answers) ? q.answers
+                    : (q.answer === undefined || q.answer === null ? [] : [q.answer]);
+        (q.options || []).forEach((opt, oi) => {
+          const chose = picks.indexOf(oi) >= 0, isRight = right.indexOf(oi) >= 0;
+          out.push({ t: "text", face: "p",
+                     text: tick(chose) + pdfText(opt) + (isRight ? "   (correct)" : ""),
+                     colour: chose ? (isRight ? PDF.GREEN : PDF.RED) : (isRight ? PDF.GREEN : PDF.MUTED) });
+        });
+        if (!picks.length) out.push({ t: "text", face: "small", text: "Not answered", colour: PDF.RED });
       });
-      gap(3); return;
+      return out;
     }
-
-    if (b.type === "password"){
-      heading(stripHtml(b.title) || "Password challenge");
-      const bs = v ? v.bestScore : 0, out = v ? v.outOf : 5;
-      write("Best strength reached: " + bs + " out of " + out,
-            { size:10.5, style:"bold", color: bs >= out ? "#1B7A4B" : "#B26B00" });
-      write("(The password itself is never saved or recorded.)", { size:8.5, color:"#999999", lh:4.2 });
-      gap(4); return;
-    }
-
-    if (b.type === "caesar"){
-      heading(stripHtml(b.title) || "Cipher puzzle");
-      write("Coded message:  " + b.ciphertext, { size:9.5, font:"courier", color:"#555555", lh:4.8 });
-      write("Shift used: " + (v ? v.shift : 0), { size:9.5, color:"#777777", lh:4.8 });
-      label("THEIR ANSWER");
-      const ca = v && v.answer ? v.answer.trim() : "";
-      write(ca || "(nothing typed)", { size:10.5, color: ca ? "#111111" : "#B03A2E", lh:5 });
-      write(v && v.solved ? "Code cracked" : "Not cracked",
-            { size:10.5, style:"bold", color: (v && v.solved) ? "#1B7A4B" : "#C0392B" });
-      gap(4); return;
-    }
-
-    if (b.type === "link"){
-      heading(stripHtml(b.prompt) || "Link handed in");
-      const url = (v || "").trim();
-      write(url || "(no link pasted)", { size:10, color: url ? "#0B5FA5" : "#B03A2E" });
-      gap(4); return;
-    }
-
-    if (b.type === "image"){
-      heading(stripHtml(b.title) || "Screenshot");
-      if (v){
-        try{
-          const p = doc.getImageProperties(v);
-          let iw = W, ih = (p.height / p.width) * W;
-          const maxH = BOTTOM - M;                 // never taller than a page
-          if (ih > maxH){ ih = maxH; iw = (p.width / p.height) * ih; }
-          room(ih);
-          doc.addImage(v, "JPEG", M, y, iw, ih);
-          y += ih + 3;
-        }catch(e){
-          write("(the picture could not be added to this PDF)", { size:10, color:"#B03A2E" });
-        }
-      } else {
-        write("(no screenshot added)", { size:10, color:"#B03A2E" });
-      }
-      gap(4); return;
-    }
-
-    if (b.type === "python"){
-      heading("Python");
-      if (b.task) write(clip(stripHtml(b.task), 200), { size:9, color:"#777777", lh:4.4 });
-      label("THEIR CODE");
-      write(v || "(no code written)", { size:9, font:"courier", lh:4.4, pre:true });
-      gap(4); return;
-    }
-
-    /* The editor task: the field returns { code, out, ran }. Older saves are a
-       bare string. Without this the whole of a coding lesson came out blank. */
-    if (b.type === "ide"){
-      heading(stripHtml(b.title) || "Code");
-      if (b.task) write(clip(stripHtml(b.task), 200), { size:9, color:"#777777", lh:4.4 });
-      label("THEIR CODE");
-      const code = (v && typeof v === "object") ? v.code : v;
-      write(code || "(no code written)", { size:9, font:"courier", lh:4.4, pre:true });
-      if (v && typeof v === "object" && v.out){
-        label("WHAT IT PRINTED");
-        write(v.out, { size:9, font:"courier", color:"#555555", lh:4.4, pre:true });
-      }
-      gap(4); return;
-    }
-
-    if (b.type === "web"){
-      heading(stripHtml(b.title) || "Web page");
-      if (b.task) write(clip(stripHtml(b.task), 200), { size:9, color:"#777777", lh:4.4 });
-      let any = false;
-      [["HTML", v && v.html], ["CSS", v && v.css], ["JavaScript", v && v.js]].forEach(pair => {
-        if (!pair[1]) return;
-        any = true;
-        label("THEIR " + pair[0].toUpperCase());
-        write(pair[1], { size:9, font:"courier", lh:4.4, pre:true });
-        gap(1);
-      });
-      if (!any) write("(nothing written)", { size:10, color:"#B03A2E" });
-      gap(4); return;
-    }
-
-    if (b.type === "pastelink"){
-      heading(stripHtml(b.heading) || "Link handed in");
-      const url = String(v || "").trim();
-      write(url || "(no link pasted)", { size:10, color: url ? "#0B5FA5" : "#B03A2E" });
-      gap(4); return;
-    }
-
-    if (b.type === "mc"){
-      heading(stripHtml(b.prompt) || "Multiple choice");
-      label("THEIR ANSWER");
-      const none = (v === null || v === undefined);
-      write(none ? "(not answered)" : stripHtml((b.options || [])[v]),
-            { size:10.5, color: none ? "#B03A2E" : "#111111", lh:5 });
-      if (!none && b.answer !== undefined && v !== b.answer)
-        write("Answer: " + stripHtml((b.options || [])[b.answer]), { size:9, color:"#777777", lh:4.4 });
-      gap(4); return;
-    }
-
-    if (b.type === "short"){
-      heading(stripHtml(b.prompt) || "Short answer");
-      label("THEIR ANSWER");
-      const a = String(v || "").trim();
-      write(a || "(not answered)", { size:10.5, color: a ? "#111111" : "#B03A2E", lh:5 });
-      gap(4); return;
-    }
-
     if (b.type === "order"){
-      heading(stripHtml(b.prompt) || "Put in order");
-      label("THE ORDER THEY CHOSE");
+      out.push({ t: "ask", text: pdfText(b.prompt) || "Put in order" });
       const items = b.items || [];
       const arr = Array.isArray(v) ? v : items.map((_, i) => i);
-      arr.forEach((idx, i) => write((i + 1) + ". " + stripHtml(items[idx]), { size:10, lh:4.8 }));
-      gap(4); return;
+      arr.forEach((idx, i) => out.push({ t: "text", face: "p", text: (i + 1) + ".  " + pdfText(items[idx]) }));
+      return out;
     }
-
     if (b.type === "blanks"){
-      heading(stripHtml(b.prompt) || "Fill the gaps");
+      out.push({ t: "ask", text: pdfText(b.prompt) || "Fill the gaps" });
       const accepted = [];
       String(b.text || "").replace(/\[\[(.*?)\]\]/g, (_, g) => { accepted.push(g.split("|")[0]); return ""; });
       accepted.forEach((exp, i) => {
         const given = (v && v[i]) ? String(v[i]).trim() : "";
-        write("Gap " + (i + 1) + ": " + (given || "(blank)"),
-              { size:10, color: given ? "#111111" : "#B03A2E", lh:4.8 });
+        out.push({ t: "text", face: "p", text: "Gap " + (i + 1) + ":  " + (given || "left blank"),
+                   colour: given ? PDF.INK : PDF.RED });
       });
-      gap(4); return;
+      return out;
     }
-
-    if (b.type === "binary" || b.type === "binadd"){
-      heading(stripHtml(b.title) || (b.type === "binadd" ? "Binary addition" : "Binary numbers"));
-      const answers = (v && Array.isArray(v.answers)) ? v.answers : [];
-      if (answers.length) answers.forEach((a, i) => write("Row " + (i + 1) + ": " + (a || "(blank)"), { size:10, font:"courier", lh:4.8 }));
-      else write("(nothing filled in)", { size:10, color:"#B03A2E" });
-      write((v && v.done) ? "All correct" : "Not all correct yet",
-            { size:10, style:"bold", color: (v && v.done) ? "#1B7A4B" : "#B26B00", lh:4.8 });
-      gap(4); return;
+    if (b.type === "ide" || b.type === "python"){
+      const head = pdfText(b.title) || "Python";
+      out.push({ t: "text", face: "task", text: head });
+      /* Plenty of lessons put the same words in the heading and the subtitle,
+         which reads as a mistake once they are stacked. */
+      const sub = pdfText(b.task);
+      if (sub && sub.toLowerCase() !== head.toLowerCase())
+        out.push({ t: "text", face: "small", text: sub });
+      out.push(label("Their code"));
+      const code = (v && typeof v === "object") ? v.code : v;
+      if (code) out.push({ t: "box", face: "code", text: code, fill: PDF.PANEL2 });
+      else out.push(answerBox("", "No code written"));
+      if (v && typeof v === "object" && v.out){
+        out.push(label("What it printed"));
+        out.push({ t: "box", face: "code", text: v.out, fill: PDF.PANEL2, colour: PDF.MUTED });
+      }
+      return out;
     }
-
+    if (b.type === "web"){
+      out.push({ t: "text", face: "task", text: pdfText(b.title) || "Web page" });
+      let any = false;
+      [["HTML", v && v.html], ["CSS", v && v.css], ["JavaScript", v && v.js]].forEach(pair => {
+        if (!pair[1]) return;
+        any = true;
+        out.push(label("Their " + pair[0]));
+        out.push({ t: "box", face: "code", text: pair[1], fill: PDF.PANEL2 });
+      });
+      if (!any) out.push(answerBox("", "Nothing written"));
+      return out;
+    }
+    if (b.type === "password"){
+      out.push({ t: "text", face: "task", text: title || "Password strength" });
+      const best = v ? v.bestScore : 0, of = v ? v.outOf : 5;
+      out.push({ t: "text", face: "sub", text: "Best strength reached: " + best + " out of " + of,
+                 colour: best >= of ? PDF.GREEN : PDF.AMBER });
+      out.push({ t: "text", face: "small", text: "The password itself is never saved." });
+      return out;
+    }
+    if (b.type === "caesar"){
+      out.push({ t: "text", face: "task", text: title || "Caesar cipher" });
+      out.push({ t: "box", face: "code", text: b.ciphertext || "", fill: PDF.PANEL2, colour: PDF.MUTED });
+      out.push({ t: "text", face: "small", text: "Shift used: " + (v ? v.shift : 0) });
+      out.push(label("Their answer"));
+      out.push(answerBox(v && v.answer ? v.answer.trim() : "", "Nothing typed"));
+      out.push({ t: "text", face: "sub", text: (v && v.solved) ? "Code cracked" : "Not cracked",
+                 colour: (v && v.solved) ? PDF.GREEN : PDF.RED });
+      return out;
+    }
+    if (b.type === "link" || b.type === "pastelink"){
+      out.push({ t: "text", face: "task", text: pdfText(b.prompt || b.heading) || "Link handed in" });
+      const url = String(v || "").trim();
+      out.push(url ? { t: "box", text: url, face: "small", colour: PDF.ACCENT }
+                   : answerBox("", "No link pasted"));
+      return out;
+    }
     if (b.type === "notes"){
-      heading(stripHtml(b.title) || "Notes");
-      label("THEIR NOTES");
-      const t = htmlToLines(v);
-      write(t || "(nothing written)", { size:10, color: t ? "#111111" : "#B03A2E", lh:5, pre:true });
-      gap(4); return;
+      out.push({ t: "text", face: "task", text: title || "Notes" });
+      if (!htmlToLines(v)) out.push(answerBox("", "Nothing written"));
+      else proseParts(v).forEach(p => out.push(p));
+      return out;
     }
-
     if (b.type === "mindmap"){
-      heading(stripHtml(b.title) || "Mind map");
+      out.push({ t: "text", face: "task", text: title || "Mind map" });
       const nodes = (v && Array.isArray(v.nodes)) ? v.nodes : [];
       const root = nodes.find(n => n.parent === null) || nodes[0];
-      if (root){
-        write(stripHtml(root.text) || "(middle idea)", { size:10.5, style:"bold", lh:5 });
-        const walk = (parentId, depth) => {
-          nodes.filter(n => n.parent === parentId).forEach(n => {
-            write(new Array(depth + 1).join("   ") + "- " + (stripHtml(n.text) || "(blank)"),
-                  { size:9.5, lh:4.6, pre:true });
-            walk(n.id, depth + 1);
-          });
-        };
-        walk(root.id, 1);
-      } else {
-        write("(nothing added)", { size:10, color:"#B03A2E" });
-      }
-      gap(4); return;
+      if (!root){ out.push(answerBox("", "Nothing added")); return out; }
+      out.push({ t: "text", face: "sub", text: pdfText(root.text) || "The middle idea" });
+      const walk = (parentId, depth) => {
+        nodes.filter(n => n.parent === parentId).forEach(n => {
+          out.push({ t: "bullet", face: "p",
+                     text: new Array(depth).join("    ") + (pdfText(n.text) || "(blank)") });
+          walk(n.id, depth + 1);
+        });
+      };
+      walk(root.id, 1);
+      return out;
     }
-
     if (b.type === "label"){
-      heading(stripHtml(b.title) || "Labelling a picture");
+      out.push({ t: "text", face: "task", text: title || "Labelling a picture" });
       const placed = (v && v.placed) ? v.placed : {};
       (b.spots || []).forEach((sp, i) => {
         const given = placed[i] || placed[String(i)] || "";
-        write("Label " + (i + 1) + ": " + (given || "(empty)"),
-              { size:10, color: given ? "#111111" : "#B03A2E", lh:4.8 });
+        out.push({ t: "text", face: "p", text: "Label " + (i + 1) + ":  " + (given || "left empty"),
+                   colour: given ? PDF.INK : PDF.RED });
       });
-      gap(4); return;
+      return out;
     }
-
-    if (b.type === "board"){
-      heading(stripHtml(b.title) || "Whiteboard");
-      const strokes = (v && Array.isArray(v.strokes)) ? v.strokes : [];
-      const png = strokes.length ? boardImage(strokes) : null;
-      if (png){
-        try{
-          const p = doc.getImageProperties(png);
-          let iw = W, ih = (p.height / p.width) * W;
-          const maxH = BOTTOM - M;
-          if (ih > maxH){ ih = maxH; iw = (p.width / p.height) * ih; }
-          room(ih);
-          doc.addImage(png, "PNG", M, y, iw, ih);
-          y += ih + 3;
-        }catch(e){
-          write(strokes.length + " marks drawn (the drawing could not be added to this PDF)", { size:10, color:"#B03A2E" });
-        }
-      } else {
-        write(strokes.length ? (strokes.length + " marks drawn") : "(nothing drawn)",
-              { size:10, color: strokes.length ? "#111111" : "#B03A2E" });
+    if (b.type === "binary" || b.type === "binadd"){
+      out.push({ t: "text", face: "task",
+                 text: title || (b.type === "binadd" ? "Binary addition" : "Binary numbers") });
+      const answers = (v && Array.isArray(v.answers)) ? v.answers : [];
+      if (!answers.length) out.push(answerBox("", "Nothing filled in"));
+      else out.push({ t: "box", face: "code", fill: PDF.PANEL2,
+                      text: answers.map((a, i) => "Row " + (i + 1) + ":  " + (a || "blank")).join("\n") });
+      out.push({ t: "text", face: "small", text: (v && v.done) ? "All correct" : "Not all correct yet",
+                 colour: (v && v.done) ? PDF.GREEN : PDF.AMBER });
+      return out;
+    }
+    if (b.type === "image" || b.type === "board"){
+      out.push({ t: "text", face: "task",
+                 text: title || (b.type === "board" ? "Whiteboard" : "Screenshot") });
+      const data = b.type === "board"
+        ? ((v && Array.isArray(v.strokes) && v.strokes.length) ? boardImage(v.strokes) : null)
+        : (v || null);
+      if (!data){
+        out.push(answerBox("", b.type === "board" ? "Nothing drawn" : "No screenshot added"));
+        return out;
       }
-      gap(4); return;
+      try{
+        const props = doc.getImageProperties(data);
+        let w = W, h = (props.height / props.width) * W;
+        const maxH = PDF.BOTTOM - PDF.M;
+        if (h > maxH){ h = maxH; w = (props.width / props.height) * h; }
+        out.push({ t: "img", data: data, fmt: b.type === "board" ? "PNG" : "JPEG", w: w, h: h });
+      }catch(e){
+        out.push(answerBox("", "This picture could not be added"));
+      }
+      return out;
     }
-
-    /* Teacher-supplied content with nothing for the student to fill in. */
-    if (b.type === "picture" || b.type === "frame") return;
-
-    /* Anything new that carries a field but has no case above still gets its
-       heading and a readable dump, so a task can never silently vanish from a
-       hand-in again. */
+    /* Anything new that holds an answer, so a task can never quietly vanish
+       from a hand-in because nobody came back here to add it. */
     if (f){
-      heading(stripHtml(b.title || b.prompt || b.heading) || b.type);
+      out.push({ t: "text", face: "task", text: title || b.type });
       let text;
-      if (v == null || v === "") text = "(nothing saved)";
+      if (v === null || v === undefined || v === "") text = "";
       else if (typeof v === "string") text = v;
-      else { try { text = JSON.stringify(v); } catch(e){ text = String(v); } }
-      write(text, { size:9, lh:4.4 });
-      gap(4); return;
+      else { try{ text = JSON.stringify(v); }catch(e){ text = String(v); } }
+      out.push(answerBox(text, "Nothing saved"));
     }
+    return out;
+  }
+
+  /* ---------- the head of the first page ---------- */
+  /* A teacher looking at a hand-in wants the name on it to be the student's;
+     a student saving their own has only the name they typed at the start. */
+  const who = inspectName || (OFFLINE ? (localStorage.getItem("hub_name") || "") : "");
+  doc.setFillColor(PDF.ACCENT);
+  doc.rect(0, 0, 210, 3, "F");
+  y = PDF.M + 4;
+  useFace(FACE.h1);
+  wrap(lesson.title, "h1", W).forEach(line => { doc.text(line, M, y); y += FACE.h1.lh; });
+  const stamp = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  useFace(FACE.small);
+  doc.text(pdfSafe([who, stamp].filter(Boolean).join("   ·   ")), M, y);
+  y += 3;
+  doc.setDrawColor(PDF.LINE); doc.setLineWidth(0.4);
+  doc.line(M, y, M + W, y);
+  y += 7;
+
+  /* Lessons are made of pages, so the tasks are one level in. */
+  const flat = [];
+  (lesson.blocks || []).forEach(b => {
+    if (b.type === "page"){
+      if (b.title) flat.push({ type: "__page", title: b.title });
+      (b.blocks || []).forEach(child => flat.push(child));
+    } else flat.push(b);
   });
 
-  // ---- footer ----
+  flat.forEach(b => {
+    if (b.type === "__page"){
+      drawBlock([{ t: "text", face: "task", text: pdfText(b.title) }, { t: "rule" }]);
+      return;
+    }
+    const f = fields[b.id];
+    const v = f ? f.get() : null;
+    drawBlock(partsFor(b, v, f));
+  });
+
+  /* ---------- the strip along the bottom of every page ---------- */
   const pages = doc.getNumberOfPages();
   for (let p = 1; p <= pages; p++){
     doc.setPage(p);
-    doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor("#AAAAAA");
-    doc.text(pdfSafe(lesson.title), M, 289);
-    doc.text("Page " + p + " of " + pages, 210 - M, 289, { align:"right" });
+    doc.setDrawColor(PDF.LINE); doc.setLineWidth(0.25);
+    doc.line(M, 285, M + W, 285);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); doc.setTextColor(PDF.DIM);
+    doc.text(pdfSafe([who, lesson.title].filter(Boolean).join("  ·  ")), M, 289.5);
+    doc.text("Page " + p + " of " + pages, 210 - M, 289.5, { align: "right" });
   }
   return doc;
 }

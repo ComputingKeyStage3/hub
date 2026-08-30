@@ -1414,8 +1414,6 @@ pre, code{overflow-wrap:anywhere}
 
 
 /* a way back to the summary once finished */
-.backdone{position:absolute; top:66px; right:24px; z-index:20}
-@media (max-width:640px){ .backdone{position:static; margin:8px 14px 0; width:calc(100% - 28px)} }
 
 /* per question marks on the review */
 .qmark{display:flex; align-items:baseline; gap:10px; margin:0 0 6px; padding:7px 0; border-bottom:1px solid var(--line)}
@@ -1964,6 +1962,11 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 /* the lesson code, big enough to read off a teacher's screen */
 .sharecode{ font-family:var(--mono); font-size:38px; letter-spacing:.22em; text-indent:.22em;
   text-align:center; margin:6px 0 14px; color:var(--text) }
+
+/* --- which of the two people holding this link is opening it --- */
+.whogate .modal{ text-align:center }
+.whogate .whocode{ margin:18px auto 0; max-width:320px; text-align:left }
+.whogate .whocode .wide{ width:100%; margin-top:10px }
 
 /* --- the name check that opens every lesson without a server ---
    It covers the lesson underneath on purpose: nobody starts work until the
