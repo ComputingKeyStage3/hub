@@ -1959,6 +1959,14 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .passpill.unset{ background:var(--red-dim); border-color:var(--red); color:var(--red) }
 .passpill:hover{ filter:brightness(1.06) }
 
+/* the link a student hands in: long, so it is shown small and whole rather
+   than wrapped, and it is a real input so a phone can select all of it */
+.worklink{ width:100%; margin:14px 0 4px; padding:10px 12px; font-family:var(--mono);
+  font-size:12.5px; border:1.5px solid var(--line-2); border-radius:10px;
+  background:var(--panel-2); color:var(--text); text-overflow:ellipsis }
+.worklink:focus{ border-color:var(--amber); outline:none;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent) }
+
 /* the lesson code, big enough to read off a teacher's screen */
 .sharecode{ font-family:var(--mono); font-size:38px; letter-spacing:.22em; text-indent:.22em;
   text-align:center; margin:6px 0 14px; color:var(--text) }

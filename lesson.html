@@ -117,6 +117,7 @@ let assessStarted = Date.now();
 let restoredData = null;       // last saved data we restored (responses re-apply from it)
 let wasDone = false;           // the saved copy says this lesson was completed
 let lockedSet = new Set();     // task indexes the teacher has locked shut
+let linkBroken = false;        // a handed-in link arrived damaged
 let relManaged = false;
 if (!localStorage.getItem("hub_token") && location.search.indexOf("builder=") < 0
     && location.search.indexOf("preview=") < 0 && location.search.indexOf("view=") < 0) {
@@ -415,6 +416,160 @@ if (OFFLINE){
   }
 }
 
+/* =====================================================================
+   HANDING WORK IN AS A LINK  (no server)
+
+   The whole of a student's work is squeezed into the link itself, after
+   the "#", so it never reaches GitHub Pages and is never logged anywhere:
+   it travels from their browser to their teacher's and nowhere else.
+
+   Text, quizzes, ciphers and password scores compress to almost nothing,
+   so a full lesson comes to a few hundred characters. A screenshot does
+   not: a JPEG is already compressed, so it arrives at roughly 136,000
+   characters, which no chat window will carry intact. Lessons holding a
+   screenshot or a whiteboard therefore keep the PDF instead, and there is
+   a length check behind that in case some other task grows unexpectedly.
+   ===================================================================== */
+const LINK_MAX = 8000;          // beyond this a chat client is likely to mangle it
+const HEAVY_TASKS = ["image", "board"];
+
+/* Screenshots and whiteboards can sit inside a page, so this looks all the
+   way down rather than only at the top level. */
+function hasHeavyTask(blocks){
+  return (blocks || []).some(b =>
+    HEAVY_TASKS.indexOf(b.type) >= 0 || hasHeavyTask(b.blocks));
+}
+function linkPossible(){
+  return OFFLINE && !spectate && lesson && !hasHeavyTask(lesson.blocks)
+         && typeof CompressionStream !== "undefined";
+}
+
+/* The top right button cannot know which it is until the lesson has loaded
+   and its tasks can be looked at, so it starts as the PDF and is repainted
+   once that is known. */
+function topSaveLabel(){ return linkPossible() ? "Copy my work link" : "Save as PDF"; }
+function paintTopSave(){
+  const b = $("saveBtn");
+  if (b && OFFLINE && !spectate) b.textContent = topSaveLabel();
+}
+
+function toBase64Url(bytes){
+  let bin = "";
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function fromBase64Url(text){
+  const pad = String(text).replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(pad + "=".repeat((4 - pad.length % 4) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+/* A damaged link fails on both halves of the stream at once, and the writer's
+   half has nobody waiting on it, so its rejection has to be swallowed here or
+   it surfaces as an uncaught error even though the reader handled it. */
+function feed(stream, bytes){
+  const w = stream.writable.getWriter();
+  w.write(bytes).catch(() => {});
+  w.close().catch(() => {});
+}
+async function squash(text){
+  const cs = new CompressionStream("deflate-raw");
+  feed(cs, new TextEncoder().encode(text));
+  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+}
+async function unsquash(bytes){
+  const ds = new DecompressionStream("deflate-raw");
+  feed(ds, bytes);
+  return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer());
+}
+
+/* The address a student hands their teacher, or null if this lesson's work
+   is too heavy to travel in one. Short keys because every character counts. */
+async function buildWorkLink(){
+  if (!linkPossible()) return null;
+  const payload = JSON.stringify({
+    n: localStorage.getItem("hub_name") || "",
+    d: snapshot()
+  });
+  const blob = toBase64Url(await squash(payload));
+  const url = new URL("lesson.html", location.href);
+  url.search = "?id=" + encodeURIComponent(lessonId) + "&view=1";
+  url.hash = "w=" + blob;
+  const full = url.href;
+  return full.length > LINK_MAX ? null : full;
+}
+
+/* Reading one back. Returns null for anything that is not a work link, or
+   for one that arrived damaged, so the page can say so plainly. */
+async function readWorkLink(){
+  const raw = location.hash || "";
+  if (raw.indexOf("#w=") !== 0) return null;
+  try{
+    const text = await unsquash(fromBase64Url(raw.slice(3)));
+    const box = JSON.parse(text);
+    if (!box || !box.d) return null;
+    return box;
+  }catch(e){
+    console.error("work link could not be read:", e);
+    return null;
+  }
+}
+
+/* The hand-in itself: the link on screen, already copied, and selected so
+   that a student whose browser refuses the clipboard can still take it. */
+async function shareWorkLink(onState){
+  const say = (t) => { if (onState) onState(t); };
+  say("busy");
+  let link = null;
+  try{ link = await buildWorkLink(); }catch(e){ console.error("work link failed:", e); }
+  if (!link){ say("failed"); return false; }
+
+  let copied = false;
+  try{ await navigator.clipboard.writeText(link); copied = true; }catch(e){}
+
+  const back = el("div","modal-back no-print");
+  const box = el("div","modal narrow");
+  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+  x.addEventListener("click", () => back.remove());
+  box.appendChild(x);
+  box.appendChild(el("h2","","Hand your work in"));
+  box.appendChild(el("p","modal-text","Send this link to your teacher."));
+
+  const field = el("input");
+  field.type = "text"; field.className = "worklink"; field.readOnly = true;
+  field.value = link;
+  box.appendChild(field);
+
+  const note = el("p","handin");
+  note.dataset.state = copied ? "done" : "";
+  note.textContent = copied ? "Copied \u2713" : "";
+  box.appendChild(note);
+
+  const copy = el("button","btn-primary modal-cta", copied ? "Copy it again" : "Copy the link");
+  copy.addEventListener("click", async () => {
+    try{
+      await navigator.clipboard.writeText(link);
+      note.dataset.state = "done"; note.textContent = "Copied \u2713";
+      copy.textContent = "Copy it again";
+    }catch(e){
+      field.focus(); field.select();
+      note.dataset.state = ""; note.textContent = "Press Ctrl and C to copy it.";
+    }
+  });
+  box.appendChild(copy);
+  const done = el("button","btn-ghost modal-stay","Done");
+  done.addEventListener("click", () => back.remove());
+  box.appendChild(done);
+  scrollBody(box);
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+  document.body.appendChild(back);
+  setTimeout(() => { field.focus(); field.select(); }, 30);
+  say(copied ? "copied" : "shown");
+  return true;
+}
+
 /* Everything this computer has kept for a student. Wiped when someone else
    sits down at it: two children sharing a machine must never open each
    other's work. Display settings belong to the machine, so they stay. */
@@ -629,7 +784,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     /* Asked before anything is restored: a name change means a different
        child, and the work waiting on this machine is cleared, so restoring
        first would put the last one's answers on screen. */
-    if (OFFLINE && !spectate) await nameGate(l.title);
+    if (OFFLINE && !spectate){ paintTopSave(); await nameGate(l.title); }
     try{ await loadSaved(); }
     finally{ restoreDone = true; }      // saving is allowed from here on
     if (spectate){
@@ -723,6 +878,21 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
       const home = $("homeLink");
       if (home){ home.textContent = "\u2190 Teacher console"; home.href = "admin.html"; }
       hideLoader();
+      /* A link that has lost characters on its way through a chat window
+         decodes to nothing. Saying so beats showing an empty lesson that
+         looks like a student who did no work. */
+      if (linkBroken){
+        $("briefTitle").textContent = "This link is damaged";
+        $("briefText").textContent = "";
+        $("dock").classList.add("gone");
+        const box = el("section","station");
+        box.appendChild(el("p","err",
+          "The work could not be read out of this link. It was probably cut short on its " +
+          "way here. Ask for it again, pasted as a plain link rather than typed out."));
+        $("blocks").innerHTML = "";
+        $("blocks").appendChild(box);
+        return;
+      }
       if (pdfParam !== null){ showPdfView(); return; }
       const target = stepParam !== null ? parseInt(stepParam, 10)
                    : (previewParam !== null && previewParam !== "" ? parseInt(previewParam, 10) : null);
@@ -777,6 +947,21 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
 async function loadSaved(){
   if (spectate){
     if (viewParam !== null || pdfParam !== null){
+      /* A link the student handed in carries the work itself, so there is
+         nothing on this machine to look up. It takes precedence over
+         hub_inspect: a teacher opening a link means to see that link. */
+      const handed = await readWorkLink();
+      if (handed){
+        inspectName = handed.n || "";
+        const d = handed.d || {};
+        Object.keys(d).forEach(k => {
+          if (!k.startsWith("__") && fields[k]){ try{ fields[k].set(d[k]); }catch(e){} }
+        });
+        if (typeof d.__step === "number") step = Math.min(Math.max(d.__step, 0), steps.length - 1);
+        restoredData = d; wasDone = !!d.__done;
+        return;
+      }
+      if ((location.hash || "").indexOf("#w=") === 0) linkBroken = true;
       try{
         let box = JSON.parse(localStorage.getItem("hub_inspect") || "null");
         if (box && Array.isArray(box.list) && box.list.length){
@@ -1088,25 +1273,38 @@ let flashTimer = null;
 async function manualSave(){
   save();
   const btn = $("saveBtn");
-  /* Offline there is no teacher to send anything to, and pressing this used to
-     say "Sign in to save" on a site that has no sign in. Handing in offline
-     means a PDF, so that is what the button does. */
+  /* Offline there is no teacher to send anything to. Handing in is a link
+     where the work is light enough to travel in one, and a PDF where it is
+     not, so this button does whichever this lesson can manage. */
   if (OFFLINE){
     clearTimeout(flashTimer);
     btn.classList.remove("flash-ok","flash-bad");
+    const settle = (label, cls) => {
+      btn.textContent = label;
+      if (cls) btn.classList.add(cls);
+      flashTimer = setTimeout(() => {
+        btn.textContent = topSaveLabel();
+        btn.classList.remove("flash-ok","flash-bad");
+      }, 2500);
+    };
+    if (linkPossible()){
+      btn.textContent = "Making the link…";
+      shareWorkLink().then(ok => {
+        if (ok) settle("Copied ✓", "flash-ok");
+        else settle("Could not make a link", "flash-bad");
+      });
+      return;
+    }
     btn.textContent = "Making the PDF…";
     setTimeout(() => {
       try{
         if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
         buildPdf().save(fileName());
-        btn.textContent = "Saved a PDF ✓"; btn.classList.add("flash-ok");
+        settle("Saved a PDF ✓", "flash-ok");
       }catch(e){
         console.error("PDF save failed:", e);
-        btn.textContent = "Could not save"; btn.classList.add("flash-bad");
+        settle("Could not save", "flash-bad");
       }
-      flashTimer = setTimeout(() => {
-        btn.textContent = "Save as PDF"; btn.classList.remove("flash-ok","flash-bad");
-      }, 2500);
     }, 30);
     return;
   }
@@ -3900,6 +4098,7 @@ function renderResponses(container, targetTopic, statusEl){
     /* saving the practice is what counts as having done it */
     save.addEventListener("click", announceDone);
     wrap.appendChild(save);
+    if (OFFLINE && linkPossible()) wrap.appendChild(pdfButton(statusEl, false));
   }
   container.appendChild(wrap);
 }
@@ -4037,32 +4236,53 @@ function paintSaveButtons(state){
   });
 }
 
+/* The PDF, as its own button. On its own where a lesson is too heavy for a
+   link, and as the quieter of the two where it is not. */
+function pdfButton(statusEl, primary){
+  const btn = el("button", (primary ? "btn-primary" : "btn-ghost") + " done-save", "Save my work as a PDF");
+  btn.addEventListener("click", () => {
+    /* built here and downloaded, no print dialogue to get lost in */
+    btn.textContent = "Making the PDF\u2026";
+    setTimeout(() => {
+      try{
+        if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
+        buildPdf().save(fileName());
+        btn.textContent = "\u2713 Saved as a PDF";
+        if (statusEl) statusEl.textContent = "Saved as " + fileName() + ", hand that in.";
+      }catch(e){
+        btn.textContent = "Save my work as a PDF";
+        if (statusEl) statusEl.textContent = e.message;
+      }
+    }, 30);
+  });
+  return btn;
+}
+
 function saveButton(statusEl){
   /* With no backend there is nothing to send work to, so handing in means
-     making a PDF to give to the teacher. */
+     giving the teacher a link holding the work, or a PDF where the lesson
+     is too heavy for one. */
   if (OFFLINE){
-    const btn = el("button","btn-primary done-save","Save my work as a PDF");
-    btn.addEventListener("click", () => {
-      /* built here and downloaded, no print dialogue to get lost in */
-      btn.textContent = "Making the PDF\u2026";
-      setTimeout(() => {
-        try{
-          if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
-          const doc = buildPdf();
-          doc.save(fileName());
-          btn.textContent = "\u2713 Saved as a PDF";
-          if (statusEl) statusEl.textContent = "Saved as " + fileName() + ", hand that in.";
-        }catch(e){
-          btn.textContent = "Save my work as a PDF";
-          if (statusEl) statusEl.textContent = e.message;
-        }
-      }, 30);
-    });
+    if (linkPossible()){
+      const btn = el("button","btn-primary done-save","Copy my work link");
+      btn.addEventListener("click", () => {
+        btn.textContent = "Making the link\u2026";
+        shareWorkLink().then(ok => {
+          btn.textContent = ok ? "\u2713 Link copied" : "Copy my work link";
+          if (statusEl && !ok) statusEl.textContent = "That link could not be made. Save a PDF instead.";
+        });
+      });
+      if (statusEl){
+        statusEl.dataset.state = "offline";
+        statusEl.textContent = "Send your teacher the link to hand this in.";
+      }
+      return btn;
+    }
     if (statusEl){
       statusEl.dataset.state = "offline";
       statusEl.textContent = "Your work is kept in this browser. Save a PDF to hand it in.";
     }
-    return btn;
+    return pdfButton(statusEl, true);
   }
   const btn = el("button","btn-primary done-save","Save Work");
   saveButtons.push({ btn: btn, label: "Save Work" });
@@ -4106,7 +4326,13 @@ function showLessonComplete(revisit, justFinished){
     see.addEventListener("click", () => openTaskPopup());
     hero.appendChild(see);
   }
-  if (OFFLINE && !spectate) hero.appendChild(saveButton(status));
+  if (OFFLINE && !spectate){
+    hero.appendChild(saveButton(status));
+    /* The PDF stays on this screen whatever happens, so a student whose link
+       will not paste, or whose teacher would rather have a file, has a way
+       out without going looking for one. */
+    if (linkPossible()) hero.appendChild(pdfButton(status, false));
+  }
   /* Offline there is no home to go back to, only a code box. */
   if (!spectate && !OFFLINE){
     const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
