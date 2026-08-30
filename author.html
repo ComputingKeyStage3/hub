@@ -717,7 +717,16 @@ function card(b, i, arr){
     if (at === openPage) c.classList.add("open");
     c.addEventListener("mousedown", () => {
       const i2 = lesson.blocks.indexOf(b);
-      if (i2 >= 0 && i2 !== openPage){ openPage = i2; render(); }
+      if (i2 < 0 || i2 === openPage) return;
+      openPage = i2;
+      /* Only the highlight changes, so the cards themselves are left alone.
+         Rendering again from here threw away the very element being pressed
+         before its mouseup could land on it, so clicking a button or a box on
+         another page took two goes: one to move the highlight, one to do the
+         thing. Nothing else drawn by render() reads openPage. */
+      const list = c.closest(".build-list") || document;
+      list.querySelectorAll(".bcard.open").forEach(x => x.classList.remove("open"));
+      c.classList.add("open");
     });
   }
   const grip = el("span","bgrip","\u2630"); grip.title = "Drag to move";
@@ -2119,54 +2128,88 @@ function addTaskRow(target){
     return { group, chip };
   });
 
-  /* Whatever will not fit on one line goes behind a More container at the
-     end, which opens sideways rather than pushing the row onto two lines.
-     Measured after it is on the page, because until then nothing has a
-     width to measure. */
-  const more = el("button","pageadd-chip pageadd-more","More");
-  more.type = "button";
-  const overflow = el("div","pageadd-overflow");
-  overflow.hidden = true;
-  const moreWrap = el("span","pageadd-morewrap");
-  moreWrap.appendChild(more); moreWrap.appendChild(overflow);
-  more.addEventListener("click", (e) => {
-    e.stopPropagation();
-    overflow.hidden = !overflow.hidden;
-    more.classList.toggle("open", !overflow.hidden);
-  });
-  document.addEventListener("pointerdown", (e) => {
-    if (overflow.hidden) return;
-    if (moreWrap.contains(e.target)) return;
-    overflow.hidden = true; more.classList.remove("open");
-  });
+  /* On a wide screen the containers wrap onto as many lines as they need and
+     that is the end of it. On a phone that would push the page's own tasks a
+     long way down, so the row is held to two lines with a button that grows it
+     one line at a time, and shrinks it again the same way once it is all out.
 
-  function fold(){
-    if (!wrap.isConnected) return;
-    /* start again from everything on the bar, then move the tail off it */
-    chips.forEach(c => bar.appendChild(c.chip));
-    overflow.innerHTML = "";
-    if (moreWrap.parentNode) moreWrap.parentNode.removeChild(moreWrap);
-    bar.appendChild(moreWrap);
-    moreWrap.hidden = true;
-    const top = bar.getBoundingClientRect().top;
-    const spill = chips.filter(c => c.chip.getBoundingClientRect().top > top + 4);
-    if (!spill.length) return;
-    moreWrap.hidden = false;
-    /* The ones that spilled move first. Only then is it worth asking whether
-       More still fits, because until they have gone it never will and the
-       loop below would strip the bar bare. */
-    spill.forEach(c => overflow.appendChild(c.chip));
-    let cut = chips.length - spill.length;
-    while (cut > 1 && moreWrap.getBoundingClientRect().top > top + 4){
-      cut--;
-      overflow.insertBefore(chips[cut].chip, overflow.firstChild);
-    }
+     What was here before moved whatever spilled into a More pop-up. Deciding
+     what had spilled meant measuring the row, and when that measurement landed
+     before the middle column had its width every chip looked wrapped, so a
+     desktop builder would show one container and hide the other eight behind
+     More. Nothing is moved now: the bar is only ever clipped, so a bad
+     measurement can no longer rearrange anything. */
+  const LIMIT = 2;                    // lines shown before a phone hides any
+  let shown = LIMIT;
+  const more = el("button","pageadd-more","More");
+  more.type = "button";
+  more.hidden = true;
+  wrap.insertBefore(more, tray);      // above the open container, not below it
+
+  /* Where each line of chips begins. Clipping the bar does not change how they
+     wrap, so this reads the same whether the row is open or held down. */
+  function lineTops(){
+    const tops = [];
+    chips.forEach(c => {
+      const t = c.chip.offsetTop;
+      if (!tops.some(v => Math.abs(v - t) < 4)) tops.push(t);
+    });
+    return tops.sort((a, b) => a - b);
   }
-  /* after the browser has laid the row out, and again if the window changes */
-  setTimeout(fold, 0);
-  window.addEventListener("resize", fold);
+
+  function fit(){
+    if (!wrap.isConnected) return;
+    const tops = lineTops();
+    if (!tops.length) return;
+    const loose = () => {
+      more.hidden = true;
+      bar.classList.remove("clamped");
+      bar.style.removeProperty("max-height");
+    };
+    if (!isCompact() || tops.length <= LIMIT) return loose();
+    shown = Math.max(LIMIT, Math.min(shown, tops.length));
+    if (shown >= tops.length){
+      /* everything is out, so the button turns round */
+      bar.classList.remove("clamped");
+      bar.style.removeProperty("max-height");
+      more.hidden = false;
+      more.textContent = "Less";
+      return;
+    }
+    more.hidden = false;
+    more.textContent = "More";
+    bar.classList.add("clamped");
+    /* The bottom of the lowest chip on the last line being shown. Chips are not
+       all one height, because a long name wraps to two lines inside its own
+       pill on a narrow screen, so taking the first chip's height here left the
+       row a line short of what it was meant to be showing. */
+    const cut = tops[shown - 1];
+    let bottom = 0;
+    chips.forEach(c => {
+      if (c.chip.offsetTop <= cut + 4){
+        bottom = Math.max(bottom, c.chip.offsetTop + c.chip.offsetHeight);
+      }
+    });
+    bar.style.maxHeight = (bottom - tops[0]) + "px";
+  }
+  more.addEventListener("click", () => {
+    shown += (shown >= lineTops().length) ? -1 : 1;
+    fit();
+  });
+  wrap._fit = fit;
+  /* after the browser has laid the row out: until then nothing has a width and
+     every chip reads as though it had wrapped */
+  setTimeout(fit, 0);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
   return wrap;
 }
+
+/* One listener for every row on the page rather than one per row per render.
+   The builder rebuilds its cards on every change and the old per-row resize
+   listeners were never taken off again, so they gathered all session. */
+window.addEventListener("resize", () => {
+  document.querySelectorAll(".pageadd").forEach(w => { if (w._fit) w._fit(); });
+});
 
 /* a small prompt that returns what was typed */
 function askNew(title, label){

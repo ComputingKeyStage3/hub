@@ -998,10 +998,18 @@ body.spectating{padding-top:40px}
 .brow input{flex:1}
 
 .build-preview{display:flex; flex-direction:column; border-left:1px solid var(--line); min-width:0}
+/* The frame sits inside .prev-hold, so its own flex:1 was being measured
+   against a plain block that never stretched: it fell back to its minimum
+   and used about two thirds of the column it had. The holder has to stretch
+   itself before anything inside it has room to fill. Compact mode pins this
+   back to flex:none, because there the frame is laid out big and scaled. */
+.prev-hold{flex:1 1 auto; min-height:0}
 .prev-head{display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--line);
   background:var(--panel-2)}
 .prev-head b{flex:1; font-size:15px}
-#prev{flex:1; width:100%; border:none; background:var(--bg); min-height:420px}
+/* block, not the default inline: as an inline element it sat on a text
+   baseline and left a gap underneath it inside the holder */
+#prev{display:block; width:100%; height:100%; border:none; background:var(--bg); min-height:0}
 
 .jsonbox{max-height:46vh; overflow:auto; white-space:pre-wrap; word-break:break-word;
   background:var(--code-bg); color:var(--code-fg); border-radius:12px; padding:14px; font-family:var(--mono);
@@ -1995,14 +2003,14 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .pageadd-tray[hidden]{display:none}
 
 /* the ones that did not fit, in a small stack beside More */
-.pageadd-morewrap{position:relative; display:inline-flex}
-.pageadd-overflow{position:absolute; top:calc(100% + 6px); right:0; z-index:30;
-  display:flex; flex-direction:column; gap:6px; padding:8px; width:max-content;
-  max-width:min(280px, calc(100vw - 32px));
-  background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
-  box-shadow:0 8px 22px rgba(0,0,0,.16)}
-.pageadd-overflow[hidden]{display:none}
-.pageadd-overflow .pageadd-chip{text-align:left}
+/* Held to two lines on a phone. Only ever clipped, never rearranged, so a
+   measurement taken before the column has its width cannot hide anything. */
+.pageadd-bar.clamped{overflow:hidden}
+.pageadd-more{align-self:flex-start; padding:6px 13px; border:1.5px dashed var(--line-2);
+  border-radius:999px; background:none; color:var(--muted); cursor:pointer;
+  font-family:var(--body); font-size:13px; font-weight:700}
+.pageadd-more:hover{border-color:var(--amber); color:var(--amber)}
+.pageadd-more[hidden]{display:none}
 
 /* the lesson code, big enough to read off a teacher's screen */
 .sharecode{ font-family:var(--mono); font-size:38px; letter-spacing:.22em; text-indent:.22em;
@@ -2971,3 +2979,50 @@ html[data-build=compact][data-preview=full] .homebar{display:none}
   color:var(--text); font-family:var(--body); font-size:13px}
 .board-sizenum:focus{border-color:var(--amber); outline:none}
 .board-sizeunit{font-size:12px; color:var(--muted); margin-right:2px}
+
+
+/* =====================================================================
+   ARRIVING ON A PAGE
+
+   Everything a page is made of fades up a few pixels as it lands. It takes
+   the hard edge off a page swap without making anyone wait: it is over in
+   a third of a second and nothing is unclickable while it runs.
+
+   Nothing that covers the whole screen is included, because none of them are
+   the page arriving and all of them show the seam: drifting an inset:0 layer
+   up seven pixels leaves seven pixels uncovered along the bottom. That rules
+   out pop-up backdrops, the confetti, the PDF viewer, and the reading tint,
+   which is the one that would actually be noticed, since it is switched on
+   during load for the students who need it.
+
+   Two things here are deliberate, and both are about the same worry: a
+   decoration must never be able to leave a page blank.
+
+   No JavaScript sets it up. A rule that hid the page until a script said
+   otherwise would show a blank screen on any page where that script threw.
+
+   There is no fill mode and no delay either, so the resting state is the
+   ordinary one and an element is only ever see-through while the animation
+   is actually running. Holding the first frame instead would mean that
+   anything stopping the animation part way leaves the page invisible for
+   good, which was worth more than the stagger it cost. It showed up in
+   testing: a page loaded in a background tab sat at nothing until it was
+   first drawn.
+
+   The reduced motion rule near the top of this file turns every animation
+   off with !important, so this is covered by it wherever it sits.
+   ===================================================================== */
+@keyframes hub-arrive{
+  from{ opacity:0; transform:translateY(7px) }
+  to{ opacity:1; transform:none }
+}
+body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell){
+  animation:hub-arrive .34s cubic-bezier(.22,.61,.36,1);
+}
+/* the bars settle a little sooner than what sits underneath them */
+body > .homebar, body > .topbar, body > .crumbbar, body > .modeswitch{
+  animation-duration:.24s;
+}
+/* The loading screen covers the page while a lesson is put together, so it
+   has nothing to fade up from and should be there the moment it is needed. */
+body > .loadscreen{ animation:none }
