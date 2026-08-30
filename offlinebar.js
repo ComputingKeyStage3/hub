@@ -20,7 +20,7 @@
     bar.appendChild(b);
     const rest = document.createElement("span");
     rest.textContent = teacher
-      ? " Classes, marking and saved work are unavailable. Lessons are built here and saved into the lessons folder."
+      ? " The lessons folder is the hub. Classes, marking and saved work are unavailable, and lessons are saved by downloading them into the folder."
       : " Your work is kept in this browser. Save a PDF to hand it in.";
     bar.appendChild(rest);
     if (document.body.firstChild) document.body.insertBefore(bar, document.body.firstChild);

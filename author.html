@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="offlinebar.js"></script>
+<script src="lessonfile.js"></script>
 <script src="richtext.js"></script>
 <script src="menus.js"></script>
 <script src="settings.js"></script>
@@ -1764,13 +1765,19 @@ on("titleBtn", "click", () => {
   });
 });
 
+/* Without a server a year or unit is nothing but a word written into
+   lessons/index.json, so a new one is simply added to what is on offer
+   here. It reaches the site when the line for this lesson is pasted in. */
 on("lYear", "change", async () => {
   const v = $("lYear").value;
   if (v === "__new"){
     const name = await askNew("New year group", "Name (e.g. Year 8)");
     if (!name){ $("lYear").value = lesson.year || ""; return; }
-    try{ await catPost({ op:"add-year", name: name }); }catch(e){ say("Could not create it", e.message); }
-    await loadUnitsAndYears();
+    if (OFFLINE) cat.years = (cat.years || []).concat([{ name }]);
+    else {
+      try{ await catPost({ op:"add-year", name: name }); }catch(e){ say("Could not create it", e.message); }
+      await loadUnitsAndYears();
+    }
     lesson.year = name;
   } else {
     lesson.year = v;
@@ -1783,9 +1790,12 @@ on("lUnit", "change", async () => {
   if (v === "__new"){
     const name = await askNew("New unit", "Name (e.g. 8.1 Programming with Python)");
     if (!name){ paintPickers(); return; }
-    try{ await catPost({ op:"add-unit", name: name, year: lesson.year || "" }); }
-    catch(e){ say("Could not create it", e.message); }
-    await loadUnitsAndYears();
+    if (OFFLINE) cat.units = (cat.units || []).concat([{ name, year: lesson.year || "" }]);
+    else {
+      try{ await catPost({ op:"add-unit", name: name, year: lesson.year || "" }); }
+      catch(e){ say("Could not create it", e.message); }
+      await loadUnitsAndYears();
+    }
     lesson.unit = name;
   } else {
     lesson.unit = v;
@@ -2030,14 +2040,30 @@ function lessonId(){
   if (lesson.savedAs) return lesson.savedAs;
   return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50);
 }
-/* Save the lesson as a file for the lessons folder, with what to do next. */
-function downloadForFolder(){
+/* Save the lesson as a file for the lessons folder, with what to do next.
+   Two things go into GitHub: the lesson file itself, and a line in
+   lessons/index.json that files it under a year and unit and gives it the
+   four digit code students type when a link has not reached them. */
+async function downloadForFolder(){
   if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
   if (!lesson.year || !lesson.year.trim()){
-    say("Which year group?", "Students pick their year when they open the site, and only see lessons for it.");
+    say("Which year group?", "The hub files lessons by year, so every lesson needs one.");
     return;
   }
-  const id = (lessonId || lesson.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (!lesson.unit || !lesson.unit.trim()){
+    say("Which unit?", "Choose a unit at the top, or make a new one. Units sit inside a year group.");
+    return;
+  }
+  const id = lessonId();
+  /* An existing lesson keeps the code it was given: it is on a worksheet,
+     in somebody's planner, and written on the board. Only a new one gets
+     a fresh one, chosen so nothing else in the folder is using it. */
+  let code = lesson.code || "";
+  let known = { lessons: [] };
+  try{ known = await window.lessonFile.load(true); }catch(e){}
+  if (!code) code = window.lessonFile.codeFor(known, id) || window.lessonFile.newCode(known);
+  lesson.code = code;
+
   const built = compile();
   const blob = new Blob([JSON.stringify(built, null, 2)], { type:"application/json" });
   const a = document.createElement("a");
@@ -2046,27 +2072,54 @@ function downloadForFolder(){
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   dirty = false;
+
+  const listed = (known.lessons || []).some(l => l.id === id);
+  const unitExists = (known.units || []).some(u => u.name === lesson.unit && (u.year || "") === lesson.year);
+  /* The lesson's line on its own is no use if there is no unit for it to sit
+     in, so a brand new unit comes out whole, ready to drop in beside the
+     others. */
+  const entry = Object.assign(
+    { id: id, title: lesson.title, description: lesson.intro || "" },
+    (lesson.assessment || lesson.practical) ? { assessment: true } : {},
+    lesson.homework ? { homework: true } : {},
+    { code: code });
+  const paste = unitExists ? entry
+    : { name: lesson.unit, year: lesson.year, lessons: [entry] };
+
   openModal(box => {
     box.appendChild(el("h2","","Saved as " + id + ".json"));
-    box.appendChild(el("p","modal-text","To put it on the site:"));
+    box.appendChild(el("p","modal-text", listed
+      ? "It is already listed in lessons/index.json, so there is one thing left to do:"
+      : "To put it on the site:"));
     const list = el("ol","modal-steps");
-    [ "Put " + id + ".json into the lessons folder in GitHub.",
-      "Open lessons/index.json and add this line inside the right unit:",
-      "Commit. The lesson appears for students within a minute or so."
-    ].forEach(t => list.appendChild(el("li","", t)));
+    const steps = ["Put " + id + ".json into the lessons folder in GitHub, replacing the old one if it is there."];
+    if (!listed){
+      steps.push(unitExists
+        ? "Open lessons/index.json and add this to the lessons of “" + lesson.unit + "”:"
+        : "Open lessons/index.json. There is no “" + lesson.unit + "” yet, so add this whole unit to the list:");
+    }
+    steps.push("Commit. The lesson is on the site within a minute or so.");
+    steps.forEach(t => list.appendChild(el("li","", t)));
     box.appendChild(list);
-    const snippet = el("pre","codeblock");
-    snippet.textContent = JSON.stringify({ id: id, title: lesson.title,
-      description: lesson.intro || "",
-      year: lesson.year || "",
-      assessment: !!(lesson.assessment || lesson.practical) || undefined,
-      homework: !!lesson.homework || undefined }, null, 2);
-    box.appendChild(snippet);
-    const copy = el("button","btn-ghost","Copy that line");
-    copy.addEventListener("click", () => {
-      try{ navigator.clipboard.writeText(snippet.textContent); copy.textContent = "Copied"; }catch(e){}
-    });
-    box.appendChild(copy);
+
+    if (!listed){
+      const snippet = el("pre","codeblock");
+      snippet.textContent = JSON.stringify(paste, null, 2);
+      box.appendChild(snippet);
+      const copy = el("button","btn-ghost","Copy that");
+      copy.addEventListener("click", async () => {
+        try{ await navigator.clipboard.writeText(snippet.textContent); copy.textContent = "Copied ✓"; }
+        catch(e){ copy.textContent = "Select it and press Ctrl+C"; }
+      });
+      box.appendChild(copy);
+    }
+
+    box.appendChild(el("p","set-label","How the class gets in"));
+    box.appendChild(el("p","modal-text","Give them this link:"));
+    box.appendChild(el("pre","codeblock", window.lessonFile.linkFor(id)));
+    box.appendChild(el("p","modal-text","Or, from the front page, this code:"));
+    box.appendChild(el("p","sharecode", code));
+
     const done = el("button","btn-primary modal-cta","Done");
     done.addEventListener("click", closeModal);
     box.appendChild(done);
@@ -2077,7 +2130,7 @@ async function saveToSite(){
   const API = (window.HUB && window.HUB.API) || "";
   /* Offline there is nowhere to save to, so the lesson is downloaded instead
      and dropped into the lessons folder on GitHub. */
-  if (window.HUB && window.HUB.OFFLINE){ downloadForFolder(); return; }
+  if (OFFLINE){ await downloadForFolder(); return; }
   if (!API){ say("Not connected", "This copy of the site has no server address in config.js, so it can't save lessons."); return; }
   if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
   if (!lesson.year || !lesson.year.trim()){ say("Which year group?", "Choose a year group at the top, or make a new one."); return; }
@@ -2157,8 +2210,23 @@ on("delLesson", "click", () => {
 });
 
 /* offer the units that already exist, and load a lesson if asked to edit one */
+const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
+
 async function loadUnitsAndYears(){
   const API = (window.HUB && window.HUB.API) || "";
+  /* Without a server the years and units on offer are simply the ones
+     already written into lessons/index.json. */
+  if (OFFLINE){
+    try{
+      const file = await window.lessonFile.load(true);
+      const years = [];
+      file.units.forEach(u => { if (u.year && years.indexOf(u.year) < 0) years.push(u.year); });
+      file.lessons.forEach(l => { if (l.year && years.indexOf(l.year) < 0) years.push(l.year); });
+      cat = { years: years.map(name => ({ name })), units: file.units.filter(u => u.name) };
+    }catch(e){ cat = { years: [], units: [] }; }
+    paintPickers();
+    return;
+  }
   if (!API) return;
   try{
     const r = await fetch(API + "/api/catalog", { headers: teacherKey() ? { "x-teacher-key": teacherKey() } : {}, cache:"no-store" });
@@ -2166,9 +2234,36 @@ async function loadUnitsAndYears(){
   }catch(e){}
   paintPickers();
 }
+
+/* Editing without a server means reading the lesson's own file back out of
+   the lessons folder. It carries its title, year and unit, so the only
+   thing that has to come from the index is the code, which lives there. */
+async function loadLessonFromFolder(editId){
+  try{
+    const r = await fetch("lessons/" + encodeURIComponent(editId) + ".json", { cache:"no-store" });
+    if (!r.ok) throw new Error("There is no lessons/" + editId + ".json.");
+    const data = await r.json();
+    let known = {};
+    try{
+      const file = await window.lessonFile.load();
+      known = file.lessons.find(l => l.id === editId) || {};
+    }catch(e){}
+    lesson = fromCompiled(data, { title: known.title, unit: known.unit });
+    if (!lesson.year && known.year) lesson.year = known.year;
+    lesson.savedAs = editId;
+    lesson.code = known.code || "";
+    migrate(lesson.blocks); tidyIntoPages();
+    dirty = false;
+    showTitle();
+    paintPickers();
+    setMode(!!lesson.assessment && !lesson.practical, !!lesson.practical);
+    render(); refreshPreview();
+  }catch(e){ say("Could not open that lesson", e.message); }
+}
+
 async function loadUnitsAndMaybeLesson(){
   const API = (window.HUB && window.HUB.API) || "";
-  if (!API) return;
+  if (!API && !OFFLINE) return;
   await loadUnitsAndYears();
   const editId = new URLSearchParams(location.search).get("edit");
   const qs2 = new URLSearchParams(location.search);
@@ -2182,6 +2277,7 @@ async function loadUnitsAndMaybeLesson(){
     $("ownerNote").textContent = "This lesson is being made for " + wantClass + " only.";
   }
   if (!editId) return;
+  if (OFFLINE){ await loadLessonFromFolder(editId); return; }
   if (!teacherKey()){ askForKey(loadUnitsAndMaybeLesson); return; }
   try{
     const r = await fetch(API + "/api/teacher/get-lesson?id=" + encodeURIComponent(editId),

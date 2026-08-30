@@ -1939,17 +1939,25 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .homebar .settings-btn,.homebar .auth{ flex:0 0 auto; margin-left:auto }
 .homebar .settings-btn ~ .auth{ margin-left:10px }
 
-/* --- the offline name box matches every other field --- */
-.offname{ width:100%; max-width:340px; height:44px; padding:0 14px; text-align:center;
-  border:1.5px solid var(--line-2); border-radius:10px; background:var(--panel);
-  color:var(--text); font-family:var(--body); font-size:16px }
-.offname:focus{ border-color:var(--amber); outline:none;
-  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent) }
-.offwrap{ display:flex; flex-direction:column; align-items:center; gap:12px }
+/* --- the four digit lesson code on the home page ---
+   Wide, spaced digits so a code read off the board can be checked at a
+   glance. It is a text box, not a number one: spinner arrows on a code
+   invite dragging it to a lesson nobody meant to open. */
+/* beats the plain ".field input" it sits inside */
+.field input.codebox{ width:100%; max-width:260px; height:56px; padding:0 14px; text-align:center;
+  letter-spacing:.34em; text-indent:.34em; font-family:var(--mono); font-size:26px }
 
-/* the year beside a student name in the bar */
-.whoyear{color:var(--muted); font-size:14px}
-select.offname{text-align-last:center; cursor:pointer}
+/* the lesson code, big enough to read off a teacher's screen */
+.sharecode{ font-family:var(--mono); font-size:38px; letter-spacing:.22em; text-indent:.22em;
+  text-align:center; margin:6px 0 14px; color:var(--text) }
+
+/* --- the name check that opens every lesson without a server ---
+   It covers the lesson underneath on purpose: nobody starts work until the
+   name on it is theirs. Above the loading screen (300) as well, since it is
+   asked while the lesson is still being put together. */
+.namegate{ z-index:400 }
+.namegate .modal{ text-align:center }
+.namegate .field{ margin:16px auto 4px; max-width:320px; text-align:left }
 
 /* the backup button asks for attention once a week */
 .iconbtn.due{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 14%, var(--panel))}
@@ -2235,10 +2243,6 @@ select.offname{text-align-last:center; cursor:pointer}
   .done-layout{grid-template-columns:minmax(0,1fr)}
   .done-cards{overflow:visible}
 }
-
-/* the button that starts an offline session */
-.offstart{min-width:180px; margin-top:4px}
-@media (max-width:640px){ .offstart{width:100%; min-width:0} }
 
 /* the tasks themselves arrive after the buttons */
 .fadelast{opacity:0; transition:opacity .6s ease}

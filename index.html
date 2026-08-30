@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="offlinebar.js"></script>
+<script src="lessonfile.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -124,78 +125,75 @@ function signedInView(inYet){
   }
 }
 
+/* ---------- home without a server ----------
+   Lessons are handed out as links that open straight into the lesson, so
+   this page is only the way back in when a link has not reached somebody:
+   they type the lesson's four digit code and go there. There is no list to
+   browse, no sign in, and nothing here knows their name — the lesson page
+   asks for that, because that is where the work happens. */
+function offlineHome(){
+  ["tabs","view-lessons","view-results"].forEach(id => { const e = $(id); if (e) e.hidden = true; });
+  $("auth").innerHTML = "";
+  $("headline").textContent = "Open a lesson";
+  const card = $("loginCard");
+  card.hidden = false;
+  card.innerHTML = "";
+  card.appendChild(el("p","hint",
+    "Your teacher will normally give you a link that opens the lesson for you. " +
+    "If you have not got one, type the four digit code for today's lesson."));
+
+  const field = el("div","field");
+  field.appendChild(el("label","","Lesson code"));
+  const box = document.createElement("input");
+  box.type = "text";
+  box.id = "codeIn";
+  box.className = "codebox";
+  box.inputMode = "numeric";
+  box.maxLength = 4;
+  box.autocomplete = "off";
+  box.placeholder = "0000";
+  field.appendChild(box);
+  card.appendChild(field);
+
+  const msg = el("p","err","");
+  const go = el("button","btn-primary","Open lesson");
+  go.style.marginTop = "6px";
+
+  const open = async () => {
+    const code = box.value.replace(/\D/g, "");
+    if (code.length !== 4){ msg.textContent = "Lesson codes are four numbers."; box.focus(); return; }
+    msg.textContent = "";
+    go.disabled = true; go.textContent = "Looking…";
+    try{
+      const found = window.lessonFile.byCode(await window.lessonFile.load(true), code);
+      if (!found){
+        msg.textContent = "No lesson has the code " + code + ". Check it with your teacher.";
+        box.select();
+        return;
+      }
+      location.href = "lesson.html?id=" + encodeURIComponent(found.id);
+    }catch(e){
+      msg.textContent = "The lesson list could not be read. Tell your teacher.";
+    }finally{
+      go.disabled = false; go.textContent = "Open lesson";
+    }
+  };
+  go.addEventListener("click", open);
+  /* Only numbers go in, so a stray letter cannot sit there looking right. */
+  box.addEventListener("input", () => {
+    const only = box.value.replace(/\D/g, "").slice(0, 4);
+    if (only !== box.value) box.value = only;
+    msg.textContent = "";
+  });
+  box.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
+  card.appendChild(go);
+  card.appendChild(msg);
+  setTimeout(() => box.focus(), 30);
+}
+
 function renderAuth(){
   const name = localStorage.getItem("hub_name");
-  /* With no backend there is nobody to sign in to. Students just say who
-     they are so their work can be told apart on this computer. */
-  if (OFFLINE){
-    if (name){
-      $("auth").innerHTML = '<span class="who"><b></b> <span class="whoyear"></span></span> <button class="btn-ghost" id="outBtn"><span class="ico">&#9099;</span><span class="lbl"> Not me</span></button>';
-      $("auth").querySelector("b").textContent = name;
-      $("auth").querySelector(".whoyear").textContent = localStorage.getItem("hub_year") || "";
-      on("outBtn", "click", () => {
-        ["hub_name","hub_year"].forEach(k => localStorage.removeItem(k));
-        forgetEverything();
-        renderAuth();
-      });
-      $("loginCard").hidden = true;
-      const hour = new Date().getHours();
-      const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-      $("headline").textContent = part + ", " + name.split(" ")[0];
-      signedInView(true);
-      loadLessons();
-    } else {
-      $("auth").innerHTML = "";
-      $("loginCard").hidden = false;
-      $("headline").textContent = "What is your name?";
-      /* built as real elements, so the button is wired to the one on screen */
-      const card = $("loginCard");
-      card.innerHTML = "";
-      const note = document.createElement("p");
-      note.className = "hint";
-      note.textContent = "Your work is kept on this computer, in this browser. " +
-                         "Put your name in so it can be told apart from anyone else using it.";
-      const field = document.createElement("div");
-      field.className = "offwrap";
-      const input = document.createElement("input");
-      input.className = "offname";
-      input.placeholder = "Your name";
-      input.autocomplete = "off";
-      field.appendChild(input);
-      const go = document.createElement("button");
-      go.className = "btn-primary offstart";
-      go.textContent = "Start";
-      const years = (window.HUB && window.HUB.YEARS) || ["Year 7","Year 8","Year 9"];
-      const pick = document.createElement("select");
-      pick.className = "offname";
-      const blank = document.createElement("option");
-      blank.value = ""; blank.textContent = "Choose your year";
-      pick.appendChild(blank);
-      years.forEach(y => {
-        const o = document.createElement("option");
-        o.value = y; o.textContent = y;
-        pick.appendChild(o);
-      });
-      pick.value = localStorage.getItem("hub_year") || "";
-      field.appendChild(pick);
-
-      const start = () => {
-        const v = (input.value || "").trim();
-        if (!v){ input.focus(); return; }
-        if (!pick.value){ pick.focus(); return; }
-        forgetEverything();          // never inherit the last student's data
-        localStorage.setItem("hub_name", v);
-        localStorage.setItem("hub_year", pick.value);
-        renderAuth();
-      };
-      go.addEventListener("click", start);
-      input.addEventListener("keydown", (e) => { if (e.key === "Enter") start(); });
-      field.appendChild(go);
-      card.appendChild(note); card.appendChild(field);
-      signedInView(false);
-    }
-    return;
-  }
+  if (OFFLINE){ offlineHome(); return; }
   if (name && localStorage.getItem("hub_token")){
     $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn"><span class="ico">&#9099;</span><span class="lbl"> Sign out</span></button>';
     $("auth").querySelector("b").textContent = name;
@@ -275,6 +273,7 @@ let showing = "active";
    is locked for this class. */
 let lessonsLoaded = false;
 async function loadLessons(force){
+  if (OFFLINE) return;              // no list to browse, only the code box
   if (lessonsLoaded && !force){ paintLessons(lastById); return; }
   /* Only count it as loaded once lessons have actually arrived. Marking it
      loaded after a fetch that returned early, or failed, left the list empty
@@ -287,8 +286,7 @@ async function fetchLessons(){
   let loadedOk = false;
   const box = $("lessonList");
   const token = localStorage.getItem("hub_token");
-  if (!OFFLINE && !token){ box.innerHTML = ""; return false; }   // signing in comes first
-  if (OFFLINE && !(localStorage.getItem("hub_name") && localStorage.getItem("hub_year"))){ box.innerHTML = ""; return false; }
+  if (!token){ box.innerHTML = ""; return false; }               // signing in comes first
   box.innerHTML = '<p class="hint">Loading…</p>';
   const group = localStorage.getItem("hub_group") || "";
   try{
@@ -303,15 +301,12 @@ async function fetchLessons(){
     const byId = {};
     flat.forEach(l => { byId[l.id] = l; lessonTitles[l.id] = l.title; });
 
-    /* Offline there is no catalogue to ask, so the lesson files are the
-       catalogue: everything in lessons/index.json is on offer. */
+    /* Until config.js has a server address there is no catalogue to ask, so
+       the lesson files stand in for one: everything in lessons/index.json is
+       on offer. */
     catalogue = ready
       ? await (await fetch(API + "/api/catalog" + (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json()
-      : { units: [], lessons: flat
-            /* only the year they said they are in; a lesson with no year is
-               shown to everyone */
-            .filter(l => !l.year || l.year === (localStorage.getItem("hub_year") || ""))
-            .map(l => ({
+      : { units: [], lessons: flat.map(l => ({
               lesson_id: l.id, title: l.title, description: l.description || "",
               unit: l.unit || "", year: l.year || "",
               assessment: !!l.assessment, homework: !!l.homework })) };

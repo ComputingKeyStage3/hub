@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="offlinebar.js"></script>
+<script src="lessonfile.js"></script>
 <script src="xlsx.js"></script>
 <script src="menus.js"></script>
 <script src="settings.js"></script>
@@ -244,6 +245,11 @@ function on(id, ev, fn){
   e.addEventListener(ev, fn);
 }
 const API = (window.HUB && window.HUB.API) || "";
+/* Without a server the console is the lesson hub and nothing else: the
+   lessons folder is the catalogue, there are no classes to give work to and
+   no marking to do. Everything gated on this is read from files or written
+   to a download. */
+const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
 function el(tag, cls, text){
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -286,14 +292,18 @@ const toHubYear = () => openYear(hubYear);
 function paintCrumbs(){
   const v = VIEWS.find(x => !$(x).hidden);
   if (v === "keyView"){ crumbs(null); return; }
-  const top = { name:"Home", go: v === "homeView" ? null : toHome };
+  /* Offline the hub is the top of the console rather than something sitting
+     under Home, because Home holds classes and there are none. */
+  const top = OFFLINE ? { name:"Lesson hub", go: v === "hubView" ? null : toHub }
+                      : { name:"Home", go: v === "homeView" ? null : toHome };
+  const hub = OFFLINE ? [top] : [top, { name:"Lesson hub", go: toHub }];
   const home = { name:"Classes", go: toClasses };
   if (v === "homeView") return crumbs([top]);
-  if (v === "hubView") return crumbs([top, { name:"Lesson hub" }]);
-  if (v === "hubUnitsView") return crumbs([top, { name:"Lesson hub", go: toHub }, { name: hubYear || "Not in a year group" }]);
-  if (v === "hubLessonsView") return crumbs([top, { name:"Lesson hub", go: toHub },
+  if (v === "hubView") return crumbs(OFFLINE ? [top] : [top, { name:"Lesson hub" }]);
+  if (v === "hubUnitsView") return crumbs(hub.concat([{ name: hubYear || "Not in a year group" }]));
+  if (v === "hubLessonsView") return crumbs(hub.concat([
                                              { name: hubYear || "Not in a year group", go: toHubYear },
-                                             { name: hubUnit || "Not in a unit" }]);
+                                             { name: hubUnit || "Not in a unit" }]));
   if (v === "classesView") return crumbs([top, { name:"Classes" }]);
   if (v === "pwView") return crumbs([top, { name:"Password updates" }]);
   if (v === "classView") return crumbs([top, home, { name: cls }]);
@@ -436,22 +446,29 @@ function fieldRow(box, label, type, value){
   return i;
 }
 
+/* ---------- opening the console without a server ----------
+   There is no key to check and nothing to sign in to, so the console opens
+   on the lesson hub. Everything that needs the database is taken off the
+   page rather than left there to fail when pressed. */
+async function offlineConsole(){
+  $("topbar").hidden = false;
+  ["pwBtn","keepBtn","hubHome","hubNewYear","hubNewUnit",
+   "renameYearBtn","deleteYearBtn","renameHubUnitBtn","deleteHubUnitBtn"]
+    .forEach(id => { const e = $(id); if (e) e.remove(); });
+  const note = $("hubView").querySelector("p.hint");
+  if (note) note.textContent = "Everything in the lessons folder, filed by year and unit.";
+  show("hubView");
+  $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
+  try{ await loadCatalogue(true); paintYears(); }
+  catch(e){
+    $("hubYears").innerHTML = "";
+    $("hubYears").appendChild(el("p","hint",
+      "The lessons folder could not be read (" + e.message + ")."));
+  }
+}
+
 /* ---------- key ---------- */
 async function tryKey(){
-  if (window.HUB && window.HUB.OFFLINE){
-    $("keyMsg").textContent = "";
-    openModal(box => {
-      box.appendChild(el("h2","","The console needs the server"));
-      box.appendChild(el("p","modal-text",
-        "This copy of the site is running without a server, so there are no classes, " +
-        "no saved work and no marking. Building lessons still works, the lesson builder " +
-        "saves a file you put into the lessons folder."));
-      const go = el("button","btn-primary modal-cta","Open the lesson builder");
-      go.addEventListener("click", () => { location.href = "author.html"; });
-      box.appendChild(go);
-    });
-    return;
-  }
   KEY = $("keyIn").value.trim();
   if (!KEY){ $("keyMsg").textContent = "Type the teacher key first."; return; }
   $("keyMsg").textContent = "Checking\u2026";
@@ -939,11 +956,16 @@ function paintYears(){
     g.appendChild(el("p","hint","No year groups yet, press “+ New year group”."));
 }
 
+/* Renaming and deleting need the database, so those buttons are taken off
+   the page without a server. Everything that used to set them must cope
+   with them not being there. */
+function showIf(id, yes){ const e = $(id); if (e) e.hidden = !yes; }
+
 function openYear(y){
   hubYear = y;
   $("yearName").textContent = y || "Not in a year group";
-  $("renameYearBtn").hidden = !y;
-  $("deleteYearBtn").hidden = !y;
+  showIf("renameYearBtn", y);
+  showIf("deleteYearBtn", y);
   show("hubUnitsView");
   paintHubUnits();
 }
@@ -972,8 +994,8 @@ function openHubUnit(u){
   hubUnit = u;
   $("hubUnitName").textContent = u || "Not in a unit";
   $("backUnitYear").textContent = hubYear || "Lesson hub";
-  $("renameHubUnitBtn").hidden = !u;
-  $("deleteHubUnitBtn").hidden = !u;
+  showIf("renameHubUnitBtn", u);
+  showIf("deleteHubUnitBtn", u);
   show("hubLessonsView");
   paintHub();
 }
@@ -989,13 +1011,20 @@ function lessonCards(list, box){
     head.appendChild(el("b","", titleOf(l.lesson_id)));
     if (l.owner_group) head.appendChild(el("span","statechip shut", l.owner_group + " only"));
     card.appendChild(head);
-    const mine = assignsFor(l.lesson_id);
-    card.appendChild(el("p","lp-note", mine.length
-      ? mine.length + " class" + (mine.length === 1 ? "" : "es")
-      : "Not given to any class yet"));
+    /* With no classes to publish to, what a teacher needs off this card is
+       the address to paste into Teams, and the code that opens it if the
+       link does not survive the journey. */
+    if (OFFLINE){
+      card.appendChild(el("p","lp-note", l.code ? "Code " + l.code : "No code yet"));
+    } else {
+      const mine = assignsFor(l.lesson_id);
+      card.appendChild(el("p","lp-note", mine.length
+        ? mine.length + " class" + (mine.length === 1 ? "" : "es")
+        : "Not given to any class yet"));
+    }
     const acts = el("div","lp-acts");
-    const give = el("button","btn-primary","Give to classes");
-    give.addEventListener("click", () => distribute(l.lesson_id));
+    const give = el("button","btn-primary", OFFLINE ? "Get link" : "Give to classes");
+    give.addEventListener("click", () => OFFLINE ? shareLink(l.lesson_id) : distribute(l.lesson_id));
     const edit = el("button","btn-ghost","Edit");
     edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
     const del = el("button","btn-ghost","Delete");
@@ -1010,6 +1039,47 @@ function lessonCards(list, box){
   box.appendChild(grid);
 }
 function paintHub(){ lessonCards(lessonsOfUnit(hubUnit), $("hubList")); }
+
+/* ---------- the link to hand a class (no server) ----------
+   Lessons reach students through Teams or Impero rather than a lesson list,
+   so what the console gives out is an address. The four digit code is the
+   way back in when the link does not survive being pasted about. */
+function shareLink(id){
+  const url = window.lessonFile.linkFor(id);
+  const code = (cat.lessons || []).find(l => l.lesson_id === id);
+  openModal(box => {
+    modalTitle(box, titleOf(id));
+    box.appendChild(el("p","modal-text","Give this address to the class. It opens the lesson straight away."));
+    const link = el("pre","codeblock", url);
+    box.appendChild(link);
+    /* Kept beside the link rather than pinned at the bottom of the pop-up,
+       so it is obvious which thing it copies. */
+    const copy = el("button","btn-ghost","Copy the link");
+    copy.addEventListener("click", async () => {
+      try{ await navigator.clipboard.writeText(url); copy.textContent = "Copied ✓"; }
+      catch(e){ copy.textContent = "Select it above and press Ctrl+C"; }
+    });
+    box.appendChild(copy);
+
+    box.appendChild(el("p","set-label","If the link does not work"));
+    if (code && code.code){
+      box.appendChild(el("p","modal-text",
+        "They can go to the site's front page and type this code instead:"));
+      const big = el("p","sharecode", code.code);
+      box.appendChild(big);
+    } else {
+      box.appendChild(el("p","modal-text",
+        "This lesson has no code yet, so the front page cannot open it. Add one to its " +
+        "line in lessons/index.json:"));
+      const suggestion = el("pre","codeblock", '"code": "' + window.lessonFile.newCode(
+        { lessons: (cat.lessons || []).map(l => ({ code: l.code })) }) + '"');
+      box.appendChild(suggestion);
+    }
+    const done = el("button","btn-primary modal-cta","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+}
 
 /* searching looks across everything, from wherever you are */
 function runSearch(termBox, into){
@@ -1189,6 +1259,27 @@ function distribute(id){
 }
 
 function deleteLesson(id, then){
+  /* Offline a lesson is a file in a folder, and this page cannot reach into
+     the folder. Saying what to remove is more use than a button that would
+     have to fail. */
+  if (OFFLINE){
+    openModal(box => {
+      modalTitle(box, "Removing “" + titleOf(id) + "”");
+      box.appendChild(el("p","modal-text","Lessons are files here, so this is done in GitHub:"));
+      const list = el("ol","modal-steps");
+      [ "Delete lessons/" + id + ".json.",
+        "Open lessons/index.json and take out its line.",
+        "Commit. It disappears from the hub within a minute or so."
+      ].forEach(t => list.appendChild(el("li","", t)));
+      box.appendChild(list);
+      box.appendChild(el("p","modal-text",
+        "Anything a student has already done stays in their own browser until they finish with the computer."));
+      const done = el("button","btn-primary modal-cta","Right you are");
+      done.addEventListener("click", closeModal);
+      box.appendChild(done);
+    });
+    return;
+  }
   const mine = assignsFor(id);
   openModal(box => {
     modalTitle(box, "Delete “" + titleOf(id) + "”?");
@@ -1540,6 +1631,24 @@ async function loadCatalogue(force){
 }
 async function fetchCatalogue(){
   fileLessons = [];
+  /* No server, so lessons/index.json is the whole catalogue. It already
+     says which year and unit every lesson belongs to, which is exactly the
+     shape the hub files them in. */
+  if (OFFLINE){
+    const file = await window.lessonFile.load(true);
+    fileLessons = file.lessons.map(l => ({ id: l.id, title: l.title, unit: l.unit, year: l.year }));
+    const years = [];
+    file.units.forEach(u => { if (u.year && years.indexOf(u.year) < 0) years.push(u.year); });
+    file.lessons.forEach(l => { if (l.year && years.indexOf(l.year) < 0) years.push(l.year); });
+    cat = {
+      years: years.map(name => ({ name })),
+      units: file.units.filter(u => u.name),
+      lessons: file.lessons.map(l => ({ lesson_id: l.id, unit: l.unit, year: l.year,
+                                        code: l.code, position: 0, published: 1 }))
+    };
+    assigns = [];
+    return;
+  }
   try{
     const d = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
     fileLessons = (d.units ? d.units.flatMap(u => u.lessons) : d) || [];
@@ -2569,10 +2678,14 @@ async function loadResetQueue(){
 }
 
 /* ---------- boot ---------- */
-window.settingsExtra = { label: "Change teacher", run: changeTeacher };
+if (!OFFLINE) window.settingsExtra = { label: "Change teacher", run: changeTeacher };
 if (window.initSettings) initSettings($("setBtn"));
-const savedKey = localStorage.getItem("hub_tkey");
-if (savedKey){ $("keyIn").value = savedKey; tryKey(); }
+if (OFFLINE){
+  offlineConsole();
+} else {
+  const savedKey = localStorage.getItem("hub_tkey");
+  if (savedKey){ $("keyIn").value = savedKey; tryKey(); }
+}
 </script>
 </body>
 </html>

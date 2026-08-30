@@ -399,6 +399,78 @@ window.hubSay = function(title, text){
 /* nothing that talks about signing in belongs on a site with no accounts */
 if (OFFLINE){
   document.querySelectorAll("[data-online-only]").forEach(e => { e.remove(); });
+  /* offline this button downloads the hand-in PDF rather than sending work */
+  const sb = document.getElementById("saveBtn");
+  if (sb) sb.textContent = "Save as PDF";
+  /* Students arrive on a link straight to their lesson. There is no list for
+     them to go back to, so the way "home" is only a code box they have no
+     reason to see. Teachers still get their own link back to the console. */
+  if (!spectate){
+    const hl = document.getElementById("homeLink");
+    /* the slash after it goes too, or the bar starts with a stray mark */
+    if (hl){
+      const sep = hl.nextElementSibling;
+      if (sep && sep.classList.contains("sep")) sep.remove();
+      hl.remove();
+    }
+  }
+}
+
+/* Everything this computer has kept for a student. Wiped when someone else
+   sits down at it: two children sharing a machine must never open each
+   other's work. Display settings belong to the machine, so they stay. */
+function clearStudentWork(){
+  try{
+    const doomed = [];
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && (k.indexOf("hub_work_") === 0 || k.indexOf("hub_rel_") === 0 ||
+                k === "hub_results" || k === "hub_inspect")) doomed.push(k);
+    }
+    doomed.forEach(k => localStorage.removeItem(k));
+  }catch(e){}
+}
+
+/* Without a server this is the whole of signing in: say who you are, so the
+   work on screen and the PDF at the end have the right name on them. It is
+   shown every time a lesson opens and cannot be dismissed any other way,
+   because the last child's name sitting in the box is exactly the mistake
+   this is here to catch. */
+function nameGate(title){
+  return new Promise(resolve => {
+    const back = el("div","modal-back namegate no-print");
+    const box = el("div","modal narrow");
+    box.appendChild(el("h2","", title || "Your lesson"));
+    box.appendChild(el("p","modal-text",
+      "Before you start, put your name in. It goes on the work you hand in."));
+    const field = el("div","field");
+    field.appendChild(el("label","","Your name"));
+    const inp = el("input");
+    inp.type = "text"; inp.autocomplete = "off"; inp.spellcheck = false;
+    inp.value = localStorage.getItem("hub_name") || "";
+    field.appendChild(inp);
+    box.appendChild(field);
+    const err = el("p","err","");
+    const go = el("button","btn-primary modal-cta","Start the lesson");
+
+    const start = () => {
+      const v = inp.value.trim();
+      if (!v){ err.textContent = "Put your name in first."; inp.focus(); return; }
+      const was = localStorage.getItem("hub_name") || "";
+      if (was && was.toLowerCase() !== v.toLowerCase()) clearStudentWork();
+      localStorage.setItem("hub_name", v);
+      back.remove();
+      resolve();
+    };
+    go.addEventListener("click", start);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") start(); });
+    inp.addEventListener("input", () => { err.textContent = ""; });
+    box.appendChild(err);
+    box.appendChild(go);
+    back.appendChild(box);
+    document.body.appendChild(back);
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  });
 }
 /* Offline, there is no backend at all: every task is open, work stays in
    this browser, and handing in means saving a PDF. */
@@ -546,10 +618,15 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     $("lessonTitle").textContent = l.title;
     l.blocks.forEach(renderBlock);
     buildTracker();
+    /* Asked before anything is restored: a name change means a different
+       child, and the work waiting on this machine is cleared, so restoring
+       first would put the last one's answers on screen. */
+    if (OFFLINE && !spectate) await nameGate(l.title);
     try{ await loadSaved(); }
     finally{ restoreDone = true; }      // saving is allowed from here on
     if (spectate){
-      $("saveBtn").hidden = true; $("signinHint").hidden = true;
+      $("saveBtn").hidden = true;
+      if ($("signinHint")) $("signinHint").hidden = true;   // removed entirely when OFFLINE
       if (builderParam !== null){
 
         // inside the builder: no banner, and nowhere to wander off to
@@ -937,6 +1014,28 @@ let flashTimer = null;
 async function manualSave(){
   save();
   const btn = $("saveBtn");
+  /* Offline there is no teacher to send anything to, and pressing this used to
+     say "Sign in to save" on a site that has no sign in. Handing in offline
+     means a PDF, so that is what the button does. */
+  if (OFFLINE){
+    clearTimeout(flashTimer);
+    btn.classList.remove("flash-ok","flash-bad");
+    btn.textContent = "Making the PDF…";
+    setTimeout(() => {
+      try{
+        if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
+        buildPdf().save(fileName());
+        btn.textContent = "Saved a PDF ✓"; btn.classList.add("flash-ok");
+      }catch(e){
+        console.error("PDF save failed:", e);
+        btn.textContent = "Could not save"; btn.classList.add("flash-bad");
+      }
+      flashTimer = setTimeout(() => {
+        btn.textContent = "Save as PDF"; btn.classList.remove("flash-ok","flash-bad");
+      }, 2500);
+    }, 30);
+    return;
+  }
   btn.textContent = "Saving…";
   const state = await submitWork();
   clearTimeout(flashTimer);
@@ -3211,7 +3310,7 @@ function rShort(b){
     });
     ta.addEventListener("input", () => { fb.hidden = true; });
     s.appendChild(btn);
-  s.appendChild(doneNote); s.appendChild(fb);
+    s.appendChild(fb);
   }
 
   fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; } };
@@ -3409,8 +3508,11 @@ function renderPracticalComplete(){
     renderResponses(holder, (teacherNote && teacherNote.targetTopic) || null, null);
     if (holder.children.length) box.appendChild(holder);
   }
-  const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
-  box.appendChild(back);
+  /* Offline there is no home to go back to, only a code box. */
+  if (!OFFLINE){
+    const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
+    box.appendChild(back);
+  }
 }
 
 function renderAssessmentComplete(justFinished, res, st, sent){
@@ -3915,18 +4017,25 @@ function showLessonComplete(revisit, justFinished){
   const hero = heroBits("Well done!", lesson.title + " complete");
   const status = el("p","handin");
   hero.appendChild(status);
-  /* The work is sent as soon as this screen opens, and the line under the
-     title says so, so a Save button here only confuses. */
-
+  /* Online the work is sent as soon as this screen opens and the line under
+     the title says so, so a Save button here would only confuse. Offline
+     nothing has been sent anywhere: the PDF is the hand-in, and this is the
+     moment to make it, so the button belongs here. */
   /* Their work opens in a pop-up, where the list of tasks used to sit on
-     the page. This takes the place of "Back to Home". */
+     the page. This takes the place of "Back to Home". Offline it comes
+     first, since checking the work is what you do before handing it in. */
   if (!spectate){
-    const see = el("button","btn-primary done-save","View my work");
+    const see = el("button", (OFFLINE ? "btn-ghost" : "btn-primary") + " done-save",
+                   OFFLINE ? "Check my work" : "View my work");
     see.addEventListener("click", () => openTaskPopup());
     hero.appendChild(see);
   }
-  const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
-  if (!spectate) hero.appendChild(back);
+  if (OFFLINE && !spectate) hero.appendChild(saveButton(status));
+  /* Offline there is no home to go back to, only a code box. */
+  if (!spectate && !OFFLINE){
+    const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
+    hero.appendChild(back);
+  }
 
   /* With feedback there are two columns, as an assessment has. Without, the
      score sits on its own in the middle. */
@@ -4159,16 +4268,36 @@ function stripHtml(s){
 /* jsPDF's built-in fonts only cover Latin-1, so emoji and symbols such as a
    tick come out as mojibake (that "Ø=Þ¨" mess). Translate what we can and
    drop the rest before anything reaches the page. */
-function pdfSafe(s){
+function pdfChars(s){
   return String(s == null ? "" : s)
     .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
     .replace(/[\u201C\u201D\u201E]/g, '"')
     .replace(/[\u2013\u2212]/g, "-")
     .replace(/\u2026/g, "...")
     .replace(/\u00A0/g, " ")
-    .replace(/[^\x20-\xFF]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/[^\x20-\xFF]/g, "");
+}
+function pdfSafe(s){
+  return pdfChars(s).replace(/\s+/g, " ").trim();
+}
+/* Keeps line breaks and leading indentation, for showing code as written. */
+function pdfCode(s){
+  return String(s == null ? "" : s).replace(/\r\n?/g, "\n").split("\n")
+    .map(line => pdfChars(line.replace(/\t/g, "    ")).replace(/\s+$/, ""))
+    .join("\n");
+}
+
+/* Turn a rich-text field (notes, response boxes) into plain text that keeps
+   its paragraph breaks, so a page of notes does not come out as one run-on
+   line in the PDF. */
+function htmlToLines(html){
+  const s = String(html || "")
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6]|tr)\s*>/gi, "\n");
+  const d = document.createElement("div");
+  d.innerHTML = s;
+  return (d.textContent || "").replace(/\n{3,}/g, "\n\n")
+    .split("\n").map(l => l.replace(/\s+/g, " ").trim()).join("\n").trim();
 }
 
 /* Take the real <h2> from a teaching block. The old version guessed with a
@@ -4186,14 +4315,14 @@ function clip(s, n){
 }
 
 function fileName(){
-  /* Offline the student names it themselves: their name, year and lesson,
-     so a folder of handed-in PDFs sorts sensibly. */
+  /* Offline the student names it themselves: the name they typed at the
+     start, then the lesson, so a folder of handed-in PDFs sorts sensibly.
+     Each link goes to one lesson, so the teacher already knows the class. */
   if (OFFLINE){
     const tidy = (t) => String(t || "").replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, "-");
     const me = tidy(localStorage.getItem("hub_name"));
-    const yr = tidy(localStorage.getItem("hub_year"));
     const ttl = tidy(lesson && lesson.title ? lesson.title : lessonId);
-    return [me, yr, ttl].filter(Boolean).join("-").slice(0, 110) + ".pdf";
+    return [me, ttl].filter(Boolean).join("-").slice(0, 110) + ".pdf";
   }
   const who = (inspectName || "").replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, "-");
   const user = (inspectUser || "").replace(/[^A-Za-z0-9]/g, "");
@@ -4207,6 +4336,58 @@ function oldFileName(){
   return lessonId + "_" + stamp + ".pdf";
 }
 
+/* Repaint a saved whiteboard onto a clean canvas so it can go in the PDF as a
+   picture. The live board's own canvas is no use here: in the PDF view its
+   section is never shown, so it has been measured at zero size and holds
+   nothing. Strokes are either { points:[[x,y]...], colour, width } or
+   { kind:"text", text, x, y, colour, size }, the same shapes the board saves. */
+function boardImage(strokes){
+  try{
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const seen = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y;
+                             if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
+    strokes.forEach(st => {
+      if (st.kind === "text"){
+        const w = String(st.text || "").length * (st.size || 20) * 0.55;
+        seen(st.x, st.y - (st.size || 20)); seen(st.x + w, st.y + 6);
+      } else if (Array.isArray(st.points)){
+        st.points.forEach(p => seen(p[0], p[1]));
+      }
+    });
+    if (!isFinite(minX)) return null;
+    const pad = 20;
+    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+    const w = Math.max(1, Math.round(maxX - minX));
+    const h = Math.max(1, Math.round(maxY - minY));
+    const scale = Math.min(3, 1400 / w);          // enough resolution to print
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
+    const c = cv.getContext("2d");
+    c.fillStyle = "#FFFFFF"; c.fillRect(0, 0, cv.width, cv.height);
+    c.setTransform(scale, 0, 0, scale, -minX * scale, -minY * scale);
+    strokes.forEach(st => {
+      if (st.kind === "text"){
+        c.fillStyle = st.colour || "#1D1D1B";
+        c.font = (st.size || 20) + "px 'Segoe UI', Arial, sans-serif";
+        c.fillText(String(st.text || ""), st.x, st.y);
+        return;
+      }
+      if (!Array.isArray(st.points) || st.points.length < 2) return;
+      c.strokeStyle = st.colour || "#1D1D1B";
+      c.lineWidth = st.width || 3;
+      c.lineCap = "round"; c.lineJoin = "round";
+      c.beginPath();
+      c.moveTo(st.points[0][0], st.points[0][1]);
+      for (let i = 1; i < st.points.length; i++) c.lineTo(st.points[i][0], st.points[i][1]);
+      c.stroke();
+    });
+    return cv.toDataURL("image/png");
+  }catch(e){
+    console.warn("board image failed", e);
+    return null;
+  }
+}
+
 function buildPdf(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit:"mm", format:"a4" });
@@ -4216,14 +4397,18 @@ function buildPdf(){
   function room(h){ if (y + h > BOTTOM){ doc.addPage(); y = M; } }
   function write(text, opts){
     const o = opts || {};
-    const body = pdfSafe(text);            // everything is sanitised here
-    if (!body) return;
     doc.setFont(o.font || "helvetica", o.style || "normal");
     doc.setFontSize(o.size || 10.5);
     doc.setTextColor(o.color || "#111111");
     const lh = o.lh || 5.4;
-    doc.splitTextToSize(body, W).forEach(line => {
-      room(lh); doc.text(line, M, y); y += lh;
+    /* Code has to keep its line breaks and indentation or it is unreadable,
+       so a pre block is sanitised line by line rather than flattened. */
+    const source = o.pre ? pdfCode(text) : pdfSafe(text);
+    if (!source.trim()) return;
+    (o.pre ? source.split("\n") : [source]).forEach(part => {
+      doc.splitTextToSize(part || " ", W).forEach(line => {
+        room(lh); doc.text(line, M, y); y += lh;
+      });
     });
   }
   function gap(n){ y += (n || 3); }
@@ -4277,19 +4462,29 @@ function buildPdf(){
 
     if (b.type === "quiz"){
       heading(stripHtml(b.title) || "Quiz");
-      const got = v && v.solved ? v.solved.filter(Boolean).length : 0;
-      write("Score: " + got + " out of " + b.questions.length,
-            { size:11, style:"bold", color: got === b.questions.length ? "#1B7A4B" : "#B26B00", lh:5.6 });
+      const qs = b.questions || [];
+      /* The quiz stores { picked:[[i,...],...], solved:[bool,...] }. The old
+         renderer read v.chosen, which the field never returns, so every
+         question printed as "(not answered)" no matter what the child chose. */
+      const solvedArr = (v && Array.isArray(v.solved)) ? v.solved : [];
+      const got = solvedArr.filter(Boolean).length;
+      write("Score: " + got + " out of " + qs.length,
+            { size:11, style:"bold", color: got === qs.length ? "#1B7A4B" : "#B26B00", lh:5.6 });
       gap(2);
-      b.questions.forEach((q, qi) => {
+      qs.forEach((q, qi) => {
         write((qi+1) + ". " + clip(stripHtml(q.q), 190), { size:9.5, style:"bold", color:"#333333", lh:4.6 });
-        const c = v && v.chosen ? v.chosen[qi] : null;
-        const none = (c === null || c === undefined);
-        const right = !none && c === q.answer;
-        write("Chose: " + (none ? "(not answered)" : stripHtml(q.options[c])) + (none ? "" : right ? "   [correct]" : "   [wrong]"),
-              { size:9.5, color: none ? "#B03A2E" : right ? "#1B7A4B" : "#C0392B", lh:4.6 });
-        if (!none && !right)
-          write("Answer: " + stripHtml(q.options[q.answer]), { size:9, color:"#777777", lh:4.4 });
+        let picks = [];
+        if (v && Array.isArray(v.picked) && Array.isArray(v.picked[qi])) picks = v.picked[qi];
+        else if (v && Array.isArray(v.chosen) && v.chosen[qi] != null) picks = [v.chosen[qi]];
+        const rightAns = Array.isArray(q.answers) ? q.answers
+                       : (q.answer === undefined || q.answer === null ? [] : [q.answer]);
+        const none = !picks.length;
+        const ok = !none && picks.length === rightAns.length && picks.every(x => rightAns.indexOf(x) >= 0);
+        const chose = none ? "(not answered)" : picks.map(i => stripHtml((q.options || [])[i])).join(", ");
+        write("Chose: " + chose + (none ? "" : ok ? "   [correct]" : "   [wrong]"),
+              { size:9.5, color: none ? "#B03A2E" : ok ? "#1B7A4B" : "#C0392B", lh:4.6 });
+        if (!none && !ok && rightAns.length)
+          write("Answer: " + rightAns.map(i => stripHtml((q.options || [])[i])).join(", "), { size:9, color:"#777777", lh:4.4 });
         gap(1.5);
       });
       gap(3); return;
@@ -4347,7 +4542,172 @@ function buildPdf(){
       heading("Python");
       if (b.task) write(clip(stripHtml(b.task), 200), { size:9, color:"#777777", lh:4.4 });
       label("THEIR CODE");
-      write(v || "(no code written)", { size:9, font:"courier", lh:4.4 });
+      write(v || "(no code written)", { size:9, font:"courier", lh:4.4, pre:true });
+      gap(4); return;
+    }
+
+    /* The editor task: the field returns { code, out, ran }. Older saves are a
+       bare string. Without this the whole of a coding lesson came out blank. */
+    if (b.type === "ide"){
+      heading(stripHtml(b.title) || "Code");
+      if (b.task) write(clip(stripHtml(b.task), 200), { size:9, color:"#777777", lh:4.4 });
+      label("THEIR CODE");
+      const code = (v && typeof v === "object") ? v.code : v;
+      write(code || "(no code written)", { size:9, font:"courier", lh:4.4, pre:true });
+      if (v && typeof v === "object" && v.out){
+        label("WHAT IT PRINTED");
+        write(v.out, { size:9, font:"courier", color:"#555555", lh:4.4, pre:true });
+      }
+      gap(4); return;
+    }
+
+    if (b.type === "web"){
+      heading(stripHtml(b.title) || "Web page");
+      if (b.task) write(clip(stripHtml(b.task), 200), { size:9, color:"#777777", lh:4.4 });
+      let any = false;
+      [["HTML", v && v.html], ["CSS", v && v.css], ["JavaScript", v && v.js]].forEach(pair => {
+        if (!pair[1]) return;
+        any = true;
+        label("THEIR " + pair[0].toUpperCase());
+        write(pair[1], { size:9, font:"courier", lh:4.4, pre:true });
+        gap(1);
+      });
+      if (!any) write("(nothing written)", { size:10, color:"#B03A2E" });
+      gap(4); return;
+    }
+
+    if (b.type === "pastelink"){
+      heading(stripHtml(b.heading) || "Link handed in");
+      const url = String(v || "").trim();
+      write(url || "(no link pasted)", { size:10, color: url ? "#0B5FA5" : "#B03A2E" });
+      gap(4); return;
+    }
+
+    if (b.type === "mc"){
+      heading(stripHtml(b.prompt) || "Multiple choice");
+      label("THEIR ANSWER");
+      const none = (v === null || v === undefined);
+      write(none ? "(not answered)" : stripHtml((b.options || [])[v]),
+            { size:10.5, color: none ? "#B03A2E" : "#111111", lh:5 });
+      if (!none && b.answer !== undefined && v !== b.answer)
+        write("Answer: " + stripHtml((b.options || [])[b.answer]), { size:9, color:"#777777", lh:4.4 });
+      gap(4); return;
+    }
+
+    if (b.type === "short"){
+      heading(stripHtml(b.prompt) || "Short answer");
+      label("THEIR ANSWER");
+      const a = String(v || "").trim();
+      write(a || "(not answered)", { size:10.5, color: a ? "#111111" : "#B03A2E", lh:5 });
+      gap(4); return;
+    }
+
+    if (b.type === "order"){
+      heading(stripHtml(b.prompt) || "Put in order");
+      label("THE ORDER THEY CHOSE");
+      const items = b.items || [];
+      const arr = Array.isArray(v) ? v : items.map((_, i) => i);
+      arr.forEach((idx, i) => write((i + 1) + ". " + stripHtml(items[idx]), { size:10, lh:4.8 }));
+      gap(4); return;
+    }
+
+    if (b.type === "blanks"){
+      heading(stripHtml(b.prompt) || "Fill the gaps");
+      const accepted = [];
+      String(b.text || "").replace(/\[\[(.*?)\]\]/g, (_, g) => { accepted.push(g.split("|")[0]); return ""; });
+      accepted.forEach((exp, i) => {
+        const given = (v && v[i]) ? String(v[i]).trim() : "";
+        write("Gap " + (i + 1) + ": " + (given || "(blank)"),
+              { size:10, color: given ? "#111111" : "#B03A2E", lh:4.8 });
+      });
+      gap(4); return;
+    }
+
+    if (b.type === "binary" || b.type === "binadd"){
+      heading(stripHtml(b.title) || (b.type === "binadd" ? "Binary addition" : "Binary numbers"));
+      const answers = (v && Array.isArray(v.answers)) ? v.answers : [];
+      if (answers.length) answers.forEach((a, i) => write("Row " + (i + 1) + ": " + (a || "(blank)"), { size:10, font:"courier", lh:4.8 }));
+      else write("(nothing filled in)", { size:10, color:"#B03A2E" });
+      write((v && v.done) ? "All correct" : "Not all correct yet",
+            { size:10, style:"bold", color: (v && v.done) ? "#1B7A4B" : "#B26B00", lh:4.8 });
+      gap(4); return;
+    }
+
+    if (b.type === "notes"){
+      heading(stripHtml(b.title) || "Notes");
+      label("THEIR NOTES");
+      const t = htmlToLines(v);
+      write(t || "(nothing written)", { size:10, color: t ? "#111111" : "#B03A2E", lh:5, pre:true });
+      gap(4); return;
+    }
+
+    if (b.type === "mindmap"){
+      heading(stripHtml(b.title) || "Mind map");
+      const nodes = (v && Array.isArray(v.nodes)) ? v.nodes : [];
+      const root = nodes.find(n => n.parent === null) || nodes[0];
+      if (root){
+        write(stripHtml(root.text) || "(middle idea)", { size:10.5, style:"bold", lh:5 });
+        const walk = (parentId, depth) => {
+          nodes.filter(n => n.parent === parentId).forEach(n => {
+            write(new Array(depth + 1).join("   ") + "- " + (stripHtml(n.text) || "(blank)"),
+                  { size:9.5, lh:4.6, pre:true });
+            walk(n.id, depth + 1);
+          });
+        };
+        walk(root.id, 1);
+      } else {
+        write("(nothing added)", { size:10, color:"#B03A2E" });
+      }
+      gap(4); return;
+    }
+
+    if (b.type === "label"){
+      heading(stripHtml(b.title) || "Labelling a picture");
+      const placed = (v && v.placed) ? v.placed : {};
+      (b.spots || []).forEach((sp, i) => {
+        const given = placed[i] || placed[String(i)] || "";
+        write("Label " + (i + 1) + ": " + (given || "(empty)"),
+              { size:10, color: given ? "#111111" : "#B03A2E", lh:4.8 });
+      });
+      gap(4); return;
+    }
+
+    if (b.type === "board"){
+      heading(stripHtml(b.title) || "Whiteboard");
+      const strokes = (v && Array.isArray(v.strokes)) ? v.strokes : [];
+      const png = strokes.length ? boardImage(strokes) : null;
+      if (png){
+        try{
+          const p = doc.getImageProperties(png);
+          let iw = W, ih = (p.height / p.width) * W;
+          const maxH = BOTTOM - M;
+          if (ih > maxH){ ih = maxH; iw = (p.width / p.height) * ih; }
+          room(ih);
+          doc.addImage(png, "PNG", M, y, iw, ih);
+          y += ih + 3;
+        }catch(e){
+          write(strokes.length + " marks drawn (the drawing could not be added to this PDF)", { size:10, color:"#B03A2E" });
+        }
+      } else {
+        write(strokes.length ? (strokes.length + " marks drawn") : "(nothing drawn)",
+              { size:10, color: strokes.length ? "#111111" : "#B03A2E" });
+      }
+      gap(4); return;
+    }
+
+    /* Teacher-supplied content with nothing for the student to fill in. */
+    if (b.type === "picture" || b.type === "frame") return;
+
+    /* Anything new that carries a field but has no case above still gets its
+       heading and a readable dump, so a task can never silently vanish from a
+       hand-in again. */
+    if (f){
+      heading(stripHtml(b.title || b.prompt || b.heading) || b.type);
+      let text;
+      if (v == null || v === "") text = "(nothing saved)";
+      else if (typeof v === "string") text = v;
+      else { try { text = JSON.stringify(v); } catch(e){ text = String(v); } }
+      write(text, { size:9, lh:4.4 });
       gap(4); return;
     }
   });

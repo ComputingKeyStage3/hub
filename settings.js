@@ -19,6 +19,10 @@
   ];
   function prefs(){ try{ return JSON.parse(localStorage.getItem("hub_prefs") || "{}"); }catch(e){ return {}; } }
   function overlay(){
+    /* Loaded from <head> on most pages, so the first call happens before
+       <body> exists. Nothing to attach to yet; apply() runs again on
+       DOMContentLoaded and the overlay lands then. */
+    if (!document.body) return null;
     let o = document.getElementById("hubTint");
     if (!o){
       o = document.createElement("div");
@@ -30,6 +34,7 @@
   }
   function applyTint(p){
     const o = overlay();
+    if (!o) return;
     const colour = p.tintColour || "";
     if (!colour){ o.style.display = "none"; return; }
     o.style.display = "block";
@@ -44,11 +49,21 @@
     try{ window.dispatchEvent(new Event("hubprefs")); }catch(e){}
   }
   function build(){
+    const onConsole = /admin\.html|author\.html|work\.html/.test(location.pathname);
+    const noServer = !!(window.HUB && window.HUB.OFFLINE);
     const back = document.createElement("div");
     back.className = "modal-back no-print"; back.id = "setModal"; back.hidden = true;
     back.innerHTML =
       '<div class="modal" role="dialog" aria-modal="true">' +
       '<h2 style="margin-top:0">Settings</h2>' +
+      /* Without a server the name typed at the start of a lesson is the only
+         thing that says whose work this is, so there has to be somewhere to
+         put it right when it is spelled wrong. */
+      (noServer && !onConsole
+        ? '<div class="set-group"><span class="set-label">Your name</span>' +
+          '<p class="subnote" style="margin:0 0 8px">This goes on the work you hand in.</p>' +
+          '<div class="field"><input type="text" id="setName" autocomplete="off" spellcheck="false"></div></div>'
+        : "") +
       '<div class="set-group"><span class="set-label">Theme</span><div class="swatches" id="setSw">' +
       THEMES.map(b => '<button class="swatch swatch-wide" data-bg="' + b[0] + '" style="background:' + b[2] + '">' + b[1] + '</button>').join("") +
       '</div></div>' +
@@ -85,6 +100,9 @@
       if (amt2){ amt2.value = String(p.tintAmt === undefined ? 25 : p.tintAmt); }
       if (out) out.textContent = (p.tintAmt === undefined ? 25 : p.tintAmt) + "%";
       back.querySelectorAll(".font-opt").forEach(b => b.classList.toggle("on", (p.font || "") === b.dataset.font));
+      /* the lesson page may have changed it since this was last opened */
+      const nb = back.querySelector("#setName");
+      if (nb && document.activeElement !== nb) nb.value = localStorage.getItem("hub_name") || "";
     }
     back.querySelectorAll(".swatch[data-bg]").forEach(b => b.addEventListener("click", () => {
       const p = prefs(); p.bg = b.dataset.bg; save(p); paint();
@@ -105,13 +123,22 @@
     back.querySelectorAll(".font-opt").forEach(b => b.addEventListener("click", () => {
       const p = prefs(); p.font = b.dataset.font; localStorage.setItem("hub_prefs", JSON.stringify(p)); apply(p); paint();
     }));
+    /* Saved as they type. Only the name changes: the work already on this
+       machine is theirs, so correcting a spelling must not throw it away.
+       A different child is caught when the lesson opens, not here. */
+    const nameBox = back.querySelector("#setName");
+    if (nameBox){
+      nameBox.value = localStorage.getItem("hub_name") || "";
+      nameBox.addEventListener("input", () => {
+        const v = nameBox.value.trim();
+        if (v) localStorage.setItem("hub_name", v);
+      });
+    }
     const API = (window.HUB && window.HUB.API) || "";
     const grp = back.querySelector("#pwGroup");
     // only students have a password to change here
     const isStudent = !!localStorage.getItem("hub_token");
-    const onConsole = /admin\.html|author\.html|work\.html/.test(location.pathname);
     const isTeacher = !!localStorage.getItem("hub_tkey");
-    const noServer = !!(window.HUB && window.HUB.OFFLINE);
     if (isStudent && API && !onConsole && !isTeacher && !noServer) grp.hidden = false;
     if (window.settingsExtra){
       const extra = document.createElement("button");
@@ -156,4 +183,10 @@
     });
   };
   apply(prefs());
+  /* The <head> run above sets the theme and font on <html> straight away, but
+     the tint overlay needs <body>. Run once more when the document is ready so
+     a saved tint shows on load without every page having to defer the script. */
+  if (document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", () => apply(prefs()), { once:true });
+  }
 })();
