@@ -1012,7 +1012,6 @@ body.spectating{padding-top:40px}
 .pal.strong{border-color:var(--amber); background:var(--panel-2)}
 .pagekids{margin:6px 0 10px; padding:10px 0 2px 12px; border-left:3px solid var(--line-2)}
 .pagekids .bcard{background:var(--panel-2)}
-.pageadd{display:flex; gap:6px; flex-wrap:wrap; padding-left:12px}
 .qsub{border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:0 0 10px; background:var(--panel-2)}
 .qsub-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:9px}
 .bhelp.warn{color:var(--amber-dark); font-weight:700}
@@ -1392,7 +1391,9 @@ pre, code{overflow-wrap:anywhere}
 
 
 /* scheduling, marks and feedback */
-.periodgrid{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px}
+/* three across: the period names are short, and two columns left them
+   spread out enough to be hard to scan */
+.periodgrid{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px}
 .periodbtn{text-align:left; padding:10px 12px; border:1.5px solid var(--line-2); border-radius:10px;
   background:var(--panel); cursor:pointer; font-family:var(--body)}
 .periodbtn b{display:block; font-size:14.5px; color:var(--text)}
@@ -1959,6 +1960,24 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .worklink:focus{ border-color:var(--amber); outline:none;
   box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent) }
 
+/* how a quiz went, once every question has been answered */
+.quiz-score{margin-top:16px; padding:16px 18px; border-radius:12px;
+  border:1.5px solid var(--line-2); background:var(--panel-2)}
+.quiz-score[data-verdict=correct]{border-color:var(--mint); background:var(--mint-dim)}
+.quiz-score[data-verdict=incorrect]{border-color:var(--amber); background:var(--panel-2)}
+.quiz-tally{display:block; font-family:var(--display); font-size:26px; font-weight:800;
+  margin-bottom:4px; color:var(--text)}
+.quiz-score p{margin:0 0 12px; font-size:16px; color:var(--text)}
+.quiz-score[data-verdict=correct] .btn-primary{display:none}
+
+/* adding a task under the ones already on a page: groups that fold open */
+.pageadd{display:flex; flex-direction:column; gap:6px; margin-top:10px}
+.pageadd-group{display:flex; flex-direction:column; gap:6px}
+.pageadd-head{align-self:flex-start}
+.pageadd-head.open{border-color:var(--amber); color:var(--amber)}
+.pageadd-body{display:flex; flex-wrap:wrap; gap:6px; padding:2px 0 4px 12px;
+  border-left:2px solid var(--line)}
+
 /* the lesson code, big enough to read off a teacher's screen */
 .sharecode{ font-family:var(--mono); font-size:38px; letter-spacing:.22em; text-indent:.22em;
   text-align:center; margin:6px 0 14px; color:var(--text) }
@@ -2099,10 +2118,15 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   .done-save{ font-size:14px }
 
   /* --- nothing may insist on being wider than the screen --- */
-  .build-titles, .rt-palette, .rt-nummenu, .menu, .workbar select,
+  .build-titles, .rt-palette, .rt-nummenu, .workbar select,
   .blank-select, .ide-helpword, .mbstat, .seat, .seatpool .seat{
     min-width:0 !important; max-width:100%;
   }
+  /* A menu hangs off a button that is only as wide as its icon, so being told
+     it may not insist on a width collapsed it to one letter per line. It is
+     allowed its content instead, and menus.js shows it as a pop-up when even
+     that will not fit. */
+  .menu{ min-width:0 !important; width:max-content; max-width:calc(100vw - 24px) }
   .workbar select{ width:100%; flex:1 1 100% }
   .rt-palette, .rt-nummenu{ max-width:calc(100vw - 24px) }
   .rubriccol{ flex:0 0 80vw }
@@ -2152,6 +2176,7 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .anytime.on{border-color:var(--amber); background:var(--panel-2)}
 .anytime label{font-size:14px; color:var(--muted); flex:1}
 .anytime input{width:130px !important}
+@media (max-width:900px){ .periodgrid{grid-template-columns:repeat(2, minmax(0,1fr))} }
 @media (max-width:640px){ .periodgrid{grid-template-columns:minmax(0,1fr)} }
 
 
@@ -2501,9 +2526,11 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .rt-imgsize button:hover{border-color:var(--amber)}
 
 /* a Save button that has nothing to save looks settled rather than urgent */
-.done-save[data-saved=yes],.resp-save[data-saved=yes]{
+.done-save[data-saved=yes],.resp-save[data-saved=yes],#saveBtn[data-saved=yes],
+#saveFb[data-saved=yes]{
   background:transparent; color:var(--mint); border-color:var(--mint)}
-.done-save[data-saved=yes]:hover,.resp-save[data-saved=yes]:hover{
+.done-save[data-saved=yes]:hover,.resp-save[data-saved=yes]:hover,#saveBtn[data-saved=yes]:hover,
+#saveFb[data-saved=yes]:hover{
   background:var(--mint); color:#fff}
 
 /* whiteboard icons, drawn rather than typed */
@@ -2756,8 +2783,17 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 
 /* sizes for writing on the board */
 .board-sizes{position:absolute; left:10px; top:10px; z-index:6; display:flex; gap:4px;
-  padding:4px; background:var(--panel); border:1.5px solid var(--line-2); border-radius:10px;
+  align-items:center; padding:4px; background:var(--panel);
+  border:1.5px solid var(--line-2); border-radius:10px;
   box-shadow:0 4px 12px rgba(0,0,0,.12)}
 .board-size{padding:5px 10px; border:1px solid var(--line); border-radius:8px;
   background:var(--panel-2); cursor:pointer; font-size:13px; font-family:var(--body); color:var(--text)}
 .board-size.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 14%, var(--panel))}
+/* the step either side of the number, square so they read as a pair */
+.board-step{min-width:30px; text-align:center; font-weight:800; font-size:15px; line-height:1}
+.board-step:hover{border-color:var(--amber)}
+.board-sizenum{width:52px; height:30px; padding:0 6px; text-align:center;
+  border:1px solid var(--line); border-radius:8px; background:var(--panel);
+  color:var(--text); font-family:var(--body); font-size:13px}
+.board-sizenum:focus{border-color:var(--amber); outline:none}
+.board-sizeunit{font-size:12px; color:var(--muted); margin-right:2px}

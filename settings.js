@@ -51,6 +51,12 @@
   function build(){
     const onConsole = /admin\.html|author\.html|work\.html/.test(location.pathname);
     const noServer = !!(window.HUB && window.HUB.OFFLINE);
+    /* A teacher looking at a lesson, previewing one or reading a hand-in is
+       on the same page a student uses, so the page alone does not say whose
+       settings these are. The address does: all four of these only ever
+       belong to a teacher. */
+    const spectating = /[?&](view|pdf|preview|builder)=/.test(location.search);
+    const mine = noServer && !onConsole && !spectating;
     const back = document.createElement("div");
     back.className = "modal-back no-print"; back.id = "setModal"; back.hidden = true;
     back.innerHTML =
@@ -64,7 +70,7 @@
       /* Without a server the name typed at the start of a lesson is the only
          thing that says whose work this is, so there has to be somewhere to
          put it right when it is spelled wrong. */
-      (noServer && !onConsole
+      (mine
         ? '<div class="set-group"><span class="set-label">Your name</span>' +
           '<div class="field"><input type="text" id="setName" autocomplete="off" spellcheck="false"></div></div>'
         : "") +

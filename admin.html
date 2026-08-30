@@ -316,6 +316,15 @@ function show(view, quiet){
   paintCrumbs();
   /* Remember where we are, so Back and the swipe gesture step through the
      console rather than leaving the site. */
+  /* Kept in sessionStorage, so refreshing lands back where you were but
+     closing the browser does not. localStorage would put a teacher back into
+     last Tuesday's class the next time they opened the console. */
+  if (view !== "keyView" && view !== "whoView"){
+    try{
+      sessionStorage.setItem("hub_spot", JSON.stringify(
+        { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit }));
+    }catch(e){}
+  }
   if (!quiet && !goingBack && view !== "keyView"){
     try{
       const state = { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit };
@@ -330,6 +339,12 @@ function show(view, quiet){
 try{
   window.addEventListener("popstate", (e) => {
     const st = e.state;
+    /* A pop-up is the first thing Back should take away. */
+    if (!$("tmodal").hidden){
+      if (modalDepth > 0) modalDepth--;
+      closeModal(true);
+      return;
+    }
     if (!st || !st.view) return;
     goingBack = true;
     try{
@@ -366,6 +381,10 @@ function scrollBody(box){
   middle.forEach(n => scroller.appendChild(n));
 }
 
+/* A pop-up gets its own step in the history, so the browser's Back closes it
+   rather than navigating out from underneath it. Closing any other way steps
+   back off that entry, so Back never has to be pressed twice. */
+let modalDepth = 0;
 function openModal(build){
   const box = $("tmodalBox");
   box.innerHTML = "";
@@ -382,9 +401,23 @@ function openModal(build){
   /* Everything between the cross and the closing button scrolls, so a long
      pop-up never pushes its own buttons off the screen. */
   scrollBody(box);
+  const wasOpen = !$("tmodal").hidden;
   $("tmodal").hidden = false;
+  if (!wasOpen){
+    modalDepth++;
+    try{ history.pushState({ modal: modalDepth }, "", location.pathname + location.search); }catch(e){}
+  }
 }
-function closeModal(){ $("tmodal").hidden = true; }
+function closeModal(fromBack){
+  const wasOpen = !$("tmodal").hidden;
+  $("tmodal").hidden = true;
+  /* Coming back off the history entry the pop-up added, unless Back is what
+     closed it in the first place. */
+  if (wasOpen && !fromBack && modalDepth > 0){
+    modalDepth--;
+    try{ if (history.state && history.state.modal) history.back(); }catch(e){}
+  }
+}
 on("tmodal", "mousedown", (e) => { if (e.target === $("tmodal")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 function say(title, message){
@@ -482,8 +515,33 @@ on("whoGo", "click", async () => {
   await refreshGroups();
   paintClasses();
   show("homeView");
+  await restoreSpot();
   nudgeBackup();           // the once-a-week reminder to take a backup
 });
+
+/* Back to whichever screen the refresh interrupted. Anything that cannot be
+   reopened, because the class or unit has gone, quietly stays at Home. */
+async function restoreSpot(){
+  let spot = null;
+  try{ spot = JSON.parse(sessionStorage.getItem("hub_spot") || "null"); }catch(e){}
+  if (!spot || !spot.view || spot.view === "homeView") return;
+  cls = spot.cls || ""; unit = spot.unit || "";
+  hubYear = spot.hubYear || ""; hubUnit = spot.hubUnit || "";
+  try{
+    if (spot.view === "hubView"){ await loadCatalogue(); show("hubView"); paintYears(); return; }
+    if (spot.view === "hubUnitsView"){ await loadCatalogue(); openYear(hubYear); return; }
+    if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit); return; }
+    if (spot.view === "classesView"){ toClasses(); return; }
+    if (!cls) return;
+    if (spot.view === "classView"){ openClass(cls); return; }
+    if (spot.view === "studentsView"){ openClass(cls); show("studentsView"); loadStudents(); return; }
+    if (spot.view === "unitsView"){ openClass(cls); await loadCatalogue(); show("unitsView"); paintClassUnits(); return; }
+    if (spot.view === "lessonsView"){
+      openClass(cls); await loadCatalogue(); await loadClassLocks();
+      show("lessonsView"); paintLessonGrid(); return;
+    }
+  }catch(e){ console.warn("could not go back to where you were:", e); }
+}
 /* changing who you are, without signing in again */
 function changeTeacher(){ show("whoView", true); }
 on("keyIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
@@ -1735,9 +1793,14 @@ on("addLessonBtn", "click", () => {
     x.addEventListener("click", closeModal); box.appendChild(x);
     modalTitle(box, "Add a lesson to " + (unit || "no unit"));
     const tools = el("div","toolrow");
-    const search = el("input"); search.placeholder = "Search lessons\u2026"; search.style.flex = "1";
+    /* the same box as the one on the hub, rather than a bare input */
+    const searchWrap = el("span","searchbox");
+    searchWrap.style.flex = "1";
+    searchWrap.appendChild(el("span","searchicon","\uD83D\uDD0D"));
+    const search = el("input"); search.placeholder = "Search lessons\u2026";
+    searchWrap.appendChild(search);
     const toggle = el("button","btn-ghost","Show every lesson");
-    tools.appendChild(search); tools.appendChild(toggle);
+    tools.appendChild(searchWrap); tools.appendChild(toggle);
     box.appendChild(tools);
     const holder = el("div"); box.appendChild(holder);
     const msg = el("p","hint",""); box.appendChild(msg);
@@ -1947,8 +2010,7 @@ function schedulePopup(id){
   openModal(box => {
     const already = assignOf(id);
     const live = already && already.published;
-    modalTitle(box, (live ? "When \u201c" : "Publish \u201c") + titleOf(id) + "\u201d" +
-                    (live ? " is open for " : " to ") + cls);
+    modalTitle(box, "Schedule \u201c" + titleOf(id) + "\u201d");
     /* start from what is already set, so this edits rather than replaces */
     let date = (already && already.release_at) ? already.release_at.slice(0, 10) : ymd(new Date());
     let time = (already && already.release_at) ? already.release_at.slice(11, 16) : "";
@@ -2002,7 +2064,6 @@ function schedulePopup(id){
     closeRow.appendChild(el("label","","Closes at the end of"));
     const cIn = el("input"); cIn.type = "date";
     closeRow.appendChild(cIn);
-    closeRow.appendChild(el("p","bhelp","Set to match the opening day. Change it for a longer piece of work."));
     box.appendChild(closeRow);
 
     let closeTouched = !!close;
@@ -2371,9 +2432,13 @@ async function openMarkbook(backToManage){
           const m = w ? markQuestion(q.block, w.data ? w.data[q.id] : null) : null;
           marks[q.id] = (w && w.data && w.data.__done) ? m : null;
         });
-        return { name: st.display_name, username: st.username,
+        /* A practical graded against a rubric has no score worth showing:
+           it is stored as 0 out of 1 so the row exists at all. The grade is
+           the mark, so that is what the column carries. */
+        const grade = r ? (r.grade || "") : "";
+        return { name: st.display_name, username: st.username, grade: grade,
                  score: r ? r.score : null, outOf: r ? r.out_of : null,
-                 pct: r ? Math.round(100 * r.score / Math.max(1, r.out_of)) : null,
+                 pct: (r && !grade) ? Math.round(100 * r.score / Math.max(1, r.out_of)) : null,
                  seconds: r ? (r.seconds || 0) : 0,
                  strength: r ? (r.strength || "") : "", target: r ? (r.target || "") : "",
                  marks: marks, data: w ? w.data : null };
@@ -2429,8 +2494,8 @@ function headCell(label, key, title){
 function paintMarkbook(holder){
   holder.id = "mbHolder";
   sortRows();
-  const done = markbookRows.filter(r => r.score !== null);
-  const pcts = done.map(r => r.pct);
+  const done = markbookRows.filter(r => r.score !== null || r.grade);
+  const pcts = done.filter(r => r.pct !== null).map(r => r.pct);
   const times = done.filter(r => r.seconds > 0).map(r => r.seconds);
   const avg = (a) => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0;
   const stats = el("div","mbstats");
@@ -2460,7 +2525,8 @@ function paintMarkbook(holder){
   markbookRows.forEach(r => {
     const tr = el("tr");
     tr.appendChild(el("td","", r.name));
-    tr.appendChild(el("td","", r.score === null ? "" : r.score + " / " + r.outOf));
+    tr.appendChild(el("td","", r.grade ? r.grade
+                              : r.score === null ? "" : r.score + " / " + r.outOf));
     tr.appendChild(el("td","", r.pct === null ? "" : r.pct + "%"));
     tr.appendChild(el("td","", niceTime(r.seconds)));
     markbookQs.forEach(q => {
@@ -2520,8 +2586,8 @@ function exportMarkbook(){
   const rows = [head];
   markbookRows.forEach(r => {
     const row = [r.name, r.username,
-                 r.score === null ? "" : r.score,
-                 r.outOf === null ? "" : r.outOf,
+                 r.grade ? r.grade : (r.score === null ? "" : r.score),
+                 r.grade ? "" : (r.outOf === null ? "" : r.outOf),
                  r.pct === null ? "" : r.pct,
                  r.seconds ? niceTime(r.seconds) : "",
                  r.strength, r.target];

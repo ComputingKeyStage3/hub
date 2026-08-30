@@ -464,6 +464,7 @@ function showStudent(i, step){
   /* a practical assessment is marked by hand, so the boxes appear */
   paintMarking(st.username);
   loadFeedback(row);
+  paintFb("idle");
   paintTaskNav();
 }
 on("prevStu", "click", () => showStudent(idx - 1));
@@ -632,6 +633,24 @@ function bankPopup(which){
     paint(); refresh();
   });
 }
+/* The Save button says where it is up to itself, the way a student's does,
+   rather than leaving a line of text underneath to be read. It stays saying
+   Saved until part of the feedback is changed. */
+function paintFb(state){
+  const btn = $("saveFb");
+  if (!btn) return;
+  if (state === "saving"){ btn.textContent = "Saving…"; btn.disabled = true; btn.dataset.saved = "no"; }
+  else if (state === "saved"){ btn.textContent = "✓ Saved"; btn.disabled = false; btn.dataset.saved = "yes"; }
+  else { btn.textContent = "Save feedback"; btn.disabled = false; btn.dataset.saved = "no"; }
+}
+["fbStrength","fbTarget","fbComment","fbScore","fbGrade"].forEach(id => {
+  const e = $(id);
+  if (!e) return;
+  const undo = () => { if ($("saveFb").dataset.saved === "yes") paintFb("idle"); };
+  e.addEventListener("input", undo);
+  e.addEventListener("change", undo);
+});
+
 on("saveFb", "click", () => {
   /* Both boxes are on screen, so a missing one is a choice rather than an
      oversight. Only say something when exactly one has been filled in. */
@@ -700,7 +719,8 @@ async function saveFeedback(){
   const st = roster[idx];
   if (!st) return;
   if (OFFLINE) return handBack();
-  $("fbMsg").textContent = "Saving\u2026";
+  paintFb("saving");
+  $("fbMsg").textContent = "";
   try{
     const r = await fetch(API + "/api/teacher/feedback", { method:"POST", headers: HJ(),
       body: JSON.stringify({ username: st.username, lesson: lessonId,
@@ -731,8 +751,8 @@ async function saveFeedback(){
       strength: showing("Strength") ? $("fbStrength").value : "",
       target: showing("Target") ? $("fbTarget").value : "",
       comment: $("fbComment").value });
-    $("fbMsg").textContent = "Saved.";
-  }catch(e){ $("fbMsg").textContent = e.message; }
+    paintFb("saved");
+  }catch(e){ paintFb("idle"); $("fbMsg").textContent = e.message; }
 }
 
 /* ---------------- who opened this link ----------------
@@ -825,7 +845,8 @@ async function handBack(){
   if (markOverrides) box.ov = markOverrides;
   row.feedback = JSON.stringify(fb);
 
-  $("fbMsg").textContent = "Making the link\u2026";
+  paintFb("saving");
+  $("fbMsg").textContent = "";
   try{
     const blob = await window.workLink.pack(box);
     const url = new URL("lesson.html", location.href);
@@ -833,12 +854,13 @@ async function handBack(){
     url.hash = "f=" + blob;
     markedLink = url.href;
     if (markedLink.length > window.workLink.MAX){
+      paintFb("idle");
       $("fbMsg").textContent = "That is too long to send as a link. Shorten the feedback.";
       return;
     }
-    $("fbMsg").textContent = "";
+    paintFb("saved");
     showMarkedLink();
-  }catch(e){ $("fbMsg").textContent = "The link could not be made."; }
+  }catch(e){ paintFb("idle"); $("fbMsg").textContent = "The link could not be made."; }
 }
 
 function showMarkedLink(){

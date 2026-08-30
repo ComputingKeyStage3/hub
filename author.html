@@ -71,6 +71,7 @@
           <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
           <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
           <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
+          <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="media">
@@ -88,7 +89,6 @@
           <button class="pal" data-add="notes"><b>Notes</b><span>Their own notes, with formatting</span></button>
           <button class="pal" data-add="mindmap"><b>Mind map</b><span>A middle idea with branches</span></button>
           <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
-          <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="coding">
@@ -127,7 +127,14 @@
           <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
           <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
           <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
+          <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
           <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
+        </div>
+      </div>
+      <div class="palgroup" data-group="acode">
+        <button class="pal-head" type="button">Coding</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="code"><b>Coding task</b><span>Marked by its checklist</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="abinary">
@@ -193,7 +200,8 @@ const BLANK = {
                      js:'console.log("Ready");',
                      run:true, edit:true, help:true, tooltips:true, expect:"" }),
   question: () => ({ type:"question", heading:"Write your answer", context:"", prompt:"", minWords:20 }),
-  quiz:     () => ({ type:"quiz", title:"Check your understanding", questions:[{ q:"", options:["",""], answers:[0], hint:"" }] }),
+  quiz:     () => ({ type:"quiz", title:"Check your understanding", pass:{ mode:"percent", value:70 },
+                     questions:[{ q:"", options:["",""], answers:[0], hint:"", why:"" }] }),
   page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
   image:    () => ({ type:"image", title:"Add your screenshot", task:"Take a screenshot and paste it here." }),
   embed:    () => ({ type:"embed", url:"", title:"Watch this", note:"Watch it all the way through.", confirm:false }),
@@ -249,6 +257,12 @@ function toEmbed(raw){
   const src = t.match(/src\s*=\s*["']([^"']+)["']/i);      // a whole <iframe> pasted in
   if (src) return toEmbed(src[1]) || src[1];
   return t;                                                  // something else: leave it alone
+}
+
+/* "a, b and c", which reads better than a list with a stray comma on it */
+function joinWords(list){
+  if (list.length === 1) return list[0];
+  return list.slice(0, -1).join(", ") + " and " + list[list.length - 1];
 }
 
 /* ---------------- the draft lives in this browser ---------------- */
@@ -496,8 +510,12 @@ function compileOne(b, id, target){
             const answers = (q.answers !== undefined ? q.answers : [q.answer || 0])
               .map(Number).filter(x => !isNaN(x) && x >= 0 && x < opts.length);
             return { q: q.q || "", options: opts.filter(x => x !== ""),
-                     answers: answers.length ? answers : [0], hint: q.hint || "" };
-          }) });
+                     answers: answers.length ? answers : [0],
+                     hint: q.hint || "", why: q.why || "" };
+          }),
+        pass: (b.pass && b.pass.mode && b.pass.mode !== "none")
+          ? { mode: b.pass.mode, value: Math.max(1, parseInt(b.pass.value, 10) || 1) }
+          : undefined });
     else if (b.type === "image")
       push(keepArrays({ type:"image", id, title: b.title || "", task: b.task || "" }));
     else if (b.type === "embed")
@@ -558,8 +576,12 @@ function render(){
   /* the palette is hidden only while writing feedback sentences */
   const writingTargets = (lesson.assessment || lesson.practical) && assessTab === "targets" && !respEditing;
   if (!writingTargets){
-    $("palLesson").hidden = !!lesson.assessment;
-    $("palAssess").hidden = !lesson.assessment;
+    /* Practice for a weak topic can be any kind of task, so writing response
+       tasks offers the full lesson palette rather than the short list of
+       question types an assessment is marked from. */
+    const anyTask = !!respEditing;
+    $("palLesson").hidden = !!lesson.assessment && !anyTask;
+    $("palAssess").hidden = !lesson.assessment || anyTask;
   }
   const list = $("list"); list.innerHTML = "";
   /* an assessment is three pages: its questions, its feedback, its follow-up */
@@ -980,6 +1002,13 @@ function card(b, i, arr){
       const addOpt = el("button","btn-ghost bmini2","+ Add another option");
       addOpt.addEventListener("click", () => { q.options.push(""); render(); });
       ow.appendChild(addOpt); box.appendChild(ow);
+      /* The lesson page has always been able to show this; there was simply
+         nowhere to write it. */
+      const yw = el("div","bfield");
+      yw.appendChild(el("label","","Sentence to display when they get it right"));
+      const yi = el("input"); yi.value = q.why || "";
+      yi.addEventListener("input", () => { q.why = yi.value; saveDraft(); schedulePreview(); });
+      yw.appendChild(yi); box.appendChild(yw);
       const hw = el("div","bfield");
       hw.appendChild(el("label","","Hint if they get it wrong"));
       const hi = el("input"); hi.value = q.hint || "";
@@ -988,8 +1017,49 @@ function card(b, i, arr){
       body.appendChild(box);
     });
     const addQ = el("button","btn-ghost bmini2","+ Add another question");
-    addQ.addEventListener("click", () => { b.questions.push({ q:"", options:["",""], answer:0, hint:"" }); render(); schedulePreview(); });
+    addQ.addEventListener("click", () => { b.questions.push({ q:"", options:["",""], answer:0, hint:"", why:"" }); render(); schedulePreview(); });
     body.appendChild(addQ);
+
+    /* A student now answers every question straight through and is told how
+       they did at the end, rather than being held on one until it is right.
+       Being held there taught them to change the answer until the box went
+       green, which is not the same as thinking about it. This is how well
+       they have to do before they can move on. */
+    if (!b.pass) b.pass = { mode:"percent", value:70 };
+    const pw = el("div","bfield");
+    pw.appendChild(el("label","","How well they have to do"));
+    const modes = el("div","brow");
+    [["percent","A percentage"],["count","A number of questions"],["none","No pass mark"]].forEach(pair => {
+      const btn = el("button","btn-ghost bmini2" + (b.pass.mode === pair[0] ? " right" : ""), pair[1]);
+      btn.addEventListener("click", () => { b.pass.mode = pair[0]; render(); schedulePreview(); });
+      modes.appendChild(btn);
+    });
+    pw.appendChild(modes);
+    if (b.pass.mode !== "none"){
+      const row = el("div","stepper");
+      const less = el("button","btn-ghost iconbtn","−");
+      const num = el("input"); num.type = "number"; num.className = "stepnum";
+      const most = b.pass.mode === "percent" ? 100 : b.questions.length;
+      num.min = "1"; num.max = String(most);
+      num.value = String(Math.min(b.pass.value || 1, most));
+      const more = el("button","btn-ghost iconbtn","+");
+      const setPass = (v) => {
+        b.pass.value = Math.max(1, Math.min(most, Math.round(Number(v) || 1)));
+        num.value = String(b.pass.value);
+        saveDraft(); schedulePreview();
+      };
+      less.addEventListener("click", () => setPass((parseInt(num.value, 10) || 1) - (b.pass.mode === "percent" ? 10 : 1)));
+      more.addEventListener("click", () => setPass((parseInt(num.value, 10) || 1) + (b.pass.mode === "percent" ? 10 : 1)));
+      num.addEventListener("input", () => setPass(num.value));
+      row.appendChild(less); row.appendChild(num); row.appendChild(more);
+      pw.appendChild(row);
+      pw.appendChild(el("p","bhelp", b.pass.mode === "percent"
+        ? "Below this they are asked to have another go before moving on."
+        : "They have to get at least this many right before moving on."));
+    } else {
+      pw.appendChild(el("p","bhelp","They can move on however they do."));
+    }
+    body.appendChild(pw);
   }
   if (b.type === "web"){
     F("Heading (optional)", "title");
@@ -1021,19 +1091,7 @@ function card(b, i, arr){
       dropInto(b.blocks, -1);              // -1 means "at the end"
     });
     body.appendChild(inner);
-    const addRow = el("div","pageadd");
-    const kinds = lesson.assessment
-      ? [["text","Paragraph"],["picture","Image"],["mc","Multiple choice"],["blanks","Fill the gaps"],
-         ["order","Put in order"],["short","Short answer"]]
-      : [["text","Paragraph"],["picture","Image"],["code","Coding task"],["question","Written answer"],
-         ["quiz","Quiz"],["image","Screenshot"],["embed","Video"],["link","Link to a site"],
-         ["pastelink","Paste a link"],["blanks","Fill the gaps"],["order","Put in order"],["short","Short answer"]];
-    kinds.forEach(pair => {
-      const btn = el("button","btn-ghost bmini2","+ " + pair[1]);
-      btn.addEventListener("click", () => { b.blocks.push(BLANK[pair[0]]()); render(); schedulePreview(); });
-      addRow.appendChild(btn);
-    });
-    body.appendChild(addRow);
+    body.appendChild(addTaskRow(b));
   }
   if (b.type === "image"){ F("Heading (optional)", "title"); F("Instruction (optional)", "task", { area:true, rows:2 }); }
   if (b.type === "frame"){
@@ -1683,6 +1741,7 @@ function paintTargets(into){
     into.appendChild(el("p","hint", lesson.practical
       ? "No topics yet, press \u201c+ New topic\u201d."
       : "No topics yet, press \u201c+ New topic\u201d, or tag some questions."));
+    extremeSentences(into);       // these two stand on their own
     return;
   }
   names.forEach(name => {
@@ -1714,8 +1773,15 @@ function paintTargets(into){
     card2.appendChild(body);
     into.appendChild(card2);
   });
-  [["perfectTarget","Target for when a student gets everything right"],
-   ["zeroStrength","Strength for when a student gets everything wrong"]].forEach(pair => {
+  extremeSentences(into);
+}
+
+/* The two sentences that belong to the whole assessment rather than to any
+   one topic: what to say when nothing was right, and when everything was.
+   Strength first, the way round a student is shown them. */
+function extremeSentences(into){
+  [["zeroStrength","Strength for when a student gets everything wrong"],
+   ["perfectTarget","Target for when a student gets everything right"]].forEach(pair => {
     const w = el("div","bfield");
     w.appendChild(el("label","", pair[1]));
     const inp = el("textarea"); inp.rows = 2; inp.value = lesson[pair[0]] || "";
@@ -1945,6 +2011,55 @@ function pagesMissingPasscode(){
   return out;
 }
 
+/* ---------------- adding a task under the ones already on a page ----------------
+   The same tasks as the palette down the left, in the same groups and the
+   same order, folded away so the row does not become a wall of buttons. Read
+   from the palette itself rather than written out again, because two lists of
+   the same thing drift apart and nobody notices for a term. */
+function taskGroups(){
+  const from = (lesson.assessment && !openArray()) ? "palAssess" : "palLesson";
+  const box = $(from);
+  if (!box) return [];
+  return Array.from(box.querySelectorAll(".palgroup")).map(group => ({
+    name: (group.querySelector(".pal-head") || {}).textContent || "",
+    kinds: Array.from(group.querySelectorAll(".pal[data-add]")).map(btn => ({
+      kind: btn.dataset.add,
+      label: (btn.querySelector("b") || {}).textContent || btn.dataset.add
+    }))
+  })).filter(g => g.kinds.length);
+}
+
+function addTaskRow(page){
+  const wrap = el("div","pageadd");
+  const groups = taskGroups();
+  groups.forEach(group => {
+    const holder = el("div","pageadd-group");
+    const head = el("button","btn-ghost bmini2 pageadd-head","+ " + group.name);
+    const body = el("div","pageadd-body");
+    body.hidden = true;
+    head.addEventListener("click", () => {
+      const opening = body.hidden;
+      /* one open at a time, or the row grows taller than the page it is on */
+      wrap.querySelectorAll(".pageadd-body").forEach(x => { x.hidden = true; });
+      wrap.querySelectorAll(".pageadd-head").forEach(x => x.classList.remove("open"));
+      body.hidden = !opening;
+      head.classList.toggle("open", opening);
+    });
+    group.kinds.forEach(item => {
+      const btn = el("button","btn-ghost bmini2", item.label);
+      btn.addEventListener("click", () => {
+        if (!BLANK[item.kind]) return;
+        page.blocks.push(BLANK[item.kind]());
+        render(); schedulePreview();
+      });
+      body.appendChild(btn);
+    });
+    holder.appendChild(head); holder.appendChild(body);
+    wrap.appendChild(holder);
+  });
+  return wrap;
+}
+
 /* a small prompt that returns what was typed */
 function askNew(title, label){
   return new Promise(resolve => {
@@ -2003,6 +2118,7 @@ function paintPickers(){
     const uNew = document.createElement("option");
     uNew.value = "__new"; uNew.textContent = "+ New unit"; us.appendChild(uNew);
   }
+  if (!lesson.year && lesson.unit) lesson.unit = "";
   us.value = lesson.unit && lesson.year ? lesson.unit : "";
 }
 
@@ -2128,6 +2244,15 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal
 
 on("jsonBtn", "click", () => {
   $("moreMenu").hidden = true;
+  const missing = [];
+  if (!lesson.title.trim()) missing.push("a title");
+  if (!lesson.year || !lesson.year.trim()) missing.push("a year group");
+  if (!lesson.unit || !lesson.unit.trim()) missing.push("a unit");
+  if (missing.length){
+    say("Not ready yet", "This lesson still needs " + joinWords(missing) +
+        ". They go in the boxes at the top, and they are what files it on the site.");
+    return;
+  }
   openModal(box => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);
@@ -2487,8 +2612,14 @@ function fromCompiled(data, meta){
         .replace(/<[^>]+>/g, "").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&").trim();
       return { type:"text", heading: h ? h[1].replace(/<[^>]+>/g,"") : "", body };
     }
-    if (b.type === "quiz") return { type:"quiz", questions:(b.questions || []).map(q => ({
-      q:q.q || "", options:q.options || ["",""], answer:q.answer || 0, hint:q.hint || "" })) };
+    if (b.type === "quiz") return { type:"quiz",
+      title: b.title || "",
+      pass: b.pass ? { mode: b.pass.mode || "percent", value: b.pass.value || 70 }
+                   : { mode:"none", value:70 },
+      questions:(b.questions || []).map(q => ({
+        q:q.q || "", options:q.options || ["",""],
+        answers: q.answers !== undefined ? q.answers.slice() : [q.answer || 0],
+        answer:q.answer || 0, hint:q.hint || "", why:q.why || "" })) };
     if (b.type === "short") return { type:"short", prompt:b.prompt || "",
       keywords:(b.keywords || []).map(g => g.join(", ")).join("; "), model:b.model || "", topic:b.topic || "" };
     if (b.type === "blanks") return { type:"blanks", prompt:b.prompt || "", text:b.text || "",

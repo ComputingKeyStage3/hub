@@ -26,13 +26,20 @@
     menu.style.removeProperty("left");
     menu.style.removeProperty("right");
 
-    /* measure it where it is, hidden but laid out */
+    /* Measured at the width its own words want, not the width it happens to
+       have been squeezed into. A menu hangs off a button barely wider than an
+       icon, so measuring it in place said it needed 32px and every position
+       looked like a fit. */
     const wasHidden = menu.hidden;
     menu.hidden = false;
     menu.style.visibility = "hidden";
+    menu.style.width = "max-content";
+    menu.style.maxWidth = "none";
     const box = btn.getBoundingClientRect();
     const size = menu.getBoundingClientRect();
     const need = { h: size.height || 160, w: size.width || 180 };
+    menu.style.removeProperty("width");
+    menu.style.removeProperty("max-width");
     const room = {
       below: window.innerHeight - box.bottom - GAP,
       above: box.top - GAP,
@@ -42,6 +49,10 @@
     menu.style.visibility = "";
     if (wasHidden) menu.hidden = true;
 
+    /* Once a menu is as wide as the screen it stops being a menu hanging off
+       a button and becomes a pop-up, which is how everything else behaves on
+       a phone. */
+    if (need.w > window.innerWidth - 24) return "modal";
     if (fits(room.below, need.h)) return "down";          // the usual place
     if (fits(room.above, need.h)){ wrap.classList.add("up"); return "up"; }
     if (fits(room.left, need.w)){ wrap.classList.add("left"); return "left"; }

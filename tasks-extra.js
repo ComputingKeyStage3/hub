@@ -112,6 +112,7 @@
     }
     function showPickTools(e){
       hidePickTools();
+      sizesFollowPicked();
       if (!picked.length) return;
       pickTools = make("div", "board-picktools");
       movePickTools(e);
@@ -142,7 +143,6 @@
           hidePickTools();
           retype(only);
         });
-        showSizes(true);
         pickTools.appendChild(editBtn);
       }
 
@@ -164,7 +164,7 @@
       binBtn.addEventListener("click", () => {
         strokes = strokes.filter(x => picked.indexOf(x) < 0);
         picked = [];
-        hidePickTools();
+        hidePickTools(); sizesFollowPicked();
         draw(); ctx.changed();
       });
       pickTools.appendChild(moveBtn); pickTools.appendChild(binBtn);
@@ -181,24 +181,60 @@
 
     /* How big the next piece of writing will be. */
     let textSize = 20;
+    /* Four fixed sizes were never quite the one wanted, so it is a number
+       with a step either side of it. Small enough to fit a label on a
+       diagram, large enough for a heading, and no further in either
+       direction: past those it is either unreadable or off the board. */
+    const MIN_TEXT = 8, MAX_TEXT = 96;
     const sizeBar = make("div", "board-sizes");
     sizeBar.hidden = true;
-    [["Small", 14], ["Medium", 20], ["Large", 30], ["Huge", 44]].forEach(pair => {
-      const b2 = make("button", "board-size", pair[0]);
-      if (pair[1] === textSize) b2.classList.add("on");
-      b2.addEventListener("mousedown", (ev) => ev.preventDefault());
-      b2.addEventListener("click", () => {
-        textSize = pair[1];
-        sizeBar.querySelectorAll(".board-size").forEach(x => x.classList.remove("on"));
-        b2.classList.add("on");
-        /* if something is picked up, change that too */
-        const words = picked.filter(x => x.kind === "text");
-        if (words.length){ words.forEach(w => { w.size = pair[1]; }); draw(); ctx.changed(); }
-      });
-      sizeBar.appendChild(b2);
+    const down = make("button", "board-size board-step", "−");
+    down.title = "Smaller";
+    const sizeBox = make("input", "board-sizenum");
+    sizeBox.type = "number";
+    sizeBox.min = String(MIN_TEXT);
+    sizeBox.max = String(MAX_TEXT);
+    sizeBox.value = String(textSize);
+    sizeBox.title = "Size in points";
+    const up = make("button", "board-size board-step", "+");
+    up.title = "Bigger";
+    const unit = make("span", "board-sizeunit", "pt");
+
+    function setTextSize(next, fromBox){
+      textSize = Math.max(MIN_TEXT, Math.min(MAX_TEXT, Math.round(Number(next) || textSize)));
+      if (!fromBox) sizeBox.value = String(textSize);
+      /* anything picked up changes with it */
+      const words = picked.filter(x => x.kind === "text");
+      if (words.length){ words.forEach(w => { w.size = textSize; }); draw(); ctx.changed(); }
+    }
+    [down, up].forEach(b => b.addEventListener("mousedown", (ev) => ev.preventDefault()));
+    down.addEventListener("click", () => setTextSize(textSize - 2));
+    up.addEventListener("click", () => setTextSize(textSize + 2));
+    sizeBox.addEventListener("input", () => {
+      const n = parseInt(sizeBox.value, 10);
+      if (!isNaN(n)) setTextSize(n, true);
     });
+    /* Out of range or left empty, it goes back to what it actually is. */
+    sizeBox.addEventListener("blur", () => setTextSize(textSize));
+    sizeBar.appendChild(down);
+    sizeBar.appendChild(sizeBox);
+    sizeBar.appendChild(unit);
+    sizeBar.appendChild(up);
     stage.appendChild(sizeBar);
-    function showSizes(on){ sizeBar.hidden = !on; }
+
+    /* Shown while the text tool is chosen, and while words are picked up.
+       Clicking away from the words puts it away again: it was staying on
+       screen with nothing left for it to change. */
+    function showSizes(on){
+      sizeBar.hidden = !on;
+      if (on){
+        const words = picked.filter(x => x.kind === "text");
+        if (words.length) sizeBox.value = String(words[0].size || textSize);
+      }
+    }
+    function sizesFollowPicked(){
+      showSizes(tool === "text" || picked.some(x => x.kind === "text"));
+    }
 
     /* type where they clicked, rather than in a browser pop-up */
     function typeHere(where, e, existing){
@@ -271,8 +307,8 @@
           if (lit){
             ctx2.save();
             ctx2.strokeStyle = "#2F6BAE";
-            ctx2.lineWidth = Math.max(1, 1 / view.scale);
-            ctx2.setLineDash([5 / view.scale, 4 / view.scale]);
+            ctx2.lineWidth = Math.max(2.2, 2.2 / view.scale);
+            ctx2.setLineDash([6 / view.scale, 4 / view.scale]);
             const w = String(st.text).length * (st.size || 20) * 0.55;
             ctx2.strokeRect(st.x - 3, st.y - (st.size || 20), w + 6, (st.size || 20) + 8);
             ctx2.restore();
@@ -293,8 +329,8 @@
         if (lit){
           ctx2.save();
           ctx2.strokeStyle = "#2F6BAE";
-          ctx2.lineWidth = Math.max(1, 1 / view.scale);
-          ctx2.setLineDash([5 / view.scale, 4 / view.scale]);
+          ctx2.lineWidth = Math.max(2.2, 2.2 / view.scale);
+          ctx2.setLineDash([6 / view.scale, 4 / view.scale]);
           ctx2.stroke();
           ctx2.restore();
         }
@@ -353,7 +389,7 @@
         /* nothing under the pointer, so draw a rectangle around things */
         marquee = { from: where, to: where };
         picked = [];
-        hidePickTools();
+        hidePickTools(); sizesFollowPicked();
         draw();
         return;
       }
@@ -397,6 +433,7 @@
         picked = insideBox(marquee);
         marquee = null;
         draw();
+        sizesFollowPicked();
         if (picked.length && e) showPickTools(e);
       }
       panning = null;
@@ -455,7 +492,7 @@
         btn.classList.add("on");
         /* the pointer says what will happen when it is pressed */
         stage.dataset.tool = name;
-        showSizes(name === "text");
+        sizesFollowPicked();
       });
       if (name === "pen") btn.classList.add("on");
       bar.appendChild(btn);

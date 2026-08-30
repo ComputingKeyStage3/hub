@@ -1093,7 +1093,12 @@ function showStep(i){
   $("brief").hidden = !bt && !bx;
 
   $("backBtn").disabled = step === 0;
-  $("nextBtn").textContent = step === steps.length - 1 ? ((lesson && lesson.assessment) ? "Finish & see my score" : "Finish 🏁") : "Continue →";
+  /* A practical is marked by hand, later, so it must not promise a score
+     the moment they press it. */
+  const scoredNow = lesson && lesson.assessment && !lesson.practical;
+  $("nextBtn").textContent = step === steps.length - 1
+    ? (scoredNow ? "Finish & see my score" : "Finish 🏁")
+    : "Continue →";
   $("stage").scrollTop = 0;
   refreshGate();
 }
@@ -1311,14 +1316,21 @@ async function manualSave(){
     }, 30);
     return;
   }
-  btn.textContent = "Saving…";
-  const state = await submitWork();
+  /* Every Save button on the page moves together, and the tick stays until
+     something is typed. It used to flash Saved for two seconds and go back to
+     Save Work, which read as though the save had come undone. */
   clearTimeout(flashTimer);
   btn.classList.remove("flash-ok","flash-bad");
-  if (state === "done"){ btn.textContent = "Saved ✓"; btn.classList.add("flash-ok"); }
-  else if (state === "offline"){ btn.textContent = "Sign in to save"; btn.classList.add("flash-bad"); }
-  else { btn.textContent = "Try again"; btn.classList.add("flash-bad"); }
-  flashTimer = setTimeout(() => { btn.textContent = "Save Work"; btn.classList.remove("flash-ok","flash-bad"); }, 2500);
+  paintSaveButtons("saving");
+  const state = await submitWork();
+  if (state === "done"){ paintSaveButtons("saved"); return; }
+  paintSaveButtons("idle");
+  btn.textContent = state === "offline" ? "Sign in to save" : "Try again";
+  btn.classList.add("flash-bad");
+  flashTimer = setTimeout(() => {
+    btn.classList.remove("flash-bad");
+    paintSaveButtons(unsavedTyping ? "idle" : "saved");
+  }, 2500);
 }
 function finishLesson(){
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
@@ -1435,7 +1447,15 @@ function rPage(b){
       return { ok:true };
     },
     soft: () => {
-      for (const k of kids){ if (k.soft && !k.soft().ok) return { ok:false }; }
+      /* Carry the first unfinished task's own wording up with it, so the
+         nudge says what is left rather than "something to do on this page". */
+      for (const k of kids){
+        if (!k.soft) continue;
+        const res = k.soft();
+        if (res.ok) continue;
+        const said = res.message || (k.check ? (k.check().message || "") : "");
+        return said ? { ok:false, message: said } : { ok:false };
+      }
       return { ok:true };
     },
     brief: { eyebrow:"Tasks", title: b.title || "Tasks", text: b.task || "" }
@@ -3021,6 +3041,10 @@ const rNotesTask   = (b) => wrapExtra(b, window.rNotes,   "Notes");
 const rMindmapTask = (b) => wrapExtra(b, window.rMindmap, "Mind map");
 
 function rQuiz(b){
+  /* A quiz used to hold a student on a question until they got it right,
+     which taught them to change the answer until the box turned green. Now
+     they answer straight through, are told how they did at the end, and are
+     asked to have another go if they came under the teacher's pass mark. */
   const s = el("section");
   const qs = b.questions || [];
   const n = qs.length;
@@ -3029,24 +3053,37 @@ function rQuiz(b){
   const opts = el("div","opts");
   const fb = el("div","feedback"); fb.hidden = true;
   const btn = el("button","btn-primary","Check answer");
-  s.appendChild(head); s.appendChild(qtext); s.appendChild(opts); s.appendChild(fb); s.appendChild(btn);
+  const scoreCard = el("div","quiz-score"); scoreCard.hidden = true;
+  s.appendChild(head); s.appendChild(qtext); s.appendChild(opts);
+  s.appendChild(fb); s.appendChild(btn); s.appendChild(scoreCard);
 
   let qi = 0;
+  let checked = new Array(n).fill(false);   // this question has been answered
   const picked = qs.map(() => new Set());
-  const solved = new Array(n).fill(false);
+  const solved = new Array(n).fill(false);  // and it was right
+  let finishedQuiz = false;
 
   const rightSet = (q) => new Set(Array.isArray(q.answers) ? q.answers
                                  : (q.answer === undefined || q.answer === null ? [] : [q.answer]));
   const multi = (q) => rightSet(q).size > 1;
+  const got = () => solved.filter(Boolean).length;
 
-  /* shown in place of the button once every question is right */
-  const doneNote = el("p","quiz-done","All done \u2713");
-  doneNote.hidden = true;
+  /* How well they have to do. Written by the teacher as a percentage or a
+     number of questions; without one the quiz never blocks anything. */
+  function needed(){
+    const p = b.pass;
+    if (!p || !p.mode || p.mode === "none" || !n) return 0;
+    if (p.mode === "count") return Math.max(1, Math.min(n, parseInt(p.value, 10) || 1));
+    return Math.max(1, Math.ceil(n * (Math.min(100, parseInt(p.value, 10) || 0) / 100)));
+  }
+  const passed = () => got() >= needed();
 
   function draw(){
+    scoreCard.hidden = true;
+    head.hidden = false; qtext.hidden = false; opts.hidden = false; btn.hidden = false;
     const q = qs[qi];
     if (!q){ head.textContent = ""; qtext.textContent = "No questions yet."; opts.innerHTML = ""; return; }
-    head.textContent = "Question " + (qi + 1) + " of " + n + (multi(q) ? " \u00b7 tick every right answer" : "");
+    head.textContent = "Question " + (qi + 1) + " of " + n + (multi(q) ? " · tick every right answer" : "");
     qtext.innerHTML = q.q;
     opts.innerHTML = "";
     (q.options || []).forEach((text, j) => {
@@ -3055,6 +3092,7 @@ function rQuiz(b){
       box.type = multi(q) ? "checkbox" : "radio";
       box.name = b.id + "-q" + qi;
       box.checked = picked[qi].has(j);
+      box.disabled = checked[qi];        // answered, so it stands as their answer
       if (box.checked) lab.classList.add("chosen");
       box.addEventListener("change", () => {
         if (multi(q)){
@@ -3072,39 +3110,63 @@ function rQuiz(b){
     });
     fb.hidden = true;
     btn.textContent = "Check answer";
-    if (solved[qi]) reveal(true);
+    if (checked[qi]) reveal(solved[qi]);
   }
 
+  /* What they chose, and what was right, once the answer is in. */
   function reveal(ok){
     const q = qs[qi];
     if (!q) return;
     const right = rightSet(q);
     Array.from(opts.children).forEach((c, k) => {
       const chose = picked[qi].has(k);
-      c.classList.toggle("right", ok && chose);
-      c.classList.toggle("wrong", !ok && chose && !right.has(k));
+      c.classList.toggle("right", right.has(k));
+      c.classList.toggle("wrong", chose && !right.has(k));
     });
+    Array.from(opts.querySelectorAll("input")).forEach(i => { i.disabled = true; });
     fb.hidden = false;
     fb.dataset.verdict = ok ? "correct" : "incorrect";
     fb.innerHTML = "";
-    const title = el("b","", ok ? "Correct" : "Not quite, try again");
-    const why = el("span","", ok ? (q.why || "")
-      : (q.hint || (multi(q) ? "Check you have ticked every right answer, and nothing else."
-                             : "Read the question again and pick a different answer.")));
-    fb.appendChild(title); fb.appendChild(why);
-    if (ok && qi < n - 1){ btn.textContent = "Next question →"; btn.hidden = false; }
-    else if (ok){
-      /* nothing left to press, so it reads as a note rather than a button */
-      btn.hidden = true;
-      doneNote.hidden = false;
-    }
+    fb.appendChild(el("b","", ok ? "Correct" : "Not quite"));
+    fb.appendChild(el("span","", ok ? (q.why || "")
+      : (q.hint || "The right answer is marked above.")));
+    btn.textContent = qi < n - 1 ? "Next question →" : "See how I did";
+  }
+
+  /* The tally at the end, and a way back round if it was not enough. */
+  function showScore(){
+    finishedQuiz = true;
+    head.hidden = true; qtext.hidden = true; opts.hidden = true; fb.hidden = true; btn.hidden = true;
+    scoreCard.hidden = false;
+    scoreCard.innerHTML = "";
+    const need = needed();
+    const ok = passed();
+    scoreCard.dataset.verdict = ok ? "correct" : "incorrect";
+    scoreCard.appendChild(el("b","quiz-tally", got() + " out of " + n));
+    if (!need) scoreCard.appendChild(el("p","","Nice work."));
+    else if (ok) scoreCard.appendChild(el("p","","That is enough to move on."));
+    else scoreCard.appendChild(el("p","",
+      "You need " + need + " to move on. Have another go, the questions stay the same."));
+    const again = el("button","btn-primary","Try the quiz again");
+    again.addEventListener("click", () => {
+      qi = 0;
+      checked = new Array(n).fill(false);
+      for (let i = 0; i < n; i++){ picked[i] = new Set(); solved[i] = false; }
+      finishedQuiz = false;
+      draw(); markDirty(); refreshGate();
+    });
+    scoreCard.appendChild(again);
   }
 
   btn.addEventListener("click", () => {
-    if (solved[qi] && qi < n - 1){ qi++; draw(); return; }
-    if (solved[qi]) return;
     const q = qs[qi];
     if (!q) return;
+    /* already answered: this press is the step onwards */
+    if (checked[qi]){
+      if (qi < n - 1){ qi++; draw(); }
+      else showScore();
+      return;
+    }
     if (!picked[qi].size){
       fb.hidden = false; fb.dataset.verdict = "incorrect";
       fb.innerHTML = "";
@@ -3115,13 +3177,15 @@ function rQuiz(b){
     }
     const right = rightSet(q);
     const ok = picked[qi].size === right.size && [...picked[qi]].every(x => right.has(x));
-    solved[qi] = solved[qi] || ok;
+    checked[qi] = true;
+    solved[qi] = ok;
     reveal(ok);
     markDirty();
   });
 
   fields[b.id] = {
-    get:() => ({ picked: picked.map(set => [...set]), solved: solved.slice() }),
+    get:() => ({ picked: picked.map(set => [...set]), solved: solved.slice(),
+                 checked: checked.slice(), done: finishedQuiz }),
     set:(v) => {
       if (!v) return;
       if (Array.isArray(v.chosen)){                    // saves from the old one-answer quiz
@@ -3129,16 +3193,23 @@ function rQuiz(b){
       }
       if (Array.isArray(v.picked)) v.picked.forEach((arr, i) => { if (picked[i]) picked[i] = new Set(arr || []); });
       if (Array.isArray(v.solved)) v.solved.forEach((x, i) => { solved[i] = !!x; });
-      const firstUnsolved = solved.findIndex(x => !x);
-      qi = firstUnsolved === -1 ? Math.max(0, n - 1) : firstUnsolved;
-      draw();
+      /* Older saves have no "checked": a question that was solved had been
+         answered, which is as much as can be told from them. */
+      if (Array.isArray(v.checked)) v.checked.forEach((x, i) => { checked[i] = !!x; });
+      else solved.forEach((x, i) => { checked[i] = !!x; });
+      finishedQuiz = !!v.done || (n > 0 && checked.every(Boolean));
+      const firstUnanswered = checked.findIndex(x => !x);
+      qi = firstUnanswered === -1 ? Math.max(0, n - 1) : firstUnanswered;
+      if (finishedQuiz) showScore(); else draw();
     }
   };
   draw();
 
   return { section:s,
-           check:() => !n || solved.every(Boolean)
-             ? { ok:true } : { ok:false, message:"Answer every question correctly to carry on" },
+           check:() => (!n || !needed() || passed())
+             ? { ok:true }
+             : { ok:false, message:"Get " + needed() + " out of " + n + " right to carry on" },
+           soft:() => ({ ok: !n || !needed() || passed() }),
            brief:{ eyebrow:"Quiz", title:b.title || "", text:b.note || "" } };
 }
 
@@ -3750,14 +3821,16 @@ function renderPracticalComplete(){
   }
   box.appendChild(hero);
 
+  /* The work is the thing to look at; the rubric is the reference beside it,
+     so it takes the quieter of the two. They stay in this order. */
   if (graded){
-    const rb = el("button","btn-primary done-save","View rubric");
+    const rb = el("button","btn-ghost done-save","View rubric");
     rb.addEventListener("click", showRubric);
     hero.appendChild(rb);
   }
 
   /* the same way into their work as a marked assessment has */
-  const seeBtn = el("button", (OFFLINE ? "btn-ghost" : "btn-primary") + " done-save fadein", "View my work");
+  const seeBtn = el("button", (OFFLINE && !graded ? "btn-ghost" : "btn-primary") + " done-save fadein", "View my work");
   seeBtn.addEventListener("click", () => openWorkPopup());
   hero.appendChild(seeBtn);
 
@@ -4259,6 +4332,15 @@ function doneShell(title){
   finished = true; paintTracker();
   return box;
 }
+/* Finishing an ordinary lesson, where there is no score to comment on. One
+   of these at random, so a class of thirty does not read the same two words
+   thirty times over. */
+const DONE_WORDS = ["Well done!", "Nice work!", "That's the lot!",
+                    "All finished!", "Great effort!"];
+function doneWords(){
+  return DONE_WORDS[Math.floor(Math.random() * DONE_WORDS.length)];
+}
+
 /* every score gets the tick, the words change with the result */
 function resultHeading(pct){
   if (pct > 75) return "Exceptional work! Keep it up.";
@@ -4358,8 +4440,9 @@ function paintStatus(elm, state){
 }
 
 function showLessonComplete(revisit, justFinished){
-  const box = doneShell("Well done!");
-  const hero = heroBits("Well done!", lesson.title + " complete");
+  const words = doneWords();
+  const box = doneShell(words);
+  const hero = heroBits(words, lesson.title + " complete");
   const status = el("p","handin");
   hero.appendChild(status);
   /* Online the work is sent as soon as this screen opens and the line under
@@ -4603,6 +4686,13 @@ async function runPython(code, out, err){
 }
 
 $("saveBtn").addEventListener("click", manualSave);
+/* The button in the corner is one of the Save buttons, not a thing of its
+   own, so it says the same as the one under the response tasks at the same
+   moment. Offline it copies a link instead, which is not a saved state. */
+if (!OFFLINE && !spectate){
+  saveButtons.push({ btn: $("saveBtn"), label: "Save Work" });
+  if (!unsavedTyping) $("saveBtn").dataset.saved = "yes";
+}
 
 /* ---------- build the PDF and download it, no dialog ----------
    window.print() ALWAYS opens the browser's print dialog, no site can stop
