@@ -747,9 +747,12 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
        if (!raw) throw new Error("missing");
        return JSON.parse(raw);
      } })
-   : fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
-       .then(r => r.ok ? r : dbLesson())      // not a file? ask the database
-       .catch(() => dbLesson()))
+   /* The lessons folder belongs to offline mode. With a server the database
+      is the only source: a stale file sitting in the folder must never
+      shadow the lesson a teacher has just saved and published. */
+   : OFFLINE
+     ? fetch("lessons/" + encodeURIComponent(lessonId) + ".json")
+     : dbLesson())
   .then(r => { if (!r.ok) throw new Error("missing"); return r.json().catch(() => { throw new Error("badjson"); }); })
   .then(async (l) => {
     lesson = l;

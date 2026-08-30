@@ -287,34 +287,17 @@ async function fetchLessons(){
   box.innerHTML = '<p class="hint">Loading…</p>';
   const group = localStorage.getItem("hub_group") || "";
   try{
-    /* Lessons come from two places: the files in lessons/, and lessons built
-       in the lesson builder, which live in the database. Both must appear. */
-    let flat = [];
-    try{
-      const file = await (await fetch("lessons/index.json", { cache: "no-store" })).json();
-      const units = file.units || [{ name: "", lessons: file }];
-      flat = units.flatMap(u => u.lessons);
-    }catch(e){ flat = []; }
+    /* Every lesson comes from the database. The lessons folder belongs to
+       offline mode, and this list is never shown there, so nothing here
+       reads it: a file left behind from a spell offline must not put a
+       lesson in front of a class that was never published to them. */
+    catalogue = await (await fetch(API + "/api/catalog" +
+      (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json();
+
     const byId = {};
-    flat.forEach(l => { byId[l.id] = l; lessonTitles[l.id] = l.title; });
-
-    /* Until config.js has a server address there is no catalogue to ask, so
-       the lesson files stand in for one: everything in lessons/index.json is
-       on offer. */
-    catalogue = ready
-      ? await (await fetch(API + "/api/catalog" + (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json()
-      : { units: [], lessons: flat.map(l => ({
-              lesson_id: l.id, title: l.title, description: l.description || "",
-              unit: l.unit || "", year: l.year || "",
-              assessment: !!l.assessment, homework: !!l.homework })) };
-
     (catalogue.lessons || []).forEach(c => {
-      if (!byId[c.lesson_id]){
-        byId[c.lesson_id] = { id: c.lesson_id, title: c.title || c.lesson_id, description: c.description || "" };
-      } else {
-        if (c.title) byId[c.lesson_id].title = c.title;             // the database wins on naming
-        if (c.description) byId[c.lesson_id].description = c.description;
-      }
+      byId[c.lesson_id] = { id: c.lesson_id, title: c.title || c.lesson_id,
+                            description: c.description || "" };
       lessonTitles[c.lesson_id] = byId[c.lesson_id].title;
     });
     /* prune only once we know every valid id, or work on builder-made lessons
@@ -330,8 +313,8 @@ async function fetchLessons(){
     }
 
     doneLessons = new Set();
-    flat.forEach(l => {                       // this machine's own record
-      try{ const w = JSON.parse(localStorage.getItem("hub_work_" + l.id) || "null"); if (w && w.__done) doneLessons.add(l.id); }catch(e){}
+    Object.keys(byId).forEach(id => {         // this machine's own record
+      try{ const w = JSON.parse(localStorage.getItem("hub_work_" + id) || "null"); if (w && w.__done) doneLessons.add(id); }catch(e){}
     });
     if (ready && token){                      // and the authoritative one
       try{
