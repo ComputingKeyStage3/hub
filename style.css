@@ -736,6 +736,10 @@ textarea.code{background:var(--code-bg) !important; color:var(--code-fg) !import
 .keywrap .station{padding:30px 28px}
 .keywrap input{text-align:center; font-size:19px}
 .classgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:16px; margin-top:18px}
+/* A message dropped into one of these grids is not a tile. It is about the
+   grid as a whole, so it runs the full width instead of being squeezed into
+   one 210px column and wrapping over four lines. */
+.classgrid > p, .bigcards > p{grid-column:1 / -1; margin:0}
 .classtile{background:var(--panel); border:1.5px solid var(--line); border-radius:18px; padding:26px 20px;
   cursor:pointer; text-align:left; box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .classtile:hover{border-color:var(--amber); transform:translateY(-2px); transition:.12s}
