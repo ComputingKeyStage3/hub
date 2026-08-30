@@ -13,7 +13,6 @@
 <script src="richtext.js"></script>
 <script src="tasks-extra.js"></script>
 <script src="config.js"></script>
-<script src="offlinebar.js"></script>
 <script src="settings.js"></script>
 </head>
 <body class="lesson">
@@ -425,6 +424,7 @@ function clearStudentWork(){
     for (let i = 0; i < localStorage.length; i++){
       const k = localStorage.key(i);
       if (k && (k.indexOf("hub_work_") === 0 || k.indexOf("hub_rel_") === 0 ||
+                k.indexOf("hub_page_") === 0 || k.indexOf("hub_unlock_") === 0 ||
                 k === "hub_results" || k === "hub_inspect")) doomed.push(k);
     }
     doomed.forEach(k => localStorage.removeItem(k));
@@ -551,6 +551,14 @@ function defaultLocks(){
 }
 /* Offline or signed out, nothing is locked, never strand a student. */
 const isLocked = (i) => !bypassed && !!apiReady && !!token && lockedSet.has(i);
+/* Without a server a page is shut until its passcode has been typed. Kept
+   apart from isLocked, which is about what a teacher has released. */
+function pageShut(i){
+  if (!OFFLINE || bypassed) return false;
+  const b = (lesson && lesson.blocks || [])[i];
+  if (!b || !b.passHash) return false;
+  try{ return localStorage.getItem("hub_page_" + lessonId + "_" + i) !== "1"; }catch(e){ return true; }
+}
 /* First unlocked index walking in a direction; null if there isn't one. */
 function nextOpen(from, dir){
   for (let i = from; i >= 0 && i < steps.length; i += dir){
@@ -941,8 +949,74 @@ async function tryContinue(){
   const target = await continueTarget();
   $("nextBtn").classList.remove("checking");
 
-  if (target !== null){ hideWaitModal(); showStep(target); }
+  if (target !== null){
+    /* Without a server nothing releases the next page, so the passcode does.
+       Asked here rather than on the page itself, because the question is
+       "may I move on yet", not "can I do this task". */
+    if (OFFLINE && !(await passGate(target))) return;
+    hideWaitModal(); showStep(target);
+  }
   else { showWaitModal(); startCooldown(); }
+}
+
+/* ---------- the passcode on a locked page (no server) ----------
+   Only the hash of the word is in the lesson file, so a student reading it
+   cannot find the word itself. Once a page is open it stays open, or a
+   refresh in the middle of a lesson would shut them out again. */
+function pageUnlockKey(i){ return "hub_page_" + lessonId + "_" + i; }
+
+function passGate(target){
+  const block = (lesson.blocks || [])[target];
+  const wanted = block && block.passHash;
+  if (!wanted) return Promise.resolve(true);          // nothing set: nothing to ask
+  try{ if (localStorage.getItem(pageUnlockKey(target)) === "1") return Promise.resolve(true); }catch(e){}
+  if (bypassed) return Promise.resolve(true);
+
+  return new Promise(resolve => {
+    const back = el("div","modal-back no-print");
+    const box = el("div","modal narrow");
+    const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+    const close = () => { back.remove(); resolve(false); };
+    x.addEventListener("click", close);
+    box.appendChild(x);
+    box.appendChild(el("h2","","Keep going on this page"));
+    box.appendChild(el("p","modal-text",
+      "Carry on with this page until your teacher tells you to move on. " +
+      "When they do, they will give you a code to type in here."));
+    const field = el("div","field");
+    field.appendChild(el("label","","Code"));
+    const inp = el("input");
+    inp.type = "text"; inp.autocomplete = "off"; inp.spellcheck = false;
+    field.appendChild(inp);
+    box.appendChild(field);
+    const err = el("p","err","");
+    box.appendChild(err);
+    const go = el("button","btn-primary modal-cta","Unlock the next page");
+    const stay = el("button","btn-ghost modal-stay","Not yet");
+    stay.addEventListener("click", close);
+
+    const tryIt = () => {
+      const typed = inp.value.trim();
+      if (!typed){ err.textContent = "Type the code your teacher gave you."; inp.focus(); return; }
+      if (strHash(typed.toUpperCase()) === wanted){
+        try{ localStorage.setItem(pageUnlockKey(target), "1"); }catch(e){}
+        back.remove();
+        resolve(true);
+      } else {
+        err.textContent = "That code is not right. Check it with your teacher.";
+        inp.select();
+      }
+    };
+    go.addEventListener("click", tryIt);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") tryIt(); });
+    inp.addEventListener("input", () => { err.textContent = ""; });
+    box.appendChild(go); box.appendChild(stay);
+    scrollBody(box);
+    back.appendChild(box);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
+    document.body.appendChild(back);
+    setTimeout(() => inp.focus(), 30);
+  });
 }
 $("nextBtn").addEventListener("click", tryContinue);
 
@@ -966,7 +1040,7 @@ function paintTracker(){
     // Once finished, every segment is complete, including the last one, which
     // previously stayed amber forever because "n < step" can never include it.
     seg.className = "seg" + (finished ? " done" : n < step ? " done" : n === step ? " now" : "")
-                  + (isLocked(n) && !finished ? " locked-seg" : "");
+                  + ((isLocked(n) || pageShut(n)) && !finished ? " locked-seg" : "");
   });
 }
 
@@ -1283,7 +1357,9 @@ function rQuestion(b){
     ctx.innerHTML = b.context;
     s.appendChild(ctx);
   }
-  if (b.prompt) s.appendChild(el("p","q-ask", stripTags(b.prompt)));
+  /* The question is written in the builder's formatting box now, so it
+     arrives as HTML. el() sets innerHTML, which is what we want here. */
+  if (b.prompt) s.appendChild(el("div","q-ask", b.prompt));
   const min = b.minWords || 8;
   const ta = el("textarea","answer"); ta.rows = 6; ta.placeholder = "Type your answer here…";
   const counter = el("p","counter");

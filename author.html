@@ -3,11 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lesson builder, Prince Henry's Computing KS3</title>
+<title>Lesson builder, Computing KS3</title>
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
-<script src="offlinebar.js"></script>
 <script src="lessonfile.js"></script>
 <script src="richtext.js"></script>
 <script src="menus.js"></script>
@@ -90,6 +89,13 @@
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
         </div>
       </div>
+      <div class="palgroup" data-group="cyber">
+        <button class="pal-head" type="button">Cybersecurity</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="password"><b>Password checker</b><span>Five checks on a made-up password</span></button>
+          <button class="pal" data-add="caesar"><b>Caesar cipher</b><span>Shift the letters to crack a message</span></button>
+        </div>
+      </div>
       <div class="palgroup" data-group="binary">
         <button class="pal-head" type="button">Binary</button>
         <div class="palbody" hidden>
@@ -132,7 +138,6 @@
         </div>
       </div>
     </div>
-    <p class="pal-note">Drag a card by its handle to reorder. Everything saves in this browser as you type.</p>
   </aside>
 
   <main class="build-list" id="list"></main>
@@ -154,6 +159,10 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+/* Declared up here because the whole file leans on it: without a server the
+   builder saves by downloading, reads its years and units out of the lessons
+   folder, and drops the parts that need a class behind them. */
+const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
 /* wiring a button that isn't there should not stop the rest of the page */
 function on(id, ev, fn){
   const e = document.getElementById(id);
@@ -201,11 +210,34 @@ const BLANK = {
                      showPlace:true, numbers:"" }),
   binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
                      showPlace:true, showCarry:true, pairs:"" }),
-  short:    () => ({ type:"short", prompt:"", keywords:"", keywordLabels:"", model:"", why:"", topic:"" })
+  short:    () => ({ type:"short", prompt:"", keywords:"", keywordLabels:"", model:"", why:"", topic:"" }),
+  password: () => ({ type:"password", title:"Password strength challenge",
+                     task:"Invent a made-up password that turns all five checks green." }),
+  /* The teacher writes the real message and picks a shift; the coded text and
+     the answer's hash are worked out when the lesson is compiled, so the
+     answer never sits in the lesson file in readable form. */
+  caesar:   () => ({ type:"caesar", title:"Caesar cipher puzzle",
+                     task:"Slide the shift until the message becomes English, then type it in.",
+                     message:"THE PASSWORD IS FIREWALL", shift:7,
+                     prompt:"Type the hidden message here (letters only, spaces are fine):" })
 };
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", code:"Coding task", web:"Web page" };
+                short:"Short answer", page:"Page", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", code:"Coding task", web:"Web page",
+                password:"Password checker", caesar:"Caesar cipher" };
+
+/* The lesson page hashes what a student types and compares it with this, so
+   the answer is never sitting in the lesson file for anyone to read. Same
+   two functions as lesson.html, and they must stay the same. */
+function strHash(s){ let x = 5381; for (const c of s) x = ((x << 5) + x + c.charCodeAt(0)) >>> 0; return x; }
+function normLetters(s){ return (s || "").toUpperCase().replace(/[^A-Z]/g, ""); }
+/* Shifting forwards makes the coded text; the lesson page shifts back. */
+function caesarEncode(text, k){
+  return String(text || "").replace(/[A-Za-z]/g, (c) => {
+    const base = c === c.toUpperCase() ? 65 : 97;
+    return String.fromCharCode(((c.charCodeAt(0) - base + (k % 26) + 26) % 26) + base);
+  });
+}
 
 /* A YouTube address in any of its usual shapes -> the embeddable one. */
 function toEmbed(raw){
@@ -343,7 +375,8 @@ function compileOne(b, id, target){
     const kids = [];
     (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
     push({ type:"page", id, title: b.title || "Tasks", task: b.task || "",
-           startLocked: b.startLocked !== false, blocks: kids });
+           startLocked: b.startLocked !== false,
+           passHash: b.passHash || undefined, blocks: kids });
     return;
   }
   {
@@ -395,8 +428,20 @@ function compileOne(b, id, target){
       push(keepArrays({ type:"question", id,
              heading: b.heading || "",
              context: b.context ? (window.cleanRichText ? window.cleanRichText(b.context) : b.context) : "",
-             prompt: b.prompt || "",
+             prompt: b.prompt ? (window.cleanRichText ? window.cleanRichText(b.prompt) : b.prompt) : "",
              minWords: Number(b.minWords) || 20 }));
+    else if (b.type === "password")
+      push({ type:"password", id, title: b.title || "", task: b.task || "" });
+    else if (b.type === "caesar"){
+      /* The message the teacher typed is shifted here and the answer is
+         stored only as a hash, so neither the plain message nor the answer
+         can be read out of the lesson file. */
+      const shift = Math.max(1, Math.min(25, Number(b.shift) || 7));
+      push({ type:"caesar", id,
+             title: b.title || "", task: b.task || "", prompt: b.prompt || "",
+             ciphertext: caesarEncode(b.message || "", shift),
+             answerHash: strHash(normLetters(b.message || "")) });
+    }
     else if (b.type === "web"){
       const blk = { type:"web", id, html: b.html || "", css: b.css || "", js: b.js || "",
                     files: (b.files && b.files.length) ? b.files : ["html","css","js"] };
@@ -648,7 +693,8 @@ function card(b, i, arr){
     const locked = b.startLocked !== false;
     const lk = el("button","btn-ghost bmini lockbtn" + (locked ? "" : " open"), locked ? "\u{1F512}" : "\u{1F513}");
     lk.title = isFirst ? "The first page always starts unlocked"
-             : locked ? "Starts locked when a class gets this lesson, click to start it unlocked"
+             : locked ? (OFFLINE ? "Locked until the passcode is typed, click to leave it open"
+                                 : "Starts locked when a class gets this lesson, click to start it unlocked")
                       : "Starts unlocked, click to start it locked";
     lk.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -659,9 +705,22 @@ function card(b, i, arr){
         return;
       }
       b.startLocked = !locked;
+      if (b.startLocked === false){ delete b.passCode; delete b.passHash; }
       render(); schedulePreview();
     });
     tools.appendChild(lk);
+    /* Without a server nothing releases a page: the passcode is the release,
+       so a locked page without one would simply be shut for ever. The pill
+       says which it is, and saving is refused until they all have one. */
+    if (OFFLINE && locked && !isFirst){
+      const set = !!b.passHash;
+      const pill = el("button","passpill " + (set ? "set" : "unset"),
+                       set ? "Passcode set" : "Set a passcode");
+      pill.title = set ? "Change the passcode for this page"
+                       : "This page cannot be opened until it has one";
+      pill.addEventListener("click", (e) => { e.stopPropagation(); askPasscode(b); });
+      tools.appendChild(pill);
+    }
   }
   const acts = [["\u2191","Move up", () => move(arr, i, -1)],
                 ["\u2193","Move down", () => move(arr, i, 1)],
@@ -709,6 +768,7 @@ function card(b, i, arr){
     input.addEventListener("input", () => {
       b[key] = o.num ? Number(input.value) : input.value;
       saveDraft(); schedulePreview();
+      if (o.then) o.then();
     });
     w.appendChild(input);
     if (o.help) w.appendChild(el("p","bhelp", o.help));
@@ -846,7 +906,7 @@ function card(b, i, arr){
   if (b.type === "question"){
     F("Heading (optional)", "heading");
     R("Context (optional)", "context", { rows:3 });
-    F("The question", "prompt", { area:true, rows:2, help:"This is shown larger than the context, so it stands out." });
+    R("The question", "prompt", { rows:2 });
     const w = el("div","bfield");
     w.appendChild(el("label","","Options"));
     const row = el("div","brow");
@@ -1183,6 +1243,48 @@ function card(b, i, arr){
     w.appendChild(st);
     body.appendChild(w);
     F("How many questions", "count", { num:true });
+  if (b.type === "password"){
+    F("Heading (optional)", "title");
+    F("What they have to do", "task", { area:true, rows:2 });
+  }
+  if (b.type === "caesar"){
+    F("Heading (optional)", "title");
+    F("What they have to do", "task", { area:true, rows:2 });
+    F("The hidden message", "message", { area:true, rows:2, then: () => showCoded() });
+    const sw = el("div","bfield");
+    sw.appendChild(el("label","","Shift"));
+    const srow = el("div","stepper");
+    const down = el("button","btn-ghost iconbtn","−");
+    const num = el("input"); num.type = "number"; num.className = "stepnum";
+    num.min = "1"; num.max = "25";
+    num.value = String(b.shift || 7);
+    const up = el("button","btn-ghost iconbtn","+");
+    /* One step either way is no puzzle at all, and 26 is back where it
+       started, so the slider a student drags only ever offers 1 to 25. */
+    const setShift = (v) => {
+      b.shift = Math.max(1, Math.min(25, v));
+      num.value = String(b.shift);
+      saveDraft(); schedulePreview(); showCoded();
+    };
+    down.addEventListener("click", () => setShift((parseInt(num.value, 10) || 7) - 1));
+    up.addEventListener("click", () => setShift((parseInt(num.value, 10) || 7) + 1));
+    num.addEventListener("input", () => setShift(parseInt(num.value, 10) || 7));
+    srow.appendChild(down); srow.appendChild(num); srow.appendChild(up);
+    sw.appendChild(srow);
+    /* What the class will actually see, so a teacher can check it before
+       the lesson rather than by playing it through. */
+    const coded = el("p","bhelp");
+    function showCoded(){
+      const shift = Math.max(1, Math.min(25, Number(b.shift) || 7));
+      coded.textContent = b.message
+        ? "They will see: " + caesarEncode(b.message, shift)
+        : "Type the message above and the coded version appears here.";
+    }
+    showCoded();
+    sw.appendChild(coded);
+    body.appendChild(sw);
+    F("Label above the answer box", "prompt");
+  }
     if (b.type === "binary"){
       const mw = el("div","bfield");
       mw.appendChild(el("label","","Which way round"));
@@ -1248,7 +1350,10 @@ function setMode(assess, practical){
   lesson.assessment = !!assess;
   lesson.practical = !!practical;
   if (practical) lesson.assessment = false;
-  $("modePractical").classList.toggle("on", !!practical);
+  /* The practical button is taken off the page when there is no server, so
+     it may not be there to mark. */
+  const prBtn = $("modePractical");
+  if (prBtn) prBtn.classList.toggle("on", !!practical);
   $("modeHome").classList.toggle("on", !!lesson.homework && !assess && !practical);
   $("assessTabs").hidden = !assess && !practical;
   $("tabQuestions").textContent = practical ? "Tasks" : "Questions";
@@ -1275,6 +1380,14 @@ on("modeLesson", "click", () => {
 });
 on("modeAssess", "click", () => setMode(true, false));
 on("modePractical", "click", () => { lesson.homework = false; setMode(false, true); });
+/* A practical is marked by hand against a rubric, in the console, against a
+   class. None of that exists without a server, so the button goes rather than
+   offering a kind of lesson nobody could ever mark. */
+if (OFFLINE){
+  const pr = $("modePractical");
+  if (pr) pr.remove();
+  if (lesson.practical){ lesson.practical = false; setMode(false, false); }
+}
 on("modeHome", "click", () => {
   /* the same as a lesson in every way, but students see it as home learning */
   lesson.homework = true;
@@ -1662,30 +1775,25 @@ function paintResponseTopics(into){
 let respEditing = null;
 let assessTab = "questions";   // questions | targets | responses
 
-/* Sections start folded away, so the list stays short. Which ones are open
-   is remembered between visits. */
+/* Every section starts folded away, so the palette is the same short list
+   each time it is opened. It used to remember which ones were open, which
+   meant a section opened once stayed open for ever after and looked like a
+   bug rather than a memory. */
 function wirePalette(){
-  /* Which sections the teacher had open last time, so the palette opens the
-     way they left it. */
-  let openSections = {};
-  try{ openSections = JSON.parse(localStorage.getItem("hub_pal") || "{}"); }catch(e){}
-
   document.querySelectorAll(".palgroup").forEach(group => {
     const heading = group.querySelector(".pal-head");
     const tasks = group.querySelector(".palbody");
     if (!heading || !tasks) return;
-    const name = group.dataset.group;
 
     const setOpen = (open) => {
       tasks.hidden = !open;
       heading.classList.toggle("open", open);
-      openSections[name] = open;
-      try{ localStorage.setItem("hub_pal", JSON.stringify(openSections)); }catch(e){}
     };
 
-    setOpen(!!openSections[name]);
+    setOpen(false);
     heading.addEventListener("click", () => setOpen(tasks.hidden));
   });
+  try{ localStorage.removeItem("hub_pal"); }catch(e){}   // the old memory
 }
 wirePalette();
 
@@ -1802,6 +1910,55 @@ on("lUnit", "change", async () => {
   }
   paintPickers(); saveDraft();
 });
+
+/* Setting the passcode for a page. Only its hash reaches the lesson file, so
+   a student reading lessons/whatever.json cannot find the word; the plain
+   version is kept in this browser's draft so the teacher can still see what
+   they chose while they are writing the lesson. Reopening a saved lesson on
+   another machine shows the pill as set but cannot show the word itself. */
+function askPasscode(b){
+  openModal(box => {
+    box.appendChild(el("h2","","Passcode for this page"));
+    box.appendChild(el("p","modal-text",
+      "Students type this to move on to it. Read it out when the class is ready."));
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Passcode"));
+    const inp = el("input");
+    inp.autocomplete = "off";
+    inp.spellcheck = false;
+    inp.value = b.passCode || "";
+    inp.placeholder = b.passHash && !b.passCode ? "Set on another computer, type a new one" : "";
+    w.appendChild(inp);
+    box.appendChild(w);
+    const msg = el("p","bhelp","");
+    box.appendChild(msg);
+    const go = el("button","btn-primary modal-cta","Save the passcode");
+    go.addEventListener("click", () => {
+      const v = inp.value.trim();
+      if (v.length < 3){ msg.textContent = "Make it at least three characters."; return; }
+      /* Matched the same way the lesson page matches it: upper case, so
+         nobody is caught out by a capital letter. */
+      b.passCode = v;
+      b.passHash = strHash(v.toUpperCase());
+      closeModal(); render(); schedulePreview();
+    });
+    box.appendChild(go);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  });
+}
+
+/* Every locked page that has not got a passcode yet, by its number. */
+function pagesMissingPasscode(){
+  const out = [];
+  lesson.blocks.forEach((b, i) => {
+    if (b.type !== "page" || i === 0) return;
+    if (b.startLocked !== false && !b.passHash) out.push(i + 1);
+  });
+  return out;
+}
 
 /* a small prompt that returns what was typed */
 function askNew(title, label){
@@ -2054,6 +2211,19 @@ async function downloadForFolder(){
     say("Which unit?", "Choose a unit at the top, or make a new one. Units sit inside a year group.");
     return;
   }
+  /* A locked page with no passcode can never be opened by anybody, so the
+     lesson would be unteachable past that point. */
+  const missing = pagesMissingPasscode();
+  if (missing.length){
+    say(missing.length === 1 ? "Page " + missing[0] + " has no passcode"
+                             : "Some pages have no passcode",
+        (missing.length === 1
+          ? "Page " + missing[0] + " is locked"
+          : "Pages " + missing.join(", ") + " are locked") +
+        ", and a locked page can only be opened by typing its passcode. " +
+        "Press the red pill beside the padlock to set one.");
+    return;
+  }
   const id = lessonId();
   /* An existing lesson keeps the code it was given: it is on a worksheet,
      in somebody's planner, and written on the board. Only a new one gets
@@ -2119,6 +2289,19 @@ async function downloadForFolder(){
     box.appendChild(el("pre","codeblock", window.lessonFile.linkFor(id)));
     box.appendChild(el("p","modal-text","Or, from the front page, this code:"));
     box.appendChild(el("p","sharecode", code));
+
+    /* Only the hashes go into the file, so this is the last chance to write
+       the passcodes down. */
+    const gates = [];
+    lesson.blocks.forEach((blk, i) => {
+      if (blk.type === "page" && i > 0 && blk.startLocked !== false && blk.passCode)
+        gates.push("Page " + (i + 1) + ": " + blk.passCode);
+    });
+    if (gates.length){
+      box.appendChild(el("p","set-label","Passcodes for the locked pages"));
+      box.appendChild(el("p","modal-text","Write these down, they are not stored in the lesson file."));
+      box.appendChild(el("pre","codeblock", gates.join("\n")));
+    }
 
     const done = el("button","btn-primary modal-cta","Done");
     done.addEventListener("click", closeModal);
@@ -2210,8 +2393,6 @@ on("delLesson", "click", () => {
 });
 
 /* offer the units that already exist, and load a lesson if asked to edit one */
-const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
-
 async function loadUnitsAndYears(){
   const API = (window.HUB && window.HUB.API) || "";
   /* Without a server the years and units on offer are simply the ones
@@ -2307,7 +2488,12 @@ function fromCompiled(data, meta){
                 marking: data.marking || "score", outOf: data.outOf || 20, rubric: data.rubric || [],
                 topics: data.topics || {}, responses: {}, extensions: [], blocks: [] };
   const back = (b) => {
-    if (b.type === "page") return { type:"page", title:b.title || "", task:b.task || "", blocks:(b.blocks || []).map(back) };
+    /* startLocked and passHash used to be dropped here, so reopening a lesson
+       quietly unlocked every page in it. */
+    if (b.type === "page") return { type:"page", title:b.title || "", task:b.task || "",
+                                    startLocked: b.startLocked !== false,
+                                    passHash: b.passHash || undefined,
+                                    blocks:(b.blocks || []).map(back) };
     if (b.type === "text"){
       const h = /<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(b.html || "");
       const body = String(b.html || "").replace(/<h2[\s\S]*?<\/h2>/i, "")
@@ -2322,6 +2508,20 @@ function fromCompiled(data, meta){
       keywords:(b.keywords || []).map(g => g.join(", ")).join("; "), model:b.model || "", topic:b.topic || "" };
     if (b.type === "blanks") return { type:"blanks", prompt:b.prompt || "", text:b.text || "",
       distractors:(b.distractors || []).join(", "), topic:b.topic || "" };
+    /* A saved cipher holds only the coded text and a hash, never the message.
+       Trying all 25 shifts and hashing each one finds the shift the teacher
+       used, and with it the message, so it can be edited like anything else.
+       If nothing matches (a hand-written lesson file), the fields are left
+       empty rather than filled with a wrong guess. */
+    if (b.type === "caesar"){
+      let message = "", shift = 7;
+      for (let k = 1; k <= 25; k++){
+        const tryText = caesarEncode(b.ciphertext || "", -k);
+        if (strHash(normLetters(tryText)) === b.answerHash){ message = tryText; shift = k; break; }
+      }
+      return { type:"caesar", title:b.title || "", task:b.task || "",
+               prompt:b.prompt || "", message: message, shift: shift };
+    }
     const copy = JSON.parse(JSON.stringify(b));
     delete copy.id;
     return copy;

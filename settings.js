@@ -54,21 +54,24 @@
     const back = document.createElement("div");
     back.className = "modal-back no-print"; back.id = "setModal"; back.hidden = true;
     back.innerHTML =
+      /* The middle has to be its own scrolling box. .modal is a flex column
+         with overflow:hidden, so without one the groups below are simply cut
+         off on a short screen with no way to reach them. Every other pop-up
+         gets this from scrollBody(); this one is built by hand. */
       '<div class="modal" role="dialog" aria-modal="true">' +
       '<h2 style="margin-top:0">Settings</h2>' +
+      '<div class="modal-scroll">' +
       /* Without a server the name typed at the start of a lesson is the only
          thing that says whose work this is, so there has to be somewhere to
          put it right when it is spelled wrong. */
       (noServer && !onConsole
         ? '<div class="set-group"><span class="set-label">Your name</span>' +
-          '<p class="subnote" style="margin:0 0 8px">This goes on the work you hand in.</p>' +
           '<div class="field"><input type="text" id="setName" autocomplete="off" spellcheck="false"></div></div>'
         : "") +
       '<div class="set-group"><span class="set-label">Theme</span><div class="swatches" id="setSw">' +
       THEMES.map(b => '<button class="swatch swatch-wide" data-bg="' + b[0] + '" style="background:' + b[2] + '">' + b[1] + '</button>').join("") +
       '</div></div>' +
       '<div class="set-group"><span class="set-label">Colour overlay</span>' +
-      '<p class="subnote" style="margin:0 0 8px">A colour laid over the page. Some readers find it makes text easier to follow.</p>' +
       '<div class="swatches" id="setTint">' +
       TINTS.map(t => '<button class="swatch" data-tint="' + t[0] + '"' +
         (t[2] ? ' style="background:' + t[2] + '"' : ' data-none="1"') + ' title="' + t[1] + '">' +
@@ -87,6 +90,7 @@
       '<button class="btn-ghost" id="pwGo">Change password</button>' +
       '<p class="hint" id="pwMsg" style="margin-top:10px"></p>' +
       '<p class="subnote">Tip: three random words joined together is long, strong and easy to remember.</p></div>' +
+      '</div>' +
       '<button class="btn-primary modal-cta" id="setDone">Done</button></div>';
     document.body.appendChild(back);
     function paint(){

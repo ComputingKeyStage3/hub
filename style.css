@@ -976,7 +976,6 @@ body.spectating{padding-top:40px}
 .pal:hover{border-color:var(--amber)}
 .pal b{display:block; font-size:15px}
 .pal span{font-size:12.5px; color:var(--muted)}
-.pal-note{font-size:12.5px; color:var(--muted); margin-top:16px; line-height:1.5}
 
 .build-list{padding:20px; overflow-y:auto; min-width:0}
 .bcard{background:var(--panel); border:1.5px solid var(--line); border-radius:16px; margin:0 0 14px;
@@ -1179,6 +1178,11 @@ body.spectating{padding-top:40px}
 .pg-h,.q-ask{font-family:var(--display); font-size:20px; font-weight:800; line-height:1.35}
 .q-ask{margin:0 0 14px; padding:12px 16px; background:var(--panel-2);
   border-left:4px solid var(--amber); border-radius:0 12px 12px 0}
+/* the question is written in a formatting box now, so it can hold paragraphs
+   and lists rather than one line of plain text */
+.q-ask > :first-child{margin-top:0}
+.q-ask > :last-child{margin-bottom:0}
+.q-ask ul,.q-ask ol{margin:6px 0 0; padding-left:22px; font-weight:600}
 .pg-h{margin:0 0 4px; padding:0; background:none; border:none}
 
 /* Lexend needs more weight before bold reads as bold */
@@ -1306,7 +1310,6 @@ pre, code{overflow-wrap:anywhere}
   .build-palette{border-right:none; border-bottom:1px solid var(--line);
     display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; align-items:start}
   .pal-head{grid-column:1 / -1; margin:6px 0 2px}
-  .pal-note{grid-column:1 / -1}
   .pal{margin:0}
   .build-preview{height:min(60vh, 480px)}
   .build-titles{min-width:0; flex-wrap:wrap}
@@ -1927,11 +1930,6 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .modal-steps li{margin-bottom:6px}
 .codeblock{background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
   padding:12px 14px; font-family:var(--mono); font-size:13.5px; overflow-x:auto; margin:0 0 12px}
-/* a banner saying the site is running without a server */
-.offbar{flex:0 0 auto; display:flex; align-items:center; gap:10px; justify-content:center; padding:7px 14px;
-  background:color-mix(in srgb, var(--amber) 12%, var(--panel)); border-bottom:1px solid var(--amber);
-  font-size:14px; color:var(--text)}
-.offbar b{font-weight:700}
 
 
 /* --- top bar: the title takes the space, everything else sits right --- */
@@ -1943,9 +1941,23 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
    Wide, spaced digits so a code read off the board can be checked at a
    glance. It is a text box, not a number one: spinner arrows on a code
    invite dragging it to a lesson nobody meant to open. */
+/* the whole code card sits in the middle of its panel */
+.codepanel{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px }
+.codepanel .field{ display:flex; flex-direction:column; align-items:center; width:auto }
+
 /* beats the plain ".field input" it sits inside */
 .field input.codebox{ width:100%; max-width:260px; height:56px; padding:0 14px; text-align:center;
   letter-spacing:.34em; text-indent:.34em; font-family:var(--mono); font-size:26px }
+
+/* Beside the padlock on a page: whether that page has a passcode yet.
+   Red is not a warning here so much as an unfinished job, so it reads the
+   same as the "still to do" colour everywhere else. */
+.passpill{ font-size:11.5px; font-weight:800; letter-spacing:.02em; padding:4px 10px;
+  border-radius:999px; border:1.5px solid transparent; cursor:pointer;
+  font-family:var(--body); white-space:nowrap }
+.passpill.set{ background:var(--mint-dim); border-color:var(--mint); color:var(--mint) }
+.passpill.unset{ background:var(--red-dim); border-color:var(--red); color:var(--red) }
+.passpill:hover{ filter:brightness(1.06) }
 
 /* the lesson code, big enough to read off a teacher's screen */
 .sharecode{ font-family:var(--mono); font-size:38px; letter-spacing:.22em; text-indent:.22em;
@@ -2645,6 +2657,13 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 }
 /* the pop-up itself never scrolls: its middle does */
 .modal{ overscroll-behavior:contain }
+
+/* Safety net for a pop-up built without a scrolling middle. .modal is a flex
+   column with overflow:hidden, so one that never went through scrollBody()
+   silently clips whatever does not fit. Letting the box itself scroll is not
+   as tidy as a scrolling middle, but it is always reachable. Browsers that do
+   not understand :has() drop the rule and behave as they did before. */
+.modal:not(:has(> .modal-scroll)){ overflow-y:auto }
 
 @media (max-width:640px){
   .modal, .modal.wide, .modal.narrow{
