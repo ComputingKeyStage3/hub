@@ -16,8 +16,23 @@
 
 <div class="homebar">
   <div class="title">Lesson builder<span id="titleShow"></span></div>
-  <a class="crumb" href="admin.html" style="margin-right:10px">&larr; Teacher console</a>
+  <!-- which kind of work this is, on a narrow screen where the tab strip
+       below has been folded away -->
+  <button class="modechip" id="modeChip" hidden>
+    <span id="modeChipName">Lesson</span><span class="modechip-pen">&#9998;</span>
+  </button>
+  <a class="crumb" href="admin.html" id="consoleLink" style="margin-right:10px">&larr; Teacher console</a>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
+</div>
+
+<!-- On a narrow screen this is the only row of controls: a way to add a page,
+     the assessment tabs where there are any, and the preview switch pinned to
+     the right of it. It scrolls sideways rather than wrapping. -->
+<div class="buildbar" id="buildBar" hidden>
+  <div class="buildbar-scroll" id="buildBarScroll">
+    <button class="btn-primary bmini2" id="addPageBtn">+ New page</button>
+  </div>
+  <button class="btn-ghost bmini2 prevtoggle" id="prevToggle">Preview</button>
 </div>
 
 <div class="modeswitch">
@@ -156,7 +171,7 @@
       <button class="btn-ghost iconbtn" id="prevBtn" title="Refresh preview">&#8635;</button>
       <button class="btn-ghost iconbtn" id="prevFull" title="Full screen preview">&#9974;</button>
     </div>
-    <iframe id="prev" title="Lesson preview"></iframe>
+    <div class="prev-hold"><iframe id="prev" title="Lesson preview"></iframe></div>
   </section>
 </div>
 
@@ -612,6 +627,7 @@ function render(){
       list.appendChild(empty);
     }
     arr.forEach((b, i) => list.appendChild(card(b, i, arr)));
+    if (isCompact()) list.appendChild(addTaskRow(arr));
     /* dropping anywhere in the empty space adds to the end */
     list.addEventListener("dragover", (e) => {
       if (!canDropOn(arr)) return;
@@ -630,6 +646,12 @@ function render(){
       ? "No questions yet, add one from the left."
       : "Nothing here yet, add a task or a page from the left."));
   lesson.blocks.forEach((b, i) => list.appendChild(card(b, i, lesson.blocks)));
+  /* On a narrow screen the palette is gone, so whatever list is on screen
+     needs its own way to add to it. A lesson adds pages from the bar above
+     and tasks from inside each page; an assessment has neither, so the
+     containers go straight underneath its questions. */
+  if (isCompact() && lesson.assessment && !lesson.practical)
+    list.appendChild(addTaskRow(lesson.blocks));
   saveDraft();
 }
 let newTask = null;          // a task being dragged in from the palette
@@ -1095,7 +1117,7 @@ function card(b, i, arr){
       dropInto(b.blocks, -1);              // -1 means "at the end"
     });
     body.appendChild(inner);
-    body.appendChild(addTaskRow(b));
+    body.appendChild(addTaskRow(b.blocks));
   }
   if (b.type === "image"){ F("Heading (optional)", "title"); F("Instruction (optional)", "task", { area:true, rows:2 }); }
   if (b.type === "frame"){
@@ -1419,6 +1441,7 @@ function setMode(assess, practical){
   $("palAssess").hidden = !assess;
 
   saveDraft(); render(); schedulePreview();
+  if (typeof paintBuildBar === "function") paintBuildBar();
 }
 on("modeLesson", "click", () => {
   lesson.homework = false;
@@ -2059,7 +2082,10 @@ function taskGroups(){
   })).filter(g => g.kinds.length);
 }
 
-function addTaskRow(page){
+/* The containers a task is added from. Given whichever list is being looked
+   at: the tasks on a page, the questions in an assessment, or the practice
+   under one topic. */
+function addTaskRow(target){
   const wrap = el("div","pageadd");
   const bar = el("div","pageadd-bar");        // the containers, side by side
   const tray = el("div","pageadd-tray");      // whichever one is open, below
@@ -2077,7 +2103,7 @@ function addTaskRow(page){
       const btn = el("button","btn-ghost bmini2", item.label);
       btn.addEventListener("click", () => {
         if (!BLANK[item.kind]) return;
-        page.blocks.push(BLANK[item.kind]());
+        target.push(BLANK[item.kind]());
         render(); schedulePreview();
       });
       tray.appendChild(btn);
@@ -2320,7 +2346,12 @@ function openModal(build){
   scrollBody(box);
   $("mBack").hidden = false;
 }
-function closeModal(){ $("mBack").hidden = true; }
+function closeModal(){
+  $("mBack").hidden = true;
+  /* the Save pop-up borrows the real year and unit pickers, and puts them
+     back when it hears this */
+  try{ document.dispatchEvent(new Event("hubModalClosed")); }catch(e){}
+}
 on("mBack", "mousedown", (e) => { if (e.target === $("mBack")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
@@ -2532,7 +2563,11 @@ async function saveToSite(){
   }catch(e){ say("Could not save", e.message); }
   finally{ btn.disabled = false; btn.textContent = "Save to the site"; }
 }
-on("saveSite", "click", saveToSite);
+on("saveSite", "click", () => {
+  /* On a narrow screen the title, year and unit are not on the page, so
+     Save is where they get asked for. */
+  if (isCompact()) savePopup(); else saveToSite();
+});
 
 /* deleting from here asks twice too, it is the same job as in the console */
 
@@ -2733,6 +2768,255 @@ function fromCompiled(data, meta){
 }
 
 
+/* =====================================================================
+   THE BUILDER ON A TABLET OR A PHONE
+
+   The three columns of the desktop builder do not survive being squeezed:
+   a palette, a list of cards and a live preview side by side leave nothing
+   wide enough to write in. Below a laptop width the same pieces are put
+   back together as one column instead.
+
+     - the kind of work moves into the top bar as a chip with a pencil
+     - the title, description, year and unit move into the Save pop-up
+     - Save and the three dot menu move up beside the settings cog
+     - the palette goes entirely: tasks are added from the containers
+       under each page, which is where a teacher is already looking
+     - one row underneath holds New page, the assessment tabs, and the
+       preview switch
+
+   Nothing here is duplicated. The same elements are moved about, so there
+   is only ever one Save button and one year picker to keep in step.
+   ===================================================================== */
+/* A browser without matchMedia gets the wide builder and nothing breaks;
+   the checking scripts run the page without one too. */
+function mq(query){
+  if (typeof window.matchMedia === "function") return window.matchMedia(query);
+  return { matches:false, addEventListener(){}, addListener(){} };
+}
+/* Made when first asked for, not when this line is reached: render() runs
+   from setMode() during start-up and asks whether the page is narrow before
+   the bottom of the file has been read. */
+let COMPACT_Q = null, ROOMY_Q = null;
+function compactQ(){ return COMPACT_Q || (COMPACT_Q = mq("(max-width: 1100px)")); }
+/* Room enough to keep a preview on screen while still writing: an iPad Pro
+   in either direction, but not a phone. */
+function roomyQ(){ return ROOMY_Q || (ROOMY_Q = mq("(min-width: 700px) and (min-height: 820px)")); }
+
+let compactOn = null;          // null until the first pass, then true or false
+let previewFull = false;       // the preview has taken over the screen
+let modeChosen = false;        // they have said what kind of work this is
+
+function isCompact(){ return compactQ().matches; }
+function isRoomy(){ return roomyQ().matches; }
+
+/* The pieces that move, remembered where they started so they can go back. */
+const homeSlot = document.querySelector(".homebar");
+const topSlot = document.querySelector(".build-top");
+
+function applyBuildLayout(){
+  const compact = isCompact();
+  if (compact === compactOn) { paintBuildBar(); return; }
+  compactOn = compact;
+  document.documentElement.dataset.build = compact ? "compact" : "wide";
+
+  const actions = document.querySelector(".build-actions");
+  const titles = document.querySelector(".build-titles");
+  /* Nothing to move about if the page never got built, which is how the
+     checking scripts run it. */
+  if (!actions || !titles || !homeSlot || !topSlot){ paintBuildBar(); return; }
+  if (compact){
+    /* Save and the menu sit beside the cog; everything else on that row is
+       folded into the Save pop-up. */
+    homeSlot.appendChild(actions);
+    $("buildBar").hidden = false;
+    $("modeChip").hidden = false;
+    $("saveSite").textContent = "Save";
+  } else {
+    topSlot.appendChild(titles);
+    topSlot.appendChild(actions);
+    $("buildBar").hidden = true;
+    $("modeChip").hidden = true;
+    $("saveSite").textContent = "Save to the site";
+    stopPreviewing();
+  }
+  paintBuildBar();
+  fitPreview();
+}
+
+/* What belongs on the one row of controls, which depends on the kind of
+   work: an assessment has no pages to add, a practical has both. */
+function paintBuildBar(){
+  if (!isCompact()) return;
+  const scroll = $("buildBarScroll");
+  if (!scroll || !$("addPageBtn") || !$("assessTabs") || !$("modeChipName")) return;
+  const assess = !!lesson.assessment;
+  const practical = !!lesson.practical;
+  $("addPageBtn").hidden = assess && !practical;
+  /* The tab strip is moved in beside New page rather than copied, so the
+     three buttons keep working exactly as they do on a desktop. */
+  const tabs = $("assessTabs");
+  if (assess || practical){
+    tabs.hidden = false;
+    if (tabs.parentNode !== scroll) scroll.appendChild(tabs);
+  } else {
+    tabs.hidden = true;
+  }
+  $("modeChipName").textContent = practical ? "Practical assessment"
+    : assess ? "Assessment"
+    : lesson.homework ? "Home learning" : "Lesson";
+}
+
+/* ---------- which kind of work ---------- */
+function modePicker(force){
+  openModal(box => {
+    box.appendChild(el("h2","","What are you making?"));
+    const list = el("div","modepick");
+    [["Lesson", () => { lesson.homework = false; setMode(false, false); }],
+     ["Assessment", () => setMode(true, false)],
+     ["Practical assessment", () => { lesson.homework = false; setMode(false, true); }],
+     ["Home learning", () => { lesson.homework = true; setMode(false, false); }]
+    ].forEach(pair => {
+      const b = el("button","modepick-item", pair[0]);
+      b.addEventListener("click", () => {
+        pair[1]();
+        modeChosen = true;
+        closeModal();
+        paintBuildBar();
+      });
+      list.appendChild(b);
+    });
+    box.appendChild(list);
+    if (!force){
+      const no = el("button","btn-ghost modal-stay","Cancel");
+      no.addEventListener("click", closeModal);
+      box.appendChild(no);
+    }
+  });
+}
+on("modeChip", "click", () => modePicker(false));
+
+/* ---------- the Save pop-up ----------
+   Everything that used to sit along the top of the page, asked for at the
+   moment it matters rather than taking up room while a lesson is written. */
+function savePopup(){
+  const titles = document.querySelector(".build-titles");
+  const home = titles.parentNode;                  // to put the pickers back
+  openModal(box => {
+    box.appendChild(el("h2","","Save this lesson"));
+
+    const w1 = el("div","bfield");
+    w1.appendChild(el("label","","Lesson title"));
+    const t1 = el("input"); t1.value = lesson.title || "";
+    t1.addEventListener("input", () => { lesson.title = t1.value; saveDraft(); showTitle(); });
+    w1.appendChild(t1); box.appendChild(w1);
+
+    const w2 = el("div","bfield");
+    w2.appendChild(el("label","","One line for the home page"));
+    const t2 = el("input"); t2.value = lesson.intro || "";
+    t2.addEventListener("input", () => { lesson.intro = t2.value; saveDraft(); });
+    w2.appendChild(t2); box.appendChild(w2);
+
+    /* The real pickers are moved in, not copied, so "+ New year group" and
+       everything else attached to them still works. */
+    const w3 = el("div","bfield savepickers");
+    w3.appendChild(el("label","","Year group and unit"));
+    w3.appendChild($("lYear"));
+    w3.appendChild($("lUnit"));
+    box.appendChild(w3);
+
+    const go = el("button","btn-primary modal-cta","Save to the site");
+    go.addEventListener("click", () => { closeModal(); saveToSite(); });
+    box.appendChild(go);
+    const later = el("button","btn-ghost modal-stay","Not yet");
+    later.addEventListener("click", closeModal);
+    box.appendChild(later);
+  });
+  /* however the pop-up closes, the pickers go home */
+  const back = () => {
+    if (!$("mBack").hidden) return;
+    titles.appendChild($("lYear"));
+    titles.appendChild($("lUnit"));
+    document.removeEventListener("hubModalClosed", back);
+  };
+  document.addEventListener("hubModalClosed", back);
+}
+
+/* ---------- the live preview ---------- */
+function stopPreviewing(){
+  previewFull = false;
+  document.documentElement.dataset.preview = "";
+  const t = $("prevToggle");
+  if (t) t.textContent = "Preview";
+}
+on("prevToggle", "click", () => {
+  previewFull = !previewFull;
+  document.documentElement.dataset.preview = previewFull ? "full" : "";
+  $("prevToggle").textContent = previewFull ? "Back to editing" : "Preview";
+  /* The bar's real height, so the preview starts underneath it however many
+     buttons the bar happens to be carrying. */
+  const bar = $("buildBar");
+  if (bar) document.documentElement.style.setProperty("--buildbar-h",
+             Math.round(bar.getBoundingClientRect().height) + "px");
+  if (previewFull) refreshPreview();
+  fitPreview();
+});
+
+/* On a roomy screen the preview sits along the bottom at the shape of a real
+   lesson rather than a squashed one: the frame is laid out at a proper size
+   and then scaled down, so text inside it stays in proportion. */
+function fitPreview(){
+  const frame = $("prev");
+  const box = document.querySelector(".build-preview");
+  if (!frame || !box) return;
+  const roomy = isCompact() && isRoomy() && !previewFull;
+  if (!roomy){
+    frame.style.removeProperty("width");
+    frame.style.removeProperty("height");
+    frame.style.removeProperty("transform");
+    const h = box.querySelector(".prev-hold");
+    if (h){ h.style.removeProperty("height"); h.style.removeProperty("width"); h.style.removeProperty("margin"); }
+    box.classList.remove("scaled");
+    const list = document.querySelector(".build-list");
+    if (list) list.style.removeProperty("padding-bottom");
+    return;
+  }
+  box.classList.add("scaled");
+  const holder = box.querySelector(".prev-hold") || box;
+  const w = box.clientWidth;              // the holder's own width is set below
+  if (!w) return;
+  const NATURAL = 1280;                       // laid out as a small laptop
+  const NAT_H = NATURAL * 9 / 16;
+  /* Never more than this much of the screen: the point of it is to watch a
+     lesson take shape while writing it, not to write in the strip left over
+     above a preview. */
+  const cap = Math.max(180, window.innerHeight * 0.36);
+  const scale = Math.min(w / NATURAL, cap / NAT_H);
+  frame.style.width = NATURAL + "px";
+  frame.style.height = Math.round(NAT_H) + "px";
+  frame.style.transform = "scale(" + scale + ")";
+  holder.style.height = Math.round(NAT_H * scale) + "px";
+  /* centred when the cap has made it narrower than the screen */
+  holder.style.width = Math.round(NATURAL * scale) + "px";
+  holder.style.margin = "0 auto";
+  /* Leave exactly as much room under the cards as the preview takes, so the
+     last task is reachable and there is no band of empty page either. */
+  const list = document.querySelector(".build-list");
+  if (list) list.style.paddingBottom = (box.getBoundingClientRect().height + 20) + "px";
+}
+
+try{
+  compactQ().addEventListener("change", applyBuildLayout);
+  roomyQ().addEventListener("change", () => { applyBuildLayout(); fitPreview(); });
+}catch(e){
+  compactQ().addListener(applyBuildLayout);      // older browsers
+  roomyQ().addListener(fitPreview);
+}
+window.addEventListener("resize", fitPreview);
+on("addPageBtn", "click", () => {
+  lesson.blocks.push(BLANK.page());
+  render(); schedulePreview();
+});
+
 /* ---------------- go ---------------- */
 loadDraft();
 if (!lesson.topics) lesson.topics = {};
@@ -2740,10 +3024,18 @@ if (!lesson.topics) lesson.topics = {};
 
 paintPickers();
 setMode(!!lesson.assessment && !lesson.practical, !!lesson.practical);
+applyBuildLayout();
 loadUnitsAndMaybeLesson();
 render();
 refreshPreview();
+fitPreview();
 if (window.initSettings) initSettings($("setBtn"));
+/* A fresh lesson on a narrow screen starts by asking what it is, because
+   the row of kinds that asks on a desktop is not on the page there. One
+   opened for editing already knows. */
+if (isCompact() && !new URLSearchParams(location.search).get("edit")){
+  setTimeout(() => { if (!modeChosen) modePicker(true); }, 300);
+}
 </script>
 </body>
 </html>

@@ -2758,6 +2758,116 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 }
 
 /* =====================================================================
+   THE BUILDER ON A TABLET OR A PHONE
+
+   Driven by data-build="compact" on <html>, set by the matchMedia in
+   author.html rather than by a media query alone, because the pieces are
+   moved about in the page as well as restyled and the two must agree.
+   ===================================================================== */
+.modechip{display:none}
+html[data-build=compact] .modechip{
+  display:inline-flex; align-items:center; gap:7px; padding:6px 12px;
+  border:1.5px solid var(--line-2); border-radius:999px; background:var(--panel);
+  font-family:var(--body); font-size:13px; font-weight:800; color:var(--text);
+  cursor:pointer; white-space:nowrap}
+.modechip:hover{border-color:var(--amber); color:var(--amber)}
+.modechip-pen{font-size:12px; opacity:.65}
+
+/* the one row of controls under the top bar */
+.buildbar{display:flex; align-items:center; gap:8px; padding:8px 14px;
+  background:var(--bar); border-bottom:1px solid var(--line)}
+.buildbar[hidden]{display:none}
+.buildbar-scroll{flex:1; min-width:0; display:flex; align-items:center; gap:8px;
+  overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+  scrollbar-width:none}
+.buildbar-scroll::-webkit-scrollbar{display:none}
+.buildbar-scroll > *{flex:0 0 auto}
+/* The preview switch never scrolls away with the rest, and stands clear of
+   whatever is sliding past behind it. */
+.prevtoggle{flex:0 0 auto; position:relative; z-index:2; background:var(--panel);
+  margin-left:4px; padding-left:12px; border-left:1px solid var(--line)}
+/* Inside the scrolling row the tabs stay on one line. The mobile rules make
+   every strip of controls wrap, which stacked them three deep here. */
+html[data-build=compact] .buildbar .subtabs{
+  margin:0; padding:4px; background:var(--panel-2); border:1px solid var(--line);
+  flex-wrap:nowrap !important; width:auto; max-width:none}
+html[data-build=compact] .buildbar .subtabs button{
+  padding:6px 13px; font-size:13.5px; white-space:nowrap}
+
+/* picking what kind of work this is */
+.modepick{display:flex; flex-direction:column; gap:8px; margin:14px 0 4px}
+.modepick-item{padding:15px 16px; border:1.5px solid var(--line-2); border-radius:12px;
+  background:var(--panel); font-family:var(--body); font-size:16px; font-weight:700;
+  color:var(--text); cursor:pointer; text-align:left}
+.modepick-item:hover{border-color:var(--amber); color:var(--amber)}
+/* the real year and unit pickers, borrowed by the Save pop-up */
+.savepickers{display:flex; flex-direction:column; gap:8px}
+.savepickers select{width:100%}
+
+html[data-build=compact]{
+  /* the whole page scrolls as one, rather than three columns each with
+     their own scrollbar */
+  --buildbar-h:54px;
+}
+html[data-build=compact], html[data-build=compact] body{height:auto; overflow:auto}
+html[data-build=compact] .modeswitch,
+html[data-build=compact] .build-top,
+html[data-build=compact] .build-palette{display:none}
+html[data-build=compact] .build{display:block; height:auto}
+html[data-build=compact] .build-list{padding:14px; overflow:visible; min-height:0}
+html[data-build=compact] .homebar{gap:8px; flex-wrap:wrap; row-gap:8px}
+html[data-build=compact] .homebar .title{flex:1 1 auto; min-width:0}
+html[data-build=compact] .homebar #consoleLink{order:5}
+html[data-build=compact] .build-actions{display:flex; align-items:center; gap:6px}
+html[data-build=compact] #saveSite{padding:8px 14px; font-size:14px}
+/* the tab strip that was folded into the row above */
+html[data-build=compact] > body #assessTabs{margin:0}
+
+/* --- the preview along the bottom, at the shape of a real lesson --- */
+html[data-build=compact] .build-preview{
+  position:fixed; left:0; right:0; bottom:0; z-index:40;
+  /* beats the 560px cap the wider tablet rules put on it: here the height
+     is whatever keeps the frame at 16 by 9 */
+  height:auto; grid-column:auto;
+  border-left:none; border-top:1px solid var(--line); background:var(--panel);
+  box-shadow:0 -6px 18px rgba(0,0,0,.10)}
+/* the frame's box must not be squeezed by the column it sits in, or the
+   shape it was scaled to is lost */
+html[data-build=compact] .prev-hold{overflow:hidden; background:var(--bg); flex:none}
+html[data-build=compact] .build-preview.scaled #prev{
+  transform-origin:top left; border:none; display:block; min-height:0;
+  /* laid out at a small laptop's width and then scaled down, so a cap of
+     100% would shrink it twice over and leave it in the corner */
+  max-width:none}
+/* room under the cards for it. The exact figure is set from the preview's
+   real height once it has one; this is only what to leave before then. */
+html[data-build=compact] .build-list{padding-bottom:340px}
+
+/* Too small to hold both at once: the preview takes the screen when it is
+   asked for, and nothing of it is on the page until then. */
+@media (max-width:699px), (max-height:819px){
+  html[data-build=compact] .build-preview{display:none}
+  html[data-build=compact] .build-list{padding-bottom:24px}
+}
+html[data-build=compact][data-preview=full] .build-preview{
+  display:flex; top:0; bottom:0; box-shadow:none; height:auto}
+html[data-build=compact][data-preview=full] .buildbar{
+  position:fixed; top:0; left:0; right:0; z-index:42}
+html[data-build=compact][data-preview=full] .build-preview{padding-top:var(--buildbar-h)}
+/* the compact rule pins the frame's box to the shape it was scaled to; in
+   here it has the whole screen instead, so it grows again */
+html[data-build=compact][data-preview=full] .prev-hold{
+  flex:1 1 auto !important; min-height:0; width:auto !important; height:auto !important;
+  margin:0 !important}
+html[data-build=compact][data-preview=full] #prev{
+  width:100%; height:100%; min-height:0; transform:none; max-width:none}
+/* the whole screen goes to the lesson: the refresh and full screen buttons
+   have nothing to do here */
+html[data-build=compact][data-preview=full] .prev-head{display:none}
+html[data-build=compact][data-preview=full] .build-list,
+html[data-build=compact][data-preview=full] .homebar{display:none}
+
+/* =====================================================================
    LOOKING AT WORK ON A TABLET OR A PHONE
 
    The two panes stop sitting side by side well before a phone: a 340px
