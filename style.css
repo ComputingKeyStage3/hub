@@ -187,15 +187,9 @@ body.lesson{
 /* docked footer */
 .dock{
   display:flex; align-items:center; gap:16px;
-  padding:10px 20px; background:var(--panel); border-top:1px solid var(--line);
+  padding:7px 20px; background:var(--panel); border-top:1px solid var(--line);
 }
 .dock .mid{flex:1; text-align:center; min-width:0}
-.lockmsg{
-  margin:0; font-size:16px; font-weight:600; color:var(--amber);
-  display:inline-flex; align-items:center; gap:9px;
-}
-.lockmsg::before{content:"🔒"; font-size:14px}
-.lockmsg[hidden]{display:none}
 .btn-continue{font-size:18px; padding:14px 30px; border-radius:10px}
 .btn-continue:disabled{background:var(--line); border-color:var(--line); color:var(--dim)}
 #backBtn:disabled{opacity:.35}
@@ -1338,7 +1332,7 @@ pre, code{overflow-wrap:anywhere}
   .subtabs button, .tabs button{white-space:nowrap}
 
   /* the bottom bar of a lesson */
-  .dock{padding:10px 14px; gap:8px}
+  .dock{padding:7px 14px; gap:8px}
   .btn-continue{font-size:16px; padding:12px 18px}
   .done-title{font-size:32px}
   .done-score{font-size:44px}
@@ -2097,7 +2091,7 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   .crumbbar{ padding:6px 12px; font-size:13px }
 
   /* --- the bar at the bottom of a lesson --- */
-  .dock{ padding:8px 12px; gap:6px }
+  .dock{ padding:6px 12px; gap:6px }
   .btn-continue{ font-size:15px; padding:9px 14px }
   .done-save{ font-size:14px }
 
@@ -2693,7 +2687,7 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 
 /* --- the bar along the bottom of a lesson --- */
 .dock{
-  padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px));
+  padding-bottom:calc(6px + env(safe-area-inset-bottom, 0px));
 }
 
 /* --- anything else measured against the screen --- */

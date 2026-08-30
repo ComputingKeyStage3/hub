@@ -6,6 +6,8 @@
 <title>Viewing student work</title>
 <link rel="stylesheet" href="style.css">
 <script src="config.js"></script>
+<script src="worklink.js"></script>
+<script src="settings.js"></script>
 </head>
 <body class="workpage">
 
@@ -20,7 +22,7 @@
 
 <!-- ================= seating plan ================= -->
 <div id="loadPane" class="workwrap loadpane">
-  <p class="loadmsg">Loading the class\u2019s work\u2026</p>
+  <p class="loadmsg">Loading the class’s work…</p>
 </div>
 
 <div id="seatPane" class="workwrap" hidden>
@@ -152,8 +154,13 @@ const H = () => ({ "x-teacher-key": KEY() });
 const HJ = () => ({ "Content-Type":"application/json", "x-teacher-key": KEY() });
 
 const qs = new URLSearchParams(location.search);
-const lessonId = qs.get("lesson") || "";
+/* A link handed in by a student carries the lesson on "id"; the console
+   opens this page with "lesson" and a class alongside it. */
+const lessonId = qs.get("lesson") || qs.get("id") || "";
 const cls = qs.get("group") || "";
+const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
+let handedIn = null;          // the work that arrived on the address
+let markedLink = "";          // what to hand back once it has been marked
 
 let lessonJson = null;
 let roster = [];        // everyone in the class, alphabetical
@@ -166,6 +173,7 @@ let lastStep = 0;                                     // the page being looked a
 
 /* ---------------- getting everything ---------------- */
 async function boot(){
+  if (OFFLINE){ return bootFromLink(); }
   if (!API || !KEY()){
     $("seatMsg").textContent = "Open this from the teacher console so it knows your key.";
     return;
@@ -201,6 +209,43 @@ async function boot(){
     $("seatMsg").textContent = e.message;
   }
 }
+/* ---------------- one student, arriving on a link (no server) ----------------
+   The whole hand-in is in the address, so there is no class to page through
+   and no seating plan to draw. Everything else on this page works as it does
+   online: the same viewer, the same feedback boxes down the right. */
+async function bootFromLink(){
+  const shut = (why) => { $("loadPane").querySelector(".loadmsg").textContent = why; };
+  if (!window.workLink || !window.workLink.supported)
+    return shut("This browser cannot read work links. Ask for the work as a PDF instead.");
+  handedIn = await window.workLink.readHash();
+  if (!handedIn)
+    return shut("Open a student's work link to mark it. There is nothing to show on its own.");
+  if (handedIn.kind === "broken")
+    return shut("The work could not be read out of this link. It was probably cut short on its way here. Ask for it again.");
+
+  try{ lessonJson = await fetchLesson(); }
+  catch(e){ return shut(e.message); }
+
+  /* One student, made to look like a class of one so the rest of the page
+     does not have to know the difference. */
+  const name = handedIn.n || "A student";
+  roster = [{ username: "link", display_name: name }];
+  rows = [{ username: "link", display_name: name, data: handedIn.d || {},
+            feedback: handedIn.fb ? JSON.stringify(handedIn.fb) : "" }];
+  if (handedIn.mk) marks.link = { score: handedIn.mk.score, outOf: handedIn.mk.outOf, grade: handedIn.mk.grade || "" };
+
+  /* No class, so nothing to seat and nobody to page to. */
+  document.querySelector(".worktabs").hidden = true;
+  ["prevStu","nextStu","stuPick"].forEach(id => { const e = $(id); if (e) e.remove(); });
+
+  $("barTitle").textContent = "Marking " + name + " • " +
+    (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
+  document.title = "Marking " + name;
+  $("loadPane").hidden = true;
+  tab("work");
+  showStudent(0);
+}
+
 async function fetchLesson(){
   try{
     const r = await fetch("lessons/" + encodeURIComponent(lessonId) + ".json", { cache:"no-store" });
@@ -376,6 +421,7 @@ on("saveSeats", "click", async () => {
 /* ---------------- one student's work ---------------- */
 function paintPicker(){
   const sel = $("stuPick");
+  if (!sel) return;             // a single hand-in has nobody to page between
   sel.innerHTML = "";
   roster.forEach((st, i) => {
     const o = document.createElement("option");
@@ -641,6 +687,7 @@ on("fbGrade", "change", showGradeHelp);
 async function saveFeedback(){
   const st = roster[idx];
   if (!st) return;
+  if (OFFLINE) return handBack();
   $("fbMsg").textContent = "Saving\u2026";
   try{
     const r = await fetch(API + "/api/teacher/feedback", { method:"POST", headers: HJ(),
@@ -675,6 +722,88 @@ async function saveFeedback(){
     $("fbMsg").textContent = "Saved.";
   }catch(e){ $("fbMsg").textContent = e.message; }
 }
+
+/* ---------------- handing marked work back (no server) ----------------
+   There is nowhere to save it to, so the marking goes into a new link and
+   the student opens that. It carries their work as well as the marking, so
+   what comes back is the whole thing rather than a note about it. */
+async function handBack(){
+  const st = roster[idx];
+  const row = rows.find(x => x.username === st.username) || {};
+  const fb = {
+    strength: showing("Strength") ? $("fbStrength").value : "",
+    target: showing("Target") ? $("fbTarget").value : "",
+    comment: $("fbComment").value
+  };
+  const box = { n: st.display_name, l: lessonId, d: row.data || {}, fb: fb };
+
+  if (lessonJson && lessonJson.practical){
+    const rubric = usesRubric();
+    const grade = rubric ? $("fbGrade").value : "";
+    const total = lessonJson.outOf || 20;
+    if (rubric ? grade : $("fbScore").value !== ""){
+      box.mk = { score: rubric ? 0 : (parseInt($("fbScore").value, 10) || 0),
+                 outOf: rubric ? 1 : total, grade: grade };
+      marks[st.username] = box.mk;
+    }
+  }
+  if (markOverrides) box.ov = markOverrides;
+  row.feedback = JSON.stringify(fb);
+
+  $("fbMsg").textContent = "Making the link\u2026";
+  try{
+    const blob = await window.workLink.pack(box);
+    const url = new URL("lesson.html", location.href);
+    url.search = "?id=" + encodeURIComponent(lessonId);
+    url.hash = "f=" + blob;
+    markedLink = url.href;
+    if (markedLink.length > window.workLink.MAX){
+      $("fbMsg").textContent = "That is too long to send as a link. Shorten the feedback.";
+      return;
+    }
+    $("fbMsg").textContent = "";
+    showMarkedLink();
+  }catch(e){ $("fbMsg").textContent = "The link could not be made."; }
+}
+
+function showMarkedLink(){
+  let copied = false;
+  try{ navigator.clipboard.writeText(markedLink); copied = true; }catch(e){}
+  openModal(box => {
+    box.appendChild(el("h2","","Send this back"));
+    box.appendChild(el("p","modal-text",
+      roster[idx].display_name + " opens this to see their marked work."));
+    const field = el("input");
+    field.type = "text"; field.className = "worklink"; field.readOnly = true;
+    field.value = markedLink;
+    box.appendChild(field);
+    const note = el("p","handin");
+    if (copied){ note.dataset.state = "done"; note.textContent = "Copied \u2713"; }
+    box.appendChild(note);
+    const copy = el("button","btn-primary modal-cta", copied ? "Copy it again" : "Copy the link");
+    copy.addEventListener("click", async () => {
+      try{
+        await navigator.clipboard.writeText(markedLink);
+        note.dataset.state = "done"; note.textContent = "Copied \u2713";
+        copy.textContent = "Copy it again";
+      }catch(e){
+        field.focus(); field.select();
+        note.dataset.state = ""; note.textContent = "Press Ctrl and C to copy it.";
+      }
+    });
+    box.appendChild(copy);
+    const done = el("button","btn-ghost modal-stay","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+    setTimeout(() => { field.focus(); field.select(); }, 30);
+  });
+}
+
+/* Marks the teacher changed question by question, sent up from the viewer. */
+let markOverrides = null;
+window.addEventListener("message", (e) => {
+  if (e && e.data && e.data.hubMarks) markOverrides = e.data.hubMarks;
+});
 
 if (window.initSettings) initSettings(null);
 boot();

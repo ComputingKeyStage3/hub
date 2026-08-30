@@ -13,6 +13,7 @@
 <script src="richtext.js"></script>
 <script src="tasks-extra.js"></script>
 <script src="config.js"></script>
+<script src="worklink.js"></script>
 <script src="settings.js"></script>
 </head>
 <body class="lesson">
@@ -49,9 +50,7 @@
 
 <div class="dock" id="dock">
   <button class="btn-ghost" id="backBtn">&larr; Back</button>
-  <div class="mid">
-    <p class="lockmsg" id="lockMsg" aria-live="polite"></p>
-  </div>
+  <div class="mid"></div>
   <span id="bypassDot" role="button" tabindex="0" aria-label="Teacher options">&#183;</span>
   <span class="btn-wrap" id="btnWrap">
     <button class="btn-primary btn-continue" id="nextBtn">Continue &rarr;</button>
@@ -157,6 +156,8 @@ function hasContent(v){
    plain comment; newer ones store a strength, a target and a comment. */
 let teacherNote = null;
 let myResult = null;      // the mark or grade a teacher has given
+let markOverrides = null; // marks a teacher changed by hand, question by question
+let handedIn = null;      // whatever arrived on the address, work or marked work
 function parseFeedback(raw){
   if (!raw) return null;
   let f = null;
@@ -197,6 +198,22 @@ async function loadMyMark(){
 
 function showFeedback(raw){
   teacherNote = parseFeedback(raw);
+}
+
+/* Putting a link's contents back on the page. Used by a teacher opening a
+   hand-in and by a student opening the marked one that comes back, because
+   they are the same envelope with more in it the second time. */
+function applyHandedIn(box){
+  const d = (box && box.d) || {};
+  Object.keys(d).forEach(k => {
+    if (!k.startsWith("__") && fields[k]){ try{ fields[k].set(d[k]); }catch(e){} }
+  });
+  if (typeof d.__step === "number") step = Math.min(Math.max(d.__step, 0), steps.length - 1);
+  restoredData = d;
+  wasDone = !!d.__done;
+  if (box && box.fb) teacherNote = parseFeedback(JSON.stringify(box.fb));
+  if (box && box.mk) myResult = { score: box.mk.score, outOf: box.mk.outOf, grade: box.mk.grade || "" };
+  if (box && box.ov) markOverrides = box.ov;
 }
 /* the card shown on the finished screen, matching an assessment's */
 /* Everything they did, on one scrollable page, in a pop-up. */
@@ -325,6 +342,13 @@ function strHash(s){ let x = 5381; for (const c of s) x = ((x << 5) + x + c.char
 function normLetters(s){ return (s || "").toUpperCase().replace(/[^A-Z]/g, ""); }
 function wordCount(s){ return (s || "").trim().split(/\s+/).filter(Boolean).length; }
 function stripTags(s){ return String(s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(); }
+/* Keeps bold, italics and code, but drops the paragraph a formatting box
+   wraps round them: a <p> inside a heading is not a heading any more. */
+function inlineHtml(s){
+  return String(s || "")
+    .replace(/<\/?(p|div|h[1-6]|ul|ol|li|br|blockquote)[^>]*>/gi, " ")
+    .replace(/\s+/g, " ").trim();
+}
 
 /* ---------- autosave into this browser ----------
    No network, so we can save immediately on every change. A short debounce
@@ -430,7 +454,6 @@ if (OFFLINE){
    screenshot or a whiteboard therefore keep the PDF instead, and there is
    a length check behind that in case some other task grows unexpectedly.
    ===================================================================== */
-const LINK_MAX = 8000;          // beyond this a chat client is likely to mangle it
 const HEAVY_TASKS = ["image", "board"];
 
 /* Screenshots and whiteboards can sit inside a page, so this looks all the
@@ -441,7 +464,7 @@ function hasHeavyTask(blocks){
 }
 function linkPossible(){
   return OFFLINE && !spectate && lesson && !hasHeavyTask(lesson.blocks)
-         && typeof CompressionStream !== "undefined";
+         && window.workLink && window.workLink.supported;
 }
 
 /* The top right button cannot know which it is until the lesson has loaded
@@ -453,67 +476,21 @@ function paintTopSave(){
   if (b && OFFLINE && !spectate) b.textContent = topSaveLabel();
 }
 
-function toBase64Url(bytes){
-  let bin = "";
-  bytes.forEach(b => { bin += String.fromCharCode(b); });
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function fromBase64Url(text){
-  const pad = String(text).replace(/-/g, "+").replace(/_/g, "/");
-  const bin = atob(pad + "=".repeat((4 - pad.length % 4) % 4));
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-/* A damaged link fails on both halves of the stream at once, and the writer's
-   half has nobody waiting on it, so its rejection has to be swallowed here or
-   it surfaces as an uncaught error even though the reader handled it. */
-function feed(stream, bytes){
-  const w = stream.writable.getWriter();
-  w.write(bytes).catch(() => {});
-  w.close().catch(() => {});
-}
-async function squash(text){
-  const cs = new CompressionStream("deflate-raw");
-  feed(cs, new TextEncoder().encode(text));
-  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
-}
-async function unsquash(bytes){
-  const ds = new DecompressionStream("deflate-raw");
-  feed(ds, bytes);
-  return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer());
-}
-
 /* The address a student hands their teacher, or null if this lesson's work
-   is too heavy to travel in one. Short keys because every character counts. */
+   is too heavy to travel in one. It opens the marking viewer, so a teacher
+   lands where the feedback boxes are rather than on a read-only page. */
 async function buildWorkLink(){
   if (!linkPossible()) return null;
-  const payload = JSON.stringify({
+  const blob = await window.workLink.pack({
     n: localStorage.getItem("hub_name") || "",
+    l: lessonId,
     d: snapshot()
   });
-  const blob = toBase64Url(await squash(payload));
-  const url = new URL("lesson.html", location.href);
-  url.search = "?id=" + encodeURIComponent(lessonId) + "&view=1";
+  const url = new URL("work.html", location.href);
+  url.search = "?id=" + encodeURIComponent(lessonId);
   url.hash = "w=" + blob;
   const full = url.href;
-  return full.length > LINK_MAX ? null : full;
-}
-
-/* Reading one back. Returns null for anything that is not a work link, or
-   for one that arrived damaged, so the page can say so plainly. */
-async function readWorkLink(){
-  const raw = location.hash || "";
-  if (raw.indexOf("#w=") !== 0) return null;
-  try{
-    const text = await unsquash(fromBase64Url(raw.slice(3)));
-    const box = JSON.parse(text);
-    if (!box || !box.d) return null;
-    return box;
-  }catch(e){
-    console.error("work link could not be read:", e);
-    return null;
-  }
+  return full.length > window.workLink.MAX ? null : full;
 }
 
 /* The hand-in itself: the link on screen, already copied, and selected so
@@ -784,7 +761,15 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
     /* Asked before anything is restored: a name change means a different
        child, and the work waiting on this machine is cleared, so restoring
        first would put the last one's answers on screen. */
-    if (OFFLINE && !spectate){ paintTopSave(); await nameGate(l.title); }
+    if (OFFLINE){
+      handedIn = await window.workLink.readHash();
+      if (!spectate){
+        paintTopSave();
+        /* Work coming back marked already knows whose it is, and they are
+           not starting a lesson, so there is nothing to ask them. */
+        if (!(handedIn && handedIn.kind === "marked")) await nameGate(l.title);
+      }
+    }
     try{ await loadSaved(); }
     finally{ restoreDone = true; }      // saving is allowed from here on
     if (spectate){
@@ -815,7 +800,11 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
         return;
       }
       if (document.body.classList) document.body.classList.add("spectating");
-      teacherTools = viewParam !== null && allParam === null && embedParam === null;
+      /* Embedded in the marking viewer the console usually keeps the marks
+         panel to itself, but without a server that viewer has no way to add
+         marks up on its own, so the panel travels inside the frame and posts
+         what it collects back out. */
+      teacherTools = viewParam !== null && allParam === null && (embedParam === null || OFFLINE);
       if (allParam !== null){ showEverything(); return; }
       if (keepStep !== null && keepStep >= 0 && keepStep < steps.length) step = keepStep;
       if (embedParam !== null){
@@ -903,6 +892,21 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
       }
       return;
     }
+    /* A marked link that lost characters on the way back. Saying so beats
+       showing them the lesson as though nothing had been sent. */
+    if (linkBroken){
+      hideLoader();
+      $("briefTitle").textContent = "This link is damaged";
+      $("briefText").textContent = "";
+      $("dock").classList.add("gone");
+      const box = el("section","station");
+      box.appendChild(el("p","err",
+        "Your marked work could not be read out of this link. It was probably cut " +
+        "short on its way here. Ask your teacher to send it again."));
+      $("blocks").innerHTML = "";
+      $("blocks").appendChild(box);
+      return;
+    }
     if (wasDone){
       /* A mark or feedback added after they finished has to be fetched before
          the summary is drawn, or it shows as though nothing was left. */
@@ -947,21 +951,15 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
 async function loadSaved(){
   if (spectate){
     if (viewParam !== null || pdfParam !== null){
-      /* A link the student handed in carries the work itself, so there is
-         nothing on this machine to look up. It takes precedence over
-         hub_inspect: a teacher opening a link means to see that link. */
-      const handed = await readWorkLink();
-      if (handed){
-        inspectName = handed.n || "";
-        const d = handed.d || {};
-        Object.keys(d).forEach(k => {
-          if (!k.startsWith("__") && fields[k]){ try{ fields[k].set(d[k]); }catch(e){} }
-        });
-        if (typeof d.__step === "number") step = Math.min(Math.max(d.__step, 0), steps.length - 1);
-        restoredData = d; wasDone = !!d.__done;
+      /* A link carries the work itself, so there is nothing on this machine
+         to look up. It takes precedence over hub_inspect: opening a link
+         means to see that link. */
+      if (handedIn && handedIn.kind !== "broken"){
+        inspectName = handedIn.n || "";
+        applyHandedIn(handedIn);
         return;
       }
-      if ((location.hash || "").indexOf("#w=") === 0) linkBroken = true;
+      if (handedIn) linkBroken = true;
       try{
         let box = JSON.parse(localStorage.getItem("hub_inspect") || "null");
         if (box && Array.isArray(box.list) && box.list.length){
@@ -986,6 +984,15 @@ async function loadSaved(){
     }
     return;
   }
+  /* Marked work coming back to the student it belongs to. It stands in for
+     everything below: what the teacher sent is newer than anything sitting
+     in this browser, and it is the only copy carrying the feedback. */
+  if (handedIn && handedIn.kind === "marked"){
+    applyHandedIn(handedIn);
+    wasDone = true;
+    return;
+  }
+  if (handedIn && handedIn.kind === "broken"){ linkBroken = true; return; }
   /* Priority: 1) this browser's saved copy, costs nothing, no network.
      2) only if that is EMPTY and the student is signed in, ask the server
         once (covers wiped profiles and switching computers). A first-ever
@@ -1079,7 +1086,9 @@ function showStep(i){
   const b = (typeof sb === "function") ? sb() : sb;
   /* an empty heading or subtitle takes up no room at all */
   const bt = b.title || "", bx = b.text || "";
-  $("briefTitle").textContent = bt;
+  /* Headings can come from a formatting box now, so bold and code inside one
+     survive. innerHTML, not textContent, or the tags would be read out. */
+  $("briefTitle").innerHTML = bt;
   $("briefTitle").hidden = !bt;
   $("briefText").textContent = bx;
   $("briefText").hidden = !bx;
@@ -1091,15 +1100,11 @@ function showStep(i){
   refreshGate();
 }
 function refreshGate(){
-  const s = steps[step];
-  if (!s) return;
-  const res = bypassed ? { ok:true } : s.check();
-  /* Continue is never locked. A task that is not finished says so quietly
-     under the button, and pressing it brings up a word of encouragement they
-     can move past. Being stuck with no way forward helps nobody. */
+  /* Continue is never locked, and nothing is written along the bottom bar
+     any more. A task that is not finished says so when Continue is pressed,
+     which is the moment it matters; a standing message there was read as a
+     bar on going forward, which it never was. */
   $("nextBtn").disabled = false;
-  $("lockMsg").textContent = res.ok ? "" : (res.message || "There is still something to do here.");
-  $("lockMsg").hidden = res.ok;
 }
 $("backBtn").addEventListener("click", () => {
   const b = nextOpen(step - 1, -1);
@@ -3590,7 +3595,7 @@ function rShort(b){
   fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; } };
   return { section:s,
            check:() => ta.value.trim() ? { ok:true } : { ok:false, message:"Write an answer" },
-           brief:{ eyebrow:"Short answer", title:stripTags(b.prompt) || "", text:b.note || "" } };
+           brief:{ eyebrow:"Short answer", title:inlineHtml(b.prompt) || "", text:b.note || "" } };
 }
 
 /* ---------- marking ---------- */
@@ -3634,6 +3639,10 @@ function computeAssessment(){
       pts = groups.length && groups.every(g => g.ok) ? 1 : 0;
       review = { yours: String(v || "").trim() || "(not answered)", groups, model: b.model || "" };
     }
+    /* A teacher can disagree with the automatic marking, and their word is
+       final. Their marks arrive with the work in the link that comes back. */
+    const ov = markOverrides && markOverrides.overrides;
+    if (ov && ov[b.id] !== undefined) pts = Math.max(0, Math.min(max, Number(ov[b.id]) || 0));
     score += pts; outOf += max;
     perQ.push({ id: b.id, n, type: b.type, title: stripTags(b.prompt || b.title || b.id), pts, max, review });
     const topic = b.topic || "general";
@@ -3757,9 +3766,19 @@ function renderPracticalComplete(){
   }
 
   /* the same way into their work as a marked assessment has */
-  const seeBtn = el("button","btn-primary done-save fadein","View my work");
+  const seeBtn = el("button", (OFFLINE ? "btn-ghost" : "btn-primary") + " done-save fadein", "View my work");
   seeBtn.addEventListener("click", () => openWorkPopup());
   hero.appendChild(seeBtn);
+
+  /* Online this work is already with the teacher. Offline nothing has gone
+     anywhere until they hand it over, and a practical is the one screen that
+     never had a way to. */
+  if (OFFLINE && !spectate && !marked){
+    const status = el("p","handin");
+    hero.appendChild(status);
+    hero.appendChild(saveButton(status));
+    if (linkPossible()) hero.appendChild(pdfButton(status, false));
+  }
 
   const fb = feedbackCard(teacherNote);
   /* Nothing to put beside it until a teacher has been, so it sits alone. */
@@ -4014,10 +4033,26 @@ function markEditor(res){
   const msg = el("p","hint","");
   const save = el("button","btn-primary","Save marks");
   save.addEventListener("click", async () => {
-    if (!who){ msg.textContent = "Could not tell which student this is."; return; }
-    msg.textContent = "Saving\u2026";
     const overrides = {};
     rows.forEach(r => { overrides[r.id] = Math.max(0, Math.min(r.max, parseInt(r.input.value, 10) || 0)); });
+    /* Without a server there is nobody to save a mark against. The marking
+       viewer around this page collects it instead and sends it back to the
+       student inside the link it builds, so here it only has to travel up
+       one frame. */
+    if (OFFLINE){
+      const box = { overrides: overrides, score: sum(), outOf: outOf };
+      try{
+        if (window.parent && window.parent !== window){
+          window.parent.postMessage({ hubMarks: box }, "*");
+          msg.textContent = "Kept. Press Save feedback to send it back.";
+        } else {
+          msg.textContent = "Open this from a student's work link to send the marks back.";
+        }
+      }catch(e){ msg.textContent = "Those marks could not be passed on."; }
+      return;
+    }
+    if (!who){ msg.textContent = "Could not tell which student this is."; return; }
+    msg.textContent = "Saving\u2026";
     try{
       const reply = await teacherPost("set-mark", { username: who.username, lesson: lessonId,
         overrides: overrides, score: sum(), outOf: outOf });

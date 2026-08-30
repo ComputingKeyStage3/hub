@@ -65,6 +65,14 @@
           <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
         </div>
       </div>
+      <div class="palgroup" data-group="checks">
+        <button class="pal-head" type="button">Checking understanding</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
+          <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
+          <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
+        </div>
+      </div>
       <div class="palgroup" data-group="media">
         <button class="pal-head" type="button">Media</button>
         <div class="palbody" hidden>
@@ -74,12 +82,6 @@
           <button class="pal" data-add="link"><b>Link to a site</b><span>Send them somewhere</span></button>
         </div>
       </div>
-      <div class="palgroup" data-group="coding">
-        <button class="pal-head" type="button">Coding</button>
-        <div class="palbody" hidden>
-          <button class="pal" data-add="code"><b>Coding task</b><span>Python, or HTML + CSS + JS</span></button>
-        </div>
-      </div>
       <div class="palgroup" data-group="thinking">
         <button class="pal-head" type="button">Thinking and notes</button>
         <div class="palbody" hidden>
@@ -87,6 +89,12 @@
           <button class="pal" data-add="mindmap"><b>Mind map</b><span>A middle idea with branches</span></button>
           <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
+        </div>
+      </div>
+      <div class="palgroup" data-group="coding">
+        <button class="pal-head" type="button">Coding</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="code"><b>Coding task</b><span>Python, or HTML + CSS + JS</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="cyber">
@@ -101,14 +109,6 @@
         <div class="palbody" hidden>
           <button class="pal" data-add="binary"><b>Binary conversion</b><span>Binary to denary and back</span></button>
           <button class="pal" data-add="binadd"><b>Binary addition</b><span>Column addition with carries</span></button>
-        </div>
-      </div>
-      <div class="palgroup" data-group="checks">
-        <button class="pal-head" type="button">Checking understanding</button>
-        <div class="palbody" hidden>
-          <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
-          <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
-          <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="handin">
@@ -320,15 +320,6 @@ function compile(){
   const out = { title: lesson.title || "Untitled lesson", blocks: [] };
   if (lesson.intro) out.intro = lesson.intro;
   if (lesson.unit) out.unit = lesson.unit;
-  if (lesson.year) out.year = lesson.year;
-  if (lesson.homework) out.homework = true;
-  if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
-  if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
-  if (lesson.practical){
-    out.marking = lesson.marking || "rubric";
-    if (out.marking === "score") out.outOf = lesson.outOf || 20;
-    else out.rubric = (lesson.rubric || []).filter(g => g.name);
-  }
   if (lesson.year) out.year = lesson.year;
   if (lesson.homework) out.homework = true;
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
@@ -948,9 +939,11 @@ function card(b, i, arr){
       box.appendChild(qh);
       const qw = el("div","bfield");
       qw.appendChild(el("label","","Question"));
-      const qt = el("textarea"); qt.rows = 2; qt.value = q.q || "";
-      qt.addEventListener("input", () => { q.q = qt.value; saveDraft(); schedulePreview(); });
-      qw.appendChild(qt); box.appendChild(qw);
+      /* A quiz question can want a line of code or a bold word in it, so it
+         gets the same formatting bar as everything else a teacher writes. */
+      qw.appendChild(window.richText(q.q || "",
+        (html) => { q.q = html; saveDraft(); schedulePreview(); }, { rows: 2 }));
+      box.appendChild(qw);
       if (!q.answers) q.answers = [q.answer === undefined ? 0 : q.answer];
       const ow = el("div","bfield");
       const many = q.answers.length > 1;
@@ -1069,7 +1062,7 @@ function card(b, i, arr){
     toggleRow([["confirm","Confirmation", false]]);
   }
   if (b.type === "mc"){
-    F("Question", "prompt", { area:true, rows:2 });
+    R("Question", "prompt", { rows:2 });
     listField("Options (tick the right one)", "options");
     if (lesson.assessment) F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
   }
@@ -1303,7 +1296,7 @@ function card(b, i, arr){
     }
   }
   if (b.type === "short"){
-    F("Question", "prompt", { area:true, rows:2 });
+    R("Question", "prompt", { rows:2 });
     F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by ,, e.g. loop, repeat; count" });
     F("What each group means", "keywordLabels", { help:"One phrase per group, separated by ;, students see these when they check their answer." });
     F("Model answer", "model", { area:true, rows:2 });
@@ -1380,14 +1373,6 @@ on("modeLesson", "click", () => {
 });
 on("modeAssess", "click", () => setMode(true, false));
 on("modePractical", "click", () => { lesson.homework = false; setMode(false, true); });
-/* A practical is marked by hand against a rubric, in the console, against a
-   class. None of that exists without a server, so the button goes rather than
-   offering a kind of lesson nobody could ever mark. */
-if (OFFLINE){
-  const pr = $("modePractical");
-  if (pr) pr.remove();
-  if (lesson.practical){ lesson.practical = false; setMode(false, false); }
-}
 on("modeHome", "click", () => {
   /* the same as a lesson in every way, but students see it as home learning */
   lesson.homework = true;
