@@ -1740,27 +1740,27 @@ function hlLine(line, state){
    word in the editor shows the matching note. */
 const PY_HELP = {
   print:"Shows something on the screen.",
-  input:"Waits for the person to type something, and gives back what they typed.",
-  int:"Turns something into a whole number, like \"7\" into 7.",
-  str:"Turns something into text.",
-  float:"Turns something into a decimal number, like 2.5.",
-  len:"Tells you how long something is, how many letters or items.",
-  range:"Makes a list of numbers to count through, like range(5) for 0 to 4.",
-  list:"Makes a list, which holds several things in order.",
-  dict:"Makes a dictionary, which stores pairs like name \u2192 value.",
-  round:"Rounds a decimal number to the nearest whole number.",
-  abs:"Gives a number without its minus sign.",
+  input:"Stops and waits for the person to type, then hands the typing back as text. Store it in a variable to keep it.",
+  int:"Makes a whole number out of something, like \"7\" into 7. Anything with a decimal point loses it.",
+  str:"Makes text out of something, so a number can be joined onto words.",
+  float:"Makes a decimal number out of something, like \"2.5\" into 2.5.",
+  len:"Gives the number of items in a list, or the number of characters in some text.",
+  range:"Counts from 0 up to but not including the number, so range(5) gives 0, 1, 2, 3, 4.",
+  list:"Makes a list, which holds several things in order and can be changed.",
+  dict:"Makes a dictionary, which stores pairs so you can look a value up by its name.",
+  round:"Rounds to the nearest whole number. Exact halves go to the nearest even one, so round(2.5) is 2.",
+  abs:"Gives how far a number is from zero, so the minus sign is dropped.",
   min:"Gives the smallest of the numbers.",
   max:"Gives the biggest of the numbers.",
   sum:"Adds up all the numbers in a list.",
-  sorted:"Puts a list in order.",
-  random:"A toolbox for picking things by chance.",
+  sorted:"Gives back a new list in order. The original list is left as it was.",
+  random:"A toolbox for picking things by chance. Needs import random at the top first.",
   if:"Does something only when a condition is true.",
   elif:"Another condition to try when the ones above were false.",
   else:"What to do when none of the conditions above were true.",
   for:"Repeats something once for each item, like every number in a range.",
   while:"Keeps repeating for as long as a condition stays true.",
-  break:"Stops a loop straight away.",
+  break:"Leaves the loop straight away, without finishing the rest of it.",
   continue:"Skips the rest of this time round the loop and starts the next one.",
   def:"Makes your own command that you can use again later.",
   return:"Sends a value back out of your own command.",
@@ -1775,14 +1775,14 @@ const PY_HELP = {
   None:"Means nothing at all, no value yet.",
   try:"Attempts something that might go wrong.",
   except:"What to do if the code in try went wrong.",
-  class:"Makes a new kind of thing, with its own information and commands.",
+  class:"A blueprint for making things that each carry their own information.",
   pass:"Does nothing, a placeholder to keep the code valid.",
-  global:"Lets a command change a variable made outside it.",
-  lambda:"A tiny command written on one line.",
-  with:"Uses something and tidies it away afterwards.",
-  type:"Tells you what kind of thing something is.",
-  enumerate:"Counts as it goes through a list, giving position and item.",
-  zip:"Walks through two lists side by side."
+  global:"Lets a command change a variable that was made outside it, instead of making its own.",
+  lambda:"A very short command written on one line, with no name of its own.",
+  with:"Opens something, such as a file, and closes it again when the block ends.",
+  type:"Tells you what kind of value something is, such as a number or some text.",
+  enumerate:"Goes through a list giving both the position, counting from 0, and the item.",
+  zip:"Goes through two lists side by side, stopping when the shorter one runs out."
 };
 
 /* ---------- spotting mistakes before the code is even run ---------- */
@@ -1868,8 +1868,18 @@ function saveIdePrefs(p){ try{ localStorage.setItem("hub_ide", JSON.stringify(p)
 
 /* The checklist a teacher attached to a coding task. It sits above the
    editor so a student can see what is being asked before they start. */
+/* Which lines of a checklist came out right, as plain true and false, so a
+   saved piece of work carries its own marking rather than needing the code
+   re-run to find out. */
+function checkFlags(checklist){
+  const res = checklist.results ? checklist.results() : null;
+  if (!Array.isArray(res)) return undefined;
+  return res.map(r => !!(r && r.ok));
+}
+
 function attachChecklist(section, checks, runner){
   if (!checks || !checks.length || !window.buildChecklist) return null;
+  let last = null;                    // what the checks said the last time they ran
   const list = window.buildChecklist(checks);
   const holder = el("div","checklist-wrap");
   holder.appendChild(list);
@@ -1886,11 +1896,15 @@ function attachChecklist(section, checks, runner){
       return false;
     }
     if (!Array.isArray(results)) return false;
+    last = results;
     const all = list.show(results);
     markDirty();
     return all;
   }
-  return { list, refresh, done: () => list.dataset.allDone === "yes" };
+  /* An assessment adds a coding task up from these, so the result of the last
+     run has to be readable rather than only drawn on the page. */
+  return { list, refresh, done: () => list.dataset.allDone === "yes",
+           results: () => last };
 }
 
 function rIDE(b){
@@ -2187,7 +2201,8 @@ function rIDE(b){
   });
 
   fields[b.id] = {
-    get:() => ({ code: ta.value, out: lastOut.slice(0, 4000), ran: ran }),
+    get:() => ({ code: ta.value, out: lastOut.slice(0, 4000), ran: ran,
+                 checks: checklist ? checkFlags(checklist) : undefined }),
     set:(v) => {
       if (!v) return;
       if (typeof v === "string"){ ta.value = v; repaint(); return; }
@@ -2722,7 +2737,8 @@ function rWeb(b){
       const extra = {};
       order.forEach(n => { if (!starters.hasOwnProperty(n)) extra[n] = { kind:kindOf[n], code:code[n] }; });
       return { html: code[NAMES.html] || "", css: code[NAMES.css] || "", js: code[NAMES.js] || "",
-               extra: extra, ran: ran };
+               extra: extra, ran: ran,
+               checks: checklist ? checkFlags(checklist) : undefined };
     },
     set:(v) => {
       if (!v) return;
@@ -3665,7 +3681,13 @@ function computeAssessment(){
   const perQ = [], byTopic = {};
   let score = 0, outOf = 0, n = 0;
   lesson.blocks.forEach((b) => {
-    if (!["mc","order","blanks","short"].includes(b.type)) return;
+    /* A coding task is marked by its checklist: each line is worth whatever
+       the teacher put against it. Without marks on the lines there is nothing
+       to add up, so it is left out of the score entirely. */
+    const codingMarks = (b.type === "ide" || b.type === "web")
+      && Array.isArray(b.checks)
+      && b.checks.some(c => (parseInt(c.marks, 10) || 0) > 0);
+    if (!codingMarks && !["mc","order","blanks","short"].includes(b.type)) return;
     const v = fields[b.id] ? fields[b.id].get() : null;
     n++;
     let pts = 0, max = 0, review = {};
@@ -3690,6 +3712,15 @@ function computeAssessment(){
         const ok = set.map(normAns).includes(normAns(given));
         if (ok) pts++;
         return { given: given || "(blank)", ok, expected: set[0] };
+      });
+    } else if (b.type === "ide" || b.type === "web"){
+      const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
+      review.items = (b.checks || []).map((c, i) => {
+        const worth = Math.max(0, parseInt(c.marks, 10) || 0);
+        const ok = !!flags[i];
+        max += worth;
+        if (ok) pts += worth;
+        return { given: c.label || ("Check " + (i + 1)), ok, expected: worth + (worth === 1 ? " mark" : " marks") };
       });
     } else if (b.type === "short"){
       max = 1;

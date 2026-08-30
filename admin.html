@@ -555,6 +555,14 @@ function paintClasses(){
       ? "No classes are set to " + meCode + " yet. Choose All teachers, or set who teaches a class when you rename it."
       : "No students yet, open a class after adding some, or add them from any class page."));
   }
+  /* Whatever order this teacher dragged them into, with anything new on the
+     end rather than jumping to the front. */
+  const order = classOrder();
+  mine.sort((a, b) => {
+    const ia = order.indexOf(a.name), ib = order.indexOf(b.name);
+    if (ia < 0 && ib < 0) return a.name.localeCompare(b.name);
+    return (ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib);
+  });
   mine.forEach(gr => {
     const t = el("button","classtile");
     t.appendChild(el("b","", gr.name));
@@ -562,6 +570,7 @@ function paintClasses(){
     t.addEventListener("click", () => openClass(gr.name));
     g.appendChild(t);
   });
+  makeSortable(g, mine.map(x => x.name), (moved) => { saveClassOrder(moved); paintClasses(); });
 }
 on("newClassBtn", "click", () => {
   openModal(box => {
@@ -983,6 +992,53 @@ on("refHub", "click", async () => {
 on("backYears", "click", () => { show("hubView"); paintYears(); });
 on("backHubUnits", "click", () => openYear(hubYear));
 
+/* ---------- dragging tiles into a different order ----------
+   The whole list is written back at once when something lands, so two tiles
+   can never end up claiming the same place. Years and units keep their order
+   in the database; classes keep theirs in this browser, because a class is a
+   row of students rather than a thing with an order of its own. */
+function makeSortable(container, names, onDrop){
+  let from = null;
+  Array.from(container.children).forEach((tile, i) => {
+    if (!tile.classList || !tile.classList.contains("classtile")) return;
+    tile.draggable = true;
+    tile.dataset.at = String(i);
+    tile.addEventListener("dragstart", (e) => {
+      from = i;
+      tile.classList.add("dragging");
+      if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); }
+    });
+    tile.addEventListener("dragend", () => {
+      tile.classList.remove("dragging");
+      Array.from(container.children).forEach(c => c.classList.remove("over"));
+      from = null;
+    });
+    tile.addEventListener("dragover", (e) => {
+      if (from === null) return;
+      e.preventDefault();
+      tile.classList.add("over");
+    });
+    tile.addEventListener("dragleave", () => tile.classList.remove("over"));
+    tile.addEventListener("drop", (e) => {
+      e.preventDefault();
+      tile.classList.remove("over");
+      const at = parseInt(tile.dataset.at, 10);
+      if (from === null || from === at) return;
+      const moved = names.slice();
+      moved.splice(at, 0, moved.splice(from, 1)[0]);
+      onDrop(moved);
+    });
+  });
+}
+
+/* A teacher's own order for their class tiles, kept on their machine. */
+function classOrder(){
+  try{ return JSON.parse(localStorage.getItem("hub_classorder") || "[]"); }catch(e){ return []; }
+}
+function saveClassOrder(names){
+  try{ localStorage.setItem("hub_classorder", JSON.stringify(names)); }catch(e){}
+}
+
 function paintYears(){
   const g = $("hubYears"); g.innerHTML = "";
   $("hubSearchResults").innerHTML = "";
@@ -993,6 +1049,10 @@ function paintYears(){
     t.appendChild(el("b","", y));
     t.addEventListener("click", () => openYear(y));
     g.appendChild(t);
+  });
+  makeSortable(g, years, async (moved) => {
+    try{ await catPost({ op:"reorder", kind:"year", names: moved }); paintYears(); }
+    catch(e){ say("Could not reorder those", e.message); }
   });
   if (unfiled){
     const t = el("button","classtile");
@@ -1026,6 +1086,10 @@ function paintHubUnits(){
     t.appendChild(el("b","", u));
     t.addEventListener("click", () => openHubUnit(u));
     g.appendChild(t);
+  });
+  makeSortable(g, units, async (moved) => {
+    try{ await catPost({ op:"reorder", kind:"unit", names: moved }); paintHubUnits(); }
+    catch(e){ say("Could not reorder those", e.message); }
   });
   const unfiled = (cat.lessons || []).filter(l => !l.unit).length;
   if (!hubYear && unfiled){

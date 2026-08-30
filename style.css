@@ -1960,6 +1960,11 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .worklink:focus{ border-color:var(--amber); outline:none;
   box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent) }
 
+/* a tile being dragged into a different place */
+.classtile{cursor:pointer}
+.classtile.dragging{opacity:.45}
+.classtile.over{border-color:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 20%, transparent)}
+
 /* how a quiz went, once every question has been answered */
 .quiz-score{margin-top:16px; padding:16px 18px; border-radius:12px;
   border:1.5px solid var(--line-2); background:var(--panel-2)}
@@ -1970,13 +1975,30 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .quiz-score p{margin:0 0 12px; font-size:16px; color:var(--text)}
 .quiz-score[data-verdict=correct] .btn-primary{display:none}
 
-/* adding a task under the ones already on a page: groups that fold open */
-.pageadd{display:flex; flex-direction:column; gap:6px; margin-top:10px}
-.pageadd-group{display:flex; flex-direction:column; gap:6px}
-.pageadd-head{align-self:flex-start}
-.pageadd-head.open{border-color:var(--amber); color:var(--amber)}
-.pageadd-body{display:flex; flex-wrap:wrap; gap:6px; padding:2px 0 4px 12px;
-  border-left:2px solid var(--line)}
+/* --- adding a task under the ones already on a page ---
+   A row of categories across the top; pressing one drops its tasks out
+   underneath. Anything that will not fit on the line goes behind More at
+   the end, which opens sideways instead. */
+.pageadd{display:flex; flex-direction:column; gap:8px; margin-top:12px}
+.pageadd-bar{display:flex; flex-wrap:wrap; gap:6px; align-items:flex-start}
+.pageadd-chip{padding:8px 13px; border:1.5px solid var(--line-2); border-radius:999px;
+  background:var(--panel); color:var(--text); font-family:var(--body);
+  font-size:13.5px; font-weight:700; cursor:pointer; white-space:nowrap}
+.pageadd-chip:hover{border-color:var(--amber); color:var(--amber)}
+.pageadd-chip.open{border-color:var(--amber); background:var(--amber); color:var(--amber-ink)}
+.pageadd-tray{display:flex; flex-wrap:wrap; gap:6px; padding:10px 12px;
+  border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel-2)}
+.pageadd-tray[hidden]{display:none}
+
+/* the ones that did not fit, in a small stack beside More */
+.pageadd-morewrap{position:relative; display:inline-flex}
+.pageadd-overflow{position:absolute; top:calc(100% + 6px); right:0; z-index:30;
+  display:flex; flex-direction:column; gap:6px; padding:8px; width:max-content;
+  max-width:min(280px, calc(100vw - 32px));
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
+  box-shadow:0 8px 22px rgba(0,0,0,.16)}
+.pageadd-overflow[hidden]{display:none}
+.pageadd-overflow .pageadd-chip{text-align:left}
 
 /* the lesson code, big enough to read off a teacher's screen */
 .sharecode{ font-family:var(--mono); font-size:38px; letter-spacing:.22em; text-indent:.22em;
@@ -2730,10 +2752,48 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 @media (max-width:900px){
   /* full-height pages measured the same way */
   html.builder, html.builder body{ height:100vh; height:100dvh }
-  .workframe{ height:60vh; height:60dvh }
   .board-stage{ max-height:60vh; max-height:60dvh }
   /* and the page itself can always be scrolled clear of the bar */
   body{ padding-bottom:env(safe-area-inset-bottom, 0px) }
+}
+
+/* =====================================================================
+   LOOKING AT WORK ON A TABLET OR A PHONE
+
+   The two panes stop sitting side by side well before a phone: a 340px
+   feedback column beside a lesson leaves the lesson too narrow to read.
+   Below this width they stack, the work first, and the page scrolls.
+
+   The frame kept collapsing to about 190px however tall the screen was.
+   It is a flex child with flex:1 1 0%, and a flex-basis of 0 beats any
+   height set on it, so the height in the old rules never took effect.
+   flex:none hands the height back.
+   ===================================================================== */
+@media (max-width:1000px){
+  body.workpage{ height:auto; overflow:auto; display:block }
+  .workwrap{ overflow:visible; padding:12px 14px 18px }
+  .worksplit{ display:flex; flex-direction:column; gap:14px }
+  .workmain{ display:block }
+  .workframe{ flex:none; height:72vh; height:72dvh; min-height:420px }
+  .workside{ overflow:visible; max-height:none }
+  /* the tabs sit under the title rather than squeezing beside it */
+  body.workpage .homebar{ flex-wrap:wrap; row-gap:8px }
+  .worktabs{ order:3; width:100% }
+
+  /* --- the seating plan ---
+     A twenty by twenty board of empty squares is mostly empty space on a
+     tablet. It is given a sensible height and scrolls inside itself, the
+     way it does beside a class list on a desktop. */
+  .seatwrap{ display:flex; flex-direction:column; gap:12px }
+  .seatpool{ flex-direction:row; flex-wrap:wrap; max-height:150px; align-content:flex-start }
+  .seatpool .seat{ min-width:130px; flex:0 0 auto }
+  .seatboard{ min-height:0 }
+  .seatgrid{ max-height:60vh; max-height:60dvh; overflow:auto }
+}
+@media (max-width:640px){
+  .workframe{ height:68vh; height:68dvh; min-height:360px }
+  .seatgrid{ max-height:52vh; max-height:52dvh }
+  .seatpool{ max-height:120px }
 }
 
 /* the pointer matches whichever tool is in hand */

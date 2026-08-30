@@ -416,7 +416,9 @@ function compileOne(b, id, target){
     else if (b.type === "ide"){
       const blk = { type:"ide", id, starter: b.starter || "" };
       if (Array.isArray(b.checks) && b.checks.length){
-        blk.checks = b.checks.filter(c => (c.label || "").trim());
+        blk.checks = b.checks.filter(c => (c.label || "").trim())
+                             .map(c => Object.assign({}, c,
+                               c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
         if (b.nudge === false) blk.nudge = false;
       }
       if (b.title) blk.title = b.title;              // headings stay optional
@@ -452,7 +454,9 @@ function compileOne(b, id, target){
                     files: (b.files && b.files.length) ? b.files : ["html","css","js"] };
       if (b.addFiles === true) blk.addFiles = true;
       if (Array.isArray(b.checks) && b.checks.length){
-        blk.checks = b.checks.filter(c => (c.label || "").trim());
+        blk.checks = b.checks.filter(c => (c.label || "").trim())
+                             .map(c => Object.assign({}, c,
+                               c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
         if (b.nudge === false) blk.nudge = false;
       }
       if (b.title) blk.title = b.title;
@@ -1577,6 +1581,32 @@ function checklistPopup(block, isWeb){
         head.appendChild(tools);
         card.appendChild(head);
 
+        /* An assessment has to add a coding task up somehow, and the checklist
+           is the only thing about it that can be judged automatically. Each
+           line is worth however many marks the teacher says. */
+        if (lesson.assessment){
+          const mrow = el("div","bfield");
+          mrow.appendChild(el("label","","Marks for this"));
+          const mstep = el("div","stepper");
+          const mless = el("button","btn-ghost iconbtn","−");
+          const mnum = el("input"); mnum.type = "number"; mnum.className = "stepnum";
+          mnum.min = "0"; mnum.max = "20";
+          if (c.marks === undefined) c.marks = 1;
+          mnum.value = String(c.marks);
+          const mmore = el("button","btn-ghost iconbtn","+");
+          const setMarks = (v) => {
+            c.marks = Math.max(0, Math.min(20, Math.round(Number(v) || 0)));
+            mnum.value = String(c.marks);
+            saveDraft(); schedulePreview();
+          };
+          mless.addEventListener("click", () => setMarks((parseInt(mnum.value, 10) || 0) - 1));
+          mmore.addEventListener("click", () => setMarks((parseInt(mnum.value, 10) || 0) + 1));
+          mnum.addEventListener("input", () => setMarks(mnum.value));
+          mstep.appendChild(mless); mstep.appendChild(mnum); mstep.appendChild(mmore);
+          mrow.appendChild(mstep);
+          card.appendChild(mrow);
+        }
+
         const row = el("div","bfield");
         row.appendChild(el("label","","What to look for"));
         const pick = document.createElement("select");
@@ -2031,20 +2061,18 @@ function taskGroups(){
 
 function addTaskRow(page){
   const wrap = el("div","pageadd");
+  const bar = el("div","pageadd-bar");        // the containers, side by side
+  const tray = el("div","pageadd-tray");      // whichever one is open, below
+  tray.hidden = true;
+  wrap.appendChild(bar); wrap.appendChild(tray);
   const groups = taskGroups();
-  groups.forEach(group => {
-    const holder = el("div","pageadd-group");
-    const head = el("button","btn-ghost bmini2 pageadd-head","+ " + group.name);
-    const body = el("div","pageadd-body");
-    body.hidden = true;
-    head.addEventListener("click", () => {
-      const opening = body.hidden;
-      /* one open at a time, or the row grows taller than the page it is on */
-      wrap.querySelectorAll(".pageadd-body").forEach(x => { x.hidden = true; });
-      wrap.querySelectorAll(".pageadd-head").forEach(x => x.classList.remove("open"));
-      body.hidden = !opening;
-      head.classList.toggle("open", opening);
-    });
+
+  function openGroup(group, chip){
+    const already = chip.classList.contains("open");
+    bar.querySelectorAll(".pageadd-chip").forEach(c => c.classList.remove("open"));
+    tray.innerHTML = "";
+    if (already){ tray.hidden = true; return; }
+    chip.classList.add("open");
     group.kinds.forEach(item => {
       const btn = el("button","btn-ghost bmini2", item.label);
       btn.addEventListener("click", () => {
@@ -2052,11 +2080,65 @@ function addTaskRow(page){
         page.blocks.push(BLANK[item.kind]());
         render(); schedulePreview();
       });
-      body.appendChild(btn);
+      tray.appendChild(btn);
     });
-    holder.appendChild(head); holder.appendChild(body);
-    wrap.appendChild(holder);
+    tray.hidden = false;
+  }
+
+  const chips = groups.map(group => {
+    const chip = el("button","pageadd-chip","+ " + group.name);
+    chip.type = "button";
+    chip.addEventListener("click", () => openGroup(group, chip));
+    bar.appendChild(chip);
+    return { group, chip };
   });
+
+  /* Whatever will not fit on one line goes behind a More container at the
+     end, which opens sideways rather than pushing the row onto two lines.
+     Measured after it is on the page, because until then nothing has a
+     width to measure. */
+  const more = el("button","pageadd-chip pageadd-more","More");
+  more.type = "button";
+  const overflow = el("div","pageadd-overflow");
+  overflow.hidden = true;
+  const moreWrap = el("span","pageadd-morewrap");
+  moreWrap.appendChild(more); moreWrap.appendChild(overflow);
+  more.addEventListener("click", (e) => {
+    e.stopPropagation();
+    overflow.hidden = !overflow.hidden;
+    more.classList.toggle("open", !overflow.hidden);
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (overflow.hidden) return;
+    if (moreWrap.contains(e.target)) return;
+    overflow.hidden = true; more.classList.remove("open");
+  });
+
+  function fold(){
+    if (!wrap.isConnected) return;
+    /* start again from everything on the bar, then move the tail off it */
+    chips.forEach(c => bar.appendChild(c.chip));
+    overflow.innerHTML = "";
+    if (moreWrap.parentNode) moreWrap.parentNode.removeChild(moreWrap);
+    bar.appendChild(moreWrap);
+    moreWrap.hidden = true;
+    const top = bar.getBoundingClientRect().top;
+    const spill = chips.filter(c => c.chip.getBoundingClientRect().top > top + 4);
+    if (!spill.length) return;
+    moreWrap.hidden = false;
+    /* The ones that spilled move first. Only then is it worth asking whether
+       More still fits, because until they have gone it never will and the
+       loop below would strip the bar bare. */
+    spill.forEach(c => overflow.appendChild(c.chip));
+    let cut = chips.length - spill.length;
+    while (cut > 1 && moreWrap.getBoundingClientRect().top > top + 4){
+      cut--;
+      overflow.insertBefore(chips[cut].chip, overflow.firstChild);
+    }
+  }
+  /* after the browser has laid the row out, and again if the window changes */
+  setTimeout(fold, 0);
+  window.addEventListener("resize", fold);
   return wrap;
 }
 
