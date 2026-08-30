@@ -118,8 +118,32 @@
     const boldBtn = tool("<b>B</b>", "Bold (Ctrl+B)", () => cmd("bold"));
     const italicBtn = tool("<i>I</i>", "Italic (Ctrl+I)", () => cmd("italic"));
     const underBtn = tool("<u>U</u>", "Underline (Ctrl+U)", () => cmd("underline"));
-    tool("A<small>A</small>", "Smaller text", () => sizeBy(-1), "rt-smaller");
-    tool("A<big>A</big>", "Bigger text", () => sizeBy(1), "rt-bigger");
+    /* The size is shown as a number rather than guessed at with two A buttons,
+       and uses the same range in points as the whiteboard so the two places a
+       teacher sets type size agree with each other. */
+    const MIN_TEXT = 8, MAX_TEXT = 96;
+    const sizeWrap = document.createElement("span");
+    sizeWrap.className = "rt-sizes";
+    const sizeDown = document.createElement("button");
+    sizeDown.type = "button"; sizeDown.className = "rt-btn rt-step";
+    sizeDown.textContent = "−"; sizeDown.title = "Smaller";
+    const sizeBox = document.createElement("input");
+    sizeBox.type = "number"; sizeBox.className = "rt-sizenum";
+    sizeBox.min = String(MIN_TEXT); sizeBox.max = String(MAX_TEXT);
+    sizeBox.title = "Size in points";
+    const sizeUp = document.createElement("button");
+    sizeUp.type = "button"; sizeUp.className = "rt-btn rt-step";
+    sizeUp.textContent = "+"; sizeUp.title = "Bigger";
+    const sizeUnit = document.createElement("span");
+    sizeUnit.className = "rt-sizeunit"; sizeUnit.textContent = "pt";
+    sizeWrap.appendChild(sizeDown); sizeWrap.appendChild(sizeBox);
+    sizeWrap.appendChild(sizeUnit); sizeWrap.appendChild(sizeUp);
+    bar.appendChild(sizeWrap);
+    [sizeDown, sizeUp, sizeBox].forEach(n =>
+      n.addEventListener("mousedown", (e) => { if (n !== sizeBox) e.preventDefault(); saved = save(); }));
+    sizeDown.addEventListener("click", () => stepSize(-2));
+    sizeUp.addEventListener("click", () => stepSize(2));
+    sizeBox.addEventListener("change", () => applySize(parseInt(sizeBox.value, 10)));
     tool("&bull;", "Bullet list", () => { cmd("insertUnorderedList"); refreshState(); }, "rt-bullet");
     /* numbered lists come in two kinds, so this one offers a choice */
     const numBtn = tool("1.", "Numbered list", () => {}, "rt-numbtn");
@@ -162,12 +186,49 @@
       while (n && n !== box && n.tagName !== "OL") n = n.parentNode;
       if (n && n.tagName === "OL") n.style.listStyleType = style;
     }
-    /* text size, a step at a time */
-    function sizeBy(dir){
-      let now = 3;
-      try{ now = parseInt(document.queryCommandValue("fontSize"), 10) || 3; }catch(e){}
-      cmd("fontSize", String(Math.max(1, Math.min(7, now + dir))));
+    /* What size the writing under the cursor actually is, in points. Read from
+       the page rather than from queryCommandValue, which only ever answers on
+       the old 1 to 7 scale and cannot say what that means in points. */
+    function sizeNow(){
+      const sel = window.getSelection();
+      let n = (sel && sel.rangeCount) ? sel.getRangeAt(0).commonAncestorContainer : box;
+      if (n && n.nodeType === 3) n = n.parentNode;
+      if (!n || !box.contains(n)) n = box;
+      const px = parseFloat(getComputedStyle(n).fontSize) || 16;
+      return Math.round(px * 0.75);            // 96dpi: 1pt is 4/3 of a pixel
     }
+    /* Wrapped by hand, the same as the colour, because execCommand is
+       deprecated, works differently between browsers, and cannot set a size
+       in points at all. */
+    function applySize(pt){
+      if (isNaN(pt)) { showSize(); return; }
+      const want = Math.max(MIN_TEXT, Math.min(MAX_TEXT, pt));
+      const range = saved || lastRange;
+      if (!range || range.collapsed){ showSize(want); return; }
+      restore(range);
+      let contents;
+      try{ contents = range.extractContents(); }
+      catch(e){ showSize(); return; }
+      contents.querySelectorAll && contents.querySelectorAll("[style*='font-size'], font[size]")
+        .forEach(n => {
+          if (n.style) n.style.fontSize = "";
+          if (n.removeAttribute) n.removeAttribute("size");
+        });
+      const span = document.createElement("span");
+      span.style.fontSize = want + "pt";
+      span.appendChild(contents);
+      range.insertNode(span);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      const after = document.createRange();
+      after.selectNodeContents(span);
+      sel.addRange(after);
+      saved = after.cloneRange();
+      showSize(want);
+      box.focus(); fire();
+    }
+    function stepSize(by){ applySize(sizeNow() + by); }
+    function showSize(n){ sizeBox.value = String(n || sizeNow()); }
     /* Pressing it again turns it off: the writing inside the tag is put back
        where the tag was, which is what people expect from a toggle. */
     function insideTag(name){
@@ -314,7 +375,13 @@
     });
     document.addEventListener("pointerdown", (e) => {
       if (palette.hidden) return;
-      if (colourWrap.contains(e.target)) return;
+      /* The palette hangs off document.body so nothing can cover it, which
+         puts it outside colourWrap. Checking only colourWrap counted a press
+         on a swatch as a press outside, so the palette was hidden between
+         mousedown and mouseup: with the swatch gone no click ever completed
+         and pick() never ran. The colour button did nothing, and the colour
+         code itself was never at fault. */
+      if (colourWrap.contains(e.target) || palette.contains(e.target)) return;
       palette.hidden = true;
     });
     colourWrap.appendChild(colourBtn);
@@ -343,6 +410,8 @@
     if (o.rows) box.style.minHeight = (o.rows * 26) + "px";
     if (o.placeholder) box.dataset.placeholder = o.placeholder;
     box.innerHTML = initialHtml || "";
+    /* so the number reads the box's own size before anyone has clicked in it */
+    try{ showSize(); }catch(e){}
 
     let saved = null;
     /* The words being worked on are remembered whenever the selection moves
@@ -379,6 +448,8 @@
        the toolbar tells you the state rather than just setting it. */
     const stateOf = { bold:boldBtn, italic:italicBtn, underline:underBtn };
     function refreshState(){
+      /* so the number always says what the writing under the cursor really is */
+      try{ showSize(); }catch(e){}
       Object.keys(stateOf).forEach(name => {
         const btn = stateOf[name];
         if (!btn) return;

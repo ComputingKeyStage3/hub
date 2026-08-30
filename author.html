@@ -126,6 +126,13 @@
           <button class="pal" data-add="binadd"><b>Binary addition</b><span>Column addition with carries</span></button>
         </div>
       </div>
+      <div class="palgroup" data-group="extra" id="palExtra">
+        <button class="pal-head" type="button">Extra</button>
+        <div class="palbody" hidden>
+          <button class="pal" data-add="choice" id="palChoiceBtn"><b>Choice</b><span>They pick, and get the task that follows</span></button>
+          <button class="pal" data-add="extension" id="palExtensionBtn"><b>Extension tasks</b><span>Only once the page is finished</span></button>
+        </div>
+      </div>
       <div class="palgroup" data-group="handin">
         <button class="pal-head" type="button">Handing work in</button>
         <div class="palbody" hidden>
@@ -218,6 +225,13 @@ const BLANK = {
   quiz:     () => ({ type:"quiz", title:"Check your understanding", pass:{ mode:"percent", value:70 },
                      questions:[{ q:"", options:["",""], answers:[0], hint:"", why:"" }] }),
   page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
+  /* A page within a page: it holds whatever a teacher wants, and the lesson
+     keeps it out of sight until the rest of the page is finished with. */
+  extension:() => ({ type:"extension", title:"Extension tasks",
+                     task:"Finished early? Have a go at these.", blocks:[] }),
+  /* They pick one, and what they picked decides the work they then get. */
+  choice:   () => ({ type:"choice", title:"", task:"", prompt:"Choose one",
+                     options:[{ label:"", blocks:[] }, { label:"", blocks:[] }] }),
   image:    () => ({ type:"image", title:"Add your screenshot", task:"Take a screenshot and paste it here." }),
   embed:    () => ({ type:"embed", url:"", title:"Watch this", note:"Watch it all the way through.", confirm:false }),
   frame:    () => ({ type:"frame", url:"", heading:"Have a go", task:"", width:"100%", height:520, confirm:false }),
@@ -246,7 +260,7 @@ const BLANK = {
 };
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", code:"Coding task", web:"Web page",
+                short:"Short answer", page:"Page", extension:"Extension tasks", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", code:"Coding task", web:"Web page",
                 password:"Password checker", caesar:"Caesar cipher" };
 
 /* The lesson page hashes what a student types and compares it with this, so
@@ -329,7 +343,8 @@ function migrate(arr){
       b.questions = [{ q: b.q || "", options: b.options || ["",""], answer: b.answer || 0, hint: b.hint || "" }];
       delete b.q; delete b.options; delete b.answer; delete b.hint;
     }
-    if (b.type === "page") migrate(b.blocks);
+    if (b.type === "page" || b.type === "extension") migrate(b.blocks);
+    if (b.type === "choice") (b.options || []).forEach(o => migrate(o.blocks || []));
   });
 }
 
@@ -399,6 +414,29 @@ function compileOne(b, id, target){
            passHash: b.passHash || undefined, blocks: kids });
     return;
   }
+  if (b.type === "choice"){
+    const opts = [];
+    (b.options || []).forEach((opt, k) => {
+      if (!(opt.label || "").trim()) return;         // an unnamed choice cannot be offered
+      const kids = [];
+      (opt.blocks || []).forEach((child, j) =>
+        compileOne(child, id + "_" + (k + 1) + "_" + (j + 1), kids));
+      opts.push({ label: opt.label, blocks: kids });
+    });
+    if (opts.length < 2) return;                     // nothing to choose between
+    push({ type:"choice", id, title: b.title || "", task: b.task || "",
+           prompt: b.prompt ? (window.cleanRichText ? window.cleanRichText(b.prompt) : b.prompt) : "",
+           options: opts });
+    return;
+  }
+  if (b.type === "extension"){
+    const kids = [];
+    (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
+    if (!kids.length) return;                 // an empty one is not worth saving
+    push({ type:"extension", id, title: b.title || "Extension tasks",
+           task: b.task || "", blocks: kids });
+    return;
+  }
   {
     if (b.type === "text"){
       // written with the formatting buttons, so it is already HTML
@@ -440,6 +478,9 @@ function compileOne(b, id, target){
       if (b.task) blk.task = b.task;
       if (b.turtle) blk.turtle = true;
       if (b.expect) blk.expect = b.expect;
+      /* Saved either way. This was not written out at all before, so a teacher
+         who turned Run required off got it back on when they reopened. */
+      blk.required = (b.required === true && b.run !== false);
       if (b.run === false) blk.run = false;        // console hidden
       if (b.edit === false) blk.edit = false;      // read-only code
       if (b.help === false) blk.help = false;      // no Help tab
@@ -451,7 +492,9 @@ function compileOne(b, id, target){
              heading: b.heading || "",
              context: b.context ? (window.cleanRichText ? window.cleanRichText(b.context) : b.context) : "",
              prompt: b.prompt ? (window.cleanRichText ? window.cleanRichText(b.prompt) : b.prompt) : "",
-             minWords: Number(b.minWords) || 20 }));
+             /* zero is a real setting, so it has to survive being saved:
+                "|| 20" turned "no length wanted" back into twenty words */
+             minWords: b.minWords === undefined ? 20 : Math.max(0, Number(b.minWords) || 0) }));
     else if (b.type === "password")
       push({ type:"password", id, title: b.title || "", task: b.task || "" });
     else if (b.type === "caesar"){
@@ -477,6 +520,7 @@ function compileOne(b, id, target){
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
       if (b.expect) blk.expect = b.expect;
+      blk.required = (b.required !== false && b.run !== false);   // as above
       if (b.run === false) blk.run = false;
       if (b.edit === false) blk.edit = false;
       if (b.help === false) blk.help = false;
@@ -589,7 +633,42 @@ function firstPageOpen(){
   const first = lesson.blocks.find(x => x.type === "page");
   if (first) first.startLocked = false;
 }
+/* Rebuilding the list empties it, and an emptied list has scrolled back to
+   the top. Every toggle on a card calls render(), which is why pressing
+   something like "Nudge to finish it" threw the page up to the top and lost
+   a teacher's place. The position is measured before and put back after.
+
+   When something has just been added there is somewhere better to be, so the
+   new card is scrolled to instead. */
+let scrollToBlock = null;
 function render(){
+  const list = $("list");
+  const keepList = list ? list.scrollTop : 0;
+  const keepPage = window.scrollY;
+  renderNow();
+  const want = scrollToBlock; scrollToBlock = null;
+  if (!list) return;
+  if (want){
+    /* after the browser has laid the new card out, or it has no position yet */
+    requestAnimationFrame(() => {
+      const card = Array.from(list.querySelectorAll(".bcard")).find(c => c.__block === want);
+      if (!card) return;
+      /* Not smooth. A long lesson puts the new card thousands of pixels away
+         and a smooth scroll crawls over that distance: measured at one pixel
+         in the best part of a second. Going straight there is what a teacher
+         wants anyway, and the flash below says what moved. */
+      card.scrollIntoView({ block:"center" });
+      card.classList.add("justopened");
+      setTimeout(() => card.classList.remove("justopened"), 1600);
+    });
+    return;
+  }
+  list.scrollTop = keepList;
+  /* the compact builder scrolls the page itself rather than the list */
+  if (window.scrollY !== keepPage) window.scrollTo(0, keepPage);
+}
+
+function renderNow(){
   wireList();
   firstPageOpen();
   /* the palette is hidden only while writing feedback sentences */
@@ -667,6 +746,11 @@ function canDropOn(arr){
   if (!kind) return false;
   /* a page only makes sense at the top of a lesson */
   if (kind === "page") return arr === lesson.blocks && !respEditing;
+  /* and extension tasks only inside one of those pages: not loose at the top,
+     and not inside another extension container */
+  if (kind === "extension"){
+    return !respEditing && lesson.blocks.some(x => x.type === "page" && x.blocks === arr);
+  }
   /* While a response set is open it is the only place a task can go —
      otherwise the page behind it takes the drop instead. */
   if (respEditing) return arr === openArray();
@@ -681,6 +765,7 @@ function dropInto(arr, at){
     const made = BLANK[newTask]();
     newTask = null;
     arr.splice(at < 0 ? arr.length : at, 0, made);
+    scrollToBlock = made;
     render(); schedulePreview();
     return;
   }
@@ -710,6 +795,8 @@ function move(arr, i, d){
 function card(b, i, arr){
   const c = el("div","bcard");
   c.draggable = false;
+  c.__block = b;              // so render() can scroll back to a new one
+
 
   const head = el("div","bhead");
   if (b.type === "page"){
@@ -838,10 +925,20 @@ function card(b, i, arr){
     w.appendChild(el("label","", label || "Options"));
     const row = el("div","brow");
     defs.forEach(d => {
-      const key = d[0], name = d[1], onByDefault = d[2] !== false;
-      const on = b[key] === undefined ? onByDefault : b[key] !== false && b[key] !== 0;
+      const key = d[0], name = d[1], onByDefault = d[2] !== false, lockOff = d[3];
+      /* Some settings only make sense alongside another one. A fourth entry
+         says when this one cannot be on, and it is then shown off and cannot
+         be pressed, rather than being left on and quietly ignored. */
+      const locked = typeof lockOff === "function" && !!lockOff();
+      if (locked && b[key] !== false) b[key] = false;
+      const on = !locked && (b[key] === undefined ? onByDefault : b[key] !== false && b[key] !== 0);
       const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""), name + ": " + (on ? "on" : "off"));
-      btn.addEventListener("click", () => { b[key] = !on; render(); schedulePreview(); });
+      if (locked){
+        btn.disabled = true;
+        btn.title = "Turn Running on first";
+      } else {
+        btn.addEventListener("click", () => { b[key] = !on; render(); schedulePreview(); });
+      }
       row.appendChild(btn);
     });
     w.appendChild(row);
@@ -918,7 +1015,7 @@ function card(b, i, arr){
   }
   if (b.type === "web"){
     F("Heading (optional)", "title");
-    F("Subheading (optional)", "task", { area:true, rows:2 });
+    R("Subheading (optional)", "task", { rows:2 });
     const fw = el("div","bfield");
     fw.appendChild(el("label","","Which files can they use?"));
     const frow = el("div","brow");
@@ -939,16 +1036,22 @@ function card(b, i, arr){
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
     toggleRow([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true],
-               ["addFiles","Students can add files", false], ["required","Run required", true]]);
+               ["addFiles","Students can add files", false],
+               /* same rule as Python: nothing to require when nothing runs */
+               ["required","Run required", true, () => b.run === false]]);
     F("Code must contain (optional)", "expect");
   }
   if (b.type === "ide"){
     F("Heading (optional)", "title");
-    F("Subheading (optional)", "task", { area:true, rows:2 });
+    R("Subheading (optional)", "task", { rows:2 });
     F("Starter code", "starter", { area:true, rows:7, mono:true });
-    toggleRow([["turtle","Turtle canvas", false], ["run","Running", true],
-               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true],
-               ["required","Run required", true]]);
+    toggleRow([["turtle","Turtle canvas", false],
+               /* Off unless it is asked for: most Python tasks are worth a go
+                  without Continue waiting on the Run button. It cannot be on
+                  when there is nothing to run. */
+               ["required","Run required", false, () => b.run === false],
+               ["run","Running", true],
+               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]);
     F("Output must contain (optional)", "expect", { help:"Leave empty unless you want Continue to wait for the right output." });
   }
   if (b.type === "question"){
@@ -972,7 +1075,7 @@ function card(b, i, arr){
     const wrow = el("div","stepper");
     const less = el("button","btn-ghost iconbtn","\u2212");
     const num = el("input"); num.type = "number"; num.className = "stepnum";
-    num.value = String(b.minWords || 20);
+    num.value = String(b.minWords === undefined ? 20 : b.minWords);
     const more = el("button","btn-ghost iconbtn","+");
     const setW = (v) => { b.minWords = Math.max(0, v); num.value = String(b.minWords); saveDraft(); schedulePreview(); };
     less.addEventListener("click", () => setW((parseInt(num.value, 10) || 0) - 5));
@@ -1098,7 +1201,7 @@ function card(b, i, arr){
   }
   if (b.type === "web"){
     F("Heading (optional)", "title");
-    F("Subheading (optional)", "task", { area:true, rows:2 });
+    R("Subheading (optional)", "task", { rows:2 });
     F("index.html", "html", { area:true, rows:7, mono:true });
     F("style.css", "css", { area:true, rows:6, mono:true });
     F("script.js", "js", { area:true, rows:5, mono:true });
@@ -1108,7 +1211,7 @@ function card(b, i, arr){
   }
   if (b.type === "page"){
     F("Title", "title");
-    F("Subtitle", "task", { area:true, rows:2 });
+    R("Subtitle", "task", { rows:2 });
 
     const inner = el("div","pagekids");
     if (!b.blocks) b.blocks = [];
@@ -1128,6 +1231,72 @@ function card(b, i, arr){
     body.appendChild(inner);
     body.appendChild(addTaskRow(b.blocks));
   }
+  if (b.type === "extension"){
+    F("Title", "title");
+    R("Subtitle", "task", { rows:2 });
+    body.appendChild(el("p","bhelp",
+      "Students only see these once everything else on the page is finished. "
+      + "They never hold anybody up, so nobody is asked to complete them."));
+    const inner = el("div","pagekids");
+    if (!b.blocks) b.blocks = [];
+    if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
+    b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
+    inner.addEventListener("dragover", (e) => {
+      if (!canDropOn(b.blocks)) return;
+      e.preventDefault(); e.stopPropagation();
+      inner.classList.add("over");
+    });
+    inner.addEventListener("dragleave", () => inner.classList.remove("over"));
+    inner.addEventListener("drop", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      inner.classList.remove("over");
+      dropInto(b.blocks, -1);
+    });
+    body.appendChild(inner);
+    body.appendChild(addTaskRow(b.blocks, "extension"));
+  }
+  if (b.type === "choice"){
+    F("Heading (optional)", "title");
+    R("What they are choosing between", "prompt", { rows:2 });
+    if (!Array.isArray(b.options)) b.options = [];
+    b.options.forEach((opt, k) => {
+      if (!opt.blocks) opt.blocks = [];
+      const w = el("div","bfield choiceopt");
+      const lab = el("div","brow");
+      const name = el("input");
+      name.placeholder = "Choice " + String.fromCharCode(65 + k);
+      name.value = opt.label || "";
+      name.addEventListener("input", () => { opt.label = name.value; saveDraft(); schedulePreview(); });
+      lab.appendChild(name);
+      if (b.options.length > 2){
+        const del = el("button","btn-ghost bmini","×");
+        del.title = "Remove this choice";
+        del.addEventListener("click", () => { b.options.splice(k, 1); render(); schedulePreview(); });
+        lab.appendChild(del);
+      }
+      w.appendChild(lab);
+      const inner = el("div","pagekids");
+      if (!opt.blocks.length) inner.appendChild(el("p","bhelp dropzone","What they get for this choice. Use the buttons below."));
+      opt.blocks.forEach((child, j) => inner.appendChild(card(child, j, opt.blocks)));
+      inner.addEventListener("dragover", (e) => {
+        if (!canDropOn(opt.blocks)) return;
+        e.preventDefault(); e.stopPropagation();
+        inner.classList.add("over");
+      });
+      inner.addEventListener("dragleave", () => inner.classList.remove("over"));
+      inner.addEventListener("drop", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        inner.classList.remove("over");
+        dropInto(opt.blocks, -1);
+      });
+      w.appendChild(inner);
+      w.appendChild(addTaskRow(opt.blocks, "choice"));
+      body.appendChild(w);
+    });
+    const add = el("button","btn-ghost bmini2","+ Another choice");
+    add.addEventListener("click", () => { b.options.push({ label:"", blocks:[] }); render(); schedulePreview(); });
+    body.appendChild(add);
+  }
   if (b.type === "image"){ F("Heading (optional)", "title"); F("Instruction (optional)", "task", { area:true, rows:2 }); }
   if (b.type === "frame"){
     F("Heading (optional)", "heading");
@@ -1144,7 +1313,7 @@ function card(b, i, arr){
     if (shown && !/youtube\.com\/embed\//.test(shown)) note.className = "bhelp warn";
     body.appendChild(note);
     F("Heading (optional)", "title");
-    F("Subheading (optional)", "note", { area:true, rows:2 });
+    R("Subheading (optional)", "note", { rows:2 });
     toggleRow([["confirm","Confirmation", false]]);
   }
   if (b.type === "link"){
@@ -1447,6 +1616,10 @@ function setMode(assess, practical){
   $("modeLesson").classList.toggle("on", !assess && !practical && !lesson.homework);
   $("modeAssess").classList.toggle("on", assess);
   $("palLesson").hidden = !!assess;          // a practical uses the lesson palette
+  /* Extension tasks are for a lesson or a piece of home learning. An
+     assessment has its own extension list, and a practical one is marked by
+     hand against a rubric, so there would be nothing to mark these with. */
+  $("palExtensionBtn").hidden = !!assess || !!practical;
   $("palAssess").hidden = !assess;
 
   saveDraft(); render(); schedulePreview();
@@ -1576,6 +1749,12 @@ const WEB_CHECKS = [
 ];
 const USES_OPTIONS = ["for loop","while loop","if","else","elif","input","print",
                       "list","function","variable","comment","random","turtle"];
+
+/* The checks that compare something a teacher typed against something a
+   student wrote. Only those have any use for a case setting: a dropdown or a
+   number cannot be typed in the wrong case. */
+const CASED_KINDS = ["codeHas","codeLacks","defines","calls","outputHas","outputIs",
+                     "attr","contentHas","cssHas","fileHas"];
 
 function checklistPopup(block, isWeb){
   const kinds = isWeb ? WEB_CHECKS : PY_CHECKS;
@@ -1712,6 +1891,23 @@ function checklistPopup(block, isWeb){
           needs("Text to look for", "value", "console.log");
         }
         else needs("Text to look for", "value", "");
+
+        /* After the chain above, never inside it: put in the middle it would
+           swallow the branch that draws a check's own text box. Off means case
+           is ignored, which is what nearly every check wants. */
+        if (CASED_KINDS.indexOf(kind) >= 0){
+          const crow = el("div","bfield");
+          crow.appendChild(el("label","","Capital letters"));
+          const on = c.caseSensitive === true;
+          const cbtn = el("button","btn-ghost bmini2" + (on ? " right" : ""),
+                          on ? "Must match exactly" : "Ignore capitals");
+          cbtn.type = "button";
+          cbtn.title = on ? "Uppercase and lowercase must match what you typed"
+                          : "Print and print both count";
+          cbtn.addEventListener("click", () => { c.caseSensitive = !on; saveDraft(); paint(); });
+          crow.appendChild(cbtn);
+          card.appendChild(crow);
+        }
 
         list.appendChild(card);
       });
@@ -1923,13 +2119,17 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
     const kind = btn.dataset.add;
     if (respEditing){                     // a response or extension set is open
       const arr = respEditing === "__ext" ? lesson.extensions : lesson.responses[respEditing];
-      arr.push(BLANK[kind]());
+      const one = BLANK[kind]();
+      arr.push(one);
       lastAddedAt = arr.length - 1;
+      scrollToBlock = one;
       render(); schedulePreview();
       return;
     }
+    let made = null;
     if (kind === "page" || lesson.assessment){
-      lesson.blocks.push(BLANK[kind]());
+      made = BLANK[kind]();
+      lesson.blocks.push(made);
       lastAddedAt = lesson.blocks.length - 1;
     } else {
       /* Lessons are made of pages, so a task always goes on one. It joins the
@@ -1947,18 +2147,15 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
         lesson.blocks.push(page);
         openPage = lesson.blocks.length - 1;
       }
-      page.blocks.push(BLANK[kind]());
+      made = BLANK[kind]();
+      page.blocks.push(made);
       lastAddedAt = -1;                  // it is inside a page, so the page is the target
     }
+    /* Named rather than counted. Picking it out of the cards by number went
+       wrong as soon as tasks sat inside pages, because every nested card is a
+       .bcard too and the last one is rarely the new one. */
+    scrollToBlock = made;
     render(); schedulePreview();
-    /* go to the task that was just added, wherever it landed */
-    const cards = $("list").querySelectorAll(".bcard");
-    const target = (lastAddedAt >= 0 && cards[lastAddedAt]) ? cards[lastAddedAt] : cards[cards.length - 1];
-    if (target && target.scrollIntoView) target.scrollIntoView({ behavior:"smooth", block:"center" });
-    if (target && target.classList){
-      target.classList.add("justopened");
-      setTimeout(() => target.classList.remove("justopened"), 1600);
-    }
   });
 });
 function showTitle(){
@@ -2084,7 +2281,9 @@ function taskGroups(){
   if (!box) return [];
   return Array.from(box.querySelectorAll(".palgroup")).map(group => ({
     name: (group.querySelector(".pal-head") || {}).textContent || "",
-    kinds: Array.from(group.querySelectorAll(".pal[data-add]")).map(btn => ({
+    /* a task hidden from the palette is hidden from this row too, or the two
+       lists say different things about what a teacher may add */
+    kinds: Array.from(group.querySelectorAll(".pal[data-add]")).filter(btn => !btn.hidden).map(btn => ({
       kind: btn.dataset.add,
       label: (btn.querySelector("b") || {}).textContent || btn.dataset.add
     }))
@@ -2094,13 +2293,22 @@ function taskGroups(){
 /* The containers a task is added from. Given whichever list is being looked
    at: the tasks on a page, the questions in an assessment, or the practice
    under one topic. */
-function addTaskRow(target){
+function addTaskRow(target, inside){
   const wrap = el("div","pageadd");
   const bar = el("div","pageadd-bar");        // the containers, side by side
   const tray = el("div","pageadd-tray");      // whichever one is open, below
   tray.hidden = true;
   wrap.appendChild(bar); wrap.appendChild(tray);
-  const groups = taskGroups();
+  /* Containers do not go inside themselves. A choice inside extension tasks is
+     fine and useful; a choice inside a choice is a maze. */
+  const groups = taskGroups().map(g => ({
+    name: g.name,
+    kinds: g.kinds.filter(k => {
+      if (inside === "choice") return k.kind !== "choice" && k.kind !== "extension";
+      if (inside === "extension") return k.kind !== "extension";
+      return true;
+    })
+  })).filter(g => g.kinds.length);
 
   function openGroup(group, chip){
     const already = chip.classList.contains("open");
@@ -2112,7 +2320,9 @@ function addTaskRow(target){
       const btn = el("button","btn-ghost bmini2", item.label);
       btn.addEventListener("click", () => {
         if (!BLANK[item.kind]) return;
-        target.push(BLANK[item.kind]());
+        const made = BLANK[item.kind]();
+        target.push(made);
+        scrollToBlock = made;
         render(); schedulePreview();
       });
       tray.appendChild(btn);
@@ -2285,9 +2495,44 @@ function refreshPreview(){
   try{
     if (previewReset){ try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){} previewReset = false; }
     localStorage.setItem("hub_preview", JSON.stringify(compile()));
-    $("prev").src = "lesson.html?id=__preview&builder=1&t=" + Date.now();
+    const frame = $("prev");
+    /* Where the preview had been scrolled to. It is reloaded from scratch on
+       every change, so without this a teacher editing the foot of a long page
+       was thrown back to the top of it after each keystroke. */
+    const keep = previewScroll(frame);
+    frame.src = "lesson.html?id=__preview&builder=1&t=" + Date.now();
+    frame.addEventListener("load", function once(){
+      frame.removeEventListener("load", once);
+      /* The lesson draws itself after load, so the place to scroll to does not
+         exist yet on the first go. Trying again shortly after catches it. */
+      putPreviewScroll(frame, keep);
+      setTimeout(() => putPreviewScroll(frame, keep), 120);
+      setTimeout(() => putPreviewScroll(frame, keep), 400);
+    });
     $("prevMsg").textContent = "up to date";
   }catch(e){ $("prevMsg").textContent = e.message; }
+}
+
+/* The lesson scrolls inside .stage on a wide screen and scrolls the page
+   itself on a narrow one, so both are worth remembering. */
+function previewScroll(frame){
+  try{
+    const d = frame.contentDocument;
+    if (!d) return null;
+    const stage = d.querySelector(".stage");
+    return { stage: stage ? stage.scrollTop : 0,
+             page: frame.contentWindow ? frame.contentWindow.scrollY : 0 };
+  }catch(e){ return null; }         // a preview from another origin cannot be read
+}
+function putPreviewScroll(frame, keep){
+  if (!keep || (!keep.stage && !keep.page)) return;
+  try{
+    const d = frame.contentDocument;
+    if (!d) return;
+    const stage = d.querySelector(".stage");
+    if (stage && keep.stage) stage.scrollTop = keep.stage;
+    if (keep.page && frame.contentWindow) frame.contentWindow.scrollTo(0, keep.page);
+  }catch(e){}
 }
 on("prevBtn", "click", refreshPreview);
 /* the same preview, with the room to see it properly */
@@ -2764,6 +3009,14 @@ function fromCompiled(data, meta){
                                     startLocked: b.startLocked !== false,
                                     passHash: b.passHash || undefined,
                                     blocks:(b.blocks || []).map(back) };
+    if (b.type === "extension") return { type:"extension", title:b.title || "",
+                                         task:b.task || "",
+                                         blocks:(b.blocks || []).map(back) };
+    if (b.type === "choice") return { type:"choice", title:b.title || "", task:b.task || "",
+                                      prompt:b.prompt || "",
+                                      options:(b.options || []).map(o => ({
+                                        label:o.label || "",
+                                        blocks:(o.blocks || []).map(back) })) };
     if (b.type === "text"){
       const h = /<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(b.html || "");
       const body = String(b.html || "").replace(/<h2[\s\S]*?<\/h2>/i, "")
@@ -3056,7 +3309,9 @@ try{
 }
 window.addEventListener("resize", fitPreview);
 on("addPageBtn", "click", () => {
-  lesson.blocks.push(BLANK.page());
+  const made = BLANK.page();
+  lesson.blocks.push(made);
+  scrollToBlock = made;
   render(); schedulePreview();
 });
 

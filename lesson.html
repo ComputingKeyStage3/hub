@@ -1087,11 +1087,12 @@ function showStep(i){
   const b = (typeof sb === "function") ? sb() : sb;
   /* an empty heading or subtitle takes up no room at all */
   const bt = b.title || "", bx = b.text || "";
-  /* Headings can come from a formatting box now, so bold and code inside one
-     survive. innerHTML, not textContent, or the tags would be read out. */
+  /* Headings and subheadings both come from a formatting box now, so bold and
+     code inside one survive. innerHTML, not textContent, or the tags are read
+     out on the page as < b > and the like. */
   $("briefTitle").innerHTML = bt;
   $("briefTitle").hidden = !bt;
-  $("briefText").textContent = bx;
+  $("briefText").innerHTML = bx;
   $("briefText").hidden = !bx;
   $("brief").hidden = !bt && !bx;
 
@@ -1376,7 +1377,8 @@ function buildBlock(b, i){
               picture:rPicture, pastelink:rPasteLink, frame:rFrame, web:rWeb,
               binary:rBinary, binadd:rBinAdd,
               board:rBoardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
-              mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage }[b.type];
+              mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
+              extension:rExtension, choice:rChoice }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
   catch (err){
@@ -1393,10 +1395,20 @@ function rPage(b){
   const s = el("section","pagegroup");
   const kids = [];
   const items = [];      // each task on this page, so we can move on to the next
+  const extras = [];     // extension containers, held back until the rest is done
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
     const built = buildBlock(child, j);
     if (!built) return;
+    /* Extension tasks are kept out of kids and items on purpose. Everything
+       that decides whether a student may carry on reads those two, so leaving
+       these out of both is what stops work almost nobody sees from standing
+       between the rest of the class and the next page. */
+    if (child.type === "extension"){
+      built.section.hidden = true;
+      extras.push(built);
+      return;
+    }
     if (child.required === false){
       built.check = () => ({ ok:true });
       built.soft = () => ({ ok:true });
@@ -1443,6 +1455,31 @@ function rPage(b){
   };
   s.addEventListener("click", nudgeAlong);
   s.addEventListener("change", nudgeAlong);
+
+  /* Whatever the teacher put them among, extension tasks belong at the end. */
+  extras.forEach(x => s.appendChild(x.section));
+
+  /* A task counts as finished here on exactly the terms that decide whether it
+     would be nudged about: its own check, and its softer word if it has one. A
+     page of reading has neither, so nothing is being waited for and these come
+     out straight away. */
+  const restIsDone = () => kids.every(k => {
+    try{ if (!k.check().ok) return false; }catch(e){ return false; }
+    if (!k.soft) return true;
+    try{ return k.soft().ok; }catch(e){ return false; }
+  });
+  const showExtras = () => {
+    if (!extras.length) return;
+    const ready = restIsDone();
+    extras.forEach(x => {
+      if (x.section.hidden !== !ready) x.section.hidden = !ready;
+    });
+  };
+  s.addEventListener("input", showExtras);
+  s.addEventListener("click", showExtras);
+  s.addEventListener("change", showExtras);
+  showExtras();
+
   return {
     section: s,
     check: () => {
@@ -1463,6 +1500,103 @@ function rPage(b){
     },
     brief: { eyebrow:"Tasks", title: b.title || "Tasks", text: b.task || "" }
   };
+}
+
+/* Choice: they pick one, and what they picked decides the work that follows.
+   Only the chosen branch is ever on the page, so only that branch can stand
+   between them and Continue. */
+function rChoice(b){
+  const s = el("section","choice");
+  if (b.prompt) s.appendChild(el("div","q-ask", b.prompt));
+  const row = el("div","choice-row");
+  s.appendChild(row);
+  const opts = [];
+  (b.options || []).forEach((opt, k) => {
+    const btn = el("button","choice-btn", opt.label || ("Option " + (k + 1)));
+    btn.type = "button";
+    const panel = el("div","choice-panel");
+    panel.hidden = true;
+    const kids = [];
+    (opt.blocks || []).forEach((child, j) => {
+      if (!child.id) child.id = b.id + "_" + k + "_" + j;
+      const built = buildBlock(child, j);
+      if (!built) return;
+      const item = el("div","pg-item");
+      const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
+      if (child.type !== "picture"){
+        if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
+        if (bb.text) item.appendChild(el("p","pg-t", bb.text));
+      }
+      built.section.hidden = false;
+      item.appendChild(built.section);
+      panel.appendChild(item);
+      kids.push(built);
+    });
+    btn.addEventListener("click", () => { pick(k); markDirty(); });
+    row.appendChild(btn);
+    s.appendChild(panel);
+    opts.push({ btn, panel, kids });
+  });
+  let picked = -1;
+  function pick(k){
+    picked = k;
+    opts.forEach((o, i) => {
+      o.btn.classList.toggle("on", i === k);
+      o.panel.hidden = i !== k;
+    });
+  }
+  fields[b.id] = {
+    get: () => picked,
+    /* Older work may have been saved before this task had any options, so a
+       number that no longer points at one is treated as no choice at all. */
+    set: (v) => { const n = Number(v); if (n >= 0 && n < opts.length) pick(n); }
+  };
+  return { section:s,
+           check:() => {
+             if (picked < 0) return { ok:false, message:"Choose one to carry on" };
+             for (const k of opts[picked].kids){
+               const r = k.check(); if (!r.ok) return r;
+             }
+             return { ok:true };
+           },
+           soft:() => {
+             if (picked < 0) return { ok:false };
+             for (const k of opts[picked].kids){
+               if (!k.soft) continue;
+               const r = k.soft(); if (!r.ok) return r;
+             }
+             return { ok:true };
+           },
+           brief:{ eyebrow:"Choose", title:b.title || "", text:stripTags(b.task || "") } };
+}
+
+/* Extension tasks: a page within a page. It holds whatever a teacher wants and
+   is hidden until the rest of its page is finished with. Nothing inside it can
+   ever hold a student up, so its check and its soft word both always pass. */
+function rExtension(b){
+  const s = el("section","extension");
+  const head = el("div","ext-head");
+  head.appendChild(el("b","ext-title", b.title || "Extension tasks"));
+  if (b.task) head.appendChild(el("p","ext-task", b.task));
+  s.appendChild(head);
+  (b.blocks || []).forEach((child, j) => {
+    if (!child.id) child.id = b.id + "_" + j;
+    const built = buildBlock(child, j);
+    if (!built) return;
+    const item = el("div","pg-item");
+    const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
+    if (child.type !== "picture"){
+      if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
+      if (bb.text) item.appendChild(el("p","pg-t", bb.text));
+    }
+    built.section.hidden = false;
+    item.appendChild(built.section);
+    s.appendChild(item);
+  });
+  return { section:s,
+           check:() => ({ ok:true }),
+           soft:() => ({ ok:true }),
+           brief:{ eyebrow:"Extension", title:b.title || "Extension tasks", text:b.task || "" } };
 }
 
 function renderBlock(b, i){
@@ -1577,10 +1711,15 @@ function rQuestion(b){
   /* The question is written in the builder's formatting box now, so it
      arrives as HTML. el() sets innerHTML, which is what we want here. */
   if (b.prompt) s.appendChild(el("div","q-ask", b.prompt));
-  const min = b.minWords || 8;
+  /* Zero means the teacher does not want a length on this one, so there is no
+     encouragement and nothing to fall short of. Written as an explicit check
+     because "|| 8" read zero as "not set" and then asked for eight words that
+     could never be enough. undefined still means eight, for older lessons. */
+  const min = b.minWords === undefined ? 8 : Math.max(0, Number(b.minWords) || 0);
   const ta = el("textarea","answer"); ta.rows = 6; ta.placeholder = "Type your answer here…";
   const counter = el("p","counter");
   function tick(){
+    if (!min){ counter.hidden = true; counter.textContent = ""; return; }
     const n = wordCount(ta.value);
     const stage = n >= min ? "good" : n >= Math.ceil(min/2) ? "going" : "more";
     const started = ta.value.trim().length > 0;
@@ -5073,6 +5212,25 @@ function buildPdf(){
                  colour: v ? PDF.GREEN : PDF.RED });
       return out;
     }
+    /* What they chose, and then whatever that choice asked of them. The work
+       is nested, so this asks partsFor for each of those in turn rather than
+       being flattened out beforehand like the tasks on a page. */
+    if (b.type === "choice"){
+      const opts = b.options || [];
+      const k = (v === null || v === undefined || v === "") ? -1 : Number(v);
+      if (b.prompt) out.push({ t: "ask", text: pdfText(b.prompt) });
+      const chose = (k >= 0 && opts[k]) ? opts[k] : null;
+      out.push({ t: "text", face: "small",
+                 text: chose ? ("Chose: " + pdfText(chose.label)) : "Nothing chosen",
+                 colour: chose ? PDF.GREEN : PDF.AMBER });
+      if (chose){
+        (chose.blocks || []).forEach(child => {
+          const cf = fields[child.id];
+          partsFor(child, cf ? cf.get() : null, cf).forEach(part => out.push(part));
+        });
+      }
+      return out;
+    }
     if (b.type === "question"){
       if (b.heading) out.push({ t: "text", face: "task", text: pdfText(b.heading) });
       if (b.context) proseParts(b.context).forEach(p => out.push(p));
@@ -5297,7 +5455,13 @@ function buildPdf(){
   (lesson.blocks || []).forEach(b => {
     if (b.type === "page"){
       if (b.title) flat.push({ type: "__page", title: b.title });
-      (b.blocks || []).forEach(child => flat.push(child));
+      (b.blocks || []).forEach(child => {
+        /* extension tasks are a level deeper again, under their own heading */
+        if (child.type === "extension"){
+          flat.push({ type: "__page", title: child.title || "Extension tasks" });
+          (child.blocks || []).forEach(g => flat.push(g));
+        } else flat.push(child);
+      });
     } else flat.push(b);
   });
 

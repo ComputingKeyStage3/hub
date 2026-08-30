@@ -91,21 +91,22 @@
     const bare = realCode(code);
     const value = String(check.value || "");
     const out = String(output == null ? "" : output);
+    const cased = check.caseSensitive === true;
 
     switch (check.kind){
       case "codeHas":
         if (!value) return broken(label, "This check has nothing to look for.");
-        return bare.includes(value) ? pass(label)
+        return has(bare, value, cased) ? pass(label)
           : fail(label, "Your code does not use " + value + " yet.");
 
       case "codeLacks":
         if (!value) return broken(label, "This check has nothing to look for.");
-        return !bare.includes(value) ? pass(label)
+        return !has(bare, value, cased) ? pass(label)
           : fail(label, "Try doing this without " + value + ".");
 
       case "defines": {
         if (!value) return broken(label, "This check does not say which function.");
-        const re = new RegExp("\\bdef\\s+" + value.replace(/[^\w]/g, "") + "\\s*\\(");
+        const re = new RegExp("\\bdef\\s+" + value.replace(/[^\w]/g, "") + "\\s*\\(", cased ? "" : "i");
         return re.test(bare) ? pass(label)
           : fail(label, "Write a function called " + value + ".");
       }
@@ -113,7 +114,7 @@
       case "calls": {
         if (!value) return broken(label, "This check does not say what to call.");
         const name = value.replace(/[^\w]/g, "");
-        const called = new RegExp("(?<!def\\s)\\b" + name + "\\s*\\(").test(bare);
+        const called = new RegExp("(?<!def\\s)\\b" + name + "\\s*\\(", cased ? "" : "i").test(bare);
         return called ? pass(label) : fail(label, "Nothing calls " + value + " yet.");
       }
 
@@ -134,13 +135,13 @@
 
       case "outputHas":
         if (!out.trim()) return fail(label, "Run your code first.");
-        return out.includes(value) ? pass(label)
+        return has(out, value, cased) ? pass(label)
           : fail(label, "Your output does not include \u201c" + value + "\u201d.");
 
       case "outputIs": {
         if (!out.trim()) return fail(label, "Run your code first.");
         const tidy = (t) => t.replace(/\r/g, "").trim().replace(/[ \t]+$/gm, "");
-        return tidy(out) === tidy(value) ? pass(label)
+        return same(tidy(out), tidy(value), cased) ? pass(label)
           : fail(label, "Your output is not quite right yet.");
       }
 
@@ -184,6 +185,8 @@
     const selector = String(check.selector || "").trim();
     const want = parseInt(check.count, 10) || 1;
 
+    const cased = check.caseSensitive === true;
+
     switch (check.kind){
       case "tag": {
         if (!selector) return broken(label, "This check does not say which tag.");
@@ -217,7 +220,7 @@
         if (!withAttr.length)
           return fail(label, "No " + selector + " has a " + attr + " yet.");
         if (!value) return pass(label);
-        const matching = withAttr.filter(n => (n.getAttribute(attr) || "").includes(value));
+        const matching = withAttr.filter(n => has(n.getAttribute(attr) || "", value, cased));
         return matching.length ? pass(label)
           : fail(label, "The " + attr + " is set, but not to " + value + ".");
       }
@@ -225,7 +228,7 @@
       case "contentHas": {
         if (!value) return broken(label, "This check has nothing to look for.");
         const text = (doc.body ? doc.body.textContent : "") || "";
-        return text.includes(value) ? pass(label)
+        return has(text, value, cased) ? pass(label)
           : fail(label, "The page does not show \u201c" + value + "\u201d yet.");
       }
 
@@ -243,7 +246,7 @@
         const line = new RegExp("(?:^|;)\\s*" + prop.replace(/[^\w-]/g, "") + "\\s*:\\s*([^;]+)").exec(body);
         if (!line) return fail(label, selector + " does not set " + prop + " yet.");
         if (!value) return pass(label);
-        return line[1].trim().toLowerCase().includes(value.toLowerCase()) ? pass(label)
+        return has(line[1].trim(), value, cased) ? pass(label)
           : fail(label, prop + " is set, but not to " + value + ".");
       }
 
@@ -251,7 +254,7 @@
         const which = String(check.file || "html").toLowerCase();
         const text = which === "css" ? css : which === "js" ? js : String((files && files.html) || "");
         if (!value) return broken(label, "This check has nothing to look for.");
-        return text.includes(value) ? pass(label)
+        return has(text, value, cased) ? pass(label)
           : fail(label, "Your " + which.toUpperCase() + " does not include " + value + " yet.");
       }
 
@@ -268,6 +271,19 @@
   };
 
   /* ---------- what the student sees ---------- */
+
+  /* Case is ignored unless a teacher deliberately asks for it. A student who
+     writes Print where the check says print has usually made a different
+     mistake from the one the check is about, and marking it wrong teaches
+     nothing. Each check carries its own caseSensitive flag. */
+  function has(hay, needle, cased){
+    const h = String(hay == null ? "" : hay), n = String(needle == null ? "" : needle);
+    return cased ? h.includes(n) : h.toLowerCase().includes(n.toLowerCase());
+  }
+  function same(a, b, cased){
+    const x = String(a == null ? "" : a), y = String(b == null ? "" : b);
+    return cased ? x === y : x.toLowerCase() === y.toLowerCase();
+  }
 
   window.buildChecklist = function(checks){
     const wrap = document.createElement("div");

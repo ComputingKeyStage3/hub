@@ -1050,9 +1050,18 @@ function paintYears(){
     t.addEventListener("click", () => openYear(y));
     g.appendChild(t);
   });
-  makeSortable(g, years, async (moved) => {
-    try{ await catPost({ op:"reorder", kind:"year", names: moved }); paintYears(); }
-    catch(e){ say("Could not reorder those", e.message); }
+  makeSortable(g, years, (moved) => {
+    /* Move them where they were dropped straight away, then save in the
+       background. catPost writes and then reloads the whole catalogue, so
+       waiting for it meant two round trips, about two seconds, before a tile
+       so much as looked as though it had moved. */
+    const byName = new Map((cat.years || []).map(y => [y.name, y]));
+    cat.years = moved.map(n => byName.get(n)).filter(Boolean);
+    paintYears();
+    catPost({ op:"reorder", kind:"year", names: moved }).catch(e => {
+      say("Could not reorder those", e.message);
+      loadCatalogue().then(paintYears).catch(() => {});   // put them back as they really are
+    });
   });
   if (unfiled){
     const t = el("button","classtile");
@@ -1087,9 +1096,21 @@ function paintHubUnits(){
     t.addEventListener("click", () => openHubUnit(u));
     g.appendChild(t);
   });
-  makeSortable(g, units, async (moved) => {
-    try{ await catPost({ op:"reorder", kind:"unit", names: moved }); paintHubUnits(); }
-    catch(e){ say("Could not reorder those", e.message); }
+  makeSortable(g, units, (moved) => {
+    /* As with the year groups: shown moved at once, saved behind the scenes.
+       Only this year's units are reordered, and they are put back into the
+       slots they already held, so units filed under other years keep their
+       own order however this one is rearranged. */
+    const mine = new Set(moved);
+    const held = new Map(unitsOfYear(hubYear).map(u => [u.name, u]));
+    let k = 0;
+    cat.units = (cat.units || []).map(u =>
+      ((u.year || "") === hubYear && mine.has(u.name)) ? held.get(moved[k++]) : u);
+    paintHubUnits();
+    catPost({ op:"reorder", kind:"unit", names: moved }).catch(e => {
+      say("Could not reorder those", e.message);
+      loadCatalogue().then(paintHubUnits).catch(() => {});
+    });
   });
   const unfiled = (cat.lessons || []).filter(l => !l.unit).length;
   if (!hubYear && unfiled){

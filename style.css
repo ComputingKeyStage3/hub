@@ -2221,7 +2221,16 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .checklist-head b{font-size:14px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
 .checklist-score{font-weight:700; font-size:14px; color:var(--muted)}
 .checklist-items{list-style:none; margin:0; padding:0}
-.check{display:flex; align-items:flex-start; gap:9px; padding:5px 0; font-size:15.5px; line-height:1.45}
+/* The note is meant to sit on its own line under the label, which is what the
+   29px indent below is for, and that needs the row to be allowed to wrap. It
+   was not, so the note stayed on the same line and its flex-basis of 100% took
+   a share of the width even when it was empty. That squeezed the label into
+   wrapping while there was still room beside it. */
+.check{display:flex; flex-wrap:wrap; align-items:flex-start; gap:9px;
+  padding:5px 0; font-size:15.5px; line-height:1.45}
+.check-text{flex:1 1 auto; min-width:0}
+/* and with nothing to explain it takes no line at all */
+.check-note:empty{display:none}
 .check-mark{flex:none; width:20px; height:20px; border-radius:50%; display:inline-flex;
   align-items:center; justify-content:center; font-size:12px; font-weight:800;
   border:1.5px solid var(--line-2); color:var(--muted); margin-top:2px}
@@ -3026,3 +3035,36 @@ body > .homebar, body > .topbar, body > .crumbbar, body > .modeswitch{
 /* The loading screen covers the page while a lesson is put together, so it
    has nothing to fade up from and should be there the moment it is needed. */
 body > .loadscreen{ animation:none }
+
+
+/* ---------- extension tasks ----------
+   Marked off from the rest of the page so it reads as a bonus rather than as
+   more of the same. It only ever appears once everything above it is done. */
+.extension{border:1.5px dashed var(--line-2); border-radius:14px;
+  padding:14px 16px 4px; margin-top:18px; background:var(--panel-2)}
+.extension[hidden]{display:none}
+.ext-head{margin-bottom:6px}
+.ext-title{display:block; font-size:15px; color:var(--amber)}
+.ext-task{margin:4px 0 0; color:var(--muted); font-size:14px}
+
+/* ---------- choice ----------
+   The buttons sit in a row and only the chosen one's work is on the page. */
+.choice-row{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0}
+.choice-btn{padding:10px 16px; border:1.5px solid var(--line-2); border-radius:999px;
+  background:var(--panel); color:var(--text); cursor:pointer;
+  font-family:var(--body); font-size:15px; font-weight:700}
+.choice-btn:hover{border-color:var(--amber)}
+.choice-btn.on{border-color:var(--amber); background:var(--amber); color:var(--amber-ink)}
+.choice-panel[hidden]{display:none}
+.choiceopt{border:1px solid var(--line); border-radius:12px; padding:10px 12px; background:var(--panel-2)}
+
+/* ---------- text size in the formatting bar ----------
+   The same range and the same shape of control as the whiteboard, so the two
+   places a teacher sets a type size look and behave alike. */
+.rt-sizes{display:inline-flex; align-items:center; gap:2px; margin:0 2px}
+.rt-step{min-width:22px}
+.rt-sizenum{width:44px; height:26px; padding:0 4px; text-align:center;
+  border:1px solid var(--line); border-radius:7px; background:var(--panel);
+  color:var(--text); font-family:var(--body); font-size:13px}
+.rt-sizenum:focus{border-color:var(--amber); outline:none}
+.rt-sizeunit{font-size:11px; color:var(--muted)}
