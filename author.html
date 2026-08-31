@@ -273,24 +273,38 @@ function newCodeKey(){
   return "c" + Date.now().toString(36) + codeKeyCount.toString(36);
 }
 
-/* Every coding task before this one, in the order a student meets them. */
+/* Every coding task before this one, in the order a student meets them, each
+   with the page it is on so it can be named by where a teacher will look for
+   it rather than by a number in a list. */
 function earlierCodeTasks(target){
   const out = [];
   let stop = false;
+  let pageNo = 0, pageTitle = "";
   const walk = (list) => {
     (list || []).forEach(x => {
       if (stop) return;
       if (x === target){ stop = true; return; }
+      if (x.type === "page"){ pageNo++; pageTitle = String(x.title || "").trim(); }
       if (x.type === "ide" || x.type === "web"){
         if (!x.key) x.key = newCodeKey();
-        out.push(x);
+        out.push({ task:x, pageNo:pageNo, pageTitle:pageTitle });
       }
+      /* a task inside an extension or a choice is still on the page holding it */
       if (x.blocks) walk(x.blocks);
       if (x.options) x.options.forEach(o => walk(o.blocks));
     });
   };
   walk(lesson.blocks);
   return out;
+}
+/* "2 (Loops): Build the counter", falling back sensibly when a page has no
+   title yet or the task has no heading of its own. */
+function codeTaskLabel(entry){
+  const heading = String(entry.task.title || "").trim() || (LABEL[entry.task.type] || "Coding task");
+  const where = entry.pageNo
+    ? (entry.pageNo + (entry.pageTitle ? " (" + entry.pageTitle + ")" : ""))
+    : "";
+  return where ? where + ": " + heading : heading;
 }
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
@@ -849,6 +863,19 @@ function move(arr, i, d){
   arr.splice(j, 0, moved);
   render(); schedulePreview();
 }
+/* Pages are numbered among the pages, so a card says which page it is rather
+   than where it happens to sit in the list. */
+function pageNumber(b){
+  return lesson.blocks.filter(x => x.type === "page").indexOf(b) + 1;
+}
+function headLabel(b, i){
+  if (b.type !== "page") return (i + 1) + ". " + LABEL[b.type];
+  const t = String(b.title || "").trim();
+  /* "1. Page: Introduction", or just "1. Page" while it has no title, rather
+     than leaving a colon hanging with nothing after it. */
+  return pageNumber(b) + ". Page" + (t ? ": " + t : "");
+}
+
 function card(b, i, arr){
   const c = el("div","bcard");
   c.draggable = false;
@@ -891,7 +918,23 @@ function card(b, i, arr){
   grip.addEventListener("mousedown", () => { c.draggable = true; });
   grip.addEventListener("mouseup", () => { c.draggable = false; });
   head.appendChild(grip);
-  head.appendChild(el("b","btype", (i + 1) + ". " + LABEL[b.type]));
+  /* Folding a page away leaves this line and the buttons on it, which is all
+     that is needed to find, move or reorder a page. It is a way of getting
+     about a long lesson, so it is kept out of the saved lesson: it says
+     nothing about what a student sees. */
+  if (b.type === "page"){
+    const fold = el("button","btn-ghost bmini foldbtn", b.collapsed ? "▸" : "▾");
+    fold.title = b.collapsed ? "Open this page" : "Fold this page away";
+    fold.addEventListener("click", (e) => {
+      e.stopPropagation();
+      b.collapsed = !b.collapsed;
+      saveDraft(); render();
+    });
+    head.appendChild(fold);
+  }
+  const btype = el("b","btype", headLabel(b, i));
+  head.appendChild(btype);
+  const paintHead = () => { btype.textContent = headLabel(b, i); };
   const tools = el("span","btools");
   if (b.type === "page"){
     const isFirst = lesson.blocks.indexOf(b) === 0;
@@ -1134,10 +1177,10 @@ function card(b, i, arr){
       const none = document.createElement("option");
       none.value = ""; none.textContent = "The starter code below";
       sel.appendChild(none);
-      earlier.forEach((x, i) => {
+      earlier.forEach(entry => {
         const o = document.createElement("option");
-        o.value = x.key;
-        o.textContent = (i + 1) + ". " + (x.title || LABEL[x.type] || "Coding task");
+        o.value = entry.task.key;
+        o.textContent = codeTaskLabel(entry);
         sel.appendChild(o);
       });
       sel.value = b.startFrom || "";
@@ -1151,11 +1194,15 @@ function card(b, i, arr){
       } else if (b.startFrom){
         w.appendChild(el("p","bhelp",
           "Their code from that task is put in here the first time they open this one, "
-          + "so they can keep building on it. Anything they have already written here is left alone."));
+          + "so they can keep building on it. Anything they have already written here is "
+          + "left alone."));
       }
       body.appendChild(w);
+      /* Nothing to write when the code comes from somewhere else: a starter box
+         sitting under it only invites a teacher to fill in something a student
+         will never see. */
+      if (!b.startFrom) F("Starter code", "starter", { area:true, rows:7, mono:true });
     }
-    F("Starter code", "starter", { area:true, rows:7, mono:true });
     toggleRow(codeOptions([["turtle","Turtle canvas", false],
                ["run","Running", true],
                ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]));
@@ -1367,7 +1414,7 @@ function card(b, i, arr){
     F("Their code must contain (optional)", "expect");
   }
   if (b.type === "page"){
-    F("Title", "title");
+    F("Title", "title", { then: paintHead });
     R("Subtitle", "task", { rows:2 });
 
     const inner = el("div","pagekids");
@@ -1746,6 +1793,11 @@ function card(b, i, arr){
     F("What each group means", "keywordLabels", { help:"One phrase per group, separated by ;, students see these when they check their answer." });
     F("Model answer", "model", { area:true, rows:2 });
     if (lesson.assessment) F("Topic tag", "topic");
+  }
+  /* Folded away: the head and its buttons are all that is left. */
+  if (b.type === "page" && b.collapsed){
+    c.classList.add("folded");
+    body.hidden = true;
   }
   c.appendChild(body);
   return c;

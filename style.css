@@ -3328,3 +3328,11 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
   border:1px solid var(--line); border-radius:10px; background:var(--panel);
   color:var(--text); font-family:var(--mono); font-size:16px; letter-spacing:.12em}
 .bypassin:focus{border-color:var(--amber); outline:none}
+
+/* ---------- folding a page away in the builder ----------
+   A long lesson is easier to move about when the pages can be shut. The line
+   that is left carries everything needed to find, move or reorder one. */
+.foldbtn{flex:none; font-size:12px; line-height:1}
+.bcard.folded > .bhead{border-bottom:none}
+.bcard.folded .bbody[hidden]{display:none}
+.bcard.folded{margin-bottom:8px}
