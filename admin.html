@@ -2235,29 +2235,57 @@ on("addUnitBtn", "click", () => {
   const mine = new Set((cat.units || [])
     .filter(u => unitHasLessonFor(u.name))
     .map(u => u.name.toLowerCase()));
-  const year = yearOfClass();
-  const offer = (cat.units || [])
-    .filter(u => !year || !u.year || u.year === year)
-    .filter(u => !mine.has(u.name.toLowerCase()));
+  const years = (cat.years || []).map(y => y.name);
+  /* A class carries no year group of its own. The year used to be guessed from
+     the units it already had, which works until a class has none: the guess
+     came back empty, the filter let everything through, and a Year 8 class was
+     offered 7.1 Programming. Asking outright puts the choice in front of
+     whoever is making it, and it is filled in from the guess when there is one
+     so an established class is one press away as before. */
+  const guess = yearOfClass();
   openModal(box => {
     box.classList.add("narrow");
     modalTitle(box, "Add a unit to " + cls);
-    if (!offer.length){
-      box.appendChild(el("p","modal-text", year
-        ? "Every unit in " + year + " is already here."
-        : "There are no other units yet."));
-      return;
-    }
+
+    const yw = el("div","bfield");
+    yw.appendChild(el("label","","What year group is this class?"));
+    const ysel = document.createElement("select");
+    const first = document.createElement("option");
+    first.value = ""; first.textContent = "Choose…";
+    ysel.appendChild(first);
+    years.forEach(y => {
+      const o = document.createElement("option");
+      o.value = y; o.textContent = y;
+      ysel.appendChild(o);
+    });
+    ysel.value = (guess && years.indexOf(guess) >= 0) ? guess : "";
+    yw.appendChild(ysel);
+    box.appendChild(yw);
+
     const find = el("input","searchbox bankfind");
     find.placeholder = "Search";
     box.appendChild(find);
     const list = el("div","banklist");
     box.appendChild(list);
+
     function paint(){
-      const term = (find.value || "").trim().toLowerCase();
+      const year = ysel.value;
       list.innerHTML = "";
+      find.hidden = !year;
+      if (!year){
+        list.appendChild(el("p","hint","Choose a year group to see its units."));
+        return;
+      }
+      const offer = (cat.units || [])
+        .filter(u => String(u.year || "") === year)
+        .filter(u => !mine.has(u.name.toLowerCase()));
+      if (!offer.length){
+        list.appendChild(el("p","hint","Every unit in " + year + " is already here."));
+        return;
+      }
+      const term = (find.value || "").trim().toLowerCase();
       const shown = offer.filter(u => !term || u.name.toLowerCase().includes(term));
-      if (!shown.length) list.appendChild(el("p","hint","Nothing matches that."));
+      if (!shown.length){ list.appendChild(el("p","hint","Nothing matches that.")); return; }
       shown.forEach(u => {
         const row = el("button","ov-row");
         row.appendChild(el("span","t", u.name));
@@ -2267,6 +2295,7 @@ on("addUnitBtn", "click", () => {
         list.appendChild(row);
       });
     }
+    ysel.addEventListener("change", paint);
     find.addEventListener("input", paint);
     paint();
   });

@@ -95,7 +95,7 @@
       '<div class="field"><label>Type it again</label><input type="password" id="pwNew2" autocomplete="new-password"></div>' +
       '<button class="btn-ghost" id="pwGo">Change password</button>' +
       '<p class="hint" id="pwMsg" style="margin-top:10px"></p>' +
-      '<p class="subnote">Tip: three random words joined together is long, strong and easy to remember.</p></div>' +
+      '<p class="subnote">It must be at least 12 characters long.</p></div>' +
       '</div>' +
       '<button class="btn-primary modal-cta" id="setDone">Done</button></div>';
     document.body.appendChild(back);
