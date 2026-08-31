@@ -1488,7 +1488,8 @@ function rPage(b){
        these out of both is what stops work almost nobody sees from standing
        between the rest of the class and the next page. */
     if (child.type === "extension"){
-      built.section.hidden = true;
+      /* not hidden any more: the "Finished early?" question has to be reachable
+         whether or not the rest of the page is finished */
       extras.push(built);
       return;
     }
@@ -1554,9 +1555,7 @@ function rPage(b){
   const showExtras = () => {
     if (!extras.length) return;
     const ready = restIsDone();
-    extras.forEach(x => {
-      if (x.section.hidden !== !ready) x.section.hidden = !ready;
-    });
+    extras.forEach(x => { if (x.setReady) x.setReady(ready); });
   };
   s.addEventListener("input", showExtras);
   s.addEventListener("click", showExtras);
@@ -1658,10 +1657,21 @@ function rChoice(b){
    ever hold a student up, so its check and its soft word both always pass. */
 function rExtension(b){
   const s = el("section","extension");
-  const head = el("div","ext-head");
-  head.appendChild(el("b","ext-title", b.title || "Extension tasks"));
-  if (b.task) head.appendChild(el("p","ext-task", b.task));
-  s.appendChild(head);
+
+  /* The way in is a question the student answers for themselves. It is always
+     on the page, so somebody who has raced ahead can open these without having
+     to satisfy every check first: a task nobody can reach is worse than one
+     opened a little early. */
+  const gate = el("label","ext-gate");
+  const cb = el("input"); cb.type = "checkbox";
+  gate.appendChild(cb);
+  gate.appendChild(el("span","ext-gate-text","Finished early?"));
+  s.appendChild(gate);
+
+  const inner = el("div","ext-body");
+  inner.hidden = true;
+  if (b.title) inner.appendChild(el("b","ext-title", b.title));
+  inner.appendChild(el("p","ext-task", b.task || "Have a go at these"));
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
     const built = buildBlock(child, j);
@@ -1674,11 +1684,27 @@ function rExtension(b){
     }
     built.section.hidden = false;
     item.appendChild(built.section);
-    s.appendChild(item);
+    inner.appendChild(item);
   });
+  s.appendChild(inner);
+
+  /* Two ways it opens: everything else on the page being finished with, or the
+     student saying they are ready. Either is enough. */
+  let ready = false;
+  function paint(){
+    const open = ready || cb.checked;
+    if (inner.hidden === open) inner.hidden = !open;
+    s.classList.toggle("open", open);
+  }
+  cb.addEventListener("change", () => { paint(); markDirty(); });
+  /* remembered, so ticking it and coming back later does not shut it again */
+  fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; paint(); } };
+  paint();
+
   return { section:s,
            check:() => ({ ok:true }),
            soft:() => ({ ok:true }),
+           setReady:(v) => { ready = !!v; paint(); },
            brief:{ eyebrow:"Extension", title:b.title || "Extension tasks", text:b.task || "" } };
 }
 
@@ -2195,10 +2221,21 @@ function rIDE(b){
   const settings = el("div","ide-settings"); settings.hidden = true;
   settings.appendChild(el("span","ide-setlabel","Colours"));
   const themes = el("div","ide-setrow");
-  [["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(pair => {
+  /* "Match the page" first, and it is where everyone starts. Without it, picking
+     a colour scheme once meant the editor never followed the site again: turning
+     the whole site dark left a white editor sitting in the middle of it with no
+     way back short of clearing the browser's storage. */
+  [["","Match the page"],["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(pair => {
     const t = el("button","ide-chip", pair[1]);
     t.dataset.theme = pair[0];
-    t.addEventListener("click", () => setTheme(pair[0], true));
+    t.addEventListener("click", () => {
+      if (!pair[0]){
+        const p2 = idePrefs();
+        delete p2.theme; delete p2.chosen;
+        saveIdePrefs(p2);
+        setTheme(themeFromSite());
+      } else setTheme(pair[0], true);
+    });
     themes.appendChild(t);
   });
   settings.appendChild(themes);
@@ -2300,10 +2337,14 @@ function rIDE(b){
   /* --- appearance --- */
   function setTheme(k, chosen){
     s.dataset.idetheme = k;
-    Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
     /* only remember it when the student picked it, otherwise the editor would
        stop following the site's colours after the first paint */
     if (chosen){ const p = idePrefs(); p.theme = k; p.chosen = true; saveIdePrefs(p); }
+    /* Following the site is a mode of its own, so that is the chip to mark
+       rather than whichever colour it happens to be showing. */
+    const auto = !idePrefs().theme;
+    Array.from(themes.children).forEach(c =>
+      c.classList.toggle("on", auto ? c.dataset.theme === "" : c.dataset.theme === k));
   }
   function setSize(k){
     s.dataset.idesize = k;
@@ -2311,8 +2352,14 @@ function rIDE(b){
     const p = idePrefs(); p.size = k; saveIdePrefs(p);
   }
   const pref = idePrefs();
+  /* Always watching, even when a colour scheme has been chosen. The watcher
+     asks about the preference each time it fires, so pressing "Match the page"
+     starts following the site again straight away. Registering it only in the
+     else branch meant that, once a scheme had been picked, nothing was left
+     listening: choosing to follow the site again worked once and then stopped
+     until the page was reloaded. */
+  watchSiteTheme((t) => { if (!idePrefs().theme) setTheme(t); });
   if (pref.theme) setTheme(pref.theme);
-  else watchSiteTheme((t) => { if (!idePrefs().theme) setTheme(t); });
   setSize(pref.size || "m");
 
   /* --- painting --- */
@@ -2813,10 +2860,14 @@ function rWeb(b){
   /* ---------- appearance ---------- */
   function setTheme(k, chosen){
     s.dataset.idetheme = k;
-    Array.from(themes.children).forEach(c => c.classList.toggle("on", c.dataset.theme === k));
     /* only remember it when the student picked it, otherwise the editor would
        stop following the site's colours after the first paint */
     if (chosen){ const p = idePrefs(); p.theme = k; p.chosen = true; saveIdePrefs(p); }
+    /* Following the site is a mode of its own, so that is the chip to mark
+       rather than whichever colour it happens to be showing. */
+    const auto = !idePrefs().theme;
+    Array.from(themes.children).forEach(c =>
+      c.classList.toggle("on", auto ? c.dataset.theme === "" : c.dataset.theme === k));
   }
   function setSize(k){
     s.dataset.idesize = k;
@@ -2824,8 +2875,14 @@ function rWeb(b){
     const p = idePrefs(); p.size = k; saveIdePrefs(p);
   }
   const pref = idePrefs();
+  /* Always watching, even when a colour scheme has been chosen. The watcher
+     asks about the preference each time it fires, so pressing "Match the page"
+     starts following the site again straight away. Registering it only in the
+     else branch meant that, once a scheme had been picked, nothing was left
+     listening: choosing to follow the site again worked once and then stopped
+     until the page was reloaded. */
+  watchSiteTheme((t) => { if (!idePrefs().theme) setTheme(t); });
   if (pref.theme) setTheme(pref.theme);
-  else watchSiteTheme((t) => { if (!idePrefs().theme) setTheme(t); });
   setSize(pref.size || "m");
 
   /* ---------- painting ---------- */

@@ -3052,7 +3052,6 @@ body > .loadscreen{ animation:none }
 .extension{border:1.5px dashed var(--line-2); border-radius:14px;
   padding:14px 16px 4px; margin-top:18px; background:var(--panel-2)}
 .extension[hidden]{display:none}
-.ext-head{margin-bottom:6px}
 .ext-title{display:block; font-size:15px; color:var(--amber)}
 .ext-task{margin:4px 0 0; color:var(--muted); font-size:14px}
 
@@ -3240,9 +3239,13 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
    These stack up, so each one uses the width it has rather than making a
    column of single fields that has to be scrolled through. */
 .checkrow{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:10px}
-.checkfield{display:flex; flex-direction:column; gap:4px; min-width:0}
+/* These carry .bfield as well, so the boxes and dropdowns inside them are the
+   same height and padding as every other field in the builder. Without it they
+   fell back to the browser's own sizing and came out noticeably shorter than
+   the dropdowns beside them. Only the layout is changed here. */
+.checkfield{display:flex; flex-direction:column; gap:4px; min-width:0; margin:0}
 .checkfield.grow{flex:1 1 150px}
-.checkfield label{font-size:12px; color:var(--dim); font-weight:700}
+.checkfield label{font-size:12px; color:var(--dim); font-weight:700; margin-bottom:0}
 .checkfield select, .checkfield input{width:100%; min-width:0}
 /* long option text is cut with an ellipsis rather than widening the row */
 .checkrow select, .morecond select{text-overflow:ellipsis}
@@ -3266,8 +3269,9 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
 /* an extra condition uses the width too */
 .morecond{border-left:2px solid var(--line-2); padding-left:10px; margin:0 0 8px 2px}
 .morecond .brow{display:flex; flex-wrap:nowrap; gap:6px; align-items:center}
-.morecond select{flex:1 1 auto; min-width:110px}
-.morecond input{flex:2 1 120px; min-width:0}
+.morecond select{flex:1 1 auto; min-width:110px; height:44px; padding:0 12px;
+  font-size:15px; font-family:var(--body)}
+.morecond input{flex:2 1 120px; min-width:0; font-size:15px; padding:9px 11px}
 @media (max-width:640px){ .morecond .brow{flex-wrap:wrap} }
 
 /* The bar is three pixels tall, which is far too small a thing to ask anyone
@@ -3303,3 +3307,13 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
 /* another question inside the same written answer task */
 .extraq{border-left:2px solid var(--line-2); padding-left:10px}
 .extraq .brow{align-items:center; gap:8px}
+
+/* ---------- the way into extension tasks ----------
+   A question the student answers for themselves, always on the page so it can
+   be reached whether or not everything above it is finished. */
+.ext-gate{display:flex; align-items:center; gap:9px; cursor:pointer;
+  font-family:var(--display); font-size:16px; color:var(--text)}
+.ext-gate input{width:18px; height:18px; accent-color:var(--amber); cursor:pointer}
+.ext-body[hidden]{display:none}
+.ext-body{margin-top:10px}
+.extension.open{border-style:solid; border-color:var(--amber)}

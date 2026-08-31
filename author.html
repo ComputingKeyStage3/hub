@@ -229,8 +229,10 @@ const BLANK = {
   page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
   /* A page within a page: it holds whatever a teacher wants, and the lesson
      keeps it out of sight until the rest of the page is finished with. */
-  extension:() => ({ type:"extension", title:"Extension tasks",
-                     task:"Finished early? Have a go at these.", blocks:[] }),
+  /* The lesson asks "Finished early?" itself, so the title is a teacher's own
+     wording rather than something every one of these has to carry. */
+  extension:() => ({ type:"extension", title:"",
+                     task:"Have a go at these", blocks:[] }),
   /* They pick one, and what they picked decides the work they then get. */
   choice:   () => ({ type:"choice", title:"", task:"", prompt:"Choose one",
                      options:[{ label:"", blocks:[] }, { label:"", blocks:[] }] }),
@@ -437,8 +439,8 @@ function compileOne(b, id, target){
     const kids = [];
     (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
     if (!kids.length) return;                 // an empty one is not worth saving
-    push({ type:"extension", id, title: b.title || "Extension tasks",
-           task: b.task || "", blocks: kids });
+    push({ type:"extension", id, title: b.title || "",
+           task: b.task || "Have a go at these", blocks: kids });
     return;
   }
   {
@@ -830,6 +832,12 @@ function card(b, i, arr){
       const i2 = lesson.blocks.indexOf(b);
       if (i2 < 0 || i2 === openPage) return;
       openPage = i2;
+      /* The preview comes along. It keeps its page in sessionStorage and reads
+         it on load, so writing the page being edited and asking for a refresh
+         lands it on the same one. Seeing the page you are working on is more
+         use than the preview staying wherever it was left. */
+      try{ sessionStorage.setItem("hub_preview_step", String(i2)); }catch(e){}
+      schedulePreview();
       /* Only the highlight changes, so the cards themselves are left alone.
          Rendering again from here threw away the very element being pressed
          before its mouseup could land on it, so clicking a button or a box on
@@ -1311,11 +1319,12 @@ function card(b, i, arr){
     body.appendChild(addTaskRow(b.blocks));
   }
   if (b.type === "extension"){
-    F("Title", "title");
-    R("Subtitle", "task", { rows:2 });
+    F("Title (optional)", "title");
+    R("Subtitle", "task", { rows:2, help:"Shown under “Finished early?” once they open it." });
     body.appendChild(el("p","bhelp",
-      "Students only see these once everything else on the page is finished. "
-      + "They never hold anybody up, so nobody is asked to complete them."));
+      "The lesson shows “Finished early?” with a box to tick. These open "
+      + "when it is ticked, or on their own once everything else on the page is "
+      + "finished. They never hold anybody up, so nobody is asked to complete them."));
     const inner = el("div","pagekids");
     if (!b.blocks) b.blocks = [];
     if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
@@ -1932,7 +1941,7 @@ function checklistPopup(block, isWeb){
            checklist that would fit if it used the width it already has. */
         const topRow = el("div","checkrow");
         card.appendChild(topRow);
-        const whoField = el("div","checkfield");
+        const whoField = el("div","bfield checkfield");
         whoField.appendChild(el("label","","Who checks this"));
         const manual = c.manual === true;
         const mbtn = el("button","btn-ghost bmini2" + (manual ? " right" : ""),
@@ -1948,7 +1957,7 @@ function checklistPopup(block, isWeb){
            teacher-checked line would disappear from the list entirely. */
         if (manual){ list.appendChild(card); return; }
 
-        const row = el("div","checkfield grow");
+        const row = el("div","bfield checkfield grow");
         row.appendChild(el("label","","What to look for"));
         const pick = document.createElement("select");
         kinds.forEach(k => {
@@ -1971,7 +1980,7 @@ function checklistPopup(block, isWeb){
         const mainRow = el("div","checkrow");
         card.appendChild(mainRow);
         const needs = (name, key, help) => {
-          const f = el("div","checkfield grow");
+          const f = el("div","bfield checkfield grow");
           f.appendChild(el("label","", name));
           const inp = el("input");
           inp.value = c[key] || "";
@@ -1982,7 +1991,7 @@ function checklistPopup(block, isWeb){
         };
         const kind = c.kind || kinds[0][0];
         if (kind === "uses"){
-          const f = el("div","checkfield grow");
+          const f = el("div","bfield checkfield grow");
           f.appendChild(el("label","","Which one"));
           const sel = document.createElement("select");
           USES_OPTIONS.forEach(o2 => {
@@ -2010,7 +2019,7 @@ function checklistPopup(block, isWeb){
           needs("Value (optional)", "value", "red");
         }
         else if (kind === "fileHas"){
-          const f = el("div","checkfield");
+          const f = el("div","bfield checkfield");
           f.appendChild(el("label","","Which file"));
           const sel = document.createElement("select");
           [["html","HTML"],["css","CSS"],["js","JavaScript"]].forEach(o2 => {
