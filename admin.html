@@ -408,15 +408,42 @@ function openModal(build){
     try{ history.pushState({ modal: modalDepth }, "", location.pathname + location.search); }catch(e){}
   }
 }
+/* Returns once the pop-up is really gone, history and all.
+
+   history.back() does not take effect there and then: the popstate it causes
+   arrives later, and the handler for it puts back whichever view the entry
+   belongs to. Anything that closed a pop-up and then moved somewhere else was
+   racing that. Making a class was the plain case: the class view was shown and
+   then the late popstate quietly put the class list back over the top, so the
+   pop-up appeared to close and do nothing at all.
+
+   Callers that go somewhere afterwards should await this. Callers that do not
+   are unaffected: the promise is simply ignored. */
 function closeModal(fromBack){
   const wasOpen = !$("tmodal").hidden;
   $("tmodal").hidden = true;
-  /* Coming back off the history entry the pop-up added, unless Back is what
-     closed it in the first place. */
   if (wasOpen && !fromBack && modalDepth > 0){
     modalDepth--;
-    try{ if (history.state && history.state.modal) history.back(); }catch(e){}
+    try{
+      if (history.state && history.state.modal){
+        return new Promise(resolve => {
+          let done = false;
+          const settled = () => {
+            if (done) return;
+            done = true;
+            window.removeEventListener("popstate", settled);
+            /* after the popstate handler has had its turn, not during it */
+            setTimeout(resolve, 0);
+          };
+          window.addEventListener("popstate", settled);
+          history.back();
+          /* never leave a caller waiting on an event that is not coming */
+          setTimeout(settled, 300);
+        });
+      }
+    }catch(e){}
   }
+  return Promise.resolve();
 }
 on("tmodal", "mousedown", (e) => { if (e.target === $("tmodal")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
@@ -547,9 +574,25 @@ function changeTeacher(){ show("whoView", true); }
 on("keyIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
 
 /* ---------- classes grid ---------- */
+/* Every class there is: the ones with students in them, and the ones somebody
+   has been put down as teaching. A class made a moment ago has nobody in it
+   yet, so it is not in the list that comes from the students table, but it
+   exists and has to be openable or there is no way to add anyone to it. */
+function allClasses(){
+  const seen = new Map();
+  (groups || []).forEach(gr => {
+    const k = String(gr.name || "").toLowerCase();
+    if (k) seen.set(k, { name: gr.name, students: gr.students || 0 });
+  });
+  Object.keys(classTeachers || {}).forEach(k => {
+    if (!seen.has(k)) seen.set(k, { name: classNames[k] || k, students: 0 });
+  });
+  return Array.from(seen.values());
+}
+
 function paintClasses(){
   const g = $("classGrid"); g.innerHTML = "";
-  const mine = myClasses(groups);
+  const mine = myClasses(allClasses());
   if (!mine.length){
     g.appendChild(el("p","hint", meCode
       ? "No classes are set to " + meCode + " yet. Choose All teachers, or set who teaches a class when you rename it."
@@ -586,7 +629,8 @@ on("newClassBtn", "click", () => {
       if (!codes.length){ msg.textContent = "Choose who teaches this class."; return; }
       await saveClassTeachers(v, codes);
       await loadTeachers();
-      closeModal(); openClass(v);
+      await closeModal();
+      openClass(v);
     });
     box.appendChild(go); box.appendChild(msg);
   });
@@ -928,6 +972,7 @@ on("purgeBtn", "click", () => {
 let assigns = [];
 let teacherCodes = [];        // HTS, SNG, EJL, from the database, not the code
 let classTeachers = {};       // class -> [codes]
+let classNames = {};          // the same keys, holding the name as it was typed
 let meCode = "";              // who is signed in
 
 async function loadTeachers(){
@@ -936,11 +981,16 @@ async function loadTeachers(){
     const d = await r.json();
     teacherCodes = (d.teachers || []).map(t => t.code);
     classTeachers = {};
+    classNames = {};
     (d.classes || []).forEach(l => {
-      const k = l.group_name.toLowerCase();
+      const k = String(l.group_name || "").toLowerCase();
+      if (!k) return;
+      /* the name as it was typed, because the key is flattened for matching
+         and "8x/Co2" should not come back as "8x/co2" */
+      classNames[k] = l.group_name;
       (classTeachers[k] = classTeachers[k] || []).push(l.code);
     });
-  }catch(e){ teacherCodes = []; classTeachers = {}; }
+  }catch(e){ teacherCodes = []; classTeachers = {}; classNames = {}; }
   const sel = $("whoAmI");
   if (sel){
     const was = sel.value;
