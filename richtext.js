@@ -8,7 +8,7 @@
 (function(){
   "use strict";
 
-  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1, IMG:1 };
+  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1, IMG:1, KBD:1 };
   /* A swatch like the ones in Office: a row of hues, each with lighter and
      darker versions underneath. */
   const HUES = [
@@ -387,17 +387,192 @@
     colourWrap.appendChild(colourBtn);
     bar.appendChild(colourWrap);
 
+    /* ---------- keys off the keyboard ----------
+       Lessons keep naming keys to press, and writing Enter as ordinary words
+       reads as part of the sentence. These go in as <kbd>, which is what the
+       tag is for, and are drawn to look like the key itself. */
+    const KEYS = ["Enter","Esc","Tab","Space","Shift","Ctrl","Alt","Backspace",
+                  "Delete","Caps Lock","F1","F5","F11",
+                  "↑","↓","←","→"];
+    const COMBOS = [["Ctrl","C"],["Ctrl","V"],["Ctrl","X"],["Ctrl","Z"],["Ctrl","Y"],
+                    ["Ctrl","S"],["Ctrl","A"],["Ctrl","F"],["Ctrl","P"],
+                    ["Shift","Enter"],["Alt","Tab"],["Ctrl","Shift","Esc"]];
+
+    function insertKeys(parts){
+      const range = saved || lastRange;
+      if (!range) return;
+      restore(range);
+      const frag = document.createDocumentFragment();
+      parts.forEach((label, i) => {
+        if (i) frag.appendChild(document.createTextNode(" + "));
+        const k = document.createElement("kbd");
+        k.textContent = label;
+        frag.appendChild(k);
+      });
+      /* a space after it, or the next word is written hard against the key */
+      frag.appendChild(document.createTextNode(" "));
+      /* the fragment is emptied by insertNode, so what to put the cursor after
+         has to be held on to first */
+      const last = frag.lastChild;
+      try{
+        range.deleteContents();
+        range.insertNode(frag);
+        const sel = window.getSelection();
+        const after = document.createRange();
+        after.setStartAfter(last);
+        after.collapse(true);
+        sel.removeAllRanges(); sel.addRange(after);
+        saved = after.cloneRange();
+      }catch(e){}
+      keyMenu.hidden = true;
+      box.focus(); fire();
+    }
+
+    const keyWrap = document.createElement("span");
+    keyWrap.className = "rt-keywrap";
+    const keyBtn = document.createElement("button");
+    keyBtn.type = "button";
+    keyBtn.className = "rt-btn rt-keybtn";
+    keyBtn.title = "Put a key in, like Enter or Ctrl + C";
+    keyBtn.textContent = "⌨";
+    const keyMenu = document.createElement("div");
+    keyMenu.className = "rt-palette rt-keymenu";
+    keyMenu.hidden = true;
+
+    function keySection(name, list, asCombo){
+      const h = document.createElement("p");
+      h.className = "rt-keyhead";
+      h.textContent = name;
+      keyMenu.appendChild(h);
+      const grid = document.createElement("div");
+      grid.className = "rt-keygrid" + (asCombo ? " wide" : "");
+      list.forEach(entry => {
+        const parts = asCombo ? entry : [entry];
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "rt-keycell";
+        parts.forEach((pp, i) => {
+          if (i) b.appendChild(document.createTextNode(" + "));
+          const k = document.createElement("kbd");
+          k.textContent = pp;
+          b.appendChild(k);
+        });
+        b.addEventListener("mousedown", (e) => e.preventDefault());
+        b.addEventListener("click", () => insertKeys(parts));
+        grid.appendChild(b);
+      });
+      keyMenu.appendChild(grid);
+    }
+    keySection("Keys", KEYS, false);
+    keySection("Together", COMBOS, true);
+
+    /* No list can hold every key, so one can be typed instead. */
+    const ownRow = document.createElement("div");
+    ownRow.className = "rt-keyown";
+    const ownIn = document.createElement("input");
+    ownIn.type = "text";
+    ownIn.placeholder = "Another key";
+    const ownGo = document.createElement("button");
+    ownGo.type = "button";
+    ownGo.className = "rt-auto-btn";
+    ownGo.textContent = "Add";
+    const addOwn = () => {
+      const v = ownIn.value.trim();
+      if (!v) return;
+      /* "Ctrl + Alt + D" typed by hand becomes three keys, same as the list */
+      insertKeys(v.split("+").map(x => x.trim()).filter(Boolean));
+      ownIn.value = "";
+    };
+    ownGo.addEventListener("mousedown", (e) => e.preventDefault());
+    ownGo.addEventListener("click", addOwn);
+    ownIn.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); addOwn(); } });
+    ownRow.appendChild(ownIn); ownRow.appendChild(ownGo);
+    keyMenu.appendChild(ownRow);
+    document.body.appendChild(keyMenu);
+
+    keyBtn.addEventListener("mousedown", (e) => { e.preventDefault(); saved = save(); });
+    keyBtn.addEventListener("click", () => {
+      if (!keyMenu.hidden){ keyMenu.hidden = true; return; }
+      const r = keyBtn.getBoundingClientRect();
+      keyMenu.style.top = (r.bottom + window.scrollY + 6) + "px";
+      keyMenu.style.left = Math.min(r.left + window.scrollX,
+                                    window.innerWidth - 300) + "px";
+      keyMenu.hidden = false;
+    });
+    /* The menu hangs off document.body so nothing can cover it, which puts it
+       outside keyWrap. It has to be spared here or pressing a key in it would
+       count as a press outside, hiding the menu between mousedown and mouseup
+       so the click never landed. */
+    document.addEventListener("pointerdown", (e) => {
+      if (keyMenu.hidden) return;
+      if (keyWrap.contains(e.target) || keyMenu.contains(e.target)) return;
+      keyMenu.hidden = true;
+    });
+    keyWrap.appendChild(keyBtn);
+    bar.appendChild(keyWrap);
+
     /* take the colour off, rather than painting the default over it */
+    /* Whether the selection covers everything inside this element. */
+    function fills(range, node){
+      try{
+        const r = document.createRange();
+        r.selectNodeContents(node);
+        return range.compareBoundaryPoints(Range.START_TO_START, r) <= 0
+            && range.compareBoundaryPoints(Range.END_TO_END, r) >= 0;
+      }catch(e){ return false; }
+    }
+    /* Automatic: put the writing back to whatever the page's own colour is, so
+       it stays readable in both light and dark mode.
+
+       The colour is nearly always on a span wrapped *around* the words rather
+       than on anything inside them. Taking the contents out only ever reached
+       the children, so the words went back inside the same coloured wrapper
+       and the button looked as though it did nothing. Wrappers the selection
+       fills are dealt with first, before anything is moved. */
     function clearColour(){
       const sel = window.getSelection();
       if (!sel || !sel.rangeCount) return;
       const range = sel.getRangeAt(0);
+      if (range.collapsed) return;
+
+      let up = range.commonAncestorContainer;
+      if (up.nodeType === 3) up = up.parentNode;
+      const covered = [];
+      while (up && up !== box && box.contains(up)){
+        if (fills(range, up)) covered.push(up);
+        up = up.parentNode;
+      }
+      covered.forEach(n => {
+        if (n.style) n.style.removeProperty("color");
+        if (n.removeAttribute) n.removeAttribute("color");
+      });
+
+      /* Is any colour still reaching these words from a wrapper the selection
+         only partly fills? Stripping that wrapper would uncolour words outside
+         the selection too, so it is overridden instead. */
+      let outside = false;
+      let p = range.startContainer;
+      if (p.nodeType === 3) p = p.parentNode;
+      while (p && p !== box && box.contains(p)){
+        if (p.style && p.style.color){ outside = true; break; }
+        p = p.parentNode;
+      }
+
       const holder = document.createElement("span");
       try{
         holder.appendChild(range.extractContents());
         holder.querySelectorAll("[style]").forEach(n => { n.style.removeProperty("color"); });
         holder.querySelectorAll("font[color]").forEach(n => { n.removeAttribute("color"); });
-        while (holder.firstChild) range.insertNode(holder.lastChild);
+        if (outside){
+          /* var(--text) and not a fixed colour, so it follows the theme rather
+             than being black on a dark page. */
+          const back = document.createElement("span");
+          back.style.color = "var(--text)";
+          while (holder.firstChild) back.appendChild(holder.firstChild);
+          range.insertNode(back);
+        } else {
+          while (holder.firstChild) range.insertNode(holder.lastChild);
+        }
       }catch(e){}
     }
 

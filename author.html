@@ -476,15 +476,16 @@ function compileOne(b, id, target){
         blk.checks = b.checks.filter(c => (c.label || "").trim())
                              .map(c => Object.assign({}, c,
                                c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
-        if (b.nudge === false) blk.nudge = false;
+        if (b.nudge === true) blk.nudge = true;   // off unless asked for
       }
       if (b.title) blk.title = b.title;              // headings stay optional
       if (b.task) blk.task = b.task;
       if (b.turtle) blk.turtle = true;
       if (b.expect) blk.expect = b.expect;
-      /* Saved either way. This was not written out at all before, so a teacher
-         who turned Run required off got it back on when they reopened. */
-      blk.required = (b.required === true && b.run !== false);
+      /* Nothing waits on the Run button any more, so this is always off. Written
+         out rather than left absent, because absent means "required" to the
+         code that reads it. */
+      blk.required = false;
       if (b.run === false) blk.run = false;        // console hidden
       if (b.edit === false) blk.edit = false;      // read-only code
       if (b.help === false) blk.help = false;      // no Help tab
@@ -519,12 +520,12 @@ function compileOne(b, id, target){
         blk.checks = b.checks.filter(c => (c.label || "").trim())
                              .map(c => Object.assign({}, c,
                                c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
-        if (b.nudge === false) blk.nudge = false;
+        if (b.nudge === true) blk.nudge = true;   // off unless asked for
       }
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
       if (b.expect) blk.expect = b.expect;
-      blk.required = (b.required !== false && b.run !== false);   // as above
+      blk.required = false;                      // as above: Run never blocks
       if (b.run === false) blk.run = false;
       if (b.edit === false) blk.edit = false;
       if (b.help === false) blk.help = false;
@@ -936,10 +937,14 @@ function card(b, i, arr){
   }
   /* on/off buttons; each entry is [key, label, defaultOn] */
   /* Nudging about the checklist is a setting about the code like any other, so
-     it belongs on the same row rather than on its own further down. It is only
-     offered once there is a checklist to be nudged about. */
+     it sits on the same row, in the place Run required used to hold. Off unless
+     it is asked for, and only offered once there is a checklist to nudge about.
+
+     Run required is gone entirely. Making Continue wait on the Run button held
+     up students who had written perfectly good code, and the checklist already
+     says what a task needs. */
   function codeOptions(defs){
-    if ((b.checks || []).length) defs.push(["nudge","Nudge to finish it", true]);
+    if ((b.checks || []).length) defs.splice(1, 0, ["nudge","Nudge to finish it", false]);
     return defs;
   }
   function toggleRow(defs, label){
@@ -1058,9 +1063,7 @@ function card(b, i, arr){
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
     toggleRow(codeOptions([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true],
-               ["addFiles","Students can add files", false],
-               /* same rule as Python: nothing to require when nothing runs */
-               ["required","Run required", true, () => b.run === false]]));
+               ["addFiles","Students can add files", false]]));
     F("Code must contain (optional)", "expect");
   }
   if (b.type === "ide"){
@@ -1068,10 +1071,6 @@ function card(b, i, arr){
     R("Subheading (optional)", "task", { rows:2 });
     F("Starter code", "starter", { area:true, rows:7, mono:true });
     toggleRow(codeOptions([["turtle","Turtle canvas", false],
-               /* Off unless it is asked for: most Python tasks are worth a go
-                  without Continue waiting on the Run button. It cannot be on
-                  when there is nothing to run. */
-               ["required","Run required", false, () => b.run === false],
                ["run","Running", true],
                ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]));
     F("Output must contain (optional)", "expect", { help:"Leave empty unless you want Continue to wait for the right output." });
@@ -1867,6 +1866,25 @@ function checklistPopup(block, isWeb){
           card.appendChild(mrow);
         }
 
+        /* Some things are too vague or too particular for any rule: "the code
+           is tidy", "the colours suit the topic". Those are marked as the
+           teacher's to judge, and no automatic check is asked for at all. */
+        const mrow2 = el("div","bfield");
+        mrow2.appendChild(el("label","","Who checks this"));
+        const manual = c.manual === true;
+        const mbtn = el("button","btn-ghost bmini2" + (manual ? " right" : ""),
+                        manual ? "Your teacher" : "Checked automatically");
+        mbtn.type = "button";
+        mbtn.title = manual ? "You tick this off when you look at their work"
+                            : "The page works this one out on its own";
+        mbtn.addEventListener("click", () => { c.manual = !manual; saveDraft(); paint(); });
+        mrow2.appendChild(mbtn);
+        card.appendChild(mrow2);
+        /* Nothing to look for when a person is doing the looking. The card has
+           to go on the page before dropping out of this line, or a
+           teacher-checked line would disappear from the list entirely. */
+        if (manual){ list.appendChild(card); return; }
+
         const row = el("div","bfield");
         row.appendChild(el("label","","What to look for"));
         const pick = document.createElement("select");
@@ -1958,6 +1976,83 @@ function checklistPopup(block, isWeb){
           crow.appendChild(cbtn);
           card.appendChild(crow);
         }
+
+        /* ---------- extra conditions ----------
+           One line of a checklist sometimes has to ask for two things at once:
+           "uses an input, and that input mentions food". Each extra condition
+           says how it joins on, what to look for, and where to look. Where is
+           the part that matters: "in what was just found" narrows it to the
+           lines the condition before it matched, so the two halves are about
+           the same piece of code rather than anywhere in the file. */
+        if (!Array.isArray(c.more)) c.more = [];
+        c.more.forEach((m, mi) => {
+          const mr = el("div","bfield morecond");
+          const top = el("div","brow");
+          const joinBtn = el("button","btn-ghost bmini2", (m.join === "or" ? "or" : "and"));
+          joinBtn.type = "button";
+          joinBtn.title = "Both must be true, or either one";
+          joinBtn.addEventListener("click", () => { m.join = (m.join === "or") ? "and" : "or"; saveDraft(); paint(); });
+          top.appendChild(joinBtn);
+
+          const kindSel = document.createElement("select");
+          [["codeHas","the code contains..."],["codeLacks","the code avoids..."],
+           ["outputHas","the output contains..."]].forEach(k => {
+            const o = document.createElement("option");
+            o.value = k[0]; o.textContent = k[1];
+            kindSel.appendChild(o);
+          });
+          kindSel.value = m.kind || "codeHas";
+          kindSel.addEventListener("change", () => { m.kind = kindSel.value; saveDraft(); paint(); });
+          top.appendChild(kindSel);
+
+          const val = el("input");
+          val.placeholder = "What to look for";
+          val.value = m.value || "";
+          val.addEventListener("input", () => { m.value = val.value; saveDraft(); });
+          top.appendChild(val);
+
+          const scopeSel = document.createElement("select");
+          [["all","look anywhere"],["match","look in what was just found"]].forEach(k => {
+            const o = document.createElement("option");
+            o.value = k[0]; o.textContent = k[1];
+            scopeSel.appendChild(o);
+          });
+          scopeSel.value = m.scope || "all";
+          scopeSel.addEventListener("change", () => { m.scope = scopeSel.value; saveDraft(); });
+          /* the output is its own text, so narrowing to code found earlier
+             would be asking it to look in the wrong place */
+          scopeSel.disabled = (m.kind === "outputHas");
+          top.appendChild(scopeSel);
+
+          const del = el("button","btn-ghost bmini","×");
+          del.title = "Remove this condition";
+          del.addEventListener("click", () => { c.more.splice(mi,1); saveDraft(); paint(); });
+          top.appendChild(del);
+          mr.appendChild(top);
+          card.appendChild(mr);
+        });
+        const addMore = el("button","btn-ghost bmini2","+ And another condition");
+        addMore.addEventListener("click", () => {
+          c.more.push({ join:"and", kind:"codeHas", value:"", scope:"all" });
+          saveDraft(); paint();
+        });
+        card.appendChild(addMore);
+        if (c.more.length > 1){
+          card.appendChild(el("p","bhelp",
+            "Read left to right: “A and B or C” means “(A and B) or C”."));
+        }
+
+        /* Last, so it applies whatever kind of check this is. Left empty, the
+           built-in wording is used. Teacher-checked lines never reach here:
+           they have nothing to fail at, so there is nothing to say about it. */
+        const hrow = el("div","bfield");
+        hrow.appendChild(el("label","","What to say if they have not got it yet"));
+        const hin = el("input");
+        hin.value = c.hint || "";
+        hin.placeholder = "Leave empty for the usual wording";
+        hin.addEventListener("input", () => { c.hint = hin.value; saveDraft(); });
+        hrow.appendChild(hin);
+        card.appendChild(hrow);
 
         list.appendChild(card);
       });

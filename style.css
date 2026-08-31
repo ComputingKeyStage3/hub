@@ -3117,3 +3117,112 @@ body > .loadscreen{ animation:none }
   .kw-word{border-right:none; border-bottom:1px solid var(--line); padding:9px 12px}
   .kw-def{padding:8px 12px 12px}
 }
+
+/* ---------- the rubric button in the bottom bar ----------
+   A practical assessment is marked against a rubric, so it sits in the middle
+   of the bar where it is available all the way through rather than only at
+   the end. */
+.dock-rubric{font-size:14px; padding:8px 14px; white-space:nowrap}
+.dock-rubric[hidden]{display:none}
+
+/* ---------- inline code in a lesson ----------
+   It was set flush against the words either side of it, so "your own print()
+   function" ran together. A little room and a background of its own make it
+   read as a thing being named rather than part of the sentence. The grey
+   matches what the lesson builder shows while it is being written. */
+.prose code, .q-ask code, .pg-t code, .brief code, .kw-word code, .modal-text code{
+  font-family:var(--mono); font-size:12pt; background:var(--panel-2);
+  border:1px solid var(--line); border-radius:5px;
+  padding:1px 5px; margin:0 3px;
+}
+html[data-bg=dark] .prose code, html[data-bg=dark] .q-ask code,
+html[data-bg=dark] .pg-t code, html[data-bg=dark] .brief code{
+  background:#2A303B; border-color:#3D434F;
+}
+
+/* ---------- the progress bar you can go back with ----------
+   Each segment is a button for a page already done. Resting it stays the thin
+   line it always was; hovering the bar thickens it and shows the page number
+   in the middle of each segment, so a student can see where they are going
+   before they click. The tracker grows at the same time to make room for the
+   circles rather than letting them overlap what is underneath. */
+.tracker{align-items:center; transition:padding .18s ease}
+.tracker:hover{padding-top:14px; padding-bottom:12px}
+.seg{
+  position:relative; border:none; padding:0; margin:0; font:inherit;
+  appearance:none; -webkit-appearance:none;
+}
+.tracker:hover .seg{height:8px}
+.seg:not(:disabled){cursor:pointer}
+.seg-n{
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) scale(.6);
+  width:22px; height:22px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  /* room for two digits without the circle becoming an oval */
+  font-family:var(--body); font-size:11px; font-weight:800; line-height:1;
+  font-variant-numeric:tabular-nums; letter-spacing:0;
+  background:var(--panel); border:2px solid var(--line-2); color:var(--muted);
+  opacity:0; pointer-events:none; transition:opacity .18s ease, transform .18s ease;
+}
+.tracker:hover .seg-n{opacity:1; transform:translate(-50%,-50%) scale(1)}
+.seg.done .seg-n{border-color:var(--mint); color:var(--mint-dark, var(--mint))}
+.seg.now .seg-n{border-color:var(--amber); color:var(--amber-dark, var(--amber))}
+.seg:not(:disabled):hover .seg-n{background:var(--mint); border-color:var(--mint); color:#fff}
+.seg:focus-visible .seg-n{opacity:1; transform:translate(-50%,-50%) scale(1); outline:2px solid var(--amber)}
+html[data-bg=dark] .seg-n{background:#2A303B}
+
+/* the way back off the summary */
+.done-back{margin-bottom:10px; font-size:14px}
+
+/* ---------- checklists with teacher-checked lines ----------
+   Two columns only when there is something in both: what the page can work out
+   on its own to the left, what a teacher has to look at to the right. With one
+   kind on its own there is nothing to compare against, so it takes the width. */
+.checklist-body.split{display:grid; grid-template-columns:1fr 1fr; gap:0 18px}
+.checklist-body.split .checklist-col.manual{border-left:1px solid var(--line); padding-left:18px}
+.checklist-note{margin:0 0 6px; font-size:12.5px; color:var(--muted); font-style:italic}
+.check-manual .check-mark{border-style:dashed}
+/* only while a teacher is looking at the work */
+.checklist.can-tick .check-manual{cursor:pointer; border-radius:8px}
+.checklist.can-tick .check-manual:hover{background:var(--panel)}
+.checklist.can-tick .check-manual .check-mark{border-style:solid; border-color:var(--amber)}
+
+@media (max-width:620px){
+  .checklist-body.split{grid-template-columns:1fr; gap:10px}
+  .checklist-body.split .checklist-col.manual{border-left:none; padding-left:0;
+    border-top:1px solid var(--line); padding-top:10px}
+}
+
+/* ---------- keys off the keyboard ----------
+   A key named in a lesson is drawn as the key itself, so "press Enter" reads
+   as an instruction rather than as part of the sentence. Same shape in the
+   builder and on the lesson, so what a teacher types is what a student sees. */
+kbd, .rt-box kbd{
+  display:inline-block; font-family:var(--body); font-size:.85em; font-weight:700;
+  line-height:1; padding:3px 7px; margin:0 2px; white-space:nowrap;
+  color:var(--text); background:var(--panel);
+  border:1px solid var(--line-2); border-bottom-width:2px; border-radius:6px;
+  box-shadow:0 1px 0 rgba(0,0,0,.06);
+}
+html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
+
+.rt-keywrap{position:relative; display:inline-flex}
+.rt-keybtn{font-size:15px}
+.rt-keymenu{width:max-content; max-width:min(320px, calc(100vw - 32px)); padding:10px}
+.rt-keyhead{margin:2px 0 6px; font-size:11px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--dim); font-weight:700}
+.rt-keygrid{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px}
+.rt-keycell{border:1px solid var(--line); border-radius:8px; background:var(--panel-2);
+  padding:4px 6px; cursor:pointer; font-family:var(--body); color:var(--text)}
+.rt-keycell:hover{border-color:var(--amber)}
+.rt-keyown{display:flex; gap:6px; align-items:center; border-top:1px solid var(--line); padding-top:9px}
+.rt-keyown input{flex:1; min-width:0; height:30px; padding:0 8px;
+  border:1px solid var(--line); border-radius:8px; background:var(--panel);
+  color:var(--text); font-family:var(--body); font-size:13px}
+.rt-keyown input:focus{border-color:var(--amber); outline:none}
+
+/* an extra condition on a checklist line */
+.morecond{border-left:2px solid var(--line-2); padding-left:10px; margin-left:2px}
+.morecond .brow{flex-wrap:wrap; gap:6px; align-items:center}
+.morecond select, .morecond input{min-width:0}
+.morecond input{flex:1 1 130px}

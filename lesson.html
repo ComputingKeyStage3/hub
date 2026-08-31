@@ -33,7 +33,7 @@
   <button class="btn-primary no-print" id="saveBtn">Save Work</button>
 </div>
 
-<div class="tracker" id="tracker" aria-hidden="true"></div>
+<div class="tracker" id="tracker"></div>
 <div class="brief" id="brief">
   <h2 id="briefTitle"></h2>
   <p id="briefText"></p>
@@ -49,7 +49,7 @@
 
 <div class="dock" id="dock">
   <button class="btn-ghost" id="backBtn">&larr; Back</button>
-  <div class="mid"></div>
+  <div class="mid"><button class="btn-ghost dock-rubric" id="rubricBtn" hidden>Show Assessment Rubric</button></div>
   <span id="bypassDot" role="button" tabindex="0" aria-label="Teacher options">&#183;</span>
   <span class="btn-wrap" id="btnWrap">
     <button class="btn-primary btn-continue" id="nextBtn">Continue &rarr;</button>
@@ -213,6 +213,19 @@ function applyHandedIn(box){
   if (box && box.fb) teacherNote = parseFeedback(JSON.stringify(box.fb));
   if (box && box.mk) myResult = { score: box.mk.score, outOf: box.mk.outOf, grade: box.mk.grade || "" };
   if (box && box.ov) markOverrides = box.ov;
+  /* Checklist lines the teacher ticked by hand come back on the marked link,
+     kept by task id. Applied after the fields above, because setting a task's
+     value rebuilds nothing but does put its own saved ticks back first. */
+  if (box && box.mt){
+    Object.keys(box.mt).forEach(id => {
+      const f = fields[id];
+      if (!f || typeof f.set !== "function") return;
+      try{
+        const now = (typeof f.get === "function") ? f.get() : null;
+        if (now && typeof now === "object") f.set(Object.assign({}, now, { manual: box.mt[id] }));
+      }catch(e){}
+    });
+  }
 }
 /* the card shown on the finished screen, matching an assessment's */
 /* Everything they did, on one scrollable page, in a pop-up. */
@@ -792,6 +805,30 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
             if (!isNaN(n) && n >= 0 && n < steps.length) step = n;
           }
         }catch(e){}
+        /* A preview opened in its own tab keeps up with the builder on its own.
+           Writing to localStorage raises a storage event in every other tab of
+           the same site, and never in the tab that did the writing, so this
+           follows the builder without the panel inside it reacting to itself.
+
+           The place on the page is carried across the reload the same way the
+           page number is, or every keystroke would throw the teacher back to
+           the top of what they were looking at. */
+        window.addEventListener("storage", (e) => {
+          if (e.key !== "hub_preview") return;
+          try{
+            const st = $("stage");
+            sessionStorage.setItem("hub_preview_scroll", String(st ? st.scrollTop : 0));
+          }catch(err){}
+          location.reload();
+        });
+        try{
+          const y = parseInt(sessionStorage.getItem("hub_preview_scroll") || "", 10);
+          if (!isNaN(y) && y > 0){
+            /* after the page has been drawn, or there is nothing to scroll yet */
+            const put = () => { const st = $("stage"); if (st) st.scrollTop = y; };
+            setTimeout(put, 80); setTimeout(put, 300);
+          }
+        }catch(e){}
         if (!steps.length){
           $("briefTitle").textContent = "Nothing to preview yet";
           $("briefText").textContent = "Add a task on the left and it appears here.";
@@ -807,6 +844,7 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
          marks up on its own, so the panel travels inside the frame and posts
          what it collects back out. */
       teacherTools = viewParam !== null && allParam === null && (embedParam === null || OFFLINE);
+      refreshChecklistMode();
       if (allParam !== null){ showEverything(); return; }
       if (keepStep !== null && keepStep >= 0 && keepStep < steps.length) step = keepStep;
       if (embedParam !== null){
@@ -1044,9 +1082,28 @@ async function loadSaved(){
 
 
 /* ---------- shell ---------- */
+/* Leaving the summary, whether by the button on it or by the progress bar. */
+function leaveSummary(i){
+  const done = $("doneScreen");
+  if (done) done.hidden = true;
+  $("dock").classList.remove("gone");
+  showStep(i);
+}
+
 function buildTracker(){
   const t = $("tracker"); t.innerHTML = "";
-  steps.forEach(() => t.appendChild(el("div","seg")));
+  steps.forEach((_, i) => {
+    /* A button, not a div: a page they have already done is somewhere they can
+       go back to, and the number inside it says which page it is. */
+    const seg = el("button","seg");
+    seg.type = "button";
+    seg.appendChild(el("span","seg-n", String(i + 1)));
+    seg.addEventListener("click", () => {
+      if (seg.disabled) return;
+      leaveSummary(i);
+    });
+    t.appendChild(seg);
+  });
 }
 function showStep(i){
   /* inside the builder's preview, keep a note of the page so a refresh comes
@@ -1067,6 +1124,7 @@ function showStep(i){
   steps.forEach((s, n) => { s.section.hidden = (n !== step); });
 
   paintTracker();
+  paintRubricButton();
 
   // The welcome-back note belongs to the page they came back to, and nowhere
   // else. Show it on that first render only, then never again.
@@ -1232,12 +1290,32 @@ $("softStay").addEventListener("click", hideSoftModal);
 $("softGo").addEventListener("click", () => { hideSoftModal(); softSkip = true; tryContinue(); });
 $("softModal").addEventListener("mousedown", (e) => { if (e.target === $("softModal")) hideSoftModal(); });
 
+/* A practical assessment is marked against a rubric, so the student should be
+   able to read it while they work rather than only after it is marked. Nothing
+   to show unless there is a rubric with something in it. */
+function paintRubricButton(){
+  const btn = $("rubricBtn");
+  if (!btn) return;
+  const has = !!(lesson && lesson.practical && Array.isArray(lesson.rubric) && lesson.rubric.length);
+  btn.hidden = !has;
+}
+$("rubricBtn").addEventListener("click", showRubric);
+
 function paintTracker(){
   Array.from($("tracker").children).forEach((seg, n) => {
     // Once finished, every segment is complete, including the last one, which
     // previously stayed amber forever because "n < step" can never include it.
-    seg.className = "seg" + (finished ? " done" : n < step ? " done" : n === step ? " now" : "")
-                  + ((isLocked(n) || pageShut(n)) && !finished ? " locked-seg" : "");
+    const shut = (isLocked(n) || pageShut(n)) && !finished;
+    const done = finished ? true : n < step;
+    seg.className = "seg" + (done ? " done" : n === step ? " now" : "")
+                  + (shut ? " locked-seg" : "");
+    /* Only pages they have already been through can be jumped to. Going
+       forwards is what Continue is for, and a page still shut has not been
+       opened for them yet. */
+    const canGo = done && !shut && n !== step;
+    seg.disabled = !canGo;
+    seg.title = canGo ? "Back to page " + (n + 1) : "Page " + (n + 1);
+    seg.setAttribute("aria-label", seg.title);
   });
 }
 
@@ -2020,10 +2098,28 @@ function checkFlags(checklist){
   return res.map(r => !!(r && r.ok));
 }
 
-function attachChecklist(section, checks, runner){
+/* Every checklist on the page, so the teacher-only lines can be turned on once
+   it is known whether a teacher is looking. The blocks are drawn before that is
+   worked out, so setting it at build time would always say no. */
+const allChecklists = [];
+function refreshChecklistMode(){
+  allChecklists.forEach(l => { try{ l.allowManual(!!teacherTools); }catch(e){} });
+}
+
+function attachChecklist(section, checks, runner, blockId){
   if (!checks || !checks.length || !window.buildChecklist) return null;
   let last = null;                    // what the checks said the last time they ran
   const list = window.buildChecklist(checks);
+  allChecklists.push(list);
+  /* Lines a teacher has to judge by eye can only be ticked by a teacher, and
+     only while they are looking at the work rather than while it is being
+     done. The tick is sent up to the marking screen the same way changed marks
+     are, so it is saved with the feedback. */
+  list.allowManual(!!teacherTools);
+  list.onManual = (flags) => {
+    markDirty();
+    try{ window.parent.postMessage({ hubManual: { id: blockId || "", flags: flags } }, "*"); }catch(e){}
+  };
   const holder = el("div","checklist-wrap");
   holder.appendChild(list);
   if (section.firstChild) section.insertBefore(holder, section.firstChild);
@@ -2046,7 +2142,7 @@ function attachChecklist(section, checks, runner){
   }
   /* An assessment adds a coding task up from these, so the result of the last
      run has to be readable rather than only drawn on the page. */
-  return { list, refresh, done: () => list.dataset.allDone === "yes",
+  return { list, refresh, done: () => (list.autoAllDone ? list.autoAllDone() : list.dataset.allDone === "yes"),
            results: () => last };
 }
 
@@ -2289,7 +2385,7 @@ function rIDE(b){
   /* the teacher's checklist, if this task has one. Declared before run()
      so it can tick itself off when the code has finished. */
   const checklist = attachChecklist(s, b.checks,
-    () => window.runPythonChecks(b.checks, ta.value, lastOut, runs));
+    () => window.runPythonChecks(b.checks, ta.value, lastOut, runs), b.id);
 
   async function run(){
     runBtn.disabled = true;
@@ -2348,7 +2444,8 @@ function rIDE(b){
 
   fields[b.id] = {
     get:() => ({ code: ta.value, out: lastOut.slice(0, 4000), ran: ran, runs: runs,
-                 checks: checklist ? checkFlags(checklist) : undefined }),
+                 checks: checklist ? checkFlags(checklist) : undefined,
+                 manual: checklist ? checklist.list.getManual() : undefined }),
     set:(v) => {
       if (!v) return;
       if (typeof v === "string"){ ta.value = v; repaint(); return; }
@@ -2357,6 +2454,7 @@ function rIDE(b){
       ran = !!v.ran;
       /* older work has no count, so a run it remembers counts as one */
       runs = Number(v.runs) || (ran ? 1 : 0);
+      if (checklist && v.manual) checklist.list.setManual(v.manual);
       repaint();
     }
   };
@@ -2403,7 +2501,7 @@ function rIDE(b){
 
   return { section:s,
            /* An unfinished checklist is worth a word, not a locked door. */
-           soft:() => (b.checks && b.checks.length && b.nudge !== false && checklist && !checklist.done())
+           soft:() => (b.checks && b.checks.length && b.nudge === true && checklist && !checklist.done())
              ? { ok:false, words:{ title:"Keep coding",
                                    text:"There are still things on your checklist to try.",
                                    stay:"Keep coding", go:"Move on anyway" } }
@@ -2830,7 +2928,7 @@ function rWeb(b){
   /* the teacher's checklist, run against all three files. Declared before
      run() so it can tick itself off once the page has been built. */
   const checklist = attachChecklist(s, b.checks,
-    () => window.runWebChecks(b.checks, { html: code.html, css: code.css, js: code.js }, runs));
+    () => window.runWebChecks(b.checks, { html: code.html, css: code.css, js: code.js }, runs), b.id);
 
   function run(){
     code[current] = ta.value;
@@ -2888,7 +2986,8 @@ function rWeb(b){
       order.forEach(n => { if (!starters.hasOwnProperty(n)) extra[n] = { kind:kindOf[n], code:code[n] }; });
       return { html: code[NAMES.html] || "", css: code[NAMES.css] || "", js: code[NAMES.js] || "",
                extra: extra, ran: ran, runs: runs,
-               checks: checklist ? checkFlags(checklist) : undefined };
+               checks: checklist ? checkFlags(checklist) : undefined,
+               manual: checklist ? checklist.list.getManual() : undefined };
     },
     set:(v) => {
       if (!v) return;
@@ -2906,6 +3005,7 @@ function rWeb(b){
         }
         ran = !!v.ran;
         runs = Number(v.runs) || (ran ? 1 : 0);
+        if (checklist && v.manual) checklist.list.setManual(v.manual);
       }
       if (!code.hasOwnProperty(current)) current = order[0];
       ta.value = code[current];
@@ -2915,7 +3015,7 @@ function rWeb(b){
   };
 
   return { section:s,
-           soft:() => (b.checks && b.checks.length && b.nudge !== false && checklist && !checklist.done())
+           soft:() => (b.checks && b.checks.length && b.nudge === true && checklist && !checklist.done())
              ? { ok:false, words:{ title:"Keep coding",
                                    text:"There are still things on your checklist to try.",
                                    stay:"Keep coding", go:"Move on anyway" } }
@@ -4508,6 +4608,13 @@ function doneShell(title){
   let box = $("doneScreen");
   if (!box){ box = el("section"); box.id = "doneScreen"; $("blocks").appendChild(box); }
   box.hidden = false; box.innerHTML = "";
+  /* A way back into the work. Someone who has finished still wants to reread
+     what they wrote, and without this the only way back was to reload. */
+  if (steps.length){
+    const back = el("button","btn-ghost done-back","← Back to my work");
+    back.addEventListener("click", () => leaveSummary(Math.max(0, steps.length - 1)));
+    box.appendChild(back);
+  }
   $("briefTitle").textContent = title || "Well done!";
   $("briefText").textContent = ""; $("briefText").hidden = true;
   $("dock").classList.add("gone");

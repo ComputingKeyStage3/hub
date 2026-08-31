@@ -847,6 +847,7 @@ async function handBack(){
     }
   }
   if (markOverrides) box.ov = markOverrides;
+  if (Object.keys(manualTicks).length) box.mt = manualTicks;
   row.feedback = JSON.stringify(fb);
 
   paintFb("saving");
@@ -902,9 +903,17 @@ function showMarkedLink(){
 
 /* Marks the teacher changed question by question, sent up from the viewer. */
 let markOverrides = null;
+/* and the checklist lines they ticked off by hand */
+let manualTicks = {};
 window.addEventListener("message", (e) => {
   if (!e || !e.data) return;
   if (e.data.hubMarks) markOverrides = e.data.hubMarks;
+  /* Checklist lines only a teacher can judge, ticked in the viewer. Kept by
+     task so several coding tasks in one lesson do not overwrite each other. */
+  if (e.data.hubManual){
+    const m = e.data.hubManual;
+    if (m.id){ manualTicks[m.id] = m.flags || {}; }
+  }
   /* An assessment marks itself and writes its own strength and target. They
      arrive here so a teacher opens the boxes already holding them, ready to
      be edited rather than written from nothing. Anything already typed, or
