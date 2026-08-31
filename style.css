@@ -1668,7 +1668,12 @@ body.workpage .grow{flex:1}
 
 /* the rubric, side by side */
 .rubricstrip{display:flex; gap:12px; overflow-x:auto; padding:6px 2px 12px; margin-top:10px}
-.rubriccol{flex:0 0 220px; background:var(--panel-2); border:1.5px solid var(--line);
+/* They share the room the pop-up has, up to a width that stops two grades
+   stretching across a whole laptop. No min-width: on a 320px phone anything
+   over half the screen counts as a control insisting on being wide, and the
+   640px rules below give them a phone width of their own anyway. */
+.rubriccol{flex:1 1 220px; max-width:360px;
+  background:var(--panel-2); border:1.5px solid var(--line);
   border-radius:12px; padding:14px}
 .rubriccol.mine{border-color:var(--amber); background:var(--panel)}
 .rubriccol b{display:block; font-family:var(--display); font-size:18px; margin-bottom:6px}
@@ -2768,7 +2773,11 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .taskpopup{ min-height:70vh; min-height:70dvh }
 .banklist{ max-height:46vh; max-height:46dvh }
 .label-layout .label-pic img{ max-height:50vh; max-height:50dvh }
-.rubriccol{ flex-basis:78vw }
+/* .rubriccol used to be given flex-basis:78vw here. This block is not inside a
+   breakpoint, so that phone width was being applied on every screen: on a
+   laptop each grade came out 1123px wide and only one of the three could be
+   seen at a time. The phone rules for it are in the 640px block, where they
+   belong, so nothing is needed here. */
 
 @media (max-width:900px){
   /* full-height pages measured the same way */
@@ -3284,3 +3293,13 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
    of a long one can still be reached. The cap is set as an inline style when
    it is opened, because it depends on where on the screen the button is. */
 .rt-palette{overscroll-behavior:contain}
+
+/* A paragraph in a formatting box is a line someone pressed Enter for, not a
+   block of prose, so it does not want a full line's gap above and below it. At
+   the body size that was 15.5px each way, about 31px between every line. */
+.rt-box p{margin:0 0 7px}
+.rt-box p:last-child{margin-bottom:0}
+
+/* another question inside the same written answer task */
+.extraq{border-left:2px solid var(--line-2); padding-left:10px}
+.extraq .brow{align-items:center; gap:8px}

@@ -499,7 +499,15 @@ function compileOne(b, id, target){
              prompt: b.prompt ? (window.cleanRichText ? window.cleanRichText(b.prompt) : b.prompt) : "",
              /* zero is a real setting, so it has to survive being saved:
                 "|| 20" turned "no length wanted" back into twenty words */
-             minWords: b.minWords === undefined ? 20 : Math.max(0, Number(b.minWords) || 0) }));
+             minWords: b.minWords === undefined ? 20 : Math.max(0, Number(b.minWords) || 0),
+             /* the questions after the first, each with its own length and
+                whether it nudges; ones with nothing written are dropped */
+             extra: (b.extra || [])
+               .filter(q => (window.cleanRichText ? window.cleanRichText(q.prompt || "") : (q.prompt || "")).trim())
+               .map(q => ({
+                 prompt: window.cleanRichText ? window.cleanRichText(q.prompt) : q.prompt,
+                 minWords: q.minWords === undefined ? 20 : Math.max(0, Number(q.minWords) || 0),
+                 required: q.required !== false })) }));
     else if (b.type === "password")
       push({ type:"password", id, title: b.title || "", task: b.task || "" });
     else if (b.type === "caesar"){
@@ -1106,15 +1114,52 @@ function card(b, i, arr){
     ww.appendChild(wrow);
     body.appendChild(ww);
 
-    /* Written answers usually come in runs of two or three, so the next one is
-       offered here rather than sending a teacher back to the palette and then
-       dragging it into place. It lands directly under this one. */
-    const another = el("button","btn-ghost bmini2","+ Another question underneath");
+    /* Written answers usually come in runs of two or three. Another one joins
+       this task rather than becoming a task of its own: it shares the heading
+       and the context already written above, and only needs its own question,
+       length and nudge. */
+    if (!Array.isArray(b.extra)) b.extra = [];
+    b.extra.forEach((q, k) => {
+      const wrapx = el("div","bfield extraq");
+      const head = el("div","brow");
+      head.appendChild(el("label","","Question " + (k + 2)));
+      const del = el("button","btn-ghost bmini","×");
+      del.title = "Remove this question";
+      del.addEventListener("click", () => { b.extra.splice(k, 1); render(); schedulePreview(); });
+      head.appendChild(del);
+      wrapx.appendChild(head);
+
+      const ed = window.richText(q.prompt || "", (html) => { q.prompt = html; saveDraft(); schedulePreview(); },
+                                 { rows:2 });
+      wrapx.appendChild(ed);
+
+      const rowx = el("div","brow");
+      rowx.appendChild(el("label","","Recommended word count"));
+      const st = el("div","stepper");
+      const lessx = el("button","btn-ghost iconbtn","−");
+      const numx = el("input"); numx.type = "number"; numx.className = "stepnum";
+      numx.value = String(q.minWords === undefined ? 20 : q.minWords);
+      const morex = el("button","btn-ghost iconbtn","+");
+      const setx = (v) => { q.minWords = Math.max(0, v); numx.value = String(q.minWords); saveDraft(); schedulePreview(); };
+      lessx.addEventListener("click", () => setx((parseInt(numx.value,10) || 0) - 5));
+      morex.addEventListener("click", () => setx((parseInt(numx.value,10) || 0) + 5));
+      numx.addEventListener("input", () => { q.minWords = Math.max(0, parseInt(numx.value,10) || 0); saveDraft(); schedulePreview(); });
+      st.appendChild(lessx); st.appendChild(numx); st.appendChild(morex);
+      rowx.appendChild(st);
+
+      const onx = q.required !== false;
+      const nx = el("button","btn-ghost bmini2" + (onx ? " right" : ""),
+                    "Nudge for an answer: " + (onx ? "on" : "off"));
+      nx.type = "button";
+      nx.addEventListener("click", () => { q.required = !onx; render(); schedulePreview(); });
+      rowx.appendChild(nx);
+      wrapx.appendChild(rowx);
+      body.appendChild(wrapx);
+    });
+
+    const another = el("button","btn-ghost bmini2","+ Another question");
     another.addEventListener("click", () => {
-      const at = arr.indexOf(b);
-      const made = BLANK.question();
-      arr.splice(at < 0 ? arr.length : at + 1, 0, made);
-      scrollToBlock = made;
+      b.extra.push({ prompt:"", minWords:20, required:true });
       render(); schedulePreview();
     });
     body.appendChild(another);
@@ -3195,11 +3240,19 @@ function fromCompiled(data, meta){
                                         blocks:(o.blocks || []).map(back) })) };
     if (b.type === "text"){
       const h = /<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(b.html || "");
-      const body = String(b.html || "").replace(/<h2[\s\S]*?<\/h2>/i, "")
-        .replace(/<li>/gi, "- ").replace(/<\/li>/gi, "\n")
-        .replace(/<\/p>/gi, "\n\n").replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<[^>]+>/g, "").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&").trim();
-      return { type:"text", heading: h ? h[1].replace(/<[^>]+>/g,"") : "", body };
+      /* The HTML is kept exactly as it was saved.
+
+         This used to flatten it to plain text for the textarea the paragraph
+         editor once used: list items became a literal "- ", every closing
+         paragraph became a blank line, and every other tag was thrown away.
+         The editor has been a formatting box for a while now, so reopening a
+         lesson was quietly destroying its bold, colours, sizes, keys and code,
+         turning bullets into dashes and leaving a gap between every line where
+         those blank lines had been. */
+      return { type:"text",
+               heading: b.heading !== undefined ? b.heading
+                      : (h ? h[1].replace(/<[^>]+>/g,"") : ""),
+               html: String(b.html || "").replace(/<h2[\s\S]*?<\/h2>/i, "") };
     }
     if (b.type === "quiz") return { type:"quiz",
       title: b.title || "",

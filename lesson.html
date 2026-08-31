@@ -1791,32 +1791,53 @@ function rQuestion(b){
     ctx.innerHTML = b.context;
     s.appendChild(ctx);
   }
-  /* The question is written in the builder's formatting box now, so it
-     arrives as HTML. el() sets innerHTML, which is what we want here. */
-  if (b.prompt) s.appendChild(el("div","q-ask", b.prompt));
-  /* Zero means the teacher does not want a length on this one, so there is no
-     encouragement and nothing to fall short of. Written as an explicit check
-     because "|| 8" read zero as "not set" and then asked for eight words that
-     could never be enough. undefined still means eight, for older lessons. */
-  const min = b.minWords === undefined ? 8 : Math.max(0, Number(b.minWords) || 0);
-  const ta = el("textarea","answer"); ta.rows = 6; ta.placeholder = "Type your answer here…";
-  const counter = el("p","counter");
-  function tick(){
-    if (!min){ counter.hidden = true; counter.textContent = ""; return; }
-    const n = wordCount(ta.value);
-    const stage = n >= min ? "good" : n >= Math.ceil(min/2) ? "going" : "more";
-    const started = ta.value.trim().length > 0;
-    counter.textContent = !started ? "" :
-      stage === "good" ? "Looking good!" : stage === "going" ? "Keep going!" : "Try to write more!";
-    counter.dataset.stage = stage;
-    counter.hidden = !started;
-  }
-  ta.addEventListener("input", () => { tick(); markDirty(); });
-  fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; tick(); } };
-  s.appendChild(ta); s.appendChild(counter); tick();
+  /* One task can hold several questions. They share the heading and the
+     context above them, and each has its own box, its own recommended length
+     and its own say in whether the student is nudged. */
+  const asked = [{ prompt: b.prompt, minWords: b.minWords, required: b.required }]
+    .concat(Array.isArray(b.extra) ? b.extra : []);
+  const parts = [];
+
+  asked.forEach((q, i) => {
+    /* The question is written in the builder's formatting box, so it arrives
+       as HTML. el() sets innerHTML, which is what we want here. */
+    if (q.prompt) s.appendChild(el("div","q-ask", q.prompt));
+    /* Zero means the teacher does not want a length on this one, so there is
+       no encouragement and nothing to fall short of. Written as an explicit
+       check because "|| 8" read zero as "not set" and then asked for eight
+       words that could never be enough. undefined still means eight, for
+       older lessons. */
+    const min = q.minWords === undefined ? 8 : Math.max(0, Number(q.minWords) || 0);
+    const ta = el("textarea","answer"); ta.rows = 6; ta.placeholder = "Type your answer here…";
+    const counter = el("p","counter");
+    function tick(){
+      if (!min){ counter.hidden = true; counter.textContent = ""; return; }
+      const n = wordCount(ta.value);
+      const stage = n >= min ? "good" : n >= Math.ceil(min/2) ? "going" : "more";
+      const started = ta.value.trim().length > 0;
+      counter.textContent = !started ? "" :
+        stage === "good" ? "Looking good!" : stage === "going" ? "Keep going!" : "Try to write more!";
+      counter.dataset.stage = stage;
+      counter.hidden = !started;
+    }
+    ta.addEventListener("input", () => { tick(); markDirty(); });
+    s.appendChild(ta); s.appendChild(counter); tick();
+    parts.push({ ta, tick, min, required: q.required !== false });
+  });
+
+  fields[b.id] = {
+    /* One question saves a plain string, the way it always has, so work saved
+       before this still reads back. Several save a list. */
+    get:() => parts.length === 1 ? parts[0].ta.value : parts.map(x => x.ta.value),
+    set:(v) => {
+      const list = Array.isArray(v) ? v : [v];
+      parts.forEach((x, i) => { x.ta.value = list[i] == null ? "" : String(list[i]); x.tick(); });
+    }
+  };
   return { section:s,
            check:() => ({ ok:true }),
-           soft:() => ({ ok: wordCount(ta.value) >= min }),
+           /* nudged about the first one that is short of its own length */
+           soft:() => ({ ok: parts.every(x => !x.required || wordCount(x.ta.value) >= x.min) }),
            brief:{ eyebrow:"Answer", title:b.heading || "", text:stripTags(b.task || "") } };
 }
 
@@ -5366,6 +5387,17 @@ function buildPdf(){
     if (b.type === "question"){
       if (b.heading) out.push({ t: "text", face: "task", text: pdfText(b.heading) });
       if (b.context) proseParts(b.context).forEach(p => out.push(p));
+      /* Several questions in one task: each with the answer written under it. */
+      if (Array.isArray(b.extra) && b.extra.length){
+        const said = Array.isArray(v) ? v : [v];
+        [{ prompt:b.prompt }].concat(b.extra).forEach((q, i) => {
+          if (q.prompt) out.push({ t:"ask", text: pdfText(q.prompt) });
+          const a = (said[i] || "").trim();
+          if (a) out.push({ t:"box", text: pdfText(a) });
+          else out.push({ t:"text", face:"small", text:"Not answered", colour: PDF.AMBER });
+        });
+        return out;
+      }
       if (b.prompt) out.push({ t: "ask", text: pdfText(b.prompt) });
       out.push(label("Their answer"));
       out.push(answerBox(String(v || "").trim()));
