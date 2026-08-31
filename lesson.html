@@ -106,6 +106,11 @@ const WORK_KEY = "hub_work_" + lessonId;
 const fields = {};   // id -> { get, set }
 const steps  = [];   // { section, check(), brief:{eyebrow,title,text} }
 let step = 0, bypassed = false, lesson = null;
+/* Pages a teacher has let one student past, as opposed to opening the whole
+   lesson up. Kept apart from bypassed so letting somebody through a single
+   sticking point does not hand them the rest of the lesson as well. */
+const skipped = new Set();
+const waved = (i) => bypassed || skipped.has(i);
 if (spectate) bypassed = true;   // teachers see past every lock
 /* Skimming a student's work should never ask the teacher to run code, tick a
    box or wait for anything. */
@@ -694,11 +699,11 @@ function defaultLocks(){
   return out;
 }
 /* Offline or signed out, nothing is locked, never strand a student. */
-const isLocked = (i) => !bypassed && !!apiReady && !!token && lockedSet.has(i);
+const isLocked = (i) => !waved(i) && !!apiReady && !!token && lockedSet.has(i);
 /* Without a server a page is shut until its passcode has been typed. Kept
    apart from isLocked, which is about what a teacher has released. */
 function pageShut(i){
-  if (!OFFLINE || bypassed) return false;
+  if (!OFFLINE || waved(i)) return false;
   const b = (lesson && lesson.blocks || [])[i];
   if (!b || !b.passHash) return false;
   try{ return localStorage.getItem("hub_page_" + lessonId + "_" + i) !== "1"; }catch(e){ return true; }
@@ -803,6 +808,18 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
           if (keep !== null && stepParam === null){
             const n = parseInt(keep, 10);
             if (!isNaN(n) && n >= 0 && n < steps.length) step = n;
+          }
+          /* A page picked in the builder wins, but only once: the stamp is
+             remembered so an ordinary refresh leaves the preview where it was
+             rather than dragging it back every time something is typed. */
+          const go = JSON.parse(localStorage.getItem("hub_preview_go") || "null");
+          if (go && stepParam === null){
+            const seen = sessionStorage.getItem("hub_preview_go_at");
+            if (String(go.at) !== seen){
+              sessionStorage.setItem("hub_preview_go_at", String(go.at));
+              const n = parseInt(go.step, 10);
+              if (!isNaN(n) && n >= 0 && n < steps.length) step = n;
+            }
           }
         }catch(e){}
         /* A preview opened in its own tab keeps up with the builder on its own.
@@ -1122,6 +1139,10 @@ function showStep(i){
     step = (b !== null) ? b : (nextOpen(0, +1) !== null ? nextOpen(0, +1) : 0);
   }
   steps.forEach((s, n) => { s.section.hidden = (n !== step); });
+  /* Now it is on the page: anything that needs to fetch from an earlier task
+     does it here, with whatever was written by the time they got this far. */
+  try{ const st = steps[step]; if (st && st.onShow) st.onShow(); }catch(e){}
+  try{ tuneColours(); }catch(e){}
 
   paintTracker();
   paintRubricButton();
@@ -1225,7 +1246,7 @@ function passGate(target){
   const wanted = block && block.passHash;
   if (!wanted) return Promise.resolve(true);          // nothing set: nothing to ask
   try{ if (localStorage.getItem(pageUnlockKey(target)) === "1") return Promise.resolve(true); }catch(e){}
-  if (bypassed) return Promise.resolve(true);
+  if (waved(target)) return Promise.resolve(true);
 
   return new Promise(resolve => {
     const back = el("div","modal-back no-print");
@@ -1434,18 +1455,141 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitM
 /* ---------- bypass ---------- */
 $("bypassDot").addEventListener("dblclick", askBypass);   // double-click: a stray single click does nothing
 $("bypassDot").addEventListener("keydown", (e) => { if (e.key === "Enter") askBypass(); });
+/* The browser's own prompt showed what was being typed to the whole room and
+   looked nothing like the rest of the site. This is a pop-up like any other,
+   with the letters hidden as they are typed.
+
+   SKIP lets this student past the page they are stuck on. SKIPALL opens the
+   lesson up, which is what the old single code did, and a code a teacher has
+   set on the lesson still does the same. */
 function askBypass(){
-  const code = prompt("Enter code:");
-  if (code === null) return;
-  const wanted = (lesson && lesson.bypassHash) || 2667650483; // default: SKIP-2026
-  if (strHash(code.trim()) === wanted){
-    bypassed = true;
-    document.body.classList.add("bypassed");
-    steps.forEach(st => { if (st.unlock) st.unlock(); });
-    showStep(step);
-  } else {
-    alert("That code is not right.");
+  const back = el("div","modal-back no-print");
+  const box = el("div","modal narrow");
+  const x = el("button","btn-ghost iconbtn modal-x","✕");
+  x.addEventListener("click", () => back.remove());
+  box.appendChild(x);
+  box.appendChild(el("h2","","Teacher code"));
+  box.appendChild(el("p","modal-text","Type the code to let this student carry on."));
+
+  const inp = el("input","bypassin");
+  inp.type = "password";
+  inp.autocomplete = "off";
+  inp.setAttribute("aria-label","Teacher code");
+  box.appendChild(inp);
+  const msg = el("p","hint","");
+  box.appendChild(msg);
+
+  function tryIt(){
+    const typed = inp.value.trim();
+    const wanted = (lesson && lesson.bypassHash) || 2667650483;   // default: SKIP-2026
+    const word = typed.toUpperCase();
+    if (word === "SKIPALL" || strHash(typed) === wanted){
+      bypassed = true;
+      document.body.classList.add("bypassed");
+      steps.forEach(st => { if (st.unlock) st.unlock(); });
+      back.remove(); showStep(step);
+      return;
+    }
+    if (word === "SKIP"){
+      skipped.add(step);
+      const st = steps[step];
+      if (st && st.unlock) st.unlock();
+      back.remove(); showStep(step);
+      return;
+    }
+    msg.textContent = "That code is not right.";
+    inp.value = ""; inp.focus();
   }
+  const go = el("button","btn-primary modal-cta","Done");
+  go.addEventListener("click", tryIt);
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); tryIt(); } });
+  box.appendChild(go);
+  const no = el("button","btn-ghost modal-stay","Cancel");
+  no.addEventListener("click", () => back.remove());
+  box.appendChild(no);
+
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+  document.body.appendChild(back);
+  setTimeout(() => inp.focus(), 30);
+}
+
+/* Coding tasks that other coding tasks can start from. A teacher marks one as
+   the task to carry on from, and the key written into the lesson is looked up
+   here rather than by position, so inserting a task in between does not send
+   the reference somewhere else. */
+const codeKeys = {};
+
+/* ---------- colours a teacher picked, read on either background ----------
+   A dark red chosen for a white page is close to unreadable on a dark one, and
+   a pale yellow chosen for a dark page disappears on white. The hue and how
+   strong it is are kept and only the lightness is mirrored, so a dark red
+   becomes a light red rather than turning into some other colour.
+
+   The colour as written is kept on the element itself, so switching back is
+   exact rather than a mirror of a mirror. Nothing is saved from here: this
+   only changes what is on the screen. */
+function readColour(css){
+  const t = String(css || "").trim();
+  let r, g, b;
+  const m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(t);
+  if (m){ r = +m[1]; g = +m[2]; b = +m[3]; }
+  else {
+    const h = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(t);
+    if (!h) return null;                       // var(--text) and the like: leave alone
+    const v = h[1].length === 3 ? h[1].split("").map(c => c + c).join("") : h[1];
+    r = parseInt(v.slice(0,2),16); g = parseInt(v.slice(2,4),16); b = parseInt(v.slice(4,6),16);
+  }
+  return { r, g, b };
+}
+function mirrorLightness(css){
+  const c = readColour(css);
+  if (!c) return null;
+  const r = c.r/255, g = c.g/255, b = c.b/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  let h = 0, sat = 0;
+  if (d){
+    sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? ((g - b) / d + (g < b ? 6 : 0))
+      : max === g ? ((b - r) / d + 2)
+      : ((r - g) / d + 4);
+    h /= 6;
+  }
+  const nl = 1 - l;                            // the mirror
+  const hue = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  let R, G, B;
+  if (!sat){ R = G = B = nl; }
+  else {
+    const q = nl < 0.5 ? nl * (1 + sat) : nl + sat - nl * sat;
+    const pp = 2 * nl - q;
+    R = hue(pp, q, h + 1/3); G = hue(pp, q, h); B = hue(pp, q, h - 1/3);
+  }
+  const to = (x) => Math.max(0, Math.min(255, Math.round(x * 255)));
+  return "rgb(" + to(R) + ", " + to(G) + ", " + to(B) + ")";
+}
+function tuneColours(){
+  const dark = themeFromSite() === "dark";
+  document.querySelectorAll('[style*="color"]').forEach(n => {
+    /* a formatting box is somewhere a teacher is writing, and what is in there
+       is about to be saved, so it is left exactly as typed */
+    if (n.closest && n.closest(".rt")) return;
+    let orig = n.dataset.colourWas;
+    if (orig === undefined){
+      orig = n.style.color;
+      if (!orig) return;
+      n.dataset.colourWas = orig;
+    }
+    const want = dark ? mirrorLightness(orig) : orig;
+    if (want) n.style.color = want;
+  });
 }
 
 /* ---------- renderers: { section, check, brief } ---------- */
@@ -1543,27 +1687,11 @@ function rPage(b){
   /* Whatever the teacher put them among, extension tasks belong at the end. */
   extras.forEach(x => s.appendChild(x.section));
 
-  /* A task counts as finished here on exactly the terms that decide whether it
-     would be nudged about: its own check, and its softer word if it has one. A
-     page of reading has neither, so nothing is being waited for and these come
-     out straight away. */
-  const restIsDone = () => kids.every(k => {
-    try{ if (!k.check().ok) return false; }catch(e){ return false; }
-    if (!k.soft) return true;
-    try{ return k.soft().ok; }catch(e){ return false; }
-  });
-  const showExtras = () => {
-    if (!extras.length) return;
-    const ready = restIsDone();
-    extras.forEach(x => { if (x.setReady) x.setReady(ready); });
-  };
-  s.addEventListener("input", showExtras);
-  s.addEventListener("click", showExtras);
-  s.addEventListener("change", showExtras);
-  showExtras();
-
   return {
     section: s,
+    /* a task on this page may need to fetch from one on an earlier page */
+    onShow: () => { kids.forEach(k => { if (k.onShow) k.onShow(); });
+                    extras.forEach(x => { if (x.onShow) x.onShow(); }); },
     check: () => {
       for (const k of kids){ const r = k.check(); if (!r.ok) return r; }
       return { ok:true };
@@ -1634,6 +1762,7 @@ function rChoice(b){
     set: (v) => { const n = Number(v); if (n >= 0 && n < opts.length) pick(n); }
   };
   return { section:s,
+           onShow: () => { if (picked >= 0) opts[picked].kids.forEach(k => { if (k.onShow) k.onShow(); }); },
            check:() => {
              if (picked < 0) return { ok:false, message:"Choose one to carry on" };
              for (const k of opts[picked].kids){
@@ -1662,6 +1791,10 @@ function rExtension(b){
      on the page, so somebody who has raced ahead can open these without having
      to satisfy every check first: a task nobody can reach is worse than one
      opened a little early. */
+  /* The heading is always there, so a student can see these exist before
+     deciding whether to open them. */
+  s.appendChild(el("b","ext-title", b.title || "Extension tasks"));
+
   const gate = el("label","ext-gate");
   const cb = el("input"); cb.type = "checkbox";
   gate.appendChild(cb);
@@ -1669,8 +1802,8 @@ function rExtension(b){
   s.appendChild(gate);
 
   const inner = el("div","ext-body");
+  const kids = [];
   inner.hidden = true;
-  if (b.title) inner.appendChild(el("b","ext-title", b.title));
   inner.appendChild(el("p","ext-task", b.task || "Have a go at these"));
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
@@ -1685,14 +1818,19 @@ function rExtension(b){
     built.section.hidden = false;
     item.appendChild(built.section);
     inner.appendChild(item);
+    kids.push(built);
   });
   s.appendChild(inner);
 
-  /* Two ways it opens: everything else on the page being finished with, or the
-     student saying they are ready. Either is enough. */
-  let ready = false;
+  /* The tick is the only way in.
+
+     It used to open by itself once everything else on the page was finished
+     with as well. That read as broken: a page whose tasks are reading and
+     watching has nothing that can be finished, so "everything is done" was
+     true from the start and these were on show before anyone had ticked
+     anything. One clear way in is easier to explain to a class than two. */
   function paint(){
-    const open = ready || cb.checked;
+    const open = cb.checked;
     if (inner.hidden === open) inner.hidden = !open;
     s.classList.toggle("open", open);
   }
@@ -1702,9 +1840,9 @@ function rExtension(b){
   paint();
 
   return { section:s,
+           onShow: () => kids.forEach(k => { if (k.onShow) k.onShow(); }),
            check:() => ({ ok:true }),
            soft:() => ({ ok:true }),
-           setReady:(v) => { ready = !!v; paint(); },
            brief:{ eyebrow:"Extension", title:b.title || "Extension tasks", text:b.task || "" } };
 }
 
@@ -2133,6 +2271,7 @@ try{
     new MutationObserver(() => {
       const t = themeFromSite();
       ideThemeWatchers.forEach(fn => { try{ fn(t); }catch(e){} });
+      try{ tuneColours(); }catch(e){}
     }).observe(document.documentElement, { attributes:true, attributeFilter:["data-bg"] });
   }
 }catch(e){}
@@ -2258,6 +2397,7 @@ function rIDE(b){
   const ta = el("textarea","ide-code");
   ta.spellcheck = false; ta.autocapitalize = "off"; ta.autocomplete = "off"; ta.wrap = "off";
   ta.value = b.starter || "";
+  if (b.key) codeKeys[b.key] = b.id;
   if (b.readOnly || !canEdit) ta.readOnly = true;
   if (b.height) editor.style.height = b.height + "px";
   codeWrap.appendChild(hl); codeWrap.appendChild(ta);
@@ -2514,6 +2654,28 @@ function rIDE(b){
     document.body.appendChild(back);
   });
 
+  /* Starting from an earlier task, so a lesson can build one program up across
+     several steps. Only ever into an untouched box: once a student has written
+     anything of their own here, their work is what matters and overwriting it
+     with an earlier version would be the worst thing this could do. It happens
+     when the task is first opened rather than when the page is built, so it
+     picks up whatever they had written by the time they reached it. */
+  let carried = false;
+  function carryIn(){
+    if (carried || !b.startFrom) return;
+    const from = fields[codeKeys[b.startFrom]];
+    if (!from || typeof from.get !== "function") return;
+    const was = ta.value;
+    if (was.trim() && was !== (b.starter || "")) { carried = true; return; }
+    let v = null;
+    try{ v = from.get(); }catch(e){ return; }
+    const code = (v && typeof v === "object") ? v.code : (typeof v === "string" ? v : "");
+    if (!code || !code.trim()) return;      // nothing written there yet, try again later
+    carried = true;
+    ta.value = code;
+    repaint(); markDirty();
+  }
+
   fields[b.id] = {
     get:() => ({ code: ta.value, out: lastOut.slice(0, 4000), ran: ran, runs: runs,
                  checks: checklist ? checkFlags(checklist) : undefined,
@@ -2572,6 +2734,7 @@ function rIDE(b){
   tip.addEventListener("mousedown", (e) => { e.preventDefault(); tip.hidden = true; });
 
   return { section:s,
+           onShow: carryIn,
            /* An unfinished checklist is worth a word, not a locked door. */
            soft:() => (b.checks && b.checks.length && b.nudge === true && checklist && !checklist.done())
              ? { ok:false, words:{ title:"Keep coding",
@@ -3703,11 +3866,15 @@ function applyLock(b, built){
 
   const origCheck = built.check;
   const origBrief = built.brief;
+  /* The place this task is about to take in the list, so it can tell whether a
+     teacher has waved this particular one through. It is pushed straight after
+     this returns, so the next index is the one it will hold. */
+  const at = steps.length;
   return {
     section: built.section,
     soft: built.soft,
-    check: () => (unlocked || bypassed) ? origCheck() : { ok:false, message:"Wait for your teacher to give you the code" },
-    brief: () => (unlocked || bypassed) ? origBrief : {
+    check: () => (unlocked || waved(at)) ? origCheck() : { ok:false, message:"Wait for your teacher to give you the code" },
+    brief: () => (unlocked || waved(at)) ? origBrief : {
       eyebrow: "Locked",
       title: b.lockTitle || "Waiting for your teacher",
       text: b.lockHint || "Your teacher will give you the code when the class is ready."

@@ -3317,3 +3317,14 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
 .ext-body[hidden]{display:none}
 .ext-body{margin-top:10px}
 .extension.open{border-style:solid; border-color:var(--amber)}
+
+/* the heading sits above the way in, and is on the page whether it is open or not */
+.extension .ext-title{display:block; font-size:15px; color:var(--amber); margin-bottom:6px}
+.ext-gate{margin-top:0}
+
+/* the teacher code box: the letters are hidden as they are typed, so a code
+   read out at the front of the room is not also displayed to the back of it */
+.bypassin{width:100%; height:44px; padding:0 12px; margin:6px 0 4px;
+  border:1px solid var(--line); border-radius:10px; background:var(--panel);
+  color:var(--text); font-family:var(--mono); font-size:16px; letter-spacing:.12em}
+.bypassin:focus{border-color:var(--amber); outline:none}

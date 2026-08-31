@@ -231,7 +231,7 @@ const BLANK = {
      keeps it out of sight until the rest of the page is finished with. */
   /* The lesson asks "Finished early?" itself, so the title is a teacher's own
      wording rather than something every one of these has to carry. */
-  extension:() => ({ type:"extension", title:"",
+  extension:() => ({ type:"extension", title:"Extension tasks",
                      task:"Have a go at these", blocks:[] }),
   /* They pick one, and what they picked decides the work they then get. */
   choice:   () => ({ type:"choice", title:"", task:"", prompt:"Choose one",
@@ -264,6 +264,35 @@ const BLANK = {
                      message:"THE PASSWORD IS FIREWALL", shift:7,
                      prompt:"Type the hidden message here (letters only, spaces are fine):" })
 };
+/* A coding task can be told to start from another one. The reference is this
+   key rather than a position, so inserting a task in between, or dragging one
+   somewhere else, does not quietly point it at the wrong task. */
+let codeKeyCount = 0;
+function newCodeKey(){
+  codeKeyCount++;
+  return "c" + Date.now().toString(36) + codeKeyCount.toString(36);
+}
+
+/* Every coding task before this one, in the order a student meets them. */
+function earlierCodeTasks(target){
+  const out = [];
+  let stop = false;
+  const walk = (list) => {
+    (list || []).forEach(x => {
+      if (stop) return;
+      if (x === target){ stop = true; return; }
+      if (x.type === "ide" || x.type === "web"){
+        if (!x.key) x.key = newCodeKey();
+        out.push(x);
+      }
+      if (x.blocks) walk(x.blocks);
+      if (x.options) x.options.forEach(o => walk(o.blocks));
+    });
+  };
+  walk(lesson.blocks);
+  return out;
+}
+
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
                 short:"Short answer", page:"Page", extension:"Extension tasks", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
@@ -439,7 +468,7 @@ function compileOne(b, id, target){
     const kids = [];
     (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
     if (!kids.length) return;                 // an empty one is not worth saving
-    push({ type:"extension", id, title: b.title || "",
+    push({ type:"extension", id, title: b.title || "Extension tasks",
            task: b.task || "Have a go at these", blocks: kids });
     return;
   }
@@ -473,7 +502,9 @@ function compileOne(b, id, target){
       push({ type:"text", id, html });
     }
     else if (b.type === "ide"){
-      const blk = { type:"ide", id, starter: b.starter || "" };
+      if (!b.key) b.key = newCodeKey();
+      const blk = { type:"ide", id, starter: b.starter || "", key: b.key };
+      if (b.startFrom) blk.startFrom = b.startFrom;
       if (Array.isArray(b.checks) && b.checks.length){
         blk.checks = b.checks.filter(c => (c.label || "").trim())
                              .map(c => Object.assign({}, c,
@@ -836,7 +867,15 @@ function card(b, i, arr){
          it on load, so writing the page being edited and asking for a refresh
          lands it on the same one. Seeing the page you are working on is more
          use than the preview staying wherever it was left. */
-      try{ sessionStorage.setItem("hub_preview_step", String(i2)); }catch(e){}
+      try{
+        sessionStorage.setItem("hub_preview_step", String(i2));
+        /* and in localStorage for a preview in its own tab. sessionStorage is
+           per tab: the pop-out was given a copy of it when it opened and never
+           hears about anything written here afterwards. The stamp lets the
+           preview tell a fresh request to move apart from one it has already
+           acted on, so it only jumps when a page is actually picked. */
+        localStorage.setItem("hub_preview_go", JSON.stringify({ step:i2, at:Date.now() }));
+      }catch(e){}
       schedulePreview();
       /* Only the highlight changes, so the cards themselves are left alone.
          Rendering again from here threw away the very element being pressed
@@ -1085,6 +1124,37 @@ function card(b, i, arr){
   if (b.type === "ide"){
     F("Heading (optional)", "title");
     R("Subheading (optional)", "task", { rows:2 });
+    /* Carrying on from an earlier task: the box below is then only what they
+       see if that task was left empty. */
+    {
+      const earlier = earlierCodeTasks(b);
+      const w = el("div","bfield");
+      w.appendChild(el("label","","Start from"));
+      const sel = document.createElement("select");
+      const none = document.createElement("option");
+      none.value = ""; none.textContent = "The starter code below";
+      sel.appendChild(none);
+      earlier.forEach((x, i) => {
+        const o = document.createElement("option");
+        o.value = x.key;
+        o.textContent = (i + 1) + ". " + (x.title || LABEL[x.type] || "Coding task");
+        sel.appendChild(o);
+      });
+      sel.value = b.startFrom || "";
+      sel.addEventListener("change", () => {
+        b.startFrom = sel.value || undefined;
+        saveDraft(); render(); schedulePreview();
+      });
+      w.appendChild(sel);
+      if (!earlier.length){
+        w.appendChild(el("p","bhelp","Nothing to start from yet: this is the first coding task."));
+      } else if (b.startFrom){
+        w.appendChild(el("p","bhelp",
+          "Their code from that task is put in here the first time they open this one, "
+          + "so they can keep building on it. Anything they have already written here is left alone."));
+      }
+      body.appendChild(w);
+    }
     F("Starter code", "starter", { area:true, rows:7, mono:true });
     toggleRow(codeOptions([["turtle","Turtle canvas", false],
                ["run","Running", true],
@@ -1319,7 +1389,7 @@ function card(b, i, arr){
     body.appendChild(addTaskRow(b.blocks));
   }
   if (b.type === "extension"){
-    F("Title (optional)", "title");
+    F("Heading", "title");
     R("Subtitle", "task", { rows:2, help:"Shown under “Finished early?” once they open it." });
     body.appendChild(el("p","bhelp",
       "The lesson shows “Finished early?” with a box to tick. These open "
