@@ -86,7 +86,7 @@
     "turtle":      /\bturtle\b|\bforward\s*\(|\bpenup\s*\(/
   };
 
-  function checkPythonOne(check, code, output){
+  function checkPythonOne(check, code, output, runs){
     const label = check.label || "Check";
     const bare = realCode(code);
     const value = String(check.value || "");
@@ -145,6 +145,19 @@
           : fail(label, "Your output is not quite right yet.");
       }
 
+      /* Counted rather than looked for in the code: the point of it is to get
+         them to press Run, which nothing about the text of their program can
+         show. One run is the useful case, as a plain "have a go" tick. */
+      case "runCount": {
+        const want = Math.max(1, parseInt(check.count, 10) || 1);
+        const got = Math.max(0, parseInt(runs, 10) || 0);
+        if (got >= want) return pass(label);
+        return fail(label, got === 0
+          ? (want === 1 ? "Press Run to try your code."
+                        : "Press Run to try your code, " + want + " times in all.")
+          : "Run it again: " + got + " of " + want + " so far.");
+      }
+
       case "lineCount": {
         const want = parseInt(check.count, 10) || 1;
         const got = bare.split("\n").filter(l => l.trim()).length;
@@ -157,9 +170,9 @@
     }
   }
 
-  window.runPythonChecks = function(checks, code, output){
+  window.runPythonChecks = function(checks, code, output, runs){
     return (checks || []).map(c => {
-      try{ return checkPythonOne(c, code, output); }
+      try{ return checkPythonOne(c, code, output, runs); }
       catch(e){ return broken(c.label || "Check", "This check could not run."); }
     });
   };
@@ -176,7 +189,7 @@
     return doc;
   }
 
-  function checkWebOne(check, files){
+  function checkWebOne(check, files, runs){
     const label = check.label || "Check";
     const doc = parsePage(files);
     const css = String((files && files.css) || "");
@@ -188,6 +201,14 @@
     const cased = check.caseSensitive === true;
 
     switch (check.kind){
+      case "runCount": {
+        const want = Math.max(1, parseInt(check.count, 10) || 1);
+        const got = Math.max(0, parseInt(runs, 10) || 0);
+        if (got >= want) return pass(label);
+        return fail(label, got === 0 ? "Press Run to see your page."
+                                     : "Run it again: " + got + " of " + want + " so far.");
+      }
+
       case "tag": {
         if (!selector) return broken(label, "This check does not say which tag.");
         let found;
@@ -263,9 +284,9 @@
     }
   }
 
-  window.runWebChecks = function(checks, files){
+  window.runWebChecks = function(checks, files, runs){
     return (checks || []).map(c => {
-      try{ return checkWebOne(c, files); }
+      try{ return checkWebOne(c, files, runs); }
       catch(e){ return broken(c.label || "Check", "This check could not run."); }
     });
   };

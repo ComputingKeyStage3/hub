@@ -3063,8 +3063,57 @@ body > .loadscreen{ animation:none }
    places a teacher sets a type size look and behave alike. */
 .rt-sizes{display:inline-flex; align-items:center; gap:2px; margin:0 2px}
 .rt-step{min-width:22px}
-.rt-sizenum{width:44px; height:26px; padding:0 4px; text-align:center;
+/* Wide enough for two digits with the spinner beside them. At 44px the
+   numbers were being clipped. */
+.rt-sizenum{width:60px; height:26px; padding:0 4px; text-align:center;
   border:1px solid var(--line); border-radius:7px; background:var(--panel);
   color:var(--text); font-family:var(--body); font-size:13px}
 .rt-sizenum:focus{border-color:var(--amber); outline:none}
 .rt-sizeunit{font-size:11px; color:var(--muted)}
+
+
+/* ---------- a task inside a Choice ----------
+   These follow on from a choice the student has already made, so they are set
+   quieter than a task standing on its own: smaller heading, a shorter box and
+   plainer wording, to read as part of the choice rather than competing with it. */
+.choice-panel .pg-h{font-size:15px; color:var(--muted); margin-bottom:2px}
+.choice-panel .pg-t{font-size:13.5px; color:var(--muted)}
+.choice-panel .q-ask{font-size:14.5px; margin-bottom:6px}
+.choice-panel textarea.answer{min-height:96px; font-size:14.5px; padding:9px 11px}
+.choice-panel .counter{font-size:12.5px}
+.choice-panel .pg-item{padding-top:2px}
+
+/* ---------- keyword definitions ----------
+   Two columns on a screen with room for them, the word on the left and their
+   own wording on the right. */
+.kw-table{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel)}
+.kw-row{display:grid; grid-template-columns:minmax(140px, 28%) 1fr; gap:0;
+  border-top:1px solid var(--line)}
+.kw-row:first-child{border-top:none}
+.kw-head{background:var(--panel-2); font-size:13px; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--dim); font-weight:700}
+.kw-head .kw-word, .kw-head .kw-def{padding:8px 12px}
+.kw-word{padding:12px; border-right:1px solid var(--line); background:var(--panel-2);
+  display:flex; flex-direction:column; gap:3px; justify-content:center}
+.kw-word b{font-size:15.5px}
+.kw-hint{font-size:13px; color:var(--muted)}
+.kw-def{padding:8px}
+.kw-box{width:100%; min-height:58px; border:1px solid var(--line); border-radius:8px;
+  padding:8px 10px; background:var(--panel); color:var(--text);
+  font-family:var(--body); font-size:15px; line-height:1.45; resize:vertical}
+.kw-box:focus{border-color:var(--amber); outline:none}
+.kw-row[data-done=yes] .kw-word{background:var(--mint-soft, var(--panel-2))}
+.kw-count{margin:8px 0 0; font-size:13.5px; color:var(--muted)}
+.kw-count[data-all=yes]{color:var(--mint-dark, var(--muted)); font-weight:700}
+.kw-none{margin:12px; color:var(--muted)}
+/* the builder's row of word and hint */
+.kwrow input{flex:1 1 40%; min-width:0}
+
+/* A phone has no room for two columns, so the word sits above its box. The
+   heading row means nothing once they are stacked, so it goes. */
+@media (max-width:620px){
+  .kw-row{grid-template-columns:1fr}
+  .kw-head{display:none}
+  .kw-word{border-right:none; border-bottom:1px solid var(--line); padding:9px 12px}
+  .kw-def{padding:8px 12px 12px}
+}

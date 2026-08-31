@@ -78,6 +78,7 @@
           <button class="pal" data-add="text"><b>Paragraph</b><span>Words, with formatting</span></button>
           <button class="pal" data-add="question"><b>Written answer</b><span>They type a response</span></button>
           <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
+          <button class="pal" data-add="keywords"><b>Keyword definitions</b><span>They write what each word means</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="checks">
@@ -176,6 +177,7 @@
       <b>Live preview</b>
       <span class="hint" id="prevMsg"></span>
       <button class="btn-ghost iconbtn" id="prevBtn" title="Refresh preview">&#8635;</button>
+      <button class="btn-ghost iconbtn" id="prevPop" title="Open the preview in a new tab">&#10696;</button>
       <button class="btn-ghost iconbtn" id="prevFull" title="Full screen preview">&#9974;</button>
     </div>
     <div class="prev-hold"><iframe id="prev" title="Lesson preview"></iframe></div>
@@ -242,6 +244,8 @@ const BLANK = {
   notes:    () => ({ type:"notes", title:"", task:"", starter:"" }),
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
+  keywords: () => ({ type:"keywords", title:"Keywords", task:"Write what each one means in your own words.",
+                     words:[{ word:"", hint:"" }, { word:"", hint:"" }] }),
   label:    () => ({ type:"label", title:"", task:"", image:"", spots:[] }),
   binary:   () => ({ type:"binary", title:"", task:"", mode:"toDenary", bits:8, count:4,
                      showPlace:true, numbers:"" }),
@@ -260,7 +264,7 @@ const BLANK = {
 };
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", code:"Coding task", web:"Web page",
+                short:"Short answer", page:"Page", extension:"Extension tasks", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
                 password:"Password checker", caesar:"Caesar cipher" };
 
 /* The lesson page hashes what a student types and compares it with this, so
@@ -528,6 +532,17 @@ function compileOne(b, id, target){
       push(blk);
     }
     else if (b.type === "code"){ /* not chosen yet, nothing to build */ }
+    else if (b.type === "keywords"){
+      /* A word with nothing in it would be a blank row a student cannot
+         answer, so those are left out. */
+      const words = (b.words || [])
+        .filter(x => (x.word || "").trim())
+        .map(x => ({ word: x.word.trim(), hint: (x.hint || "").trim() || undefined }));
+      if (!words.length) return;
+      push({ type:"keywords", id, title: b.title || "",
+             task: b.task ? (window.cleanRichText ? window.cleanRichText(b.task) : b.task) : "",
+             words: words });
+    }
     else if (b.type === "notes")
       push(keepArrays({ type:"notes", id, title: b.title || "", task: b.task || "",
         starter: b.starter || "" }));
@@ -920,6 +935,13 @@ function card(b, i, arr){
     body.appendChild(w);
   }
   /* on/off buttons; each entry is [key, label, defaultOn] */
+  /* Nudging about the checklist is a setting about the code like any other, so
+     it belongs on the same row rather than on its own further down. It is only
+     offered once there is a checklist to be nudged about. */
+  function codeOptions(defs){
+    if ((b.checks || []).length) defs.push(["nudge","Nudge to finish it", true]);
+    return defs;
+  }
   function toggleRow(defs, label){
     const w = el("div","bfield");
     w.appendChild(el("label","", label || "Options"));
@@ -1034,24 +1056,24 @@ function card(b, i, arr){
     if (b.files.indexOf("html") >= 0) F("Starting HTML", "html", { area:true, rows:6, mono:true });
     if (b.files.indexOf("css") >= 0) F("Starting CSS", "css", { area:true, rows:5, mono:true });
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
-    toggleRow([["run","Running", true], ["edit","Editing", true],
+    toggleRow(codeOptions([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true],
                ["addFiles","Students can add files", false],
                /* same rule as Python: nothing to require when nothing runs */
-               ["required","Run required", true, () => b.run === false]]);
+               ["required","Run required", true, () => b.run === false]]));
     F("Code must contain (optional)", "expect");
   }
   if (b.type === "ide"){
     F("Heading (optional)", "title");
     R("Subheading (optional)", "task", { rows:2 });
     F("Starter code", "starter", { area:true, rows:7, mono:true });
-    toggleRow([["turtle","Turtle canvas", false],
+    toggleRow(codeOptions([["turtle","Turtle canvas", false],
                /* Off unless it is asked for: most Python tasks are worth a go
                   without Continue waiting on the Run button. It cannot be on
                   when there is nothing to run. */
                ["required","Run required", false, () => b.run === false],
                ["run","Running", true],
-               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]);
+               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]));
     F("Output must contain (optional)", "expect", { help:"Leave empty unless you want Continue to wait for the right output." });
   }
   if (b.type === "question"){
@@ -1352,17 +1374,42 @@ function card(b, i, arr){
       n ? "Edit the checklist (" + n + ")" : "+ Add a checklist");
     open2.addEventListener("click", () => checklistPopup(b, isWeb));
     w.appendChild(open2);
-    if (n){
-      const row = el("div","brow");
-      const on = b.nudge !== false;
-      const need = el("button","btn-ghost bmini2" + (on ? " right" : ""),
-                      "Nudge to finish it: " + (on ? "on" : "off"));
-      need.title = on ? "They are encouraged to finish the checklist before moving on"
-                      : "They can move on without a word about it";
-      need.addEventListener("click", () => { b.nudge = !on; render(); schedulePreview(); });
-      row.appendChild(need);
+    body.appendChild(w);
+  }
+  if (b.type === "keywords"){
+    F("Heading (optional)", "title");
+    R("Instruction (optional)", "task", { rows:2 });
+    if (!Array.isArray(b.words)) b.words = [];
+    const w = el("div","bfield");
+    w.appendChild(el("label","","The keywords"));
+    w.appendChild(el("p","bhelp",
+      "One per row. The hint is optional and sits under the word, for anything "
+      + "that needs narrowing down."));
+    b.words.forEach((entry, k) => {
+      const row = el("div","brow kwrow");
+      const word = el("input");
+      word.placeholder = "Keyword";
+      word.value = entry.word || "";
+      word.addEventListener("input", () => { entry.word = word.value; saveDraft(); schedulePreview(); });
+      const hint = el("input");
+      hint.placeholder = "Hint (optional)";
+      hint.value = entry.hint || "";
+      hint.addEventListener("input", () => { entry.hint = hint.value; saveDraft(); schedulePreview(); });
+      row.appendChild(word); row.appendChild(hint);
+      [["↑","Move up", () => { if (k){ b.words.splice(k-1,0,b.words.splice(k,1)[0]); render(); schedulePreview(); } }],
+       ["↓","Move down", () => { if (k<b.words.length-1){ b.words.splice(k+1,0,b.words.splice(k,1)[0]); render(); schedulePreview(); } }],
+       ["✕","Remove", () => { b.words.splice(k,1); render(); schedulePreview(); }]
+      ].forEach(t => {
+        const btn = el("button","btn-ghost bmini", t[0]);
+        btn.title = t[1];
+        btn.addEventListener("click", t[2]);
+        row.appendChild(btn);
+      });
       w.appendChild(row);
-    }
+    });
+    const add = el("button","btn-ghost bmini2","+ Another keyword");
+    add.addEventListener("click", () => { b.words.push({ word:"", hint:"" }); render(); schedulePreview(); });
+    w.appendChild(add);
     body.appendChild(w);
   }
   if (b.type === "notes"){
@@ -1737,7 +1784,8 @@ const PY_CHECKS = [
   ["calls",      "Calls...",               "name"],
   ["outputHas",  "The output contains...", "text"],
   ["outputIs",   "The output is exactly...","text"],
-  ["lineCount",  "At least this many lines","number"]
+  ["lineCount",  "At least this many lines","number"],
+  ["runCount",   "Runs the code at least...", "number"]
 ];
 const WEB_CHECKS = [
   ["tag",        "Has this tag...",        "tag"],
@@ -1745,7 +1793,8 @@ const WEB_CHECKS = [
   ["attr",       "An element has this attribute...","selector"],
   ["contentHas", "The page shows...",      "text"],
   ["cssHas",     "A CSS rule sets...",     "selector"],
-  ["fileHas",    "A file contains...",     "text"]
+  ["fileHas",    "A file contains...",     "text"],
+  ["runCount",   "Runs the page at least...", "number"]
 ];
 const USES_OPTIONS = ["for loop","while loop","if","else","elif","input","print",
                       "list","function","variable","comment","random","turtle"];
@@ -1863,6 +1912,7 @@ function checklistPopup(block, isWeb){
           card.appendChild(f);
         }
         else if (kind === "lineCount") needs("How many lines", "count", "5");
+        else if (kind === "runCount") needs("How many times", "count", "1");
         else if (kind === "tag") needs("Tag name", "selector", "h1");
         else if (kind === "classOrId") needs("Class or id", "selector", ".title or #header");
         else if (kind === "attr"){
@@ -2491,6 +2541,17 @@ function schedulePreview(){
   $("prevMsg").textContent = "updating\u2026";
   prevTimer = setTimeout(refreshPreview, 900);
 }
+/* The preview in its own tab, at the size a student would really see it. It
+   reads the compiled lesson out of localStorage exactly as the panel does, so
+   the only thing to be careful about is writing that first: opening the tab
+   before compiling would show whatever was there from last time. */
+on("prevPop", "click", () => {
+  try{
+    localStorage.setItem("hub_preview", JSON.stringify(compile()));
+    window.open("lesson.html?id=__preview&builder=1&t=" + Date.now(), "_blank", "noopener");
+  }catch(e){ $("prevMsg").textContent = e.message; }
+});
+
 function refreshPreview(){
   try{
     if (previewReset){ try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){} previewReset = false; }

@@ -742,6 +742,79 @@
   };
 
   /* ===================================================================
+     KEYWORD DEFINITIONS
+     { type:"keywords", title, task, words:[{word, hint}] }
+     The words down the left, a box beside each for the student to put the
+     meaning in their own words. Saved as a list of what they wrote, by
+     position, so a teacher can add or reword a keyword later without the
+     answers sliding onto the wrong rows.
+     =================================================================== */
+  window.rKeywords = function(b, ctx){
+    const s = make("section", "keywordstask");
+    const table = make("div", "kw-table");
+    const words = Array.isArray(b.words) ? b.words : [];
+    const boxes = [];
+
+    /* A heading row on a wide screen. On a phone the rows stack, and a header
+       floating above stacked rows says nothing, so it is hidden there. */
+    const head = make("div", "kw-row kw-head");
+    head.appendChild(make("div", "kw-word", "Keyword"));
+    head.appendChild(make("div", "kw-def", "What it means, in your own words"));
+    table.appendChild(head);
+
+    words.forEach((w, i) => {
+      const row = make("div", "kw-row");
+      const left = make("div", "kw-word");
+      left.appendChild(make("b", "", w.word || ""));
+      if (w.hint) left.appendChild(make("span", "kw-hint", w.hint));
+      row.appendChild(left);
+
+      const right = make("div", "kw-def");
+      const box = make("textarea", "kw-box");
+      box.rows = 2;
+      box.placeholder = "Write what it means";
+      box.addEventListener("input", () => { mark(i); ctx.changed(); });
+      right.appendChild(box);
+      row.appendChild(right);
+      table.appendChild(row);
+      boxes.push(box);
+    });
+
+    if (!words.length) table.appendChild(make("p", "kw-none", "No keywords have been added yet."));
+    s.appendChild(table);
+
+    const count = make("p", "kw-count");
+    s.appendChild(count);
+
+    /* A row counts as written once there is something in it. Nothing here is
+       marked right or wrong: they are their own words, and judging them by
+       keyword matching would punish a good definition worded differently. */
+    const written = (i) => (boxes[i].value || "").trim().length > 0;
+    function mark(i){
+      boxes[i].closest(".kw-row").dataset.done = written(i) ? "yes" : "";
+      tally();
+    }
+    function tally(){
+      if (!boxes.length) return;
+      const n = boxes.filter((_, i) => written(i)).length;
+      count.textContent = n + " of " + boxes.length + " written";
+      count.dataset.all = n === boxes.length ? "yes" : "";
+    }
+    tally();
+
+    return {
+      section: s,
+      get: () => boxes.map(x => x.value),
+      set: (v) => {
+        if (!Array.isArray(v)) return;
+        v.forEach((text, i) => { if (boxes[i]) boxes[i].value = text == null ? "" : String(text); });
+        boxes.forEach((_, i) => mark(i));
+      },
+      done: () => boxes.length > 0 && boxes.every((_, i) => written(i))
+    };
+  };
+
+  /* ===================================================================
      MINDMAP
      { type:"mindmap", centre, starter:[{id,text,parent}] }
      A middle idea with branches off it. The teacher can set the middle
