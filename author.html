@@ -223,7 +223,7 @@ const BLANK = {
                      css:'h1 {\n  color: navy;\n}',
                      js:'console.log("Ready");',
                      run:true, edit:true, help:true, tooltips:true, expect:"" }),
-  question: () => ({ type:"question", heading:"Write your answer", context:"", prompt:"", minWords:20 }),
+  question: () => ({ type:"question", heading:"", context:"", prompt:"", minWords:20 }),
   quiz:     () => ({ type:"quiz", title:"Check your understanding", pass:{ mode:"percent", value:70 },
                      questions:[{ q:"", options:["",""], answers:[0], hint:"", why:"" }] }),
   page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
@@ -1105,6 +1105,19 @@ function card(b, i, arr){
     wrow.appendChild(less); wrow.appendChild(num); wrow.appendChild(more);
     ww.appendChild(wrow);
     body.appendChild(ww);
+
+    /* Written answers usually come in runs of two or three, so the next one is
+       offered here rather than sending a teacher back to the palette and then
+       dragging it into place. It lands directly under this one. */
+    const another = el("button","btn-ghost bmini2","+ Another question underneath");
+    another.addEventListener("click", () => {
+      const at = arr.indexOf(b);
+      const made = BLANK.question();
+      arr.splice(at < 0 ? arr.length : at + 1, 0, made);
+      scrollToBlock = made;
+      render(); schedulePreview();
+    });
+    body.appendChild(another);
   }
   if (b.type === "quiz"){
     if (!b.questions) b.questions = [{ q:"", options:["",""], answer:0, hint:"" }];
@@ -1807,7 +1820,7 @@ const CASED_KINDS = ["codeHas","codeLacks","defines","calls","outputHas","output
 function checklistPopup(block, isWeb){
   const kinds = isWeb ? WEB_CHECKS : PY_CHECKS;
   openModal(box => {
-    box.classList.add("narrow");
+    box.classList.add("narrow", "checkmodal");
     box.appendChild(el("h2","","Checklist"));
     box.appendChild(el("p","modal-text",
       "Each line becomes something the student can tick off. Keep the wording plain, " +
@@ -1869,23 +1882,28 @@ function checklistPopup(block, isWeb){
         /* Some things are too vague or too particular for any rule: "the code
            is tidy", "the colours suit the topic". Those are marked as the
            teacher's to judge, and no automatic check is asked for at all. */
-        const mrow2 = el("div","bfield");
-        mrow2.appendChild(el("label","","Who checks this"));
+        /* Everything a check needs sits on as few rows as it can: these cards
+           stack up in a pop-up, and a tall one means scrolling to see a
+           checklist that would fit if it used the width it already has. */
+        const topRow = el("div","checkrow");
+        card.appendChild(topRow);
+        const whoField = el("div","checkfield");
+        whoField.appendChild(el("label","","Who checks this"));
         const manual = c.manual === true;
         const mbtn = el("button","btn-ghost bmini2" + (manual ? " right" : ""),
-                        manual ? "Your teacher" : "Checked automatically");
+                        manual ? "Teacher" : "Checked automatically");
         mbtn.type = "button";
         mbtn.title = manual ? "You tick this off when you look at their work"
                             : "The page works this one out on its own";
         mbtn.addEventListener("click", () => { c.manual = !manual; saveDraft(); paint(); });
-        mrow2.appendChild(mbtn);
-        card.appendChild(mrow2);
+        whoField.appendChild(mbtn);
+        topRow.appendChild(whoField);
         /* Nothing to look for when a person is doing the looking. The card has
            to go on the page before dropping out of this line, or a
            teacher-checked line would disappear from the list entirely. */
         if (manual){ list.appendChild(card); return; }
 
-        const row = el("div","bfield");
+        const row = el("div","checkfield grow");
         row.appendChild(el("label","","What to look for"));
         const pick = document.createElement("select");
         kinds.forEach(k => {
@@ -1901,22 +1919,25 @@ function checklistPopup(block, isWeb){
           saveDraft(); paint();
         });
         row.appendChild(pick);
-        card.appendChild(row);
+        topRow.appendChild(row);
 
-        /* the fields this kind of check needs */
+        /* the fields this kind of check needs, side by side on one row along
+           with the case switch and the button for another condition */
+        const mainRow = el("div","checkrow");
+        card.appendChild(mainRow);
         const needs = (name, key, help) => {
-          const f = el("div","bfield");
+          const f = el("div","checkfield grow");
           f.appendChild(el("label","", name));
           const inp = el("input");
           inp.value = c[key] || "";
           if (help) inp.placeholder = help;
           inp.addEventListener("input", () => { c[key] = inp.value; saveDraft(); });
           f.appendChild(inp);
-          card.appendChild(f);
+          mainRow.appendChild(f);
         };
         const kind = c.kind || kinds[0][0];
         if (kind === "uses"){
-          const f = el("div","bfield");
+          const f = el("div","checkfield grow");
           f.appendChild(el("label","","Which one"));
           const sel = document.createElement("select");
           USES_OPTIONS.forEach(o2 => {
@@ -1927,7 +1948,7 @@ function checklistPopup(block, isWeb){
           sel.value = c.value || USES_OPTIONS[0];
           sel.addEventListener("change", () => { c.value = sel.value; saveDraft(); });
           f.appendChild(sel);
-          card.appendChild(f);
+          mainRow.appendChild(f);
         }
         else if (kind === "lineCount") needs("How many lines", "count", "5");
         else if (kind === "runCount") needs("How many times", "count", "1");
@@ -1944,7 +1965,7 @@ function checklistPopup(block, isWeb){
           needs("Value (optional)", "value", "red");
         }
         else if (kind === "fileHas"){
-          const f = el("div","bfield");
+          const f = el("div","checkfield");
           f.appendChild(el("label","","Which file"));
           const sel = document.createElement("select");
           [["html","HTML"],["css","CSS"],["js","JavaScript"]].forEach(o2 => {
@@ -1955,26 +1976,24 @@ function checklistPopup(block, isWeb){
           sel.value = c.file || "html";
           sel.addEventListener("change", () => { c.file = sel.value; saveDraft(); });
           f.appendChild(sel);
-          card.appendChild(f);
+          mainRow.appendChild(f);
           needs("Text to look for", "value", "console.log");
         }
         else needs("Text to look for", "value", "");
 
-        /* After the chain above, never inside it: put in the middle it would
-           swallow the branch that draws a check's own text box. Off means case
-           is ignored, which is what nearly every check wants. */
+        /* The case switch, the way an editor's search bar shows it: Aa, with a
+           line through it while capitals are being ignored. It sits against the
+           box it applies to rather than under a heading of its own, which is
+           what made these cards taller than they needed to be. */
         if (CASED_KINDS.indexOf(kind) >= 0){
-          const crow = el("div","bfield");
-          crow.appendChild(el("label","","Capital letters"));
           const on = c.caseSensitive === true;
-          const cbtn = el("button","btn-ghost bmini2" + (on ? " right" : ""),
-                          on ? "Must match exactly" : "Ignore capitals");
+          const cbtn = el("button","casebtn" + (on ? " on" : ""), "Aa");
           cbtn.type = "button";
-          cbtn.title = on ? "Uppercase and lowercase must match what you typed"
-                          : "Print and print both count";
+          cbtn.title = on ? "Capitals must match what you typed. Click to ignore them."
+                          : "Capitals are ignored, so Print and print both count. Click to match them exactly.";
+          cbtn.setAttribute("aria-label", cbtn.title);
           cbtn.addEventListener("click", () => { c.caseSensitive = !on; saveDraft(); paint(); });
-          crow.appendChild(cbtn);
-          card.appendChild(crow);
+          mainRow.appendChild(cbtn);
         }
 
         /* ---------- extra conditions ----------
@@ -1986,7 +2005,7 @@ function checklistPopup(block, isWeb){
            the same piece of code rather than anywhere in the file. */
         if (!Array.isArray(c.more)) c.more = [];
         c.more.forEach((m, mi) => {
-          const mr = el("div","bfield morecond");
+          const mr = el("div","morecond");
           const top = el("div","brow");
           const joinBtn = el("button","btn-ghost bmini2", (m.join === "or" ? "or" : "and"));
           joinBtn.type = "button";
@@ -2031,12 +2050,13 @@ function checklistPopup(block, isWeb){
           mr.appendChild(top);
           card.appendChild(mr);
         });
-        const addMore = el("button","btn-ghost bmini2","+ And another condition");
+        const addMore = el("button","btn-ghost bmini2 addcond","Add another condition");
         addMore.addEventListener("click", () => {
           c.more.push({ join:"and", kind:"codeHas", value:"", scope:"all" });
           saveDraft(); paint();
         });
-        card.appendChild(addMore);
+        /* on the same row as the box it adds a condition to, not under it */
+        mainRow.appendChild(addMore);
         if (c.more.length > 1){
           card.appendChild(el("p","bhelp",
             "Read left to right: “A and B or C” means “(A and B) or C”."));
@@ -2045,7 +2065,7 @@ function checklistPopup(block, isWeb){
         /* Last, so it applies whatever kind of check this is. Left empty, the
            built-in wording is used. Teacher-checked lines never reach here:
            they have nothing to fail at, so there is nothing to say about it. */
-        const hrow = el("div","bfield");
+        const hrow = el("div","bfield wide");
         hrow.appendChild(el("label","","What to say if they have not got it yet"));
         const hin = el("input");
         hin.value = c.hint || "";

@@ -93,6 +93,40 @@
     return html.trim();
   }
 
+  /* Opens a menu under the button that asked for it, or above when there is
+     more room up there, and always inside the screen.
+
+     These hang off document.body with a top worked out from the button, and
+     nothing was stopping one running off the bottom: a menu 620px tall opened
+     from a toolbar 375px down a 700px screen went 300px past the edge, with
+     the box at the foot of it unreachable. Now it is capped to the room it has
+     and scrolls inside itself. */
+  function openMenuAt(btn, menu){
+    menu.hidden = false;
+    /* measured at its full size first, or the cap from last time is read back */
+    menu.style.maxHeight = "";
+    menu.style.overflowY = "";
+    const r = btn.getBoundingClientRect();
+    const GAP = 6, EDGE = 10;
+    const below = window.innerHeight - r.bottom - GAP - EDGE;
+    const above = r.top - GAP - EDGE;
+    const wanted = menu.offsetHeight;
+    const goUp = wanted > below && above > below;
+    /* never squeezed to nothing: below this it is worth scrolling instead */
+    const room = Math.max(140, goUp ? above : below);
+    const height = Math.min(wanted, room);
+    if (wanted > room){
+      menu.style.maxHeight = room + "px";
+      menu.style.overflowY = "auto";
+    }
+    menu.style.top = ((goUp ? r.top - GAP - height : r.bottom + GAP) + window.scrollY) + "px";
+    /* and kept on the screen sideways too, using its real width rather than a
+       guess at one */
+    const left = Math.min(r.left + window.scrollX,
+                          window.innerWidth - menu.offsetWidth - EDGE);
+    menu.style.left = Math.max(EDGE, left) + "px";
+  }
+
   /* Build the editor. onChange gets the cleaned HTML. */
   window.richText = function(initialHtml, onChange, opts){
     const o = opts || {};
@@ -169,10 +203,7 @@
     numBtn.addEventListener("mousedown", () => { saved = save(); });
     numBtn.addEventListener("click", () => {
       if (!numMenu.hidden){ numMenu.hidden = true; return; }
-      const r = numBtn.getBoundingClientRect();
-      numMenu.style.top = (r.bottom + window.scrollY + 6) + "px";
-      numMenu.style.left = (r.left + window.scrollX) + "px";
-      numMenu.hidden = false;
+      openMenuAt(numBtn, numMenu);
     });
     document.addEventListener("pointerdown", (e) => {
       if (!numMenu.hidden && !numMenu.contains(e.target) && e.target !== numBtn) numMenu.hidden = true;
@@ -367,11 +398,7 @@
     colourBtn.addEventListener("mousedown", (e) => { e.preventDefault(); saved = save(); });
     colourBtn.addEventListener("click", () => {
       if (!palette.hidden){ palette.hidden = true; return; }
-      const box2 = colourBtn.getBoundingClientRect();
-      palette.style.top = (box2.bottom + window.scrollY + 6) + "px";
-      palette.style.left = Math.min(box2.left + window.scrollX,
-                                    window.innerWidth - 250) + "px";
-      palette.hidden = false;
+      openMenuAt(colourBtn, palette);
     });
     document.addEventListener("pointerdown", (e) => {
       if (palette.hidden) return;
@@ -391,6 +418,15 @@
        Lessons keep naming keys to press, and writing Enter as ordinary words
        reads as part of the sentence. These go in as <kbd>, which is what the
        tag is for, and are drawn to look like the key itself. */
+    /* The symbol printed on the key itself, alongside its name, so a student
+       can match what they read to what is in front of them. Only the ones with
+       a symbol everybody agrees on: Ctrl and Alt are left as words, because the
+       symbols for those are a Mac convention and these are Windows machines. */
+    const KEY_SYMBOL = {
+      "Enter":"↵", "Shift":"⇧", "Tab":"⇥", "Backspace":"⌫",
+      "Delete":"⌦", "Caps Lock":"⇪", "Space":"␣"
+    };
+    const keyLabel = (name) => (KEY_SYMBOL[name] ? KEY_SYMBOL[name] + " " + name : name);
     const KEYS = ["Enter","Esc","Tab","Space","Shift","Ctrl","Alt","Backspace",
                   "Delete","Caps Lock","F1","F5","F11",
                   "↑","↓","←","→"];
@@ -406,7 +442,7 @@
       parts.forEach((label, i) => {
         if (i) frag.appendChild(document.createTextNode(" + "));
         const k = document.createElement("kbd");
-        k.textContent = label;
+        k.textContent = keyLabel(label);
         frag.appendChild(k);
       });
       /* a space after it, or the next word is written hard against the key */
@@ -454,7 +490,7 @@
         parts.forEach((pp, i) => {
           if (i) b.appendChild(document.createTextNode(" + "));
           const k = document.createElement("kbd");
-          k.textContent = pp;
+          k.textContent = keyLabel(pp);
           b.appendChild(k);
         });
         b.addEventListener("mousedown", (e) => e.preventDefault());
@@ -493,11 +529,7 @@
     keyBtn.addEventListener("mousedown", (e) => { e.preventDefault(); saved = save(); });
     keyBtn.addEventListener("click", () => {
       if (!keyMenu.hidden){ keyMenu.hidden = true; return; }
-      const r = keyBtn.getBoundingClientRect();
-      keyMenu.style.top = (r.bottom + window.scrollY + 6) + "px";
-      keyMenu.style.left = Math.min(r.left + window.scrollX,
-                                    window.innerWidth - 300) + "px";
-      keyMenu.hidden = false;
+      openMenuAt(keyBtn, keyMenu);
     });
     /* The menu hangs off document.body so nothing can cover it, which puts it
        outside keyWrap. It has to be spared here or pressing a key in it would

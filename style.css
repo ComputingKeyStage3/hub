@@ -3226,3 +3226,61 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
 .morecond .brow{flex-wrap:wrap; gap:6px; align-items:center}
 .morecond select, .morecond input{min-width:0}
 .morecond input{flex:1 1 130px}
+
+/* ---------- a checklist card in the pop-up ----------
+   These stack up, so each one uses the width it has rather than making a
+   column of single fields that has to be scrolled through. */
+.checkrow{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:10px}
+.checkfield{display:flex; flex-direction:column; gap:4px; min-width:0}
+.checkfield.grow{flex:1 1 150px}
+.checkfield label{font-size:12px; color:var(--dim); font-weight:700}
+.checkfield select, .checkfield input{width:100%; min-width:0}
+/* long option text is cut with an ellipsis rather than widening the row */
+.checkrow select, .morecond select{text-overflow:ellipsis}
+.bfield.wide input{width:100%}
+.addcond{flex:none; white-space:nowrap}
+
+/* Aa, the way a search bar shows it: struck through while capitals are being
+   ignored, solid and marked when they have to match. */
+.casebtn{flex:none; align-self:flex-end; width:34px; height:34px; padding:0;
+  border:1.5px solid var(--line-2); border-radius:9px; background:var(--panel);
+  color:var(--muted); cursor:pointer; font-family:var(--body);
+  font-size:13px; font-weight:800; position:relative}
+.casebtn:hover{border-color:var(--amber); color:var(--amber)}
+.casebtn::after{
+  content:""; position:absolute; left:5px; right:5px; top:50%;
+  border-top:1.5px solid currentColor; transform:rotate(-16deg);
+}
+.casebtn.on{border-color:var(--amber); background:var(--amber); color:var(--amber-ink)}
+.casebtn.on::after{display:none}
+
+/* an extra condition uses the width too */
+.morecond{border-left:2px solid var(--line-2); padding-left:10px; margin:0 0 8px 2px}
+.morecond .brow{display:flex; flex-wrap:nowrap; gap:6px; align-items:center}
+.morecond select{flex:1 1 auto; min-width:110px}
+.morecond input{flex:2 1 120px; min-width:0}
+@media (max-width:640px){ .morecond .brow{flex-wrap:wrap} }
+
+/* The bar is three pixels tall, which is far too small a thing to ask anyone
+   to hit. This reaches out well above and below it, and half way across the
+   gaps either side so there are no dead strips between segments, without
+   changing what is drawn. */
+.seg::before{
+  content:""; position:absolute; left:-2px; right:-2px; top:-11px; bottom:-11px;
+}
+
+/* The checklist pop-up lays its fields out side by side, so it needs more room
+   than a pop-up that asks one question. Comes after .modal.narrow, which it
+   has to beat. */
+.modal.narrow.checkmodal{max-width:760px}
+
+/* The Add button borrows .rt-auto-btn, which is a full-width block because the
+   Automatic button above it is one. In a row beside a text box that made it
+   take half the space, so here it is only as wide as its own word. */
+.rt-keyown .rt-auto-btn{width:auto; flex:none; text-align:center; padding:6px 12px}
+.rt-keyown input{flex:1 1 auto}
+
+/* A menu is capped to the room it has and scrolls inside itself, so the bottom
+   of a long one can still be reached. The cap is set as an inline style when
+   it is opened, because it depends on where on the screen the button is. */
+.rt-palette{overscroll-behavior:contain}

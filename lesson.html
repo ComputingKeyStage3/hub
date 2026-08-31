@@ -1311,8 +1311,12 @@ function paintTracker(){
                   + (shut ? " locked-seg" : "");
     /* Only pages they have already been through can be jumped to. Going
        forwards is what Continue is for, and a page still shut has not been
-       opened for them yet. */
-    const canGo = done && !shut && n !== step;
+       opened for them yet.
+
+       Once finished, the last page counts too. step is still sitting on it,
+       so excluding "the page you are on" left the final task as the one thing
+       that could not be reached from the summary. */
+    const canGo = done && !shut && (finished || n !== step);
     seg.disabled = !canGo;
     seg.title = canGo ? "Back to page " + (n + 1) : "Page " + (n + 1);
     seg.setAttribute("aria-label", seg.title);
