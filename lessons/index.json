@@ -1,0 +1,12 @@
+{
+  "name": "Example Unit",
+  "year": "Year X",
+  "lessons": [
+    {
+      "id": "example-lesson",
+      "title": "Example Lesson",
+      "description": "",
+      "code": "5425"
+    }
+  ]
+}
