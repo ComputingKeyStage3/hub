@@ -29,9 +29,12 @@
   <div class="keywrap" id="keyView">
     <section class="station">
       <h2 style="margin:0 0 6px">Teacher console</h2>
-      <p class="hint" style="margin:0 0 16px">Enter the teacher key to load your classes.</p>
+      <p class="hint" style="margin:0 0 16px">Sign in to load your classes.</p>
       <div class="field"><input type="password" id="keyIn" placeholder="Teacher key" autocomplete="off"></div>
-      <button class="btn-primary" id="keyGo" style="margin-top:10px; width:100%">Continue</button>
+      <div class="field" id="codeField" hidden>
+        <input type="text" id="codeIn" placeholder="6-digit code" autocomplete="one-time-code"
+               inputmode="numeric" maxlength="6"></div>
+      <button class="btn-primary" id="keyGo" style="margin-top:10px; width:100%">Sign in</button>
       <p class="hint" id="keyMsg" style="margin:12px 0 0"></p>
     </section>
   </div>
@@ -162,26 +165,10 @@
       <div id="storeOut"></div>
     </section>
 
-    <section class="station">
-      <h3 style="margin:0 0 4px">End of year</h3>
-      <p class="modal-text">Save last year's work to a file, then remove it from the database.
-        Lessons, units and year groups are kept &mdash; they are next year's teaching.</p>
-      <div class="bfield" style="max-width:280px">
-        <label for="purgeDate">Remove work saved before</label>
-        <input type="date" id="purgeDate">
-      </div>
-      <div class="bfield">
-        <label>Classes that have left the school</label>
-        <p class="bhelp">Their students, work and seating plans are removed as well. Leave all
-          unticked to keep every student.</p>
-        <div id="purgeGroups"></div>
-      </div>
-      <div class="toolrow">
-        <button class="btn-primary" id="exportBtn">1. Save it to a file</button>
-        <button class="btn-ghost" id="purgeBtn" disabled>2. Remove it from the database</button>
-      </div>
-      <p class="hint" id="purgeMsg"></p>
-    </section>
+    <!-- The end of year clear-out used to be here: pick a date, save a file,
+         then delete everything older than it. It is done straight against the
+         database now, so nothing that deletes in bulk is reachable from a
+         browser and a stolen teacher key cannot wipe a year of work. -->
   </div>
 
   <div id="pwView" hidden>
@@ -250,12 +237,18 @@ function el(tag, cls, text){
 }
 function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, ""); }
 
-let KEY = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
+let KEY = "", TOKEN = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
 let workCache = { key: "", rows: [], t: 0 };
 let relTimer = null;
 
-const H = () => ({ "x-teacher-key": KEY });
-const HJ = () => ({ "x-teacher-key": KEY, "Content-Type": "application/json" });
+/* The session, not the key. The key used to go out with every request and sat
+   in localStorage until someone cleared it, so anyone who read it once had it
+   for good. It is swapped for a token at sign-in now, the token runs out after
+   twelve hours, and it is kept in sessionStorage so closing the browser ends
+   it. The key is still sent while no second factor is set up on the server,
+   so nothing stops working before that is switched on. */
+const H = () => (TOKEN ? { "Authorization": "Bearer " + TOKEN } : { "x-teacher-key": KEY });
+const HJ = () => Object.assign(H(), { "Content-Type": "application/json" });
 
 /* ---------- online pill ---------- */
 
@@ -520,14 +513,39 @@ async function offlineConsole(){
 /* ---------- key ---------- */
 async function tryKey(){
   KEY = $("keyIn").value.trim();
+  const code = ($("codeIn").value || "").trim();
   if (!KEY){ $("keyMsg").textContent = "Type the teacher key first."; return; }
-  $("keyMsg").textContent = "Checking\u2026";
+  $("keyMsg").textContent = "Checking…";
   try{
-    const r = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
+    /* One exchange: the key, and the code from the authenticator app where one
+       is set up, for a token that runs out. Everything after this carries the
+       token instead of the key. */
+    const r = await fetch(API + "/api/teacher/sign-in", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: KEY, code: code })
+    });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "That key was not accepted.");
-    localStorage.setItem("hub_tkey", KEY);
-    groups = d.groups || [];
+    if (!r.ok){
+      /* The box for the code appears the first time the server asks for one,
+         rather than sitting there before anybody has set one up. */
+      if (r.status === 401 || /code/i.test(d.error || "")) $("codeField").hidden = false;
+      throw new Error(d.error || "That was not accepted.");
+    }
+    TOKEN = d.token || "";
+    if (d.twoFactor) $("codeField").hidden = false;
+    try{
+      /* The token lives for this browser session only. The key is remembered
+         just to fill the box in next time, and only while there is no second
+         factor: with one, keeping it would put the whole of it back on the
+         machine. */
+      sessionStorage.setItem("hub_ttoken", TOKEN);
+      if (d.twoFactor) localStorage.removeItem("hub_tkey");
+      else localStorage.setItem("hub_tkey", KEY);
+    }catch(e){}
+    const g = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
+    const gd = await g.json();
+    if (!g.ok) throw new Error(gd.error || "That key was not accepted.");
+    groups = gd.groups || [];
     $("topbar").hidden = false;
     await loadTeachers();
     show("whoView", true);
@@ -572,6 +590,7 @@ async function restoreSpot(){
 /* changing who you are, without signing in again */
 function changeTeacher(){ show("whoView", true); }
 on("keyIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
+on("codeIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
 
 /* ---------- classes grid ---------- */
 /* Every class there is: the ones with students in them, and the ones somebody
@@ -710,7 +729,7 @@ function saveJson(obj, name){
 }
 const stamp = () => new Date().toISOString().slice(0, 10);
 
-on("keepBtn", "click", () => { show("keepView"); paintBackupWhen(); paintPurgeGroups(); });
+on("keepBtn", "click", () => { show("keepView"); paintBackupWhen(); });
 /* A quiet reminder once a week, rather than a pop-up in the way. */
 function nudgeBackup(){
   const last = Number(localStorage.getItem("hub_backup_when") || 0);
@@ -884,89 +903,6 @@ on("storeBtn", "click", async () => {
   }catch(e){ out.innerHTML = ""; out.appendChild(el("p","hint", e.message)); }
 });
 
-function paintPurgeGroups(){
-  const box = $("purgeGroups");
-  box.innerHTML = "";
-  (groups || []).forEach(g => {
-    const row = el("label","opt");
-    const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.value = g.name; cb.className = "purgegroup";
-    row.appendChild(cb);
-    row.appendChild(el("span","", g.name + "  (" + g.students + " student" + (g.students === 1 ? "" : "s") + ")"));
-    box.appendChild(row);
-  });
-  if (!groups.length) box.appendChild(el("p","hint","No classes."));
-  /* a sensible default: the end of the summer term just gone */
-  if (!$("purgeDate").value){
-    const now = new Date();
-    const year = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-    $("purgeDate").value = year + "-08-31";
-  }
-}
-let exportedFor = "";      // nothing is removed until it has been saved
-on("exportBtn", "click", async () => {
-  const before = $("purgeDate").value;
-  if (!before){ $("purgeMsg").textContent = "Pick a date first."; return; }
-  $("purgeMsg").textContent = "Collecting\u2026";
-  try{
-    const r = await fetch(API + "/api/teacher/year-export?before=" + encodeURIComponent(before),
-                          { headers: H(), cache:"no-store" });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Could not export.");
-    saveJson(d, "computing-hub-" + before + "-and-earlier.json");
-    exportedFor = before;
-    $("purgeBtn").disabled = false;
-    $("purgeMsg").textContent = "Saved " + d.counts.work + " pieces of work and " +
-      d.counts.results + " results. Check the file opens before going on.";
-  }catch(e){ $("purgeMsg").textContent = e.message; }
-});
-on("purgeBtn", "click", () => {
-  const before = $("purgeDate").value;
-  if (exportedFor !== before){
-    $("purgeMsg").textContent = "Save it to a file first, the date has changed since you did.";
-    $("purgeBtn").disabled = true;
-    return;
-  }
-  const gone = Array.from(document.querySelectorAll(".purgegroup"))
-    .filter(c => c.checked).map(c => c.value);
-  openModal(box => {
-    box.appendChild(el("h2","","Remove it from the database?"));
-    box.appendChild(el("p","modal-text",
-      "Work and results saved before " + before + " will be deleted." +
-      (gone.length ? " These classes will be removed altogether: " + gone.join(", ") + "." : "")));
-    box.appendChild(el("p","modal-text","This cannot be undone. Type DELETE to go ahead."));
-    const w = el("div","bfield");
-    const inp = el("input");
-    inp.placeholder = "DELETE";
-    w.appendChild(inp);
-    box.appendChild(w);
-    const msg = el("p","hint","");
-    const go = el("button","btn-primary modal-cta","Remove it");
-    go.style.background = "var(--red)";
-    go.style.borderColor = "var(--red)";
-    go.addEventListener("click", async () => {
-      if (inp.value.trim() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; return; }
-      msg.textContent = "Removing\u2026";
-      try{
-        const r = await fetch(API + "/api/teacher/year-purge", { method:"POST", headers: HJ(),
-          body: JSON.stringify({ before, groups: gone, confirm: "DELETE" }) });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || "Could not remove it.");
-        closeModal();
-        $("purgeMsg").textContent = "Removed " + d.removed.work + " pieces of work, " +
-          d.removed.results + " results" +
-          (d.removed.students ? " and " + d.removed.students + " students" : "") + ".";
-        $("purgeBtn").disabled = true;
-        exportedFor = "";
-        await refreshGroups();
-        paintPurgeGroups();
-      }catch(e){ msg.textContent = e.message; }
-    });
-    const no = el("button","btn-ghost modal-stay","Keep it");
-    no.addEventListener("click", closeModal);
-    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
-  });
-});
 
 /* ---------- the lesson hub: year groups, then units, then lessons ---------- */
 let assigns = [];
@@ -2902,8 +2838,29 @@ if (window.initSettings) initSettings($("setBtn"));
 if (OFFLINE){
   offlineConsole();
 } else {
-  const savedKey = localStorage.getItem("hub_tkey");
-  if (savedKey){ $("keyIn").value = savedKey; tryKey(); }
+  /* Still signed in from earlier in the same browser session? Carry on, and
+     otherwise fill the key box in ready. This is the top level of the script,
+     so it cannot return early: the two paths are written out instead. */
+  let live = "";
+  try{ live = sessionStorage.getItem("hub_ttoken") || ""; }catch(e){}
+  if (live){
+    TOKEN = live;
+    fetch(API + "/api/teacher/groups", { headers: H(), cache:"no-store" })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error("no")))
+      .then(async (d) => {
+        groups = d.groups || [];
+        $("topbar").hidden = false;
+        await loadTeachers();
+        show("whoView", true);
+      })
+      .catch(() => {
+        TOKEN = "";
+        try{ sessionStorage.removeItem("hub_ttoken"); }catch(e){}
+        try{ const k = localStorage.getItem("hub_tkey"); if (k) $("keyIn").value = k; }catch(e){}
+      });
+  } else {
+    try{ const k = localStorage.getItem("hub_tkey"); if (k) $("keyIn").value = k; }catch(e){}
+  }
 }
 </script>
 </body>
