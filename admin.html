@@ -138,7 +138,19 @@
 
   <!-- ============ lessons + release ============ -->
   <div id="keepView" hidden>
-    <h2 style="margin:22px 0 4px">Backups and end of year</h2>
+    <h2 style="margin:22px 0 4px">Backups and devices</h2>
+
+    <section class="station" style="margin-bottom:18px">
+      <h3 style="margin:0 0 4px">Signed-in devices</h3>
+      <p class="modal-text">Browsers that have answered a code from the authenticator app. Each one
+        can sign in with the key alone until its sixty days are up. Sign the others out if a
+        machine has been lost, or if you are not sure what is on this list.</p>
+      <div id="deviceList"><p class="hint">Loading&hellip;</p></div>
+      <div class="toolrow">
+        <button class="btn-ghost" id="signOutOthers">Sign out every other device</button>
+      </div>
+      <p class="hint" id="deviceMsg"></p>
+    </section>
 
     <section class="station" style="margin-bottom:18px">
       <h3 style="margin:0 0 4px">Weekly backup</h3>
@@ -516,32 +528,41 @@ async function tryKey(){
   const code = ($("codeIn").value || "").trim();
   if (!KEY){ $("keyMsg").textContent = "Type the teacher key first."; return; }
   $("keyMsg").textContent = "Checking…";
+  let device = "";
+  try{ device = localStorage.getItem("hub_tdevice") || ""; }catch(e){}
   try{
-    /* One exchange: the key, and the code from the authenticator app where one
-       is set up, for a token that runs out. Everything after this carries the
-       token instead of the key. */
+    /* The key, the code if one has been asked for, and this browser's note of
+       the last time a code was answered. Back comes a session, and a fresh
+       note whenever a code was actually typed. */
     const r = await fetch(API + "/api/teacher/sign-in", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: KEY, code: code })
+      body: JSON.stringify({ key: KEY, code: code, device: device })
     });
     const d = await r.json();
     if (!r.ok){
-      /* The box for the code appears the first time the server asks for one,
-         rather than sitting there before anybody has set one up. */
-      if (r.status === 401 || /code/i.test(d.error || "")) $("codeField").hidden = false;
+      if (d.needCode || r.status === 401){
+        $("codeField").hidden = false;
+        $("codeIn").focus();
+      }
+      /* A note that is out of date is worse than none: it makes every sign-in
+         ask for a code and never replaces it. */
+      if (d.needCode){ try{ localStorage.removeItem("hub_tdevice"); }catch(e){} }
       throw new Error(d.error || "That was not accepted.");
     }
     TOKEN = d.token || "";
-    if (d.twoFactor) $("codeField").hidden = false;
     try{
-      /* The token lives for this browser session only. The key is remembered
-         just to fill the box in next time, and only while there is no second
-         factor: with one, keeping it would put the whole of it back on the
-         machine. */
       sessionStorage.setItem("hub_ttoken", TOKEN);
+      /* Only sent back when a code was answered, so this is the moment the
+         sixty days start again. */
+      if (d.device) localStorage.setItem("hub_tdevice", d.device);
+      /* The key is remembered only where there is no second factor. With one,
+         keeping it beside the device note would put both halves on the same
+         machine and leave it a one-factor sign-in. */
       if (d.twoFactor) localStorage.removeItem("hub_tkey");
       else localStorage.setItem("hub_tkey", KEY);
     }catch(e){}
+    $("codeField").hidden = true;
+    $("codeIn").value = "";
     const g = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
     const gd = await g.json();
     if (!g.ok) throw new Error(gd.error || "That key was not accepted.");
@@ -729,7 +750,90 @@ function saveJson(obj, name){
 }
 const stamp = () => new Date().toISOString().slice(0, 10);
 
-on("keepBtn", "click", () => { show("keepView"); paintBackupWhen(); });
+on("keepBtn", "click", () => { show("keepView"); paintBackupWhen(); loadDevices(); });
+
+/* ---------- the browsers that have answered a code ---------- */
+function whenWords(iso){
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return "";
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return days + " days ago";
+  return new Date(iso).toLocaleDateString();
+}
+async function loadDevices(){
+  const box = $("deviceList");
+  box.innerHTML = '<p class="hint">Loading…</p>';
+  $("deviceMsg").textContent = "";
+  try{
+    const r = await fetch(API + "/api/teacher/devices", { headers: H(), cache:"no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not read the list.");
+    box.innerHTML = "";
+    const list = d.devices || [];
+    if (!list.length){
+      box.appendChild(el("p","hint","No devices yet. This one will appear once a code has been answered."));
+      return;
+    }
+    list.forEach(x => {
+      const row = el("div","taskrow");
+      const name = el("span","", x.label || "A browser");
+      name.style.flex = "1";
+      row.appendChild(name);
+      const left = Math.max(0, Math.ceil((Number(x.expires) - Date.now()) / 86400000));
+      row.appendChild(el("span","hint",
+        "last used " + whenWords(x.last_seen) + " · asks for a code again in " +
+        left + " day" + (left === 1 ? "" : "s")));
+      if (x.thisOne){
+        row.appendChild(el("span","statechip open","This device"));
+      } else {
+        const out = el("button","btn-ghost bmini2","Sign out");
+        out.addEventListener("click", async () => {
+          out.disabled = true;
+          try{
+            const rr = await fetch(API + "/api/teacher/devices", { method:"POST", headers: HJ(),
+              body: JSON.stringify({ op:"sign-out", id: x.id }) });
+            const dd = await rr.json();
+            if (!rr.ok) throw new Error(dd.error || "Could not sign it out.");
+            loadDevices();
+          }catch(e){ $("deviceMsg").textContent = e.message; out.disabled = false; }
+        });
+        row.appendChild(out);
+      }
+      box.appendChild(row);
+    });
+  }catch(e){
+    box.innerHTML = "";
+    box.appendChild(el("p","hint", e.message));
+  }
+}
+on("signOutOthers", "click", () => {
+  openModal(box => {
+    box.appendChild(el("h2","","Sign out every other device?"));
+    box.appendChild(el("p","modal-text",
+      "Every browser except this one will be asked for the key and a fresh code next time. "
+      + "Anyone signed in on one of them is signed out straight away."));
+    const go = el("button","btn-primary modal-cta","Sign them out");
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      try{
+        const r = await fetch(API + "/api/teacher/devices", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ op:"sign-out-others" }) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Could not sign them out.");
+        closeModal();
+        $("deviceMsg").textContent = d.signedOut + " device" + (d.signedOut === 1 ? "" : "s") + " signed out.";
+        loadDevices();
+      }catch(e){ $("deviceMsg").textContent = e.message; go.disabled = false; }
+    });
+    box.appendChild(go);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+  });
+});
 /* A quiet reminder once a week, rather than a pop-up in the way. */
 function nudgeBackup(){
   const last = Number(localStorage.getItem("hub_backup_when") || 0);

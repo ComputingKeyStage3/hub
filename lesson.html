@@ -629,10 +629,20 @@ const apiReady = !OFFLINE && API && API.indexOf("PASTE_") !== 0;
    missing file is normal rather than an error. */
 async function dbLesson(){
   if (!apiReady) throw new Error("missing");
-  const key = localStorage.getItem("hub_tkey");
+  /* A teacher looking at an unpublished lesson needs to be recognised as one.
+     The console signs in for a token now and stops keeping the key in the
+     browser once a second factor is set up, so the token is what to send;
+     the key is still there to fall back on while there is no second factor. */
+  let auth = {};
+  try{
+    const tok = sessionStorage.getItem("hub_ttoken");
+    const key = localStorage.getItem("hub_tkey");
+    if (tok) auth = { "Authorization": "Bearer " + tok };
+    else if (key) auth = { "x-teacher-key": key };
+  }catch(e){}
   const grp = localStorage.getItem("hub_group") || "";
   const r = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(lessonId) + (grp ? "&group=" + encodeURIComponent(grp) : ""),
-                        { headers: key ? { "x-teacher-key": key } : {}, cache:"no-store" });
+                        { headers: auth, cache:"no-store" });
   if (!r.ok) throw new Error("missing");
   const d = await r.json();
   if (!d.lesson) throw new Error("missing");
