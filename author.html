@@ -9,6 +9,8 @@
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
 <script src="richtext.js"></script>
+<script src="pyedit.js"></script>
+<script src="teacher.js"></script>
 <script src="menus.js"></script>
 <script src="settings.js"></script>
 </head>
@@ -1023,6 +1025,26 @@ function card(b, i, arr){
     if (o.help) w.appendChild(el("p","bhelp", o.help));
     body.appendChild(w);
   }
+  /* The starter code is the very thing a student opens in the editor, so it
+     is written in the editor: same colours, same line numbers, same indent
+     after a colon, and the same list of mistakes underneath. A plain box let
+     a teacher hand out code that only looked right. */
+  function PY(label, key, opts){
+    const o = opts || {};
+    const w = el("div","bfield");
+    w.appendChild(el("label","", label));
+    const shell = el("div","ide bfield-ide");
+    window.pyEdit.follow(shell);
+    const ed = window.pyEdit.attach({
+      value: b[key] === undefined ? "" : String(b[key]),
+      onInput: () => { b[key] = ed.ta.value; saveDraft(); schedulePreview(); }
+    });
+    shell.appendChild(ed.editor);
+    shell.appendChild(ed.probs);
+    w.appendChild(shell);
+    if (o.help) w.appendChild(el("p","bhelp", o.help));
+    body.appendChild(w);
+  }
   function R(label, key, opts){
     const o = opts || {};
     const w = el("div","bfield");
@@ -1201,7 +1223,7 @@ function card(b, i, arr){
       /* Nothing to write when the code comes from somewhere else: a starter box
          sitting under it only invites a teacher to fill in something a student
          will never see. */
-      if (!b.startFrom) F("Starter code", "starter", { area:true, rows:7, mono:true });
+      if (!b.startFrom) PY("Starter code", "starter");
     }
     toggleRow(codeOptions([["turtle","Turtle canvas", false],
                ["run","Running", true],
@@ -2780,9 +2802,11 @@ function askNew(title, label){
 }
 async function catPost(payload){
   const API = (window.HUB && window.HUB.API) || "";
+  if (!signedIn()){ askForKey(() => catPost(payload), "Sign in to change the year groups and units."); return; }
   const r = await fetch(API + "/api/catalog", { method:"POST",
-    headers:{ "Content-Type":"application/json", "x-teacher-key": teacherKey() },
+    headers: window.teacherAuth.json(),
     body: JSON.stringify(payload) });
+  if (authFailed(r.status, () => catPost(payload))) return;
   if (!r.ok) throw new Error((await r.json()).error || "Could not save.");
 }
 
@@ -3033,25 +3057,21 @@ on("jsonBtn", "click", () => {
    The lesson goes into the school database through the teacher API, so there
    are no files to upload. It arrives as a draft; publishing to classes still
    happens in the teacher console. */
-function teacherKey(){ return localStorage.getItem("hub_tkey") || ""; }
-function askForKey(then){
-  openModal(box => {
-    box.appendChild(el("h2","","Teacher key"));
-    box.appendChild(el("p","modal-text","Type the teacher key once and this browser will remember it."));
-    const w = el("div","bfield");
-    const inp = el("input"); inp.type = "password"; inp.autocomplete = "off";
-    w.appendChild(inp); box.appendChild(w);
-    const go = el("button","btn-primary modal-cta","Save key");
-    go.addEventListener("click", () => {
-      const v = inp.value.trim();
-      if (!v) return;
-      localStorage.setItem("hub_tkey", v);
-      closeModal(); then();
-    });
-    const no = el("button","btn-ghost modal-stay","Cancel");
-    no.addEventListener("click", closeModal);
-    box.appendChild(go); box.appendChild(no);
-  });
+/* The sign-in itself is in teacher.js, shared with the work viewer. It used
+   to be a box here that wrote whatever was typed straight into localStorage:
+   a wrong key was then remembered for good, the pop-up never came back, and
+   every save after it failed with nothing a teacher could do about it. */
+function signedIn(){ return window.teacherAuth.have(); }
+function askForKey(then, why){
+  openModal(box => window.teacherAuth.form(box, { close: closeModal, then: then, why: why }));
+}
+/* What a refused teacher request means: throw the session away and ask again,
+   so a second go is a second go rather than the same failure for ever. */
+function authFailed(status, retry){
+  if (!window.teacherAuth.rejected(status)) return false;
+  window.teacherAuth.forget();
+  askForKey(retry, "That sign-in was not accepted. Try again.");
+  return true;
 }
 function lessonId(){
   /* A lesson keeps the name it was saved under. Renaming it changes the
@@ -3181,18 +3201,18 @@ async function saveToSite(){
   if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
   if (!lesson.year || !lesson.year.trim()){ say("Which year group?", "Choose a year group at the top, or make a new one."); return; }
   if (!lesson.unit || !lesson.unit.trim()){ say("Which unit?", "Choose a unit at the top, or make a new one."); return; }
-  if (!teacherKey()){ askForKey(saveToSite); return; }
+  if (!signedIn()){ askForKey(saveToSite, "Sign in to save this lesson to the site."); return; }
   const btn = $("saveSite");
   btn.disabled = true; btn.textContent = "Saving\u2026";
   try{
     const r = await fetch(API + "/api/teacher/save-lesson", {
       method:"POST",
-      headers:{ "Content-Type":"application/json", "x-teacher-key": teacherKey() },
+      headers: window.teacherAuth.json(),
       body: JSON.stringify({ id: lessonId(), title: lesson.title, unit: lesson.unit,
                              year: lesson.year || "", owner: lesson.ownerGroup || "", data: compile() })
     });
-    const d = await r.json();
-    if (r.status === 403){ localStorage.removeItem("hub_tkey"); throw new Error("That teacher key was not accepted."); }
+    const d = await r.json().catch(() => ({}));
+    if (authFailed(r.status, saveToSite)){ btn.disabled = false; btn.textContent = "Save to the site"; return; }
     if (!r.ok) throw new Error(d.error || "Could not save it.");
     lesson.savedAs = d.id;
     dirty = false;                       // saved, and nothing changed since
@@ -3236,7 +3256,7 @@ on("delLesson", "click", () => {
           msg.textContent = "Deleting\u2026";
           try{
             const r = await fetch(API + "/api/teacher/delete-lesson", { method:"POST",
-              headers:{ "Content-Type":"application/json", "x-teacher-key": teacherKey() },
+              headers: window.teacherAuth.json(),
               body: JSON.stringify({ id }) });
             if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
             closeModal();
@@ -3277,7 +3297,7 @@ async function loadUnitsAndYears(){
   }
   if (!API) return;
   try{
-    const r = await fetch(API + "/api/catalog", { headers: teacherKey() ? { "x-teacher-key": teacherKey() } : {}, cache:"no-store" });
+    const r = await fetch(API + "/api/catalog", { headers: window.teacherAuth.headers(), cache:"no-store" });
     cat = await r.json();
   }catch(e){}
   paintPickers();
@@ -3326,11 +3346,12 @@ async function loadUnitsAndMaybeLesson(){
   }
   if (!editId) return;
   if (OFFLINE){ await loadLessonFromFolder(editId); return; }
-  if (!teacherKey()){ askForKey(loadUnitsAndMaybeLesson); return; }
+  if (!signedIn()){ askForKey(loadUnitsAndMaybeLesson, "Sign in to open this lesson."); return; }
   try{
     const r = await fetch(API + "/api/teacher/get-lesson?id=" + encodeURIComponent(editId),
-                          { headers:{ "x-teacher-key": teacherKey() }, cache:"no-store" });
-    const d = await r.json();
+                          { headers: window.teacherAuth.headers(), cache:"no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (authFailed(r.status, loadUnitsAndMaybeLesson)) return;
     if (!r.ok) throw new Error(d.error || "Could not open that lesson.");
     const data = JSON.parse(d.lesson.data);
     lesson = fromCompiled(data, d.lesson);

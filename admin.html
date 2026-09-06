@@ -10,6 +10,7 @@
 <script src="lessonfile.js"></script>
 <script src="xlsx.js"></script>
 <script src="menus.js"></script>
+<script src="teacher.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -17,7 +18,7 @@
 <div class="homebar" id="topbar" hidden>
   <div class="title">Computing Teacher Console</div>
   <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
-  <button class="btn-ghost iconbtn" id="keepBtn" title="Backups and end of year">&#128190;</button>
+  <button class="btn-ghost iconbtn" id="keepBtn" title="Backups and devices">&#128190;</button>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
@@ -143,8 +144,9 @@
     <section class="station" style="margin-bottom:18px">
       <h3 style="margin:0 0 4px">Signed-in devices</h3>
       <p class="modal-text">Browsers that have answered a code from the authenticator app. Each one
-        can sign in with the key alone until its sixty days are up. Sign the others out if a
-        machine has been lost, or if you are not sure what is on this list.</p>
+        can sign in with the key alone until its sixty days are up. Give them names you will
+        recognise, and check where they signed in from. Sign the others out if a machine has
+        been lost, or if there is anything here you cannot account for.</p>
       <div id="deviceList"><p class="hint">Loading&hellip;</p></div>
       <div class="toolrow">
         <button class="btn-ghost" id="signOutOthers">Sign out every other device</button>
@@ -306,7 +308,7 @@ function paintCrumbs(){
   if (v === "classView") return crumbs([top, home, { name: cls }]);
   if (v === "studentsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Students" }]);
   if (v === "unitsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units" }]);
-  if (v === "keepView") return crumbs([top, home, { name:"Backups and end of year" }]);
+  if (v === "keepView") return crumbs([top, home, { name:"Backups and devices" }]);
   if (v === "lessonsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
                                           { name: unit || "Not in a unit" }]);
   crumbs([top]);
@@ -763,6 +765,43 @@ function whenWords(iso){
   if (days < 30) return days + " days ago";
   return new Date(iso).toLocaleDateString();
 }
+/* Where a device last signed in from. Nothing is said at all when the host
+   did not tell us, rather than a row that reads "unknown" and worries
+   somebody: running the backend anywhere but Vercel gives no location. */
+function placeWords(x){
+  if (x.city && x.country) return x.city + ", " + x.country;
+  return x.country || "";
+}
+function renameDevice(x){
+  openModal(box => {
+    box.appendChild(el("h2","","Name this device"));
+    box.appendChild(el("p","modal-text",
+      "Something you will recognise, like “my laptop” or “the room 12 desktop”. "
+      + "Leave it empty to go back to " + (x.label || "what the browser calls itself") + "."));
+    const w = el("div","bfield");
+    const inp = el("input"); inp.value = x.nickname || ""; inp.maxLength = 40;
+    w.appendChild(inp); box.appendChild(w);
+    const msg = el("p","hint","");
+    box.appendChild(msg);
+    const go = el("button","btn-primary modal-cta","Save the name");
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      try{
+        const r = await fetch(API + "/api/teacher/devices", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ op:"rename", id: x.id, name: inp.value.trim() }) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Could not save the name.");
+        closeModal();
+        loadDevices();
+      }catch(e){ msg.textContent = e.message; go.disabled = false; }
+    });
+    box.appendChild(go);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+    setTimeout(() => { try{ inp.focus(); }catch(e){} }, 30);
+  });
+}
 async function loadDevices(){
   const box = $("deviceList");
   box.innerHTML = '<p class="hint">Loading…</p>';
@@ -778,17 +817,31 @@ async function loadDevices(){
       return;
     }
     list.forEach(x => {
-      const row = el("div","taskrow");
-      const name = el("span","", x.label || "A browser");
-      name.style.flex = "1";
-      row.appendChild(name);
+      const row = el("div","taskrow devrow");
+      /* The name a teacher gave it if there is one, with what the browser
+         actually is underneath: "Mrs Hall's laptop" is what they are looking
+         for, but three of these are Edge on Windows and it still helps to
+         see which. */
+      const who = el("div","devwho");
+      who.appendChild(el("span","devname", x.nickname || x.label || "A browser"));
       const left = Math.max(0, Math.ceil((Number(x.expires) - Date.now()) / 86400000));
-      row.appendChild(el("span","hint",
-        "last used " + whenWords(x.last_seen) + " · asks for a code again in " +
-        left + " day" + (left === 1 ? "" : "s")));
-      if (x.thisOne){
-        row.appendChild(el("span","statechip open","This device"));
-      } else {
+      const bits = [];
+      if (x.nickname && x.label) bits.push(x.label);
+      bits.push(placeWords(x));
+      bits.push("last used " + whenWords(x.last_seen));
+      bits.push("asks for a code again in " + left + " day" + (left === 1 ? "" : "s"));
+      who.appendChild(el("span","hint", bits.filter(Boolean).join(" · ")));
+      row.appendChild(who);
+      /* Somewhere nobody in the department has been is the one thing on this
+         list worth stopping at, so it is the one thing that is coloured. */
+      if (x.elsewhere) row.appendChild(el("span","statechip alert","Different country"));
+      if (x.thisOne) row.appendChild(el("span","statechip open","This device"));
+
+      const ren = el("button","btn-ghost bmini2","Rename");
+      ren.addEventListener("click", () => renameDevice(x));
+      row.appendChild(ren);
+
+      if (!x.thisOne){
         const out = el("button","btn-ghost bmini2","Sign out");
         out.addEventListener("click", async () => {
           out.disabled = true;
@@ -840,7 +893,7 @@ function nudgeBackup(){
   const days = last ? Math.floor((Date.now() - last) / 86400000) : 999;
   const btn = $("keepBtn");
   if (btn) btn.classList.toggle("due", days >= 7);
-  if (btn) btn.title = days >= 7 ? "Backups and end of year, a backup is due" : "Backups and end of year";
+  if (btn) btn.title = days >= 7 ? "Backups and devices, a backup is due" : "Backups and devices";
 }
 function paintBackupWhen(){
   const last = localStorage.getItem("hub_backup_when");

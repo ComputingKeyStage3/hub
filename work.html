@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <script src="config.js"></script>
 <script src="worklink.js"></script>
+<script src="teacher.js"></script>
 <script src="settings.js"></script>
 </head>
 <body class="workpage">
@@ -69,6 +70,8 @@
     <button class="btn-ghost iconbtn" id="nextStu" title="Next student">&rarr;</button>
     <button class="btn-ghost" id="viewMode">All on one page</button>
     <button class="btn-ghost" id="openPdf">PDF</button>
+    <button class="btn-ghost" id="refreshWork" title="Fetch what has been saved since this page was opened">Refresh</button>
+    <span class="hint" id="workFresh"></span>
   </div>
       <div class="workframe"><iframe id="workFrame" title="Their work"></iframe></div>
       <div class="tasknav" id="taskNav"></div>
@@ -149,9 +152,10 @@ function openModal(build){
 function closeModal(){ $("mBack").hidden = true; }
 
 const API = (window.HUB && window.HUB.API) || "";
-const KEY = () => localStorage.getItem("hub_tkey") || "";
-const H = () => ({ "x-teacher-key": KEY() });
-const HJ = () => ({ "Content-Type":"application/json", "x-teacher-key": KEY() });
+/* The session, or the key where there is no second factor to make one.
+   teacher.js decides which; this page only has to ask. */
+const H = () => window.teacherAuth.headers();
+const HJ = () => window.teacherAuth.json();
 
 const qs = new URLSearchParams(location.search);
 /* A link handed in by a student carries the lesson on "id"; the console
@@ -174,8 +178,15 @@ let lastStep = 0;                                     // the page being looked a
 /* ---------------- getting everything ---------------- */
 async function boot(){
   if (OFFLINE){ return bootFromLink(); }
-  if (!API || !KEY()){
-    $("seatMsg").textContent = "Open this from the teacher console so it knows your key.";
+  if (!API){
+    $("seatMsg").textContent = "This copy of the site has no server address in config.js.";
+    return;
+  }
+  /* Opened straight from a bookmark rather than out of the console, so there
+     is no session in this tab yet. Asking is better than sending them away. */
+  if (!window.teacherAuth.have()){
+    $("seatMsg").textContent = "Sign in to see this class’s work.";
+    askToSignIn(boot);
     return;
   }
   $("seatMsg").textContent = "Loading\u2026";
@@ -186,16 +197,7 @@ async function boot(){
     lessonJson = lesson;
     roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
     rows = work;
-    try{
-      const rr = await fetch(API + "/api/teacher/results?lesson=" + encodeURIComponent(lessonId) +
-                             "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
-      const rd = await rr.json();
-      (rd.rows || []).forEach(r => {
-        const st = (students || []).find(x => x.display_name === r.display_name);
-        if (st) marks[st.username] = { score: r.score, outOf: r.out_of, grade: r.grade || "",
-                                       strength: r.strength || "", target: r.target || "" };
-      });
-    }catch(e){}
+    await loadMarks();
     if (seating && seating.seats) plan = Object.assign(plan, seating);
     $("barTitle").textContent = "Computing Teacher Console \u2022 Viewing Student Work for " +
       (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
@@ -244,7 +246,7 @@ async function bootFromLink(){
 
   /* No class, so nothing to seat and nobody to page to. */
   document.querySelector(".worktabs").hidden = true;
-  ["prevStu","nextStu","stuPick"].forEach(id => { const e = $(id); if (e) e.remove(); });
+  ["prevStu","nextStu","stuPick","refreshWork","workFresh"].forEach(id => { const e = $(id); if (e) e.remove(); });
 
   $("barTitle").textContent = "Marking " + name + " • " +
     (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
@@ -281,6 +283,62 @@ async function fetchWork(){
   if (!r.ok) throw new Error(d.error || "Could not load their work.");
   return d.rows || [];
 }
+/* What has been marked so far. Pulled out of boot so Refresh can ask for it
+   again: a colleague marking the same class in the next room is exactly the
+   sort of thing a teacher presses Refresh to see. */
+async function loadMarks(){
+  try{
+    const r = await fetch(API + "/api/teacher/results?lesson=" + encodeURIComponent(lessonId) +
+                          "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+    const d = await r.json();
+    (d.rows || []).forEach(row => {
+      const st = roster.find(x => x.display_name === row.display_name);
+      if (st) marks[st.username] = { score: row.score, outOf: row.out_of, grade: row.grade || "",
+                                     strength: row.strength || "", target: row.target || "" };
+    });
+  }catch(e){}
+}
+
+/* The sign-in pop-up, when this tab has no session of its own. It stays open
+   until the server accepts something, so a mistyped key is just a mistype. */
+function askToSignIn(then){
+  openModal(box => window.teacherAuth.form(box, {
+    close: closeModal, then: then,
+    why: "Sign in to see this class’s work." }));
+}
+
+/* Fetch what has been saved since the page was opened. Students carry on
+   working while their work is being looked at, so what is on the screen goes
+   stale within a lesson; without this the only way to see the rest was to
+   reload and lose your place. */
+async function refreshWork(){
+  const btn = $("refreshWork");
+  if (!btn || btn.disabled) return;
+  const who = (roster[idx] || {}).username || "";
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "Checking…";
+  $("workFresh").textContent = "";
+  try{
+    const [students, work] = await Promise.all([fetchRoster(), fetchWork()]);
+    roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+    rows = work;
+    await loadMarks();
+    /* Back to the same student, by name rather than by position: somebody
+       added to the class since would otherwise shift everyone along. */
+    const back = roster.findIndex(x => x.username === who);
+    paintPicker();
+    paintSeats();
+    showStudent(back < 0 ? 0 : back);
+    const now = new Date();
+    $("workFresh").textContent = "Up to date as of " +
+      String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0");
+  }catch(e){
+    $("workFresh").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
+  }finally{ btn.disabled = false; btn.textContent = label; }
+}
+on("refreshWork", "click", refreshWork);
+
 async function fetchSeating(){
   try{
     const r = await fetch(API + "/api/teacher/seating?group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });

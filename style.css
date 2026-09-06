@@ -761,6 +761,15 @@ textarea.code{background:var(--code-bg) !important; color:var(--code-fg) !import
 .statechip.open{color:var(--mint); border-color:var(--mint-dim)}
 .statechip.open{color:var(--mint)}
 .statechip.shut{color:var(--muted); border-color:var(--line-2)}
+/* A signed-in device somewhere the department has not been is the one thing
+   on that list worth stopping at, so it is the one thing coloured like a
+   warning. */
+.statechip.alert{color:var(--red); border-color:var(--red)}
+/* One device per row: its name and, under that, what the browser is, where it
+   signed in from and when. It wraps rather than squeezing on a phone. */
+.devrow{flex-wrap:wrap}
+.devwho{flex:1 1 200px; min-width:0; display:flex; flex-direction:column; gap:2px}
+.devname{font-weight:800}
 .who-row{display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--line); font-size:16px}
 .who-row .nm{flex:1}
 .who-row .st.yes{color:var(--mint); font-weight:800}
@@ -933,6 +942,14 @@ body.spectating{padding-top:40px}
 .ide-prob{display:flex; align-items:center; gap:10px; padding:5px 0; font-size:13.5px; color:var(--ed-fg)}
 .ide-probline{font-family:var(--mono); font-size:12px; font-weight:800; color:#E8615A; white-space:nowrap}
 .ide-probmsg{flex:1; opacity:.92}
+
+/* The builder's Starter code box is the same editor, so it gets the editor's
+   frame. Shorter than the student's, because it sits in a stack of fields
+   rather than being the whole point of the page. */
+.bfield-ide{border:1.5px solid var(--ed-line); border-radius:12px; overflow:hidden;
+  background:var(--ed-bg)}
+.bfield-ide .ide-editor{height:210px}
+@media (max-width:700px){ .bfield-ide .ide-editor{height:170px} }
 
 .ide-canvaswrap{padding:10px; background:var(--ed-bar); border-bottom:1px solid var(--ed-line); display:grid; place-items:center}
 .ide-canvas{width:100%; max-width:480px; height:auto; background:#fff; border-radius:8px}

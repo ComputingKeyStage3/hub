@@ -11,6 +11,8 @@
 <script src="webhub.js"></script>
 <script src="autograder.js"></script>
 <script src="richtext.js"></script>
+<script src="pyedit.js"></script>
+<script src="teacher.js"></script>
 <script src="tasks-extra.js"></script>
 <script src="config.js"></script>
 <script src="worklink.js"></script>
@@ -630,16 +632,9 @@ const apiReady = !OFFLINE && API && API.indexOf("PASTE_") !== 0;
 async function dbLesson(){
   if (!apiReady) throw new Error("missing");
   /* A teacher looking at an unpublished lesson needs to be recognised as one.
-     The console signs in for a token now and stops keeping the key in the
-     browser once a second factor is set up, so the token is what to send;
-     the key is still there to fall back on while there is no second factor. */
-  let auth = {};
-  try{
-    const tok = sessionStorage.getItem("hub_ttoken");
-    const key = localStorage.getItem("hub_tkey");
-    if (tok) auth = { "Authorization": "Bearer " + tok };
-    else if (key) auth = { "x-teacher-key": key };
-  }catch(e){}
+     teacher.js knows what to send: the session first, the key only where
+     there is no second factor to make one. */
+  const auth = window.teacherAuth.headers();
   const grp = localStorage.getItem("hub_group") || "";
   const r = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(lessonId) + (grp ? "&group=" + encodeURIComponent(grp) : ""),
                         { headers: auth, cache:"no-store" });
@@ -2108,53 +2103,10 @@ async function ensureHubPython(status){
   return py;
 }
 
-/* ---------- colouring the code ---------- */
-const PY_KW = new Set(("and as assert break class continue def del elif else except finally for from global " +
-  "if import in is lambda None nonlocal not or pass raise return True False try while with yield").split(" "));
-const PY_FN = new Set(("print input int str float len range list dict set tuple bool abs min max sum round sorted " +
-  "open type enumerate zip map filter reversed any all chr ord format").split(" "));
-function escHtml(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-
-const TRIPLES = ["'''", '"""'];
-let tipsOn = true;          // set per editor before painting
-function hlLine(line, state){
-  let out = "", i = 0;
-  if (state.triple){                                  // still inside a long string
-    const close = line.indexOf(state.triple);
-    if (close < 0) return { html: '<span class="t-str">' + escHtml(line) + "</span>" };
-    out += '<span class="t-str">' + escHtml(line.slice(0, close + 3)) + "</span>";
-    i = close + 3; state.triple = null;
-  }
-  while (i < line.length){
-    const rest = line.slice(i);
-    let m;
-    if (rest[0] === "#"){ out += '<span class="t-com">' + escHtml(rest) + "</span>"; break; }
-    const trip = TRIPLES.find(q => rest.slice(0, 3) === q);
-    if (trip){
-      const close = rest.indexOf(trip, 3);
-      if (close < 0){ state.triple = trip; out += '<span class="t-str">' + escHtml(rest) + "</span>"; break; }
-      out += '<span class="t-str">' + escHtml(rest.slice(0, close + 3)) + "</span>";
-      i += close + 3; continue;
-    }
-    if ((m = /^("(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?)/.exec(rest))){
-      out += '<span class="t-str">' + escHtml(m[0]) + "</span>"; i += m[0].length; continue;
-    }
-    if ((m = /^\d+\.?\d*/.exec(rest))){ out += '<span class="t-num">' + m[0] + "</span>"; i += m[0].length; continue; }
-    if ((m = /^[A-Za-z_]\w*/.exec(rest))){
-      const w = m[0];
-      const call = /^\s*\(/.test(rest.slice(w.length));
-      const cls = PY_KW.has(w) ? "t-kw" : (PY_FN.has(w) ? "t-fn" : (call ? "t-call" : ""));
-      const helped = Object.prototype.hasOwnProperty.call(PY_HELP, w) && tipsOn;
-      out += cls
-        ? '<span class="' + cls + (helped ? " t-help" : "") + '"' + (helped ? ' data-word="' + w + '"' : "") + ">" + w + "</span>"
-        : escHtml(w);
-      i += w.length; continue;
-    }
-    if ((m = /^[+\-*\/%=<>!&|^~]+/.exec(rest))){ out += '<span class="t-op">' + escHtml(m[0]) + "</span>"; i += m[0].length; continue; }
-    out += escHtml(rest[0]); i++;
-  }
-  return { html: out || "&nbsp;" };
-}
+/* ---------- colouring the code ----------
+   In pyedit.js, shared with the builder. Only the list of function names is
+   wanted here, for the help tab and the word explanations. */
+const PY_FN = window.pyEdit.PY_FN;
 
 /* A one-line explanation for the words a beginner meets. Clicking a coloured
    word in the editor shows the matching note. */
@@ -2205,53 +2157,8 @@ const PY_HELP = {
   zip:"Goes through two lists side by side, stopping when the shorter one runs out."
 };
 
-/* ---------- spotting mistakes before the code is even run ---------- */
-function bare(line){                                   // strings and comments blanked out
-  return line.replace(/(["'])(?:\\.|(?!\1).)*\1?/g, '""').replace(/#.*/, "");
-}
-function checkPython(code){
-  const issues = [], lines = code.split("\n");
-  const opens = { "(": ")", "[": "]", "{": "}" };
-  const stack = [];
-  lines.forEach((raw, n) => {
-    const t = bare(raw);
-    if (!t.trim()) return;
-    for (const ch of t){
-      if (opens[ch]) stack.push({ ch, n });
-      else if (ch === ")" || ch === "]" || ch === "}"){
-        if (!stack.pop()) issues.push({ line:n, msg:"There is a closing bracket here with nothing to close." });
-      }
-    }
-    const dq = (raw.replace(/\\./g, "").match(/"/g) || []).length;
-    const sq = (raw.replace(/\\./g, "").match(/'/g) || []).length;
-    if (dq % 2 || sq % 2) issues.push({ line:n, msg:"A quote mark is missing from this line." });
-
-    const printMatch = /^(\s*)print\s+(?!\()(.+)$/.exec(raw);
-    if (printMatch) issues.push({ line:n, msg:"In Python 3, print needs brackets around what it prints.",
-                          fix:() => printMatch[1] + 'print(' + printMatch[2].trim() + ')' });
-
-    const opener = /^\s*(if|elif|else|for|while|def|class|try|except|finally|with)\b/.exec(t);
-    if (opener && !/:\s*$/.test(t.trim())){
-      issues.push({ line:n, msg:'Lines starting with "' + opener[1] + '" need a colon (:) at the end.',
-                    fix:() => raw.replace(/\s*$/, "") + ":" });
-    }
-    if (/^\s*(if|elif|while)\b/.test(t) && /[^=!<>+\-*\/%]=[^=]/.test(t.replace(/^\s*\w+/, ""))){
-      issues.push({ line:n, msg:"Use == to compare two things. A single = puts a value into a variable.",
-                    fix:() => raw.replace(/([^=!<>+\-*\/%])=([^=])/, "$1==$2") });
-    }
-    const typo = /\b(pirnt|prnit|Print|inptu|inupt|Input|rang|whlie|improt|fro|esle|retrun)\b/.exec(t);
-    if (typo){
-      const right = { pirnt:"print", prnit:"print", Print:"print", inptu:"input", inupt:"input",
-                      Input:"input", rang:"range", whlie:"while", improt:"import", fro:"for",
-                      esle:"else", retrun:"return" }[typo[1]];
-      issues.push({ line:n, msg:'Did you mean "' + right + '"?',
-                    fix:() => raw.replace(new RegExp("\\b" + typo[1] + "\\b"), right) });
-    }
-    if (/^\t+ +| +\t/.test(raw)) issues.push({ line:n, msg:"This line mixes tabs and spaces. Use spaces only." });
-  });
-  stack.forEach(o => issues.push({ line:o.n, msg:"This " + o.ch + " is never closed." }));
-  return issues;
-}
+/* Spotting mistakes lives in pyedit.js beside the colouring, so the builder
+   marks a teacher's starter code exactly as the student's editor will. */
 
 /* ---------- the IDE ---------- */
 function idePrefs(){ try{ return JSON.parse(localStorage.getItem("hub_ide") || "{}"); }catch(e){ return {}; } }
@@ -2400,21 +2307,22 @@ function rIDE(b){
   pane.appendChild(settings);
   gearBtn.addEventListener("click", () => { settings.hidden = !settings.hidden; });
 
-  const editor = el("div","ide-editor");
-  const gutter = el("div","ide-gutter");
-  const codeWrap = el("div","ide-codewrap");
-  const hl = el("div","ide-hl"); hl.setAttribute("aria-hidden", "true");
-  const ta = el("textarea","ide-code");
-  ta.spellcheck = false; ta.autocapitalize = "off"; ta.autocomplete = "off"; ta.wrap = "off";
-  ta.value = b.starter || "";
+  /* The editor itself: colours, line numbers, the list of mistakes and the
+     typing behaviour all come from pyedit.js, so the builder's Starter code
+     box is the same editor rather than a plain box that looks nothing like
+     what the student will open. */
+  const ed = window.pyEdit.attach({
+    value: b.starter || "",
+    readOnly: !!(b.readOnly || !canEdit),
+    height: b.height || 0,
+    help: PY_HELP,
+    tips: wantTips,
+    onInput: () => markDirty()
+  });
+  const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
+        probs = ed.probs, repaint = ed.repaint;
   if (b.key) codeKeys[b.key] = b.id;
-  if (b.readOnly || !canEdit) ta.readOnly = true;
-  if (b.height) editor.style.height = b.height + "px";
-  codeWrap.appendChild(hl); codeWrap.appendChild(ta);
-  editor.appendChild(gutter); editor.appendChild(codeWrap);
   pane.appendChild(editor);
-
-  const probs = el("div","ide-probs"); probs.hidden = true;
   pane.appendChild(probs);
   wrap.appendChild(pane);
 
@@ -2512,65 +2420,6 @@ function rIDE(b){
   if (pref.theme) setTheme(pref.theme);
   setSize(pref.size || "m");
 
-  /* --- painting --- */
-  let issues = [];
-  function repaint(){
-    tipsOn = wantTips;
-    const lines = ta.value.split("\n");
-    issues = checkPython(ta.value);
-    const bad = new Set(issues.map(x => x.line));
-    const state = { triple: null };
-    hl.innerHTML = lines.map((l, n) =>
-      '<div class="hl-line' + (bad.has(n) ? " bad" : "") + '">' + hlLine(l, state).html + "</div>").join("");
-    gutter.innerHTML = lines.map((_, n) =>
-      '<div class="gl' + (bad.has(n) ? " bad" : "") + '">' + (n + 1) + "</div>").join("");
-    probs.innerHTML = "";
-    if (issues.length){
-      probs.hidden = false;
-      issues.slice(0, 4).forEach(iss => {
-        const row = el("div","ide-prob");
-        row.appendChild(el("span","ide-probline","Line " + (iss.line + 1)));
-        row.appendChild(tel("span","ide-probmsg", iss.msg));
-        if (iss.fix){
-          const fixBtn = el("button","ide-chip","Fix it");
-          fixBtn.addEventListener("click", () => {
-            const ls = ta.value.split("\n");
-            ls[iss.line] = iss.fix();
-            ta.value = ls.join("\n");
-            repaint(); markDirty();
-          });
-          row.appendChild(fixBtn);
-        }
-        probs.appendChild(row);
-      });
-    } else { probs.hidden = true; }
-  }
-  ta.addEventListener("input", () => { repaint(); markDirty(); });
-  ta.addEventListener("scroll", () => {
-    hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop;
-  });
-  ta.addEventListener("keydown", (e) => {
-    if (e.key === "Tab"){
-      e.preventDefault();
-      const st = ta.selectionStart, en = ta.selectionEnd;
-      ta.value = ta.value.slice(0, st) + "    " + ta.value.slice(en);
-      ta.selectionStart = ta.selectionEnd = st + 4;
-      repaint(); markDirty();
-    } else if (e.key === "Enter"){
-      const st = ta.selectionStart;
-      const line = ta.value.slice(0, st).split("\n").pop();
-      const indent = (line.match(/^[ \t]*/) || [""])[0];
-      const extra = /:\s*$/.test(line) ? "    " : "";
-      if (indent || extra){
-        e.preventDefault();
-        const ins = "\n" + indent + extra;
-        ta.value = ta.value.slice(0, st) + ins + ta.value.slice(ta.selectionEnd);
-        ta.selectionStart = ta.selectionEnd = st + ins.length;
-        repaint(); markDirty();
-      }
-    }
-  });
-  repaint();
 
   /* --- running: the console asks for input, exactly like a terminal --- */
   /* How many times they have actually pressed Run. A checklist line can ask
@@ -4628,9 +4477,8 @@ function inspectWho(){
 }
 function teacherPost(action, body){
   const API = (window.HUB && window.HUB.API) || "";
-  const key = localStorage.getItem("hub_tkey") || "";
   return fetch(API + "/api/teacher/" + action, {
-    method:"POST", headers:{ "Content-Type":"application/json", "x-teacher-key": key },
+    method:"POST", headers: window.teacherAuth.json(),
     body: JSON.stringify(body)
   });
 }

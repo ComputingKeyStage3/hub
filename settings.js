@@ -148,7 +148,11 @@
     const grp = back.querySelector("#pwGroup");
     // only students have a password to change here
     const isStudent = !!localStorage.getItem("hub_token");
-    const isTeacher = !!localStorage.getItem("hub_tkey");
+    /* A teacher is whoever has a teacher sign-in, session or key. Looking only
+       for the key stopped recognising them the moment two-factor sign-in was
+       switched on and the key stopped being kept. */
+    const isTeacher = !!(window.teacherAuth ? window.teacherAuth.have()
+                          : localStorage.getItem("hub_tkey"));
     if (isStudent && API && !onConsole && !isTeacher && !noServer) grp.hidden = false;
     if (window.settingsExtra){
       const extra = document.createElement("button");
