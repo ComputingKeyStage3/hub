@@ -1125,6 +1125,40 @@ body.spectating{padding-top:40px}
   border:1px solid var(--line); border-radius:4px; padding:1px 5px}
 .rt-box ul,.rt-box ol{margin:6px 0 6px 22px}
 
+/* ---------- a block of code, in the builder and in a lesson ----------
+   Python and HTML are shown with the colours of the editors students type
+   into, so the code in the teaching and the code in the editor read as the
+   same language. Only the code itself is stored: the colours are painted on
+   wherever the block appears.
+   The token colours are set here rather than borrowed, because .t-kw and the
+   rest are only given values inside .ide, and a block turns up in a lesson,
+   in the builder and in a pop-up, none of which are the editor. */
+.rt-cb{
+  --t-kw:#8B2FA8; --t-str:#2E7B54; --t-num:#B25C00; --t-fn:#1B6AA5;
+  --t-call:#8A6A00; --t-com:#8A8578; --t-op:#5A6472; --t-tag:#1B6AA5; --t-attr:#8A6A00;
+  margin:10px 0; padding:8px 12px 10px; border-radius:10px;
+  border:1.5px solid var(--line); border-left:4px solid var(--t-fn);
+  background:#FFFFFF; color:#2B2B2B;
+  font-family:var(--mono); font-size:13.5px; line-height:1.55;
+  tab-size:4; white-space:pre; overflow-x:auto;
+}
+html[data-bg=dark] .rt-cb, html[data-bg=night] .rt-cb{
+  --t-kw:#C792EA; --t-str:#B8E08A; --t-num:#F2B36B; --t-fn:#7FC7F0;
+  --t-call:#E8D48B; --t-com:#7A8699; --t-op:#9FB0C8; --t-tag:#7FC7F0; --t-attr:#E8D48B;
+  background:var(--code-bg); color:#D8DEE9; border-color:#3A4150;
+}
+/* which language it is, the way an editor names the file it has open. On its
+   own line rather than in the corner: a corner label is either sat under a
+   long first line or scrolled away with it, since the block scrolls. */
+.rt-cb::before{
+  content:attr(data-lang); display:block; margin:0 0 4px;
+  font-family:var(--body); font-size:10px; font-weight:800;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--t-com);
+}
+/* an empty line still takes up a line, so the shape of the code holds */
+.rt-cb .rt-cl{min-height:1.55em}
+.rt-box .rt-cb:focus{outline:none}
+
 /* builder: the open page, drop targets, picture preview */
 .bcard.open{border-color:var(--amber); box-shadow:0 0 0 2px rgba(220,138,62,.16)}
 .pagekids.over{background:rgba(220,138,62,.08); border-left-color:var(--amber); border-radius:8px}

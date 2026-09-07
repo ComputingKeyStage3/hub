@@ -8,7 +8,7 @@
 (function(){
   "use strict";
 
-  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1, IMG:1, KBD:1 };
+  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1, IMG:1, KBD:1, PRE:1 };
   /* A swatch like the ones in Office: a row of hues, each with lighter and
      darker versions underneath. */
   const HUES = [
@@ -26,6 +26,171 @@
       : Math.round(c * (1 + amount));
     r = mix(r); g = mix(g); b = mix(b);
     return "#" + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("").toUpperCase();
+  }
+
+  /* ------------------------------------------------------------------
+     Blocks of code.
+
+     A block is stored as <pre class="rt-cb" data-lang="python"> with nothing
+     inside it but the code itself. The colours are painted on wherever the
+     block is shown, by the very highlighters the Python and web editors use,
+     so code in a lesson looks like the same code in the editor a student
+     types it into. Keeping the text plain rather than the coloured spans
+     keeps a lesson file small, and means colouring improved later reaches
+     lessons that were written before it.
+     ------------------------------------------------------------------ */
+  const CODE_LANGS = { python:"Python", html:"HTML" };
+  const VOID_TAGS = { br:1, hr:1, img:1, input:1, meta:1, link:1, area:1,
+                      base:1, col:1, source:1, track:1, wbr:1 };
+  function escHtml(t){
+    return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* One line, coloured. An empty line is answered here rather than by the
+     highlighters, which give back "&nbsp;" for it: that is a character the
+     cursor would then have to be counted past in a box being typed into. */
+  function lineHtml(lang, line, state){
+    if (!line) return "";
+    try{
+      if (lang === "python" && window.pyEdit && window.pyEdit.hlLine)
+        return window.pyEdit.hlLine(line, state, { tips:false }).html;
+      /* the dotted underline the web editor puts under words it can explain is
+         taken off: nothing in a lesson block is clickable, so it would only
+         invite a click that does nothing */
+      if (lang === "html" && window.webHighlight)
+        return String(window.webHighlight("html", line, state)).replace(/ t-help/g, "");
+    }catch(e){}
+    return escHtml(line);
+  }
+
+  /* The code as text. Whatever a browser left behind while it was being typed
+     into (a <br>, a stray <div> of its own) counts as the end of a line, so
+     the text reads back the same however it got there. */
+  function codeText(node){
+    let out = "";
+    Array.from(node.childNodes).forEach(n => {
+      if (n.nodeType === 3){ out += n.nodeValue; return; }
+      if (n.nodeType !== 1) return;
+      if (n.tagName === "BR"){ out += "\n"; return; }
+      const block = n.tagName === "DIV" || n.tagName === "P" || n.tagName === "LI";
+      if (block && out && out.slice(-1) !== "\n") out += "\n";
+      out += codeText(n);
+    });
+    return out;
+  }
+
+  /* Each line becomes a div of its own. Lines built out of newline characters
+     alone kept disappearing: a browser folds a run of them together, and an
+     empty line then has nothing in it for the cursor to sit in. */
+  function paintBlock(pre){
+    const lang = CODE_LANGS[pre.dataset.lang] ? pre.dataset.lang : "python";
+    pre.dataset.lang = lang;
+    /* the spell checker underlines every word of code in red, and a phone
+       would put a capital letter at the start of each line */
+    pre.setAttribute("spellcheck", "false");
+    pre.setAttribute("autocapitalize", "off");
+    const state = {};
+    pre.innerHTML = codeText(pre).split("\n")
+      .map(line => '<div class="rt-cl">' + lineHtml(lang, line, state) + "</div>").join("");
+  }
+
+  /* Where a point in a block sits, as a line and a column. Read by copying
+     everything in front of it and measuring that, because an empty line holds
+     no text for a character count to walk through. */
+  function pointAt(pre, container, offset){
+    if (container !== pre && !pre.contains(container)) return null;
+    const r = document.createRange();
+    try{
+      r.setStart(pre, 0);
+      r.setEnd(container, offset);
+    }catch(e){ return null; }
+    const holder = document.createElement("div");
+    holder.appendChild(r.cloneContents());
+    const parts = codeText(holder).split("\n");
+    return { line: parts.length - 1, col: parts[parts.length - 1].length };
+  }
+
+  /* The other way about: a line and column back to a place in the block. */
+  function resolve(pre, line, col){
+    const div = pre.children[Math.max(0, Math.min(line, pre.children.length - 1))];
+    if (!div) return { node: pre, offset: 0 };
+    let left = col, found = null;
+    (function walk(el){
+      Array.from(el.childNodes).forEach(kid => {
+        if (found) return;
+        if (kid.nodeType === 3){
+          if (left <= kid.nodeValue.length){ found = { node: kid, offset: left }; return; }
+          left -= kid.nodeValue.length;
+        }
+        else if (kid.nodeType === 1) walk(kid);
+      });
+    })(div);
+    return found || { node: div, offset: div.childNodes.length };
+  }
+  function setCaret(pre, line, col, endLine, endCol){
+    const a = resolve(pre, line, col);
+    const b = (endLine === undefined) ? a : resolve(pre, endLine, endCol);
+    const r = document.createRange();
+    try{ r.setStart(a.node, a.offset); r.setEnd(b.node, b.offset); }catch(e){ return; }
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+  }
+  /* Put new code in and say where the cursor should end up. */
+  function setCode(pre, text, line, col, endLine, endCol){
+    pre.textContent = text;
+    paintBlock(pre);
+    setCaret(pre, line, col, endLine, endCol);
+  }
+  const flatOffset = (lines, at) =>
+    lines.slice(0, at.line).reduce((n, l) => n + l.length + 1, 0) + at.col;
+  function placeOf(text, offset){
+    const parts = text.slice(0, offset).split("\n");
+    return { line: parts.length - 1, col: parts[parts.length - 1].length };
+  }
+
+  /* How much the next line should start in by. Python opens a block with a
+     colon; HTML opens one with a tag that is not closed again on the line. */
+  function opensBlock(lang, before){
+    if (lang !== "html") return /:\s*$/.test(before);
+    if (/\/>\s*$/.test(before)) return false;
+    const open = /<([A-Za-z][\w-]*)(\s[^<>]*)?>\s*$/.exec(before);
+    if (!open) return false;
+    const name = open[1].toLowerCase();
+    if (VOID_TAGS[name]) return false;
+    return before.indexOf("</" + name + ">", open.index) < 0;
+  }
+
+  /* Lessons show a teacher's words in a dozen places, and something new shows
+     them every time a task type is added. Rather than each of those having to
+     remember to paint the code, a block is painted as it arrives on the page.
+     The builder's own blocks are left alone: it paints those as they are
+     typed, and repainting underneath someone would move their cursor. */
+  function paintCodeBlocks(root){
+    const holder = root || document;
+    if (!holder.querySelectorAll) return;
+    const found = [];
+    if (holder.matches && holder.matches("pre.rt-cb")) found.push(holder);
+    holder.querySelectorAll("pre.rt-cb").forEach(pre => found.push(pre));
+    found.forEach(pre => {
+      if (pre.dataset.painted === "1") return;
+      if (pre.closest && pre.closest(".rt-box")) return;
+      pre.dataset.painted = "1";
+      paintBlock(pre);
+    });
+  }
+  window.paintCodeBlocks = paintCodeBlocks;
+  if (window.MutationObserver){
+    const watcher = new MutationObserver(records => {
+      records.forEach(rec => Array.from(rec.addedNodes).forEach(n => {
+        if (n.nodeType === 1) paintCodeBlocks(n);
+      }));
+    });
+    const start = () => {
+      paintCodeBlocks(document);
+      watcher.observe(document.body, { childList: true, subtree: true });
+    };
+    if (document.body) start();
+    else document.addEventListener("DOMContentLoaded", start);
   }
 
   /* Keep the tags we offer, drop everything else but its words. */
@@ -55,6 +220,19 @@
           if (colour) keep.style.color = colour;
           const size = n.style && n.style.fontSize;
           if (size) keep.style.fontSize = size;
+        }
+        /* A code block keeps its language and its code, and nothing else.
+           The colours are painted back on wherever it is shown, so a lesson
+           holds the code once rather than a span around every word in it. */
+        if (tag === "PRE"){
+          keep.className = "rt-cb";
+          keep.dataset.lang = (n.dataset && CODE_LANGS[n.dataset.lang]) ? n.dataset.lang : "python";
+          /* the parser drops one newline straight after <pre>, so a block that
+             starts on a blank line needs a spare one to survive being saved
+             and read back */
+          keep.textContent = "\n" + codeText(n);
+          to.appendChild(keep);
+          return;
         }
         if (tag === "IMG"){
           /* keep where it points and how big it was made */
@@ -277,16 +455,235 @@
       while (node.firstChild) parent.insertBefore(node.firstChild, node);
       parent.removeChild(node);
     }
-    if (o.code !== false) tool("&lt;/&gt;", "Show as code", () => {
-      const already = insideTag("CODE");
-      if (already){ unwrap(already); box.focus(); fire(); refreshState(); return; }
+    /* ---------- code blocks in this box ---------- */
+    /* The block a node sits in, if any. */
+    function blockIn(node){
+      let n = node || null;
+      while (n && n !== box){
+        if (n.nodeType === 1 && n.classList && n.classList.contains("rt-cb")) return n;
+        n = n.parentNode;
+      }
+      return null;
+    }
+    function blockNow(){
       const sel = window.getSelection();
-      if (!sel || !sel.rangeCount || sel.isCollapsed) return;
-      const range = sel.getRangeAt(0);
-      const code = document.createElement("code");
-      try{ range.surroundContents(code); }catch(e){}
-      box.focus(); fire(); refreshState();
-    }, "rt-code");
+      if (!sel || !sel.rangeCount) return null;
+      const r = sel.getRangeAt(0);
+      if (!box.contains(r.startContainer)) return null;
+      return blockIn(r.startContainer);
+    }
+    /* Colour the block being typed in again, leaving the cursor where it was.
+       The whole block is redone rather than the one line: a long string opened
+       on one line colours every line under it, so a single line cannot be
+       recoloured on its own. Blocks in a lesson are a handful of lines. */
+    function repaintBlock(pre){
+      const sel = window.getSelection();
+      const r = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+      const at = r ? pointAt(pre, r.startContainer, r.startOffset) : null;
+      paintBlock(pre);
+      if (at) setCaret(pre, at.line, at.col);
+    }
+    /* Step out of a block, making a line for the words that come after it.
+       Without this a block at the bottom of the box has nothing underneath to
+       click into, and no way back to ordinary writing. */
+    function leaveBlock(pre, before){
+      const line = document.createElement("div");
+      line.appendChild(document.createElement("br"));
+      pre.parentNode.insertBefore(line, before ? pre : pre.nextSibling);
+      const r = document.createRange();
+      r.setStart(line, 0); r.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+      return line;
+    }
+    /* Put text in at the cursor, keeping its own line breaks and spacing. */
+    function codeSplice(pre, insert){
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      const r = sel.getRangeAt(0);
+      const from = pointAt(pre, r.startContainer, r.startOffset);
+      const to = r.collapsed ? from : pointAt(pre, r.endContainer, r.endOffset);
+      if (!from || !to) return;
+      const text = codeText(pre);
+      const lines = text.split("\n");
+      const a = flatOffset(lines, from), b = flatOffset(lines, to);
+      const next = text.slice(0, a) + insert + text.slice(b);
+      const at = placeOf(next, a + insert.length);
+      setCode(pre, next, at.line, at.col);
+    }
+
+    /* Typing inside a block. Tab moves on to the next stop of four rather
+       than out of the box, Enter starts the next line where this one starts
+       (and one step further in after a line that opens a block), and Enter on
+       an empty last line steps out of the block altogether. */
+    function codeKeys(e, pre){
+      if (e.key !== "Tab" && e.key !== "Enter" && e.key !== "Backspace") return false;
+      const sel = window.getSelection();
+      const r = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+      if (!r) return false;
+      const from = pointAt(pre, r.startContainer, r.startOffset);
+      const to = r.collapsed ? from : pointAt(pre, r.endContainer, r.endOffset);
+      if (!from || !to) return false;
+      const text = codeText(pre);
+      const lines = text.split("\n");
+      const STEP = 4;
+
+      if (e.key === "Tab"){
+        e.preventDefault();
+        if (!e.shiftKey && r.collapsed){
+          /* to the next stop of four, not four more, so a line sitting three
+             spaces in lands on four */
+          const add = STEP - (from.col % STEP);
+          const line = lines[from.line] || "";
+          lines[from.line] = line.slice(0, from.col) + "    ".slice(0, add) + line.slice(from.col);
+          setCode(pre, lines.join("\n"), from.line, from.col + add);
+        } else {
+          let firstBy = 0, lastBy = 0;
+          for (let i = from.line; i <= to.line; i++){
+            const line = lines[i] || "";
+            let by = 0;
+            if (e.shiftKey){
+              const off = /^( {1,4}|\t)/.exec(line);
+              if (off){ lines[i] = line.slice(off[0].length); by = -off[0].length; }
+            } else {
+              lines[i] = "    " + line;
+              by = STEP;
+            }
+            if (i === from.line) firstBy = by;
+            if (i === to.line) lastBy = by;
+          }
+          setCode(pre, lines.join("\n"), from.line, Math.max(0, from.col + firstBy),
+                  to.line, Math.max(0, to.col + lastBy));
+        }
+        fire(); return true;
+      }
+
+      if (e.key === "Enter"){
+        e.preventDefault();
+        const line = lines[from.line] || "";
+        if (r.collapsed && !line.trim() && from.line === lines.length - 1){
+          lines.pop();
+          const left = lines.join("\n");
+          if (left.trim()){ pre.textContent = left; paintBlock(pre); leaveBlock(pre); }
+          else { leaveBlock(pre); pre.remove(); }
+          fire(); return true;
+        }
+        const before = line.slice(0, from.col);
+        const indent = (before.match(/^[ \t]*/) || [""])[0];
+        const a = flatOffset(lines, from), b = flatOffset(lines, to);
+        const insert = "\n" + indent + (opensBlock(pre.dataset.lang, before) ? "    " : "");
+        const next = text.slice(0, a) + insert + text.slice(b);
+        const at = placeOf(next, a + insert.length);
+        setCode(pre, next, at.line, at.col);
+        fire(); return true;
+      }
+
+      /* Backspace */
+      if (!r.collapsed) return false;
+      const line = lines[from.line] || "";
+      const before = line.slice(0, from.col);
+      if (from.col > 0 && /^ +$/.test(before)){
+        /* one press undoes one press of Tab, rather than nibbling back
+           through the indent a space at a time */
+        e.preventDefault();
+        const take = (before.length % STEP) || STEP;
+        lines[from.line] = line.slice(0, from.col - take) + line.slice(from.col);
+        setCode(pre, lines.join("\n"), from.line, from.col - take);
+        fire(); return true;
+      }
+      if (from.line === 0 && from.col === 0){
+        e.preventDefault();
+        /* an empty block goes; a block with code in it stays, rather than
+           being folded into the words above where it would lose its shape */
+        if (!text.trim()){ leaveBlock(pre, true); pre.remove(); fire(); }
+        return true;
+      }
+      return false;
+    }
+
+    if (o.code !== false){
+      const codeBtn = tool("&lt;/&gt;", "Code", () => {}, "rt-code");
+      const codeMenu = document.createElement("div");
+      codeMenu.className = "rt-palette rt-codemenu";
+      codeMenu.hidden = true;
+      document.body.appendChild(codeMenu);
+
+      function codeItem(label, run){
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "rt-auto-btn";
+        b.textContent = label;
+        b.addEventListener("mousedown", (ev) => ev.preventDefault());
+        b.addEventListener("click", () => {
+          codeMenu.hidden = true;
+          restore(saved);
+          run();
+          box.focus(); fire(); refreshState();
+        });
+        codeMenu.appendChild(b);
+      }
+      /* Pressing it again takes the tag off: the writing inside goes back
+         where the tag was, which is what a toggle is expected to do. */
+      function toggleInline(){
+        const already = insideTag("CODE");
+        if (already){ unwrap(already); return; }
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+        const code = document.createElement("code");
+        try{ sel.getRangeAt(0).surroundContents(code); }catch(e){}
+      }
+      function makeBlock(lang){
+        const here = blockNow() || blockIn(saved ? saved.startContainer : null);
+        /* already in one: this is a change of language, not a second block */
+        if (here){ here.dataset.lang = lang; repaintBlock(here); return; }
+        const range = save();
+        const pre = document.createElement("pre");
+        pre.className = "rt-cb";
+        pre.dataset.lang = lang;
+        let text = "";
+        if (range){
+          text = range.toString().replace(/\r/g, "");
+          range.deleteContents();
+          /* the block goes on lines of its own, so it is put after whatever
+             the cursor was in rather than inside it */
+          let top = range.startContainer;
+          while (top && top.parentNode && top.parentNode !== box) top = top.parentNode;
+          if (top && top.parentNode === box) box.insertBefore(pre, top.nextSibling);
+          else box.appendChild(pre);
+        }
+        else box.appendChild(pre);
+        const lines = text.split("\n");
+        setCode(pre, text, lines.length - 1, lines[lines.length - 1].length);
+      }
+      function unblock(pre){
+        const holder = document.createDocumentFragment();
+        codeText(pre).split("\n").forEach((line, i) => {
+          if (i) holder.appendChild(document.createElement("br"));
+          holder.appendChild(document.createTextNode(line));
+        });
+        pre.parentNode.replaceChild(holder, pre);
+      }
+      /* Built afresh each time, because what it can offer depends on whether
+         the cursor is in a block already. */
+      function buildCodeMenu(){
+        codeMenu.innerHTML = "";
+        const here = blockIn(saved ? saved.startContainer : null);
+        codeItem("Code in a sentence", toggleInline);
+        Object.keys(CODE_LANGS).forEach(lang =>
+          codeItem(CODE_LANGS[lang] + " block", () => makeBlock(lang)));
+        if (here) codeItem("Back to plain writing", () => unblock(here));
+      }
+      codeBtn.addEventListener("mousedown", () => { saved = save(); });
+      codeBtn.addEventListener("click", () => {
+        if (!codeMenu.hidden){ codeMenu.hidden = true; return; }
+        buildCodeMenu();
+        openMenuAt(codeBtn, codeMenu);
+      });
+      document.addEventListener("pointerdown", (e) => {
+        if (!codeMenu.hidden && !codeMenu.contains(e.target) && e.target !== codeBtn)
+          codeMenu.hidden = true;
+      });
+    }
 
     /* the colour picker: a swatch that opens a small palette */
     const colourWrap = document.createElement("span");
@@ -617,6 +1014,7 @@
     if (o.rows) box.style.minHeight = (o.rows * 26) + "px";
     if (o.placeholder) box.dataset.placeholder = o.placeholder;
     box.innerHTML = initialHtml || "";
+    box.querySelectorAll("pre.rt-cb").forEach(paintBlock);
     /* so the number reads the box's own size before anyone has clicked in it */
     try{ showSize(); }catch(e){}
 
@@ -657,11 +1055,16 @@
     function refreshState(){
       /* so the number always says what the writing under the cursor really is */
       try{ showSize(); }catch(e){}
+      /* Inside a code block the colouring is the editor's, not the teacher's:
+         a comment is in italics and a keyword is bold because of what they
+         are. Reporting that as bold and italic being switched on invites a
+         press of the button to turn something off that was never on. */
+      const inCode = !!blockNow();
       Object.keys(stateOf).forEach(name => {
         const btn = stateOf[name];
         if (!btn) return;
         let on = false;
-        try{ on = document.queryCommandState(name); }catch(e){}
+        if (!inCode){ try{ on = document.queryCommandState(name); }catch(e){} }
         btn.classList.toggle("on", !!on);
       });
       /* lists and code show as on when the cursor is inside one, so pressing
@@ -674,7 +1077,7 @@
         btn.classList.toggle("on", !!on);
       });
       const codeBtn = bar.querySelector(".rt-code");
-      if (codeBtn) codeBtn.classList.toggle("on", !!insideTag("CODE"));
+      if (codeBtn) codeBtn.classList.toggle("on", !!(insideTag("CODE") || blockNow()));
       let colour = "";
       try{ colour = document.queryCommandValue("foreColor") || ""; }catch(e){}
       swatch.style.background = normaliseColour(colour) || "transparent";
@@ -694,10 +1097,29 @@
       if (document.activeElement === box) refreshState();
     });
 
-    box.addEventListener("input", fire);
+    /* A block is coloured again after every change. Nothing happens while a
+       key is being composed (accents, or a Chinese keyboard): rebuilding the
+       line underneath one of those loses what is half typed. */
+    let composing = false;
+    box.addEventListener("compositionstart", () => { composing = true; });
+    box.addEventListener("compositionend", () => {
+      composing = false;
+      const pre = blockNow();
+      if (pre) repaintBlock(pre);
+      fire();
+    });
+    box.addEventListener("input", () => {
+      if (!composing){
+        const pre = blockNow();
+        if (pre) repaintBlock(pre);
+      }
+      fire();
+    });
     box.addEventListener("blur", () => { if (onChange) onChange(clean(box)); });
     // paste as plain words, so a copied web page cannot bring its styling in
     box.addEventListener("keydown", (e) => {
+      const codeBlock = blockNow();
+      if (codeBlock && codeKeys(e, codeBlock)) return;
       if (e.key === "Tab"){
         /* only indent when there is already an item above to sit under */
         const sel = window.getSelection();
@@ -815,13 +1237,21 @@
     box.addEventListener("paste", (e) => {
       e.preventDefault();
       const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+      const pre = blockNow();
+      /* insertText turns the line breaks in pasted code into <br>s and drops
+         the spaces at the front of each line, which is the whole shape of a
+         piece of Python. Inside a block it is put in as text instead. */
+      if (pre){ codeSplice(pre, text.replace(/\r/g, "")); fire(); return; }
       cmd("insertText", text);
     });
 
     wrap.appendChild(bar);
     wrap.appendChild(box);
     wrap.getHtml = () => clean(box);
-    wrap.setHtml = (html) => { box.innerHTML = html || ""; };
+    wrap.setHtml = (html) => {
+      box.innerHTML = html || "";
+      box.querySelectorAll("pre.rt-cb").forEach(paintBlock);
+    };
     return wrap;
   };
 
