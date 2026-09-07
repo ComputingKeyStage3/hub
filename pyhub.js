@@ -345,29 +345,67 @@ def _hub_input(prompt=""):
 builtins.input = _hub_input
 
 # -------------------------------------------------- sleep and endless loops
-_real_sleep = time.sleep
-_sleep_budget = [3.0]
-
-def _hub_sleep(seconds):
-    # long sleeps freeze the whole page, so they are trimmed
-    try:
-        seconds = float(seconds)
-    except Exception:
-        return
-    seconds = min(seconds, 0.25)
-    if _sleep_budget[0] <= 0:
-        return
-    _sleep_budget[0] -= seconds
-    _real_sleep(max(0.0, seconds))
-
-time.sleep = _hub_sleep
-
 class HubTooLong(Exception):
     pass
+
+# Almost every module is here, and anything Pyodide keeps as a separate
+# download is fetched before the program runs. These few cannot exist in a
+# browser tab at all, so say why rather than leaving a bare ModuleNotFoundError.
+_NO_MODULE = {
+    "tkinter": "tkinter opens desktop windows, which a web page cannot do. Use turtle to draw here.",
+    "pygame": "pygame needs a desktop window. Use turtle to draw here.",
+    "winsound": "winsound only works in desktop Python on Windows. This editor has no sound.",
+    "playsound": "This editor has no sound.",
+    "simpleaudio": "This editor has no sound.",
+    "msvcrt": "msvcrt is a Windows desktop module. Use input() to read what somebody types.",
+    "curses": "curses draws into a terminal window, and this editor does not have one.",
+    "termios": "termios needs a terminal window, and this editor does not have one.",
+    "pty": "pty needs a terminal window, and this editor does not have one.",
+    "tty": "tty needs a terminal window, and this editor does not have one.",
+    "socket": "socket opens network connections, which a web page is not allowed to do.",
+    "smtplib": "Sending email needs a network connection a web page is not allowed to make.",
+    "ftplib": "This needs a network connection a web page is not allowed to make.",
+    "subprocess": "This runs other programs on a computer, and there is no computer to run them on here.",
+    "multiprocessing": "This starts extra copies of Python, which a web page cannot do.",
+}
 
 _deadline = [0.0]
 _ticks = [0]
 _limit = [10.0]
+
+_real_sleep = time.sleep
+_SLEEP_TOTAL = 6.0    # the most one program may spend waiting, in seconds
+_SLEEP_ONE = 2.0      # the most any single wait may take
+_sleep_left = [_SLEEP_TOTAL]
+_sleep_told = [False]
+
+def _hub_sleep(seconds):
+    # A browser tab is frozen while Python sleeps, so a program cannot be let
+    # wait as long as it likes. Waits used to be cut to a quarter of a second
+    # each with no word said, which made a ten second countdown finish
+    # instantly and looked exactly as though time.sleep did nothing at all.
+    # Now the wait really happens, up to a limit, and trimming is said out loud.
+    try:
+        seconds = float(seconds)
+    except Exception:
+        return
+    if seconds <= 0:
+        return
+    asked = seconds
+    seconds = min(seconds, _SLEEP_ONE, max(0.0, _sleep_left[0]))
+    if seconds < asked and not _sleep_told[0]:
+        _sleep_told[0] = True
+        print("(waiting is shortened here so the page keeps working)")
+    if seconds <= 0:
+        return
+    _sleep_left[0] -= seconds
+    _real_sleep(seconds)
+    # Waiting is not running, so it must not count towards the time limit.
+    # Without this a program that waits its way through a countdown was killed
+    # as though it had an endless loop.
+    _deadline[0] += seconds
+
+time.sleep = _hub_sleep
 
 def _hub_guard(frame, event, arg):
     _ticks[0] += 1
@@ -377,7 +415,8 @@ def _hub_guard(frame, event, arg):
 
 def _hub_run(source, seconds=10.0):
     global _hub_queue
-    _sleep_budget[0] = 3.0
+    _sleep_left[0] = _SLEEP_TOTAL
+    _sleep_told[0] = False
     _ticks[0] = 0
     _limit[0] = seconds
     _deadline[0] = time.time() + seconds
@@ -403,6 +442,14 @@ def _hub_run(source, seconds=10.0):
         ok = False
         print("")
         print(str(stop))
+    except ModuleNotFoundError as miss:
+        ok = False
+        name = str(getattr(miss, "name", "") or "").split(".")[0]
+        print("There is no module called " + (name or "that") + " here.")
+        if name in _NO_MODULE:
+            print(_NO_MODULE[name])
+        else:
+            print("Check the spelling. Nearly all of Python works here, apart from a few things a web page cannot do.")
     except SyntaxError as err:
         ok = False
         print("There is a typo in your code on line " + str(err.lineno) + ":")

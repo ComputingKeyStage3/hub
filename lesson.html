@@ -2103,6 +2103,25 @@ async function ensureHubPython(status){
   return py;
 }
 
+/* Pyodide only starts with part of Python. sqlite3, ssl and lzma sit beside it
+   as separate downloads, as does everything past the standard library such as
+   numpy, matplotlib and pandas. Without this, "import sqlite3" came back as
+   "No module named sqlite3" even though the module was on the CDN waiting to
+   be asked for. Reading the imports out of the student's own code and fetching
+   whatever they named is what makes those work.
+   Quiet on failure on purpose: if the download is blocked the run carries on
+   and the missing module message in pyhub.js explains it in words a child can
+   read, which beats stopping the editor. */
+async function loadPyImports(py, code, status){
+  if (!py || typeof py.loadPackagesFromImports !== "function") return;
+  try{
+    await py.loadPackagesFromImports(code, {
+      messageCallback: () => { if (status) status.textContent = "Getting the module you asked for…"; },
+      errorCallback: () => {}
+    });
+  }catch(e){ /* a typo in their code lands here too; the run reports it properly */ }
+}
+
 /* ---------- colouring the code ----------
    In pyedit.js, shared with the builder. Only the list of function names is
    wanted here, for the help tab and the word explanations. */
@@ -2428,6 +2447,7 @@ function rIDE(b){
   let ran = false, runs = 0, lastOut = "", answers = [];
   async function execute(){
     const py = await ensureHubPython(out);
+    await loadPyImports(py, ta.value, out);
     py.globals.set("_hub_next_inputs", answers.join("\u0000"));
     py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
     py.globals.set("_hub_src", ta.value);
@@ -5072,6 +5092,7 @@ async function runPython(code, out, err){
   err.textContent = "";
   try{
     const py = await ensurePyodide(out);
+    await loadPyImports(py, code, out);
     py.globals.set("_user_code", code);
     out.textContent = py.runPython(
       "import sys, io\n_buf = io.StringIO()\n_so, _se = sys.stdout, sys.stderr\n" +
