@@ -3642,11 +3642,16 @@ function rQuiz(b){
            soft:() => ({ ok: !n || !needed() || passed() }),
            /* A teacher can ask for the rest of the page to stay shut until the
               pass mark is reached. The quiz hides nothing itself: it answers
-              these, and the page it sits on does the hiding. */
+              these, and the page it sits on does the hiding.
+
+              It has to be finished, not merely far enough along. Opening the
+              page the moment the tally crossed the line put the rest of the
+              work on screen while they were still on question three, which
+              read as the quiz having ended early. */
            hold: { on: () => !!(b.pass && b.pass.hold) && needed() > 0,
-                   passed: () => !needed() || passed(),
-                   words: () => "There is more on this page. Get " + needed() +
-                                " out of " + n + " right above to open it.",
+                   passed: () => finishedQuiz && (!needed() || passed()),
+                   words: () => "There is more on this page. Finish the quiz above and get " +
+                                needed() + " out of " + n + " right to open it.",
                    watch: (fn) => { tell = fn; } },
            brief:{ eyebrow:"Quiz", title:b.title || "", text:b.note || "" } };
 }
