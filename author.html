@@ -27,13 +27,12 @@
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
-<!-- On a narrow screen this is the only row of controls: a way to add a page,
-     the assessment tabs where there are any, and the preview switch pinned to
-     the right of it. It scrolls sideways rather than wrapping. -->
+<!-- On a narrow screen this is the only row of controls: the assessment tabs
+     where there are any, and the preview switch pinned to the right of it. It
+     scrolls sideways rather than wrapping. Pages are added from the strip
+     below, beside the pages themselves, rather than from here as well. -->
 <div class="buildbar" id="buildBar" hidden>
-  <div class="buildbar-scroll" id="buildBarScroll">
-    <button class="btn-primary bmini2" id="addPageBtn">+ New page</button>
-  </div>
+  <div class="buildbar-scroll" id="buildBarScroll"></div>
   <button class="btn-ghost bmini2 prevtoggle" id="prevToggle">Preview</button>
 </div>
 
@@ -684,7 +683,129 @@ function compileOne(b, id, target){
 
 /* ---------------- drawing the cards ---------------- */
 let dragFrom = null;
-let openPage = 0;          // the page new tasks join
+/* Which page is on screen. Held as the page itself rather than its position,
+   because moving or deleting a page left the number pointing at whatever had
+   slid into that slot: the wrong page was highlighted and new tasks joined it.
+   Null only while a lesson has no pages at all. */
+let openPageRef = null;
+/* Every page at once with everything on it folded away. It is how you read the
+   shape of a lesson, and the only place a task can be dragged from one page to
+   another, now that the builder normally shows one page at a time. */
+let viewAll = false;
+let pageDrag = null;       // a page chip being dragged along the strip
+let lastPageAt = 0;        // where the open page was, for when it is deleted
+function pageList(){ return lesson.blocks.filter(x => x.type === "page"); }
+function pageIndex(){ return openPageRef ? lesson.blocks.indexOf(openPageRef) : -1; }
+/* The page a new task joins when nothing else says where it goes. */
+function targetPage(){
+  if (openPageRef && lesson.blocks.indexOf(openPageRef) >= 0) return openPageRef;
+  openPageRef = pageList()[0] || null;
+  return openPageRef;
+}
+/* Point the preview at a page and remember it as the one being worked on.
+   The preview keeps its page in sessionStorage and reads it on load, so
+   writing a page and asking for a refresh lands it on the same one. It goes
+   into localStorage as well for a preview in its own tab: sessionStorage is
+   per tab, and the pop-out was given a copy of it when it opened and never
+   hears about anything written here afterwards. The stamp lets that preview
+   tell a fresh request to move apart from one it has already acted on, so it
+   only jumps when a page is actually picked. */
+function tellPreview(page){
+  openPageRef = page || null;
+  const at = pageIndex();
+  if (at >= 0){
+    lastPageAt = at;
+    try{
+      sessionStorage.setItem("hub_preview_step", String(at));
+      localStorage.setItem("hub_preview_go", JSON.stringify({ step:at, at:Date.now() }));
+    }catch(e){}
+  }
+  schedulePreview();
+}
+/* Pages carry `collapsed`, tasks carry `folded`. Neither is ever compiled into
+   the lesson file: they are only about getting around the builder.
+
+   Which one you can fold depends on the view, and the two are opposites. One
+   page at a time: the page is the workbench and is always open, its tasks
+   fold. All pages: the tasks are always folded, because opening one there is
+   how the column crept back to being forty screens of editors, and the pages
+   themselves fold instead. */
+function isShut(b){
+  if (b.type === "page") return viewAll && b.collapsed === true;
+  return viewAll || b.folded === true;
+}
+/* One task open at a time on a page. The preview beside it already shows the
+   whole page, so there is nothing to compare against by keeping two open. */
+function toggleShut(b, arr){
+  if (b.type === "page"){ b.collapsed = !b.collapsed; return; }
+  const opening = b.folded === true;
+  (arr || []).forEach(x => { if (x !== b && x.type !== "page") x.folded = true; });
+  b.folded = !opening;
+}
+/* Whatever was just added is the thing being written, so it opens and the rest
+   of the page shuts behind it. */
+function openOnly(arr, b){
+  (arr || []).forEach(x => { if (x !== b && x.type !== "page") x.folded = true; });
+  if (b) b.folded = false;
+}
+/* A lesson that has just been opened starts on its first page with everything
+   folded, rather than dropping a teacher into the middle of a wall of boxes. */
+function startFolded(){
+  const fold = (arr) => (arr || []).forEach(b => {
+    if (b.type === "page"){ fold(b.blocks); return; }
+    b.folded = true;
+    if (b.type === "extension") fold(b.blocks);
+    if (b.type === "choice") (b.options || []).forEach(o => fold(o.blocks));
+  });
+  fold(lesson.blocks);
+  viewAll = false;
+  openPageRef = pageList()[0] || null;
+}
+/* The first words a task actually says, for the line it folds down to. Each
+   kind keeps its wording somewhere different, so the fields are tried in the
+   order a person would read them. */
+const SUMMARY_FIELDS = ["prompt","heading","title","html","text","message","centre","url","task","context"];
+function taskSummary(b){
+  if (b.type === "quiz"){
+    const first = (b.questions || [])[0];
+    const q = first ? plainWords(first.q) : "";
+    if (q) return q;
+  }
+  if (b.type === "keywords"){
+    const words = (b.words || []).map(w => String(w.word || "").trim()).filter(Boolean);
+    if (words.length) return plainWords(words.join(", "));
+  }
+  if (b.type === "order"){
+    const items = (b.items || []).map(x => String(x).trim()).filter(Boolean);
+    if (items.length) return plainWords(items.join(" → "));
+  }
+  if (b.type === "choice"){
+    const labels = (b.options || []).map(o => String(o.label || "").trim()).filter(Boolean);
+    if (labels.length) return plainWords(labels.join(" / "));
+  }
+  if (b.type === "extension"){
+    const n = (b.blocks || []).length;
+    return n + " task" + (n === 1 ? "" : "s");
+  }
+  if (b.type === "code") return "Python or a web page, not picked yet";
+  for (let i = 0; i < SUMMARY_FIELDS.length; i++){
+    const t = plainWords(b[SUMMARY_FIELDS[i]]);
+    if (t) return t;
+  }
+  return "";
+}
+/* Rich text fields hold HTML, so it is read the way a person would see it.
+   Stripped with a pattern rather than by putting it in an element: an image in
+   a paragraph would be fetched by the browser the moment it was parsed, and
+   this runs for every folded task on the page. */
+function plainWords(v){
+  if (v === undefined || v === null) return "";
+  const t = String(v).replace(/<[^>]*>/g, " ")
+                     .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+                     .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+                     .replace(/\s+/g, " ").trim();
+  return t.length > 60 ? t.slice(0, 58).replace(/\s+$/, "") + "…" : t;
+}
 let lastAddedAt = -1;      // where the newest task landed, so we can scroll to it
 let listWired = false;
 function wireList(){
@@ -794,18 +915,169 @@ function renderNow(){
     saveDraft();
     return;
   }
-  if (!lesson.blocks.length)
-    list.appendChild(el("p","hint", lesson.assessment
-      ? "No questions yet, add one from the left."
-      : "Nothing here yet, add a task or a page from the left."));
-  lesson.blocks.forEach((b, i) => list.appendChild(card(b, i, lesson.blocks)));
-  /* On a narrow screen the palette is gone, so whatever list is on screen
-     needs its own way to add to it. A lesson adds pages from the bar above
-     and tasks from inside each page; an assessment has neither, so the
-     containers go straight underneath its questions. */
-  if (isCompact() && lesson.assessment && !lesson.practical)
-    list.appendChild(addTaskRow(lesson.blocks));
+  /* An assessment is a flat list of questions with no pages in it, so it is
+     drawn the way it always was. */
+  if (lesson.assessment && !lesson.practical){
+    if (!lesson.blocks.length)
+      list.appendChild(el("p","hint","No questions yet, add one from the left."));
+    lesson.blocks.forEach((b, i) => list.appendChild(card(b, i, lesson.blocks)));
+    /* On a narrow screen the palette is gone, so the list needs its own way to
+       add to it. A lesson adds pages from the strip and tasks from inside the
+       page; an assessment has neither, so the containers go straight
+       underneath its questions. */
+    if (isCompact()) list.appendChild(addTaskRow(lesson.blocks));
+    saveDraft();
+    return;
+  }
+  /* Everything else is made of pages, and one of them is shown at a time. A
+     whole lesson laid out at once ran to forty-odd screens of scrolling and
+     held every editor in it live, which is what made the column unreadable and
+     every button on it slow. */
+  list.appendChild(pageStrip());
+  const pages = pageList();
+  if (!pages.length){
+    openPageRef = null;                  // whatever it pointed at has gone
+    list.appendChild(el("p","hint",
+      "No pages yet. Add one above, or pick a task on the left and a page is made for it."));
+    saveDraft();
+    return;
+  }
+  if (!openPageRef || lesson.blocks.indexOf(openPageRef) < 0){
+    /* The page being edited has just been deleted, or dragged somewhere this
+       list cannot see. Land on whatever has taken its place, or the one before
+       it, rather than throwing a teacher back to page one from the middle of a
+       lesson. */
+    let at = Math.min(lastPageAt, lesson.blocks.length - 1);
+    while (at >= 0 && (!lesson.blocks[at] || lesson.blocks[at].type !== "page")) at--;
+    openPageRef = at >= 0 ? lesson.blocks[at] : pages[0];
+    lastPageAt = Math.max(0, lesson.blocks.indexOf(openPageRef));
+  }
+  const shown = viewAll ? lesson.blocks : [openPageRef];
+  shown.forEach(b => list.appendChild(card(b, lesson.blocks.indexOf(b), lesson.blocks)));
   saveDraft();
+}
+
+/* The pages side by side above the one being edited. It is how you get about a
+   lesson now that only one is on screen: numbered, with the task count on each
+   so a thin page shows up without opening it, and dragging a chip reorders the
+   pages. The old way was dragging a card two thousand pixels past four others,
+   which nobody managed twice. */
+function pageStrip(){
+  const wrap = el("div","pagestrip"); wrap.id = "pageStrip";
+  const bar = el("div","pagestrip-bar");
+  wrap.appendChild(bar);
+  pageList().forEach((p, n) => {
+    const name = String(p.title || "").trim() || "Untitled";
+    const count = (p.blocks || []).length;
+    const chip = el("button","pagechip");
+    chip.type = "button";
+    chip.__page = p;
+    chip.appendChild(el("span","n", String(n + 1)));
+    chip.appendChild(el("span","t", name));
+    chip.appendChild(el("span","c", String(count)));
+    chip.title = name + " • " + count + " task" + (count === 1 ? "" : "s");
+    /* Filled in when this is the page being edited; only outlined when every
+       page is on screen, where it is saying which one the preview follows
+       rather than which one you are in. */
+    if (p === openPageRef) chip.classList.add(viewAll ? "here" : "on");
+    chip.addEventListener("click", () => { viewAll = false; tellPreview(p); render(); });
+    chip.draggable = true;
+    chip.addEventListener("dragstart", (e) => {
+      pageDrag = p; newTask = null; dragFrom = null;
+      chip.classList.add("dragging");
+      if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain","page"); }
+    });
+    chip.addEventListener("dragend", () => { chip.classList.remove("dragging"); pageDrag = null; });
+    chip.addEventListener("dragover", (e) => {
+      if (!pageDrag || pageDrag === p) return;
+      e.preventDefault(); e.stopPropagation();
+      chip.classList.add("over");
+    });
+    chip.addEventListener("dragleave", () => chip.classList.remove("over"));
+    chip.addEventListener("drop", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      chip.classList.remove("over");
+      const moved = pageDrag; pageDrag = null;
+      if (!moved || moved === p) return;
+      const from = lesson.blocks.indexOf(moved);
+      if (from < 0) return;
+      lesson.blocks.splice(from, 1);
+      lesson.blocks.splice(lesson.blocks.indexOf(p), 0, moved);
+      firstPageOpen();
+      render(); schedulePreview();
+    });
+    bar.appendChild(chip);
+  });
+  const add = el("button","pagechip add","+ Page");
+  add.type = "button";
+  add.title = "Add a page to the end";
+  add.addEventListener("click", addPage);
+  bar.appendChild(add);
+
+  /* Nothing to compare against with one page, so the way of seeing them all
+     only appears once there are two. */
+  if (pageList().length < 2) return wrap;
+  const all = el("button","pagechip all", viewAll ? "One page at a time" : "All pages");
+  all.type = "button";
+  all.title = viewAll ? "Back to editing one page"
+                      : "Every page at once, tasks folded away, for reading the shape of the lesson and for moving a task between pages";
+  if (viewAll) all.classList.add("on");
+  all.addEventListener("click", () => { viewAll = !viewAll; render(); });
+  wrap.appendChild(all);
+  return wrap;
+}
+
+function addPage(){
+  const made = BLANK.page();
+  lesson.blocks.push(made);
+  viewAll = false;
+  tellPreview(made);
+  scrollToBlock = made;
+  render();
+}
+
+/* Only the chip highlight changes when a page is picked from a card, so the
+   strip is not rebuilt: doing that from a mousedown threw away the element
+   being pressed before its mouseup could land on it. */
+function paintStrip(){
+  const strip = document.getElementById("pageStrip");
+  if (!strip) return;
+  strip.querySelectorAll(".pagechip").forEach(chip => {
+    if (!chip.__page) return;
+    chip.classList.toggle("on", chip.__page === openPageRef && !viewAll);
+    chip.classList.toggle("here", chip.__page === openPageRef && viewAll);
+  });
+}
+
+/* Only one page is on screen, so a task can no longer be dragged onto another
+   one. This is the way across. */
+function movePagePicker(b, arr){
+  openModal(box => {
+    box.appendChild(el("h2","","Move this to another page"));
+    box.appendChild(el("p","modal-text","It joins the end of the page you pick."));
+    const holder = el("div","modepick");
+    pageList().forEach((p, n) => {
+      const here = p.blocks === arr;
+      const name = String(p.title || "").trim() || "Untitled";
+      const row = el("button","modepick-item",
+                     (n + 1) + ". " + name + (here ? "   it is on this one now" : ""));
+      if (here) row.disabled = true;
+      row.addEventListener("click", () => {
+        const at = arr.indexOf(b);
+        closeModal();
+        if (at < 0) return;
+        arr.splice(at, 1);
+        p.blocks.push(b);
+        openOnly(p.blocks, b);
+        viewAll = false;
+        tellPreview(p);
+        scrollToBlock = b;
+        render();
+      });
+      holder.appendChild(row);
+    });
+    box.appendChild(holder);
+  });
 }
 let newTask = null;          // a task being dragged in from the palette
 
@@ -839,6 +1111,8 @@ function dropInto(arr, at){
     const made = BLANK[newTask]();
     newTask = null;
     arr.splice(at < 0 ? arr.length : at, 0, made);
+    if (made.type === "page"){ viewAll = false; tellPreview(made); }
+    else { openOnly(arr, made); viewAll = false; }
     scrollToBlock = made;
     render(); schedulePreview();
     return;
@@ -886,57 +1160,71 @@ function card(b, i, arr){
 
 
   const head = el("div","bhead");
-  if (b.type === "page"){
-    const at = lesson.blocks.indexOf(b);
-    if (at === openPage) c.classList.add("open");
+  const shut = isShut(b);
+  /* Only the All pages view has more than one page on screen, so only there
+     does picking one out mean anything. */
+  if (b.type === "page" && viewAll){
+    if (b === openPageRef) c.classList.add("open");
     c.addEventListener("mousedown", () => {
-      const i2 = lesson.blocks.indexOf(b);
-      if (i2 < 0 || i2 === openPage) return;
-      openPage = i2;
-      /* The preview comes along. It keeps its page in sessionStorage and reads
-         it on load, so writing the page being edited and asking for a refresh
-         lands it on the same one. Seeing the page you are working on is more
-         use than the preview staying wherever it was left. */
-      try{
-        sessionStorage.setItem("hub_preview_step", String(i2));
-        /* and in localStorage for a preview in its own tab. sessionStorage is
-           per tab: the pop-out was given a copy of it when it opened and never
-           hears about anything written here afterwards. The stamp lets the
-           preview tell a fresh request to move apart from one it has already
-           acted on, so it only jumps when a page is actually picked. */
-        localStorage.setItem("hub_preview_go", JSON.stringify({ step:i2, at:Date.now() }));
-      }catch(e){}
-      schedulePreview();
+      if (b === openPageRef) return;
+      tellPreview(b);
       /* Only the highlight changes, so the cards themselves are left alone.
          Rendering again from here threw away the very element being pressed
          before its mouseup could land on it, so clicking a button or a box on
          another page took two goes: one to move the highlight, one to do the
-         thing. Nothing else drawn by render() reads openPage. */
-      const list = c.closest(".build-list") || document;
-      list.querySelectorAll(".bcard.open").forEach(x => x.classList.remove("open"));
+         thing. */
+      const holder = c.closest(".build-list") || document;
+      holder.querySelectorAll(".bcard.open").forEach(x => x.classList.remove("open"));
       c.classList.add("open");
+      paintStrip();
     });
   }
   const grip = el("span","bgrip","\u2630"); grip.title = "Drag to move";
   grip.addEventListener("mousedown", () => { c.draggable = true; });
   grip.addEventListener("mouseup", () => { c.draggable = false; });
   head.appendChild(grip);
-  /* Folding a page away leaves this line and the buttons on it, which is all
-     that is needed to find, move or reorder a page. It is a way of getting
-     about a long lesson, so it is kept out of the saved lesson: it says
-     nothing about what a student sees. */
-  if (b.type === "page"){
-    const fold = el("button","btn-ghost bmini foldbtn", b.collapsed ? "▸" : "▾");
-    fold.title = b.collapsed ? "Open this page" : "Fold this page away";
+  /* Folding leaves this line and the buttons on it, which is all that is
+     needed to find, move or reorder something. It is a way of getting about a
+     long lesson, so it is kept out of the saved lesson: it says nothing about
+     what a student sees.
+
+     Which things fold depends on the view, and it is never both at once.
+     Editing one page, the page is the workbench and its tasks fold; looking at
+     all of them, the tasks are already shut and the pages fold instead. */
+  const canFold = b.type === "page" ? viewAll : !viewAll;
+  if (canFold){
+    const fold = el("button","btn-ghost bmini foldbtn", shut ? "▸" : "▾");
+    fold.title = b.type === "page"
+      ? (shut ? "Open this page" : "Fold this page away")
+      : (shut ? "Open this task" : "Fold this task away");
     fold.addEventListener("click", (e) => {
       e.stopPropagation();
-      b.collapsed = !b.collapsed;
+      toggleShut(b, arr);
       saveDraft(); render();
     });
     head.appendChild(fold);
   }
   const btype = el("b","btype", headLabel(b, i));
   head.appendChild(btype);
+  /* Shut, the line has to say enough to pick the task out by, so it carries
+     the first thing the task itself says and not only what kind it is. */
+  if (shut && b.type !== "page"){
+    const said = taskSummary(b);
+    if (said){
+      head.classList.add("hassum");
+      head.appendChild(el("span","bsum", said));
+    }
+  }
+  /* Anywhere along the line opens it, which is a far bigger target than the
+     little arrow, and nothing else on a shut card wants the click. */
+  if (canFold && b.type !== "page"){
+    head.classList.add("tapfold");
+    head.addEventListener("click", (e) => {
+      if (e.target.closest("button") || e.target.closest(".bgrip")) return;
+      toggleShut(b, arr);
+      saveDraft(); render();
+    });
+  }
   const paintHead = () => { btype.textContent = headLabel(b, i); };
   const tools = el("span","btools");
   if (b.type === "page"){
@@ -974,6 +1262,16 @@ function card(b, i, arr){
       tools.appendChild(pill);
     }
   }
+  /* Dragging a task onto another page needs both pages on screen, which only
+     the All pages view has. Everywhere else this is the way across. */
+  const onAPage = b.type !== "page"
+    && lesson.blocks.some(p => p.type === "page" && p.blocks === arr);
+  if (onAPage && pageList().length > 1){
+    const mv = el("button","btn-ghost bmini","\u21c4");
+    mv.title = "Move to another page";
+    mv.addEventListener("click", (e) => { e.stopPropagation(); movePagePicker(b, arr); });
+    tools.appendChild(mv);
+  }
   const acts = [["\u2191","Move up", () => move(arr, i, -1)],
                 ["\u2193","Move down", () => move(arr, i, 1)],
                 ["\u29C9","Duplicate", () => { arr.splice(i + 1, 0, JSON.parse(JSON.stringify(b))); render(); schedulePreview(); }],
@@ -1006,6 +1304,17 @@ function card(b, i, arr){
     c.classList.remove("over");
     dropInto(arr, i);
   });
+
+  /* A shut card is its head and nothing else: the body is not built at all.
+     Hiding it after the fact, which is what folding a page used to do, cost
+     exactly as much as leaving it open. Measured on a twelve page lesson: 264
+     live inputs, and 130ms spent rebuilding every one of them each time any
+     button anywhere on the list was pressed, because every toggle calls
+     render(). */
+  if (shut){
+    c.classList.add("folded");
+    return c;
+  }
 
   const body = el("div","bbody");
   function F(label, key, opts){
@@ -1452,12 +1761,22 @@ function card(b, i, arr){
     F("Their code must contain (optional)", "expect");
   }
   if (b.type === "page"){
-    F("Title", "title", { then: paintHead });
-    R("Subtitle", "task", { rows:2 });
+    /* All pages is for reading the shape of a lesson and shifting things
+       about, so it leaves out everything that is writing rather than
+       arranging: the title and subtitle boxes, and the row of containers.
+       Five pages' worth of those came to more than two screens on their own,
+       which is most of what the view was meant to get rid of. The page title
+       is already on the line above. */
+    if (!viewAll){
+      F("Title", "title", { then: paintHead });
+      R("Subtitle", "task", { rows:2 });
+    }
 
     const inner = el("div","pagekids");
     if (!b.blocks) b.blocks = [];
-    if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
+    if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone", viewAll
+      ? "Nothing on this page yet."
+      : "Drag a task here, or use the buttons below."));
     b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
     inner.addEventListener("dragover", (e) => {
       if (!canDropOn(b.blocks)) return;
@@ -1471,7 +1790,7 @@ function card(b, i, arr){
       dropInto(b.blocks, -1);              // -1 means "at the end"
     });
     body.appendChild(inner);
-    body.appendChild(addTaskRow(b.blocks));
+    if (!viewAll) body.appendChild(addTaskRow(b.blocks));
   }
   if (b.type === "extension"){
     F("Heading", "title");
@@ -1831,11 +2150,6 @@ function card(b, i, arr){
     F("What each group means", "keywordLabels", { help:"One phrase per group, separated by ;, students see these when they check their answer." });
     F("Model answer", "model", { area:true, rows:2 });
     if (lesson.assessment) F("Topic tag", "topic");
-  }
-  /* Folded away: the head and its buttons are all that is left. */
-  if (b.type === "page" && b.collapsed){
-    c.classList.add("folded");
-    body.hidden = true;
   }
   c.appendChild(body);
   return c;
@@ -2500,6 +2814,7 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
       const arr = respEditing === "__ext" ? lesson.extensions : lesson.responses[respEditing];
       const one = BLANK[kind]();
       arr.push(one);
+      openOnly(arr, one);
       lastAddedAt = arr.length - 1;
       scrollToBlock = one;
       render(); schedulePreview();
@@ -2510,24 +2825,23 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
       made = BLANK[kind]();
       lesson.blocks.push(made);
       lastAddedAt = lesson.blocks.length - 1;
+      if (made.type === "page"){ viewAll = false; tellPreview(made); }
     } else {
       /* Lessons are made of pages, so a task always goes on one. It joins the
-         page you last touched, or a new page if there isn't one yet. */
-      let page = lesson.blocks[openPage] && lesson.blocks[openPage].type === "page"
-        ? lesson.blocks[openPage] : null;
-      if (!page){
-        for (let i = lesson.blocks.length - 1; i >= 0; i--){
-          if (lesson.blocks[i].type === "page"){ page = lesson.blocks[i]; openPage = i; break; }
-        }
-      }
+         page on screen, or a new page if the lesson has none yet. */
+      let page = targetPage();
       if (!page){
         page = BLANK.page();
         page.title = "New page";
         lesson.blocks.push(page);
-        openPage = lesson.blocks.length - 1;
+        openPageRef = page;
       }
       made = BLANK[kind]();
       page.blocks.push(made);
+      /* it is the one about to be written, so the rest of the page shuts, and
+         All pages is left because nothing can be edited from there */
+      openOnly(page.blocks, made);
+      viewAll = false;
       lastAddedAt = -1;                  // it is inside a page, so the page is the target
     }
     /* Named rather than counted. Picking it out of the cards by number went
@@ -2701,6 +3015,8 @@ function addTaskRow(target, inside){
         if (!BLANK[item.kind]) return;
         const made = BLANK[item.kind]();
         target.push(made);
+        openOnly(target, made);
+        viewAll = false;
         scrollToBlock = made;
         render(); schedulePreview();
       });
@@ -3336,7 +3652,7 @@ async function loadLessonFromFolder(editId){
     if (!lesson.year && known.year) lesson.year = known.year;
     lesson.savedAs = editId;
     lesson.code = known.code || "";
-    migrate(lesson.blocks); tidyIntoPages();
+    migrate(lesson.blocks); tidyIntoPages(); startFolded();
     dirty = false;
     showTitle();
     paintPickers();
@@ -3372,7 +3688,7 @@ async function loadUnitsAndMaybeLesson(){
     const data = JSON.parse(d.lesson.data);
     lesson = fromCompiled(data, d.lesson);
     lesson.savedAs = editId;
-    migrate(lesson.blocks); tidyIntoPages();
+    migrate(lesson.blocks); tidyIntoPages(); startFolded();
     dirty = false;
     $("delLesson").hidden = false;
     
@@ -3542,10 +3858,9 @@ function applyBuildLayout(){
 function paintBuildBar(){
   if (!isCompact()) return;
   const scroll = $("buildBarScroll");
-  if (!scroll || !$("addPageBtn") || !$("assessTabs") || !$("modeChipName")) return;
+  if (!scroll || !$("assessTabs") || !$("modeChipName")) return;
   const assess = !!lesson.assessment;
   const practical = !!lesson.practical;
-  $("addPageBtn").hidden = assess && !practical;
   /* The tab strip is moved in beside New page rather than copied, so the
      three buttons keep working exactly as they do on a desktop. */
   const tabs = $("assessTabs");
@@ -3706,12 +4021,7 @@ try{
   roomyQ().addListener(fitPreview);
 }
 window.addEventListener("resize", fitPreview);
-on("addPageBtn", "click", () => {
-  const made = BLANK.page();
-  lesson.blocks.push(made);
-  scrollToBlock = made;
-  render(); schedulePreview();
-});
+
 
 /* ---------------- go ---------------- */
 loadDraft();

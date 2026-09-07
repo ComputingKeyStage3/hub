@@ -3384,10 +3384,79 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
   color:var(--text); font-family:var(--mono); font-size:16px; letter-spacing:.12em}
 .bypassin:focus{border-color:var(--amber); outline:none}
 
-/* ---------- folding a page away in the builder ----------
-   A long lesson is easier to move about when the pages can be shut. The line
-   that is left carries everything needed to find, move or reorder one. */
+/* ---------- folding in the builder ----------
+   A long lesson is easier to move about when the parts of it can be shut. The
+   line that is left carries everything needed to find, move or reorder one. */
 .foldbtn{flex:none; font-size:12px; line-height:1}
 .bcard.folded > .bhead{border-bottom:none}
-.bcard.folded .bbody[hidden]{display:none}
 .bcard.folded{margin-bottom:8px}
+.pagekids .bcard.folded{margin-bottom:6px}
+/* the whole line is the target, not just the little arrow */
+.bhead.tapfold{cursor:pointer}
+.bhead.tapfold:hover{background:var(--panel-2)}
+/* What a folded task says for itself. The kind stops stretching so the words
+   from the task get the room instead. */
+.bhead.hassum .btype{flex:none}
+.bsum{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--dim); font-size:13.5px}
+
+/* ---------- the page strip ----------
+   One page is edited at a time, so this is how a teacher gets to the others.
+   It sticks to the top of the column that scrolls, which is the list itself on
+   a desktop and the whole page in the compact layout, where it sits under the
+   build bar instead of behind it. */
+/* Stuck against the list's padding box, so top:0 would leave a 20px band above
+   it with cards sliding through: the padding is taken back off so it sits
+   flush with the top of the column. */
+.pagestrip{position:sticky; top:-20px; z-index:6;
+  display:flex; align-items:flex-start; gap:10px;
+  margin:-20px -20px 14px; padding:11px 20px;
+  background:var(--panel-2); border-bottom:1px solid var(--line)}
+/* Most lessons are four to seven pages and take one line or two. A double
+   lesson of twelve took three, and the strip is stuck to the top of the
+   column, so that was a fifth of the working area gone for good. Held to two
+   lines, and it scrolls inside itself past that. */
+.pagestrip-bar{display:flex; flex-wrap:wrap; gap:6px; flex:1; min-width:0;
+  max-height:80px; overflow-y:auto; overscroll-behavior:contain}
+.pagechip{display:inline-flex; align-items:center; gap:7px;
+  padding:7px 12px; border:1.5px solid var(--line-2); border-radius:999px;
+  background:var(--panel); color:var(--dim);
+  font:inherit; font-size:13.5px; line-height:1.2; cursor:pointer; white-space:nowrap}
+.pagechip:hover{border-color:var(--amber); color:var(--amber)}
+.pagechip .n{font-weight:700}
+/* Titles are cut rather than allowed to push the strip on to a fourth line.
+   The one being edited gets more room because it is the one being read. */
+.pagechip .t{max-width:108px; overflow:hidden; text-overflow:ellipsis}
+.pagechip.on .t{max-width:230px}
+.pagechip .c{font-size:11.5px; padding:1px 6px; border-radius:999px;
+  background:var(--panel-2); color:var(--dim)}
+.pagechip.on{border-color:var(--amber); background:var(--amber); color:var(--amber-ink)}
+.pagechip.on .c{background:rgba(0,0,0,.18); color:inherit}
+/* which page the preview is following, while every page is on screen */
+.pagechip.here{border-color:var(--amber); color:var(--amber)}
+.pagechip.dragging{opacity:.45}
+.pagechip.over{border-color:var(--amber); box-shadow:0 0 0 3px rgba(220,138,62,.16)}
+.pagechip.add{border-style:dashed}
+.pagechip.all{flex:none}
+
+html[data-build=compact] .pagestrip{top:var(--buildbar-h); margin:-14px -14px 12px; padding:10px 14px}
+/* A phone has no room for two rows of controls, so the strip wraps under
+   itself rather than sitting beside All pages. */
+/* A phone has no room for a strip of titles: five of them ran to three lines
+   of a screen that is nine deep, and the strip is stuck to the top. Only the
+   page being edited says its name; the rest are their number and how many
+   tasks are on them, which is enough to move between them. Their titles are
+   all together in the All pages view. */
+@media (max-width: 700px){
+  .pagestrip{flex-wrap:wrap; gap:8px}
+  .pagestrip-bar{flex:1 1 100%}
+  .pagechip{padding:6px 11px; font-size:13px}
+  .pagechip:not(.on) .t{display:none}
+  .pagechip.on .t{max-width:150px}
+  /* A folded task's line wraps here, and what the task says was being squeezed
+     into a couple of letters between the kind and the row of buttons. It takes
+     the second line on its own instead, after the buttons rather than before
+     them, so the line above stays the one you press. */
+  .bhead.hassum .bsum{order:3; flex:1 0 100%; padding-left:2px; font-size:13px}
+  .bhead.hassum .btools{order:2}
+}
