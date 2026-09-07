@@ -650,7 +650,8 @@ function compileOne(b, id, target){
                      hint: q.hint || "", why: q.why || "" };
           }),
         pass: (b.pass && b.pass.mode && b.pass.mode !== "none")
-          ? { mode: b.pass.mode, value: Math.max(1, parseInt(b.pass.value, 10) || 1) }
+          ? Object.assign({ mode: b.pass.mode, value: Math.max(1, parseInt(b.pass.value, 10) || 1) },
+                          b.pass.hold === true ? { hold:true } : {})
           : undefined });
     else if (b.type === "image")
       push(keepArrays({ type:"image", id, title: b.title || "", task: b.task || "" }));
@@ -1420,6 +1421,21 @@ function card(b, i, arr){
       pw.appendChild(el("p","bhelp", b.pass.mode === "percent"
         ? "Below this they are asked to have another go before moving on."
         : "They have to get at least this many right before moving on."));
+      /* Holding the page back only means anything where there is something
+         below the quiz to hold back, so it sits with the pass mark rather
+         than among the quiz's own settings. */
+      const holdOn = b.pass.hold === true;
+      const holdRow = el("div","brow");
+      const hb = el("button","btn-ghost bmini2" + (holdOn ? " right" : ""),
+                    "Hide the rest of the page until they pass: " + (holdOn ? "on" : "off"));
+      hb.title = holdOn ? "Tasks under this quiz are out of sight until they reach the pass mark"
+                        : "Tasks under this quiz are on the page from the start";
+      hb.addEventListener("click", () => { b.pass.hold = !holdOn; render(); schedulePreview(); });
+      holdRow.appendChild(hb);
+      pw.appendChild(holdRow);
+      pw.appendChild(el("p","bhelp", holdOn
+        ? "Tasks below this quiz on the same page stay out of sight until they get enough right. Continue still works, so nobody is stuck."
+        : "Everything else on the page is there from the start."));
     } else {
       pw.appendChild(el("p","bhelp","They can move on however they do."));
     }
@@ -3408,7 +3424,8 @@ function fromCompiled(data, meta){
     }
     if (b.type === "quiz") return { type:"quiz",
       title: b.title || "",
-      pass: b.pass ? { mode: b.pass.mode || "percent", value: b.pass.value || 70 }
+      pass: b.pass ? { mode: b.pass.mode || "percent", value: b.pass.value || 70,
+                       hold: b.pass.hold === true }
                    : { mode:"none", value:70 },
       questions:(b.questions || []).map(q => ({
         q:q.q || "", options:q.options || ["",""],

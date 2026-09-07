@@ -1052,6 +1052,10 @@ body.spectating{padding-top:40px}
 .pg-h{font-family:var(--display); font-size:20px; font-weight:800; margin:0 0 4px}
 .pg-t{color:var(--muted); font-size:16px; margin:0 0 12px}
 .pg-item section{margin:0}
+/* A quiz can be set to keep the rest of its page shut until the pass mark is
+   reached. This line stands where that work will appear. */
+.pg-hold{margin:0; padding:14px 16px; text-align:center; border:1.5px dashed var(--line-2);
+  border-radius:14px; background:var(--panel-2); color:var(--muted); font-size:15.5px; font-weight:700}
 
 
 /* teacher console: where am I */

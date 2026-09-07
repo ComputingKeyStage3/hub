@@ -1645,6 +1645,8 @@ function rPage(b){
     if (child.required === false){
       built.check = () => ({ ok:true });
       built.soft = () => ({ ok:true });
+      /* A task that cannot hold Continue up must not hold the page shut either. */
+      built.hold = null;
     }
     const item = el("div","pg-item");
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
@@ -1686,17 +1688,49 @@ function rPage(b){
       }, 320);
     });
   };
-  s.addEventListener("click", nudgeAlong);
-  s.addEventListener("change", nudgeAlong);
+  /* A quiz on this page can be set to keep everything below it out of sight
+     until the student reaches its pass mark, so a class reads, answers, and
+     only then gets the work that follows. Nothing is locked: Continue still
+     works, and what they meet there is the quiz's own nudge. */
+  const holdNote = el("p","pg-hold");
+  holdNote.hidden = true;
+  function refreshHold(){
+    let shut = -1;
+    for (let i = 0; i < items.length; i++){
+      const h = items[i].built.hold;
+      if (!h || !h.on() || h.passed()) continue;
+      /* Nothing below it is nothing to hold back, and a line promising more
+         when there is none would be a lie. */
+      if (i === items.length - 1 && !extras.length) continue;
+      shut = i; break;
+    }
+    items.forEach((entry, i) => { entry.item.hidden = shut !== -1 && i > shut; });
+    /* Extension work sits at the end of the page, so it is below the quiz as
+       well. Somebody who has not passed it yet has not finished early. */
+    extras.forEach(x => { x.section.hidden = shut !== -1; });
+    holdNote.hidden = shut === -1;
+    if (shut === -1) return;
+    holdNote.textContent = items[shut].built.hold.words();
+    s.insertBefore(holdNote, items[shut].item.nextSibling);
+  }
+  items.forEach(entry => {
+    const h = entry.built.hold;
+    if (h && h.watch) h.watch(refreshHold);
+  });
+
+  s.addEventListener("click", () => { refreshHold(); nudgeAlong(); });
+  s.addEventListener("change", () => { refreshHold(); nudgeAlong(); });
 
   /* Whatever the teacher put them among, extension tasks belong at the end. */
   extras.forEach(x => s.appendChild(x.section));
+  refreshHold();
 
   return {
     section: s,
     /* a task on this page may need to fetch from one on an earlier page */
     onShow: () => { kids.forEach(k => { if (k.onShow) k.onShow(); });
-                    extras.forEach(x => { if (x.onShow) x.onShow(); }); },
+                    extras.forEach(x => { if (x.onShow) x.onShow(); });
+                    refreshHold(); },
     check: () => {
       for (const k of kids){ const r = k.check(); if (!r.ok) return r; }
       return { ok:true };
@@ -3450,6 +3484,7 @@ function rQuiz(b){
   s.appendChild(fb); s.appendChild(btn); s.appendChild(scoreCard);
 
   let qi = 0;
+  let tell = null;                          // the page asks to be told when the score moves
   let checked = new Array(n).fill(false);   // this question has been answered
   const picked = qs.map(() => new Set());
   const solved = new Array(n).fill(false);  // and it was right
@@ -3503,6 +3538,7 @@ function rQuiz(b){
     fb.hidden = true;
     btn.textContent = "Check answer";
     if (checked[qi]) reveal(solved[qi]);
+    if (tell) tell();
   }
 
   /* What they chose, and what was right, once the answer is in. */
@@ -3523,6 +3559,7 @@ function rQuiz(b){
     fb.appendChild(el("span","", ok ? (q.why || "")
       : (q.hint || "The right answer is marked above.")));
     btn.textContent = qi < n - 1 ? "Next question →" : "See how I did";
+    if (tell) tell();
   }
 
   /* The tally at the end, and a way back round if it was not enough. */
@@ -3548,6 +3585,7 @@ function rQuiz(b){
       draw(); markDirty(); refreshGate();
     });
     scoreCard.appendChild(again);
+    if (tell) tell();
   }
 
   btn.addEventListener("click", () => {
@@ -3602,6 +3640,14 @@ function rQuiz(b){
              ? { ok:true }
              : { ok:false, message:"Get " + needed() + " out of " + n + " right to carry on" },
            soft:() => ({ ok: !n || !needed() || passed() }),
+           /* A teacher can ask for the rest of the page to stay shut until the
+              pass mark is reached. The quiz hides nothing itself: it answers
+              these, and the page it sits on does the hiding. */
+           hold: { on: () => !!(b.pass && b.pass.hold) && needed() > 0,
+                   passed: () => !needed() || passed(),
+                   words: () => "There is more on this page. Get " + needed() +
+                                " out of " + n + " right above to open it.",
+                   watch: (fn) => { tell = fn; } },
            brief:{ eyebrow:"Quiz", title:b.title || "", text:b.note || "" } };
 }
 
