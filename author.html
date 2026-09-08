@@ -214,7 +214,8 @@ let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical
 
 const BLANK = {
   text:     () => ({ type:"text", heading:"", html:"" }),
-  picture:  () => ({ type:"picture", title:"Have a look at this", url:"", caption:"", note:"" }),
+  picture:  () => ({ type:"picture", title:"Have a look at this", url:"", caption:"", note:"",
+                     alt:"", size:"full", width:"", align:"left", beside:"", frame:true }),
   pastelink:() => ({ type:"pastelink", heading:"Paste your link", task:"", note:"" }),
   code:     () => ({ type:"code", lang:"" }),        // they pick Python or web next
   ide:      () => ({ type:"ide", title:"Python", task:"Write your code, then press Run.",
@@ -632,8 +633,16 @@ function compileOne(b, id, target){
           return (two.length === 2 && !isNaN(two[0]) && !isNaN(two[1])) ? two : null;
         }).filter(Boolean) }));
     else if (b.type === "picture")
+      /* Only the settings that are not the ordinary ones are written out, so a
+         picture nobody has changed the shape of stays the three lines it was.
+         keepArrays drops "" and undefined, which is what does the dropping. */
       push(keepArrays({ type:"picture", id, title: b.title || "", url: b.url || "",
-             caption: b.caption || "", note: b.note || "" }));
+             caption: b.caption || "", note: b.note || "", alt: b.alt || "",
+             size: (b.size && b.size !== "full") ? b.size : "",
+             width: (b.size === "custom") ? String(b.width || "") : "",
+             align: (b.align === "centre" || b.align === "right") ? b.align : "",
+             beside: (b.beside === "left" || b.beside === "right") ? b.beside : "",
+             frame: b.frame === false ? false : undefined }));
     else if (b.type === "pastelink")
       push(keepArrays({ type:"pastelink", id, heading: b.heading || "Paste your link",
              task: b.task || "", note: b.note || "" }));
@@ -1401,6 +1410,24 @@ function card(b, i, arr){
     w.appendChild(row);
     body.appendChild(w);
   }
+  /* One of several, chosen the way the on/off buttons are turned on: the
+     picked one is filled in. A dropdown would hide the choices behind a tap,
+     and there are only ever a handful of them. Each entry is [value, words];
+     the first is what an older lesson with nothing stored falls back to. */
+  function pickRow(label, key, defs, help){
+    const w = el("div","bfield");
+    w.appendChild(el("label","", label));
+    const row = el("div","brow");
+    const now = (b[key] === undefined || b[key] === "") ? defs[0][0] : b[key];
+    defs.forEach(d => {
+      const btn = el("button","btn-ghost bmini2" + (d[0] === now ? " right" : ""), d[1]);
+      btn.addEventListener("click", () => { b[key] = d[0]; render(); schedulePreview(); });
+      row.appendChild(btn);
+    });
+    w.appendChild(row);
+    if (help) w.appendChild(el("p","bhelp", help));
+    body.appendChild(w);
+  }
   function listField(label, key, help){
     const w = el("div","bfield");
     w.appendChild(el("label","", label));
@@ -1442,6 +1469,21 @@ function card(b, i, arr){
     }
     F("Caption underneath (optional)", "caption");
     F("Instruction above it (optional)", "note");
+    F("Words for a screen reader (optional)", "alt",
+      { help:"Read out to anyone who cannot see the picture. The caption is used if this is left empty." });
+    pickRow("How big", "size",
+      [["full","Full width"],["large","Large"],["medium","Medium"],["small","Small"],["custom","Exact"]]);
+    if (b.size === "custom")
+      F("How wide", "width", { help:"A number of pixels, such as 320, or a share of the width, such as 60%." });
+    pickRow("Beside the next task", "beside",
+      [["","No, on its own"],["left","Picture on the left"],["right","Picture on the right"]],
+      "Only works on a page with something after the picture. They share a line on a computer and stack on a phone.");
+    /* Where it sits across the page is only a question once there is room
+       either side of it. Full width has nowhere to go, and standing beside a
+       task the row has already decided which side it is on. */
+    if (!b.beside && b.size && b.size !== "full")
+      pickRow("Where it sits", "align", [["left","Left"],["centre","Middle"],["right","Right"]]);
+    toggleRow([["frame","Border", true]], "Style");
   }
   if (b.type === "pastelink"){
     F("Heading (optional)", "heading");

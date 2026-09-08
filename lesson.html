@@ -1598,6 +1598,54 @@ function tuneColours(){
 }
 
 /* ---------- renderers: { section, check, brief } ---------- */
+
+/* How wide a picture asks to be. A lesson written before there was a choice
+   carries no size at all and stays full width, which is what those lessons
+   have always looked like. A bare number in the exact box means pixels, since
+   a teacher types 320 rather than 320px. */
+const PIC_SIZES = { small:"200px", medium:"340px", large:"520px", full:"100%" };
+function picWidth(b){
+  if (b.size === "custom"){
+    const w = String(b.width || "").trim();
+    if (!w) return "100%";
+    return /^[0-9.]+$/.test(w) ? w + "px" : w;
+  }
+  return PIC_SIZES[b.size] || "100%";
+}
+/* The column a picture takes when it stands beside a task. Full width next to
+   something else has to mean an even share of the line, not the whole of it,
+   or the task beside it is squeezed to nothing. */
+function picColumn(b){
+  const w = picWidth(b);
+  return w === "100%" ? "minmax(0,1fr)" : w;
+}
+
+/* Where a built activity goes on a page. Two of them can only share a line if
+   something puts them in a row together: each .pg-item is a block of its own.
+   A picture set to sit beside what follows starts a row, and the next activity
+   is dropped into that row rather than under it. A picture that has itself
+   just been placed beside something cannot start another row, or a run of
+   pictures ends up nested one inside the next. */
+function pageSlot(container){
+  const rows = [];
+  let open = null;
+  function place(item, child){
+    if (child.type === "picture") item.classList.add("pg-pic");
+    const paired = !!open;
+    if (paired){ open.appendChild(item); open = null; }
+    else container.appendChild(item);
+    const side = (!paired && child.type === "picture") ? child.beside : "";
+    if (side === "left" || side === "right"){
+      open = el("div", "pg-pair pic-" + side);
+      open.style.setProperty("--pic-col", picColumn(child));
+      container.replaceChild(open, item);
+      open.appendChild(item);
+      rows.push(open);
+    }
+  }
+  return { place, rows };
+}
+
 let qCounter = 0;
 /* Builds one activity without putting it on the page, used both for ordinary
    steps and for the several activities that share a "page". */
@@ -1628,6 +1676,7 @@ function rPage(b){
   const kids = [];
   const items = [];      // each task on this page, so we can move on to the next
   const extras = [];     // extension containers, held back until the rest is done
+  const slots = pageSlot(s);
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
     const built = buildBlock(child, j);
@@ -1656,7 +1705,7 @@ function rPage(b){
     }
     built.section.hidden = false;
     item.appendChild(built.section);
-    s.appendChild(item);
+    slots.place(item, child);
     kids.push(built);
     items.push({ item, built, type: child.type });
   });
@@ -1705,13 +1754,22 @@ function rPage(b){
       shut = i; break;
     }
     items.forEach((entry, i) => { entry.item.hidden = shut !== -1 && i > shut; });
+    /* A picture and the task beside it share one row. The row itself has to go
+       once everything in it has gone, or its rule is left behind on its own. */
+    slots.rows.forEach(row => {
+      row.hidden = Array.prototype.every.call(row.children, kid => kid.hidden);
+    });
     /* Extension work sits at the end of the page, so it is below the quiz as
        well. Somebody who has not passed it yet has not finished early. */
     extras.forEach(x => { x.section.hidden = shut !== -1; });
     holdNote.hidden = shut === -1;
     if (shut === -1) return;
     holdNote.textContent = items[shut].built.hold.words();
-    s.insertBefore(holdNote, items[shut].item.nextSibling);
+    /* The note goes after whatever the page itself holds, which is the row
+       when the held task is sitting beside a picture rather than the task. */
+    const held = items[shut].item;
+    const after = held.parentNode === s ? held : held.parentNode;
+    s.insertBefore(holdNote, after.nextSibling);
   }
   items.forEach(entry => {
     const h = entry.built.hold;
@@ -1766,6 +1824,7 @@ function rChoice(b){
     const panel = el("div","choice-panel");
     panel.hidden = true;
     const kids = [];
+    const slots = pageSlot(panel);
     (opt.blocks || []).forEach((child, j) => {
       if (!child.id) child.id = b.id + "_" + k + "_" + j;
       const built = buildBlock(child, j);
@@ -1778,7 +1837,7 @@ function rChoice(b){
       }
       built.section.hidden = false;
       item.appendChild(built.section);
-      panel.appendChild(item);
+      slots.place(item, child);
       kids.push(built);
     });
     btn.addEventListener("click", () => { pick(k); markDirty(); });
@@ -1844,6 +1903,7 @@ function rExtension(b){
   const kids = [];
   inner.hidden = true;
   inner.appendChild(el("p","ext-task", b.task || "Have a go at these"));
+  const slots = pageSlot(inner);
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
     const built = buildBlock(child, j);
@@ -1856,7 +1916,7 @@ function rExtension(b){
     }
     built.section.hidden = false;
     item.appendChild(built.section);
-    inner.appendChild(item);
+    slots.place(item, child);
     kids.push(built);
   });
   s.appendChild(inner);
@@ -1924,6 +1984,18 @@ function rText(b){
 function rPicture(b){
   const s = el("section","picture");
   const fig = el("figure","picfig");
+  /* The width is handed down as a property rather than set on the figure, so
+     a picture standing beside a task can be told to fill the column its row
+     has already measured out without an inline width to fight. */
+  const wide = picWidth(b);
+  s.style.setProperty("--pic-w", wide);
+  /* Full width is what every picture was before there was a choice, and it is
+     left exactly as it was: the picture at its own size, capped at the width
+     of the page. A picture that has been given a size is drawn at that size,
+     which is what makes placing it mean anything. */
+  if (wide !== "100%") fig.classList.add("sized");
+  if (b.align === "centre" || b.align === "right") fig.classList.add("pic-" + b.align);
+  if (b.frame === false) fig.classList.add("bare");
   const img = el("img","picimg");
   img.src = b.url || "";
   img.alt = b.alt || b.caption || "Picture";

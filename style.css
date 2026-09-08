@@ -1945,7 +1945,9 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 .importlist{max-height:260px; overflow-y:auto; margin:10px 0}
 .importrow{display:flex; justify-content:space-between; gap:12px; padding:8px 10px;
   border-bottom:1px solid var(--line)}
-.importrow span{color:var(--muted); font-family:var(--mono); font-size:14px}
+.importrow span{margin-left:auto; color:var(--muted); font-family:var(--mono); font-size:14px}
+/* only there when the spreadsheet brought passwords with it */
+.importrow i{font-style:normal; color:var(--muted); font-size:13px}
 
 /* the welcome-back note fades away rather than sitting there */
 #resumeNote{transition:opacity 3s ease}
@@ -3459,4 +3461,48 @@ html[data-build=compact] .pagestrip{top:var(--buildbar-h); margin:-14px -14px 12
      them, so the line above stays the one you press. */
   .bhead.hassum .bsum{order:3; flex:1 0 100%; padding-left:2px; font-size:13px}
   .bhead.hassum .btools{order:2}
+}
+
+/* ---------- where a picture sits ----------
+   How big it is, where it sits across the page, whether it stands beside the
+   task after it, and whether it is framed. The width comes down as a property
+   set on the section, so a picture in a row can be told to fill the column its
+   row has already measured rather than carrying a width of its own as well.
+   These come after the .picfig rules further up, which is what they beat. */
+.picfig{max-width:100%}
+
+/* A figure is a block and fills the line whatever the picture in it does, so
+   until it is given a width of its own the picture sits at the left of a
+   full-width box and moving that box about does nothing you can see. Only a
+   picture that has been given a size is placed; a full width one has nowhere
+   to be placed to. Measured before this was here: a picture set to 60% and to
+   the right drew a 738px figure with the picture still 602px at the left. */
+.picfig.sized{width:var(--pic-w)}
+.picfig.sized .picimg{width:100%}
+.picfig.sized.pic-centre{margin-left:auto; margin-right:auto}
+.picfig.sized.pic-right{margin-left:auto}
+/* The rounded corner is set with !important further up, in one rule covering
+   every card on the site, so taking the frame off has to say so as loudly. */
+.picfig.bare .picimg{border:none; border-radius:0 !important}
+
+/* a picture and the task beside it, sharing one line */
+.pg-pair{display:grid; grid-template-columns:var(--pic-col, auto) minmax(0,1fr);
+  gap:22px; align-items:start;
+  padding:0 0 22px; margin:0 0 22px; border-bottom:1px solid var(--line)}
+.pg-pair:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0}
+/* Inside a row the rule underneath belongs to the row, not to each half. */
+.pg-pair > .pg-item{padding:0; margin:0; border-bottom:none}
+/* The row measured the column already, so the picture fills it rather than
+   carrying the same width a second time. */
+.pg-pair .picfig{width:100%; margin-left:0; margin-right:0}
+.pg-pair.pic-right{grid-template-columns:minmax(0,1fr) var(--pic-col, auto)}
+.pg-pair.pic-right > .pg-pic{order:2}
+
+/* Two columns need a page wide enough for both. An iPad held upright is not,
+   so below that the picture goes back above the task, which is what a phone
+   was always going to get. */
+@media (max-width:800px){
+  .pg-pair{display:block}
+  .pg-pair > .pg-item{margin-bottom:16px}
+  .pg-pair > .pg-item:last-child{margin-bottom:0}
 }

@@ -145,8 +145,8 @@
       <h3 style="margin:0 0 4px">Signed-in devices</h3>
       <p class="modal-text">Browsers that have answered a code from the authenticator app. Each one
         can sign in with the key alone until its sixty days are up. Give them names you will
-        recognise, and check where they signed in from. Sign the others out if a machine has
-        been lost, or if there is anything here you cannot account for.</p>
+        recognise. Sign the others out if a machine has been lost, or if there is anything
+        here you cannot account for.</p>
       <div id="deviceList"><p class="hint">Loading&hellip;</p></div>
       <div class="toolrow">
         <button class="btn-ghost" id="signOutOthers">Sign out every other device</button>
@@ -765,13 +765,6 @@ function whenWords(iso){
   if (days < 30) return days + " days ago";
   return new Date(iso).toLocaleDateString();
 }
-/* Where a device last signed in from. Nothing is said at all when the host
-   did not tell us, rather than a row that reads "unknown" and worries
-   somebody: running the backend anywhere but Vercel gives no location. */
-function placeWords(x){
-  if (x.city && x.country) return x.city + ", " + x.country;
-  return x.country || "";
-}
 function renameDevice(x){
   openModal(box => {
     box.appendChild(el("h2","","Name this device"));
@@ -827,7 +820,6 @@ async function loadDevices(){
       const left = Math.max(0, Math.ceil((Number(x.expires) - Date.now()) / 86400000));
       const bits = [];
       if (x.nickname && x.label) bits.push(x.label);
-      bits.push(placeWords(x));
       bits.push("last used " + whenWords(x.last_seen));
       bits.push("asks for a code again in " + left + " day" + (left === 1 ? "" : "s"));
       who.appendChild(el("span","hint", bits.filter(Boolean).join(" · ")));
@@ -1792,14 +1784,20 @@ on("addOneBtn", "click", () => {
     box.appendChild(go); box.appendChild(msg);
   });
 });
-/* Bring a whole class in from an Arbor export. */
-on("importBtn", "click", () => {
+/* Bring a whole class in from an Arbor export.
+
+   Built as a function rather than straight into the button because the
+   Password question below swaps the pop-up for itself and then swaps this one
+   back. openModal reuses the one box, so the list read out of the file has to
+   be handed back in or it would be gone. */
+on("importBtn", "click", () => openImport(null));
+function openImport(ready){
   openModal(box => {
     box.classList.add("wide");
     modalTitle(box, "Import " + cls + " from Arbor");
     box.appendChild(el("p","modal-text",
       "In Arbor, export the class list with two columns: First name and Email address (main). " +
-      "Drop that file below, the username is taken from the email address, so doej26@\u2026 becomes doej26."));
+      "Drop that file below, the username is taken from the email address, so doej26@… becomes doej26."));
 
     const drop = el("div","dropfile");
     drop.appendChild(el("b","","Drop the spreadsheet here"));
@@ -1819,39 +1817,75 @@ on("importBtn", "click", () => {
     box.appendChild(preview);
     box.appendChild(msg);
 
-    let found = [];
+    let found = ready ? ready.found : [];
+    /* Only ever true because the teacher was asked and said yes. A file with
+       no Password column never gets as far as the question. */
+    let usePasswords = ready ? ready.usePasswords : false;
     const go = el("button","btn-primary modal-cta","Add these students");
     go.hidden = true;
 
+    /* The list, once there is one, whether it came from the file just dropped
+       or from the answer to the password question. */
+    function showFound(){
+      preview.innerHTML = "";
+      found.forEach(st => {
+        const row = el("div","importrow");
+        row.appendChild(el("b","", st.name));
+        row.appendChild(el("span","", st.username));
+        if (usePasswords && st.password) row.appendChild(el("i","","password from the file"));
+        preview.appendChild(row);
+      });
+      const withPw = usePasswords ? found.filter(st => st.password).length : 0;
+      const tooShort = usePasswords ? found.filter(st => st.shortPassword).length : 0;
+      msg.textContent = found.length + " student" + (found.length === 1 ? "" : "s") + " ready to add." +
+        (withPw ? "  " + withPw + " will get the password from the file." : "") +
+        (tooShort ? "  " + tooShort + (tooShort === 1 ? " password is" : " passwords are") +
+                    " shorter than 4 characters, so " +
+                    (tooShort === 1 ? "that student picks" : "those students pick") + " their own." : "");
+      go.hidden = false;
+    }
+
     async function take(file){
       if (!file) return;
-      msg.textContent = "Reading \u2026";
+      msg.textContent = "Reading …";
       preview.innerHTML = "";
       found = [];
+      usePasswords = false;
+      go.hidden = true;
       try{
         if (!window.readXlsx) throw new Error("The spreadsheet reader did not load.");
         const rows = await window.readXlsx(file);
-        /* find the two columns by their headings, wherever they are */
+        /* find the columns by their headings, wherever they are */
         const head = (rows[0] || []).map(h => String(h).toLowerCase().trim());
         let nameCol = head.findIndex(h => h.startsWith("first name"));
         let mailCol = head.findIndex(h => h.indexOf("email") >= 0);
+        /* Most exports have no passwords in them at all, so no column is the
+           normal case and nothing about it is shown. */
+        const pwCol = head.findIndex(h => h.indexOf("password") >= 0);
         if (nameCol < 0) nameCol = 0;
         if (mailCol < 0) mailCol = 1;
         rows.slice(1).forEach(r => {
           const name = String(r[nameCol] || "").trim();
           const mail = String(r[mailCol] || "").trim();
           const user = mail.split("@")[0].trim().toLowerCase();
-          if (name && user) found.push({ name: name, username: user });
+          /* Spaces at either end of a password are invisible in a spreadsheet
+             and would stop the student signing in, so they come off here. */
+          const cell = pwCol >= 0 ? r[pwCol] : "";
+          const pw = (cell === undefined || cell === null) ? "" : String(cell).trim();
+          if (name && user) found.push({
+            name: name,
+            username: user,
+            /* Anything under four characters is refused by the server, and it
+               refuses it by quietly leaving the student out altogether. Better
+               to add them with no password and say so. */
+            password: pw.length >= 4 ? pw : "",
+            shortPassword: pw.length > 0 && pw.length < 4
+          });
         });
         if (!found.length) throw new Error("No students found in that file.");
-        found.forEach(st => {
-          const row = el("div","importrow");
-          row.appendChild(el("b","", st.name));
-          row.appendChild(el("span","", st.username));
-          preview.appendChild(row);
-        });
-        msg.textContent = found.length + " student" + (found.length === 1 ? "" : "s") + " ready to add.";
-        go.hidden = false;
+        const anyPasswords = found.some(st => st.password || st.shortPassword);
+        if (pwCol >= 0 && anyPasswords){ askPasswords(found); return; }
+        showFound();
       }catch(e){ msg.textContent = e.message; }
     }
     picker.addEventListener("change", () => take(picker.files && picker.files[0]));
@@ -1867,12 +1901,16 @@ on("importBtn", "click", () => {
     });
 
     go.addEventListener("click", async () => {
-      msg.textContent = "Adding \u2026";
+      msg.textContent = "Adding …";
       let done = 0, failed = [], clashed = [];
       for (const st of found){
         try{
+          /* The endpoint reads a students array and nothing else. Sent as a
+             loose { group, name, username } it answered "No students
+             supplied" and the whole import came to nothing. */
           const r = await fetch(API + "/api/teacher/students", { method:"POST", headers: HJ(),
-            body: JSON.stringify({ group: cls, name: st.name, username: st.username }) });
+            body: JSON.stringify({ students: [{ group: cls, username: st.username, displayName: st.name,
+                                                password: usePasswords ? st.password : "" }] }) });
           const d = await r.json();
           if (!r.ok) throw new Error(d.error || "failed");
           if (d.clashes && d.clashes.length){
@@ -1888,8 +1926,30 @@ on("importBtn", "click", () => {
       if (!failed.length) closeModal();
     });
     box.appendChild(go);
+
+    if (ready) showFound();
   });
-});
+}
+
+/* Asked only when the file actually has passwords in it. Either answer goes
+   back to the import pop-up with the same list, so nothing has to be dropped
+   in twice. */
+function askPasswords(found){
+  const howMany = found.filter(st => st.password || st.shortPassword).length;
+  openModal(box => {
+    modalTitle(box, "This spreadsheet has passwords in it");
+    box.appendChild(el("p","modal-text",
+      "There is a Password column in that file, filled in for " + howMany +
+      " student" + (howMany === 1 ? "" : "s") + ". Do you want to use those as their passwords?"));
+    box.appendChild(el("p","modal-text",
+      "Say no and they are added without one, and each student picks their own the first time they sign in."));
+    const yes = el("button","btn-primary modal-cta","Yes, use these passwords");
+    yes.addEventListener("click", () => openImport({ found: found, usePasswords: true }));
+    const no = el("button","btn-ghost modal-stay","No, let them pick their own");
+    no.addEventListener("click", () => openImport({ found: found, usePasswords: false }));
+    box.appendChild(yes); box.appendChild(no);
+  });
+}
 
 
 /* ---------- catalogue: units + which lessons are published ---------- */
