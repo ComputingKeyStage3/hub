@@ -2479,6 +2479,46 @@ function rIDE(b){
      for a number of runs, and nothing about the text of their program can show
      whether they ever ran it. Kept with the work so it survives a reload. */
   let ran = false, runs = 0, lastOut = "", answers = [];
+
+  /* Playing back what the program did.
+     Python runs at full speed and hands back a list of what happened in order:
+     text printed, waits asked for, turtle drawing. Nothing can appear on the
+     page while Python is running, because there is one thread and Python is
+     using it. So the waiting is done out here instead, between the pieces,
+     where the browser is free to paint. That is the difference between a
+     program printing hello, pausing, then asking a question, and the same
+     program showing an empty console for two seconds and then all three at
+     once with the question already asked. */
+  let playRun = 0;      // bumped to abandon a playback that is still in flight
+  let shownSteps = 0;   // how much of the timeline they have already sat through
+  const pause = (secs) => new Promise(go => setTimeout(go, Math.max(0, secs) * 1000));
+  async function playback(events){
+    const mine = ++playRun;
+    const list = events || [];
+    out.textContent = "";
+    for (let i = 0; i < list.length; i++){
+      const ev = list[i];
+      if (ev[0] === "out"){
+        out.textContent += ev[1];
+        out.scrollTop = out.scrollHeight;
+      } else if (ev[0] === "wait"){
+        /* Answering a question runs the whole program again from the top, so
+           the part already sat through must not be waited out a second time.
+           This counts steps rather than letters printed: a turtle program can
+           draw its way through several waits without printing anything, and
+           counting letters skipped every one of those waits. */
+        if (i >= shownSteps) await pause(ev[1]);
+      } else if (ev[0] === "draw"){
+        if (window.hubDraw) window.hubDraw.apply(null, [ev[1]].concat(ev[2] || []));
+      } else if (ev[0] === "clear"){
+        if (window.hubTurtleClear) window.hubTurtleClear();
+      }
+      if (playRun !== mine) return false;   // Run or Clear was pressed meanwhile
+    }
+    shownSteps = list.length;
+    return true;
+  }
+
   async function execute(){
     const py = await ensureHubPython(out);
     await loadPyImports(py, ta.value, out);
@@ -2487,7 +2527,7 @@ function rIDE(b){
     py.globals.set("_hub_src", ta.value);
     const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
     lastOut = res.out || "";
-    out.textContent = lastOut;
+    if (!await playback(res.events)) return true;   // something newer is running now
     out.classList.toggle("has-error", res.status === "done" && !res.ok);
     if (res.status === "input"){
       askText.textContent = res.prompt || ">";
@@ -2518,6 +2558,7 @@ function rIDE(b){
     runBtn.textContent = "Running\u2026";
     note.hidden = true;
     answers = [];
+    shownSteps = 0;
     out.textContent = "";
     showTab("console");
     try{
@@ -2544,6 +2585,8 @@ function rIDE(b){
   });
   runBtn.addEventListener("click", run);
   clearBtn.addEventListener("click", () => {
+    playRun++;          // stops anything still arriving from the run before
+    shownSteps = 0;
     out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
   });
   resetBtn.addEventListener("click", () => {

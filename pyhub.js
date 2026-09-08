@@ -73,7 +73,6 @@
   /* ---------- Python side ---------- */
   window.HUB_PY_BOOT = `
 import sys, io, math, time, types, builtins, json
-import js
 
 # ---------------------------------------------------------------- turtle
 class _Vec(tuple):
@@ -101,7 +100,7 @@ class _HubTurtle:
     # --- movement ---
     def _to(self, nx, ny):
         if self.down:
-            js.hubDraw("line", self.x, self.y, nx, ny, self.col, self.wid)
+            _draw("line", self.x, self.y, nx, ny, self.col, self.wid)
         self.x = nx
         self.y = ny
         if self._poly is not None:
@@ -145,7 +144,7 @@ class _HubTurtle:
                 self.forward(step_len)
                 self.right(step_ang / 2.0)
     def dot(self, size=6, colour=None):
-        js.hubDraw("dot", self.x, self.y, float(size), colour or self.col)
+        _draw("dot", self.x, self.y, float(size), colour or self.col)
 
     # --- pen ---
     def penup(self):
@@ -173,7 +172,7 @@ class _HubTurtle:
         self._poly = [[self.x, self.y]]
     def end_fill(self):
         if self._poly and len(self._poly) > 2:
-            js.hubDraw("fill", json.dumps(self._poly), self._fillcol)
+            _draw("fill", json.dumps(self._poly), self._fillcol)
         self._poly = None
     def write(self, text, move=False, align="left", font=("Lexend", 14, "normal")):
         size = 14
@@ -181,7 +180,7 @@ class _HubTurtle:
             size = float(font[1])
         except Exception:
             pass
-        js.hubDraw("text", self.x, self.y, str(text), self.col, size)
+        _draw("text", self.x, self.y, str(text), self.col, size)
 
     # --- position ---
     def position(self):
@@ -213,9 +212,9 @@ class _HubTurtle:
     def isvisible(self):
         return True
     def clear(self):
-        js.hubTurtleClear()
+        _clear()
     def reset(self):
-        js.hubTurtleClear()
+        _clear()
         self.reset_state()
     def stamp(self):
         return 0
@@ -248,7 +247,7 @@ def _colour(*a):
 class _HubScreen:
     def bgcolor(self, *a):
         if a:
-            js.hubDraw("bg", _colour(*a))
+            _draw("bg", _colour(*a))
     def setup(self, *a, **k):
         pass
     def title(self, *a):
@@ -272,7 +271,7 @@ class _HubScreen:
     def screensize(self, *a, **k):
         pass
     def clear(self):
-        js.hubTurtleClear()
+        _clear()
 
 _screen = _HubScreen()
 _default = _HubTurtle()
@@ -373,18 +372,67 @@ _deadline = [0.0]
 _ticks = [0]
 _limit = [10.0]
 
-_real_sleep = time.sleep
-_SLEEP_TOTAL = 6.0    # the most one program may spend waiting, in seconds
-_SLEEP_ONE = 2.0      # the most any single wait may take
+# ------------------------------------------------ recording what a run did
+# JavaScript has one thread. While Python is running, nothing on the page can
+# be redrawn, so a real time.sleep froze the whole tab: a program that said
+# hello, waited two seconds and then asked a question showed nothing at all
+# for two seconds and then everything at once, question included.
+#
+# So the program is never slowed down while it runs. It runs flat out and
+# writes down what it did, in order: text printed, waits asked for, turtle
+# drawing. The console plays that list back afterwards, doing the waits in
+# JavaScript where the page stays alive and each line arrives when it should.
+_events = []
+_pending = []
+
+def _flush_text():
+    if _pending:
+        _events.append(["out", "".join(_pending)])
+        del _pending[:]
+
+def _emit(event):
+    # text written before this moment has to be pinned down first, or it would
+    # play back after the wait it was printed before
+    _flush_text()
+    _events.append(event)
+
+def _draw(op, *args):
+    _emit(["draw", op, list(args)])
+
+def _clear():
+    _emit(["clear"])
+
+class _HubOut(io.TextIOBase):
+    def write(self, text):
+        text = str(text)
+        _pending.append(text)
+        return len(text)
+    def writable(self):
+        return True
+    def flush(self):
+        pass
+
+def _hub_text():
+    return "".join([e[1] for e in _events if e[0] == "out"]) + "".join(_pending)
+
+# ---------------------------------------------------------------- waiting
+_SLEEP_TOTAL = 20.0   # the most one program may keep the console waiting
+_SLEEP_ONE = 10.0     # the most any single wait may take
+
 _sleep_left = [_SLEEP_TOTAL]
 _sleep_told = [False]
 
+# The waiting happens after the program has finished, so the real clock knows
+# nothing about it and a program that timed itself across a sleep read back
+# almost zero. Nudging the clock forward by whatever was asked for gives the
+# answer a person would expect. The guard below keeps the real clock on
+# purpose, or a sleepy program would look like an endless loop.
+_real_time = time.time
+_real_monotonic = time.monotonic
+_real_perf = time.perf_counter
+_clock_shift = [0.0]
+
 def _hub_sleep(seconds):
-    # A browser tab is frozen while Python sleeps, so a program cannot be let
-    # wait as long as it likes. Waits used to be cut to a quarter of a second
-    # each with no word said, which made a ten second countdown finish
-    # instantly and looked exactly as though time.sleep did nothing at all.
-    # Now the wait really happens, up to a limit, and trimming is said out loud.
     try:
         seconds = float(seconds)
     except Exception:
@@ -395,35 +443,38 @@ def _hub_sleep(seconds):
     seconds = min(seconds, _SLEEP_ONE, max(0.0, _sleep_left[0]))
     if seconds < asked and not _sleep_told[0]:
         _sleep_told[0] = True
-        print("(waiting is shortened here so the page keeps working)")
+        print("(the wait was made shorter so you are not left staring at the screen)")
     if seconds <= 0:
         return
     _sleep_left[0] -= seconds
-    _real_sleep(seconds)
-    # Waiting is not running, so it must not count towards the time limit.
-    # Without this a program that waits its way through a countdown was killed
-    # as though it had an endless loop.
-    _deadline[0] += seconds
+    _clock_shift[0] += seconds
+    _emit(["wait", seconds])
 
 time.sleep = _hub_sleep
+time.time = lambda: _real_time() + _clock_shift[0]
+time.monotonic = lambda: _real_monotonic() + _clock_shift[0]
+time.perf_counter = lambda: _real_perf() + _clock_shift[0]
 
+# --------------------------------------------------------- endless loops
 def _hub_guard(frame, event, arg):
     _ticks[0] += 1
-    if _ticks[0] % 400 == 0 and time.time() > _deadline[0]:
+    if _ticks[0] % 400 == 0 and _real_time() > _deadline[0]:
         raise HubTooLong("Your program was still running after " + str(int(_limit[0])) + " seconds. Is there a loop that never ends?")
     return _hub_guard
 
 def _hub_run(source, seconds=10.0):
     global _hub_queue
+    del _events[:]
+    del _pending[:]
     _sleep_left[0] = _SLEEP_TOTAL
     _sleep_told[0] = False
+    _clock_shift[0] = 0.0
     _ticks[0] = 0
     _limit[0] = seconds
-    _deadline[0] = time.time() + seconds
+    _deadline[0] = _real_time() + seconds
     _hub_reset_turtle()
-    buf = io.StringIO()
     old_out, old_err = sys.stdout, sys.stderr
-    sys.stdout = sys.stderr = buf
+    sys.stdout = sys.stderr = _HubOut()
     ok = True
     try:
         code = compile(source, "your program", "exec")
@@ -432,7 +483,9 @@ def _hub_run(source, seconds=10.0):
     except HubNeedsInput as ask:
         sys.settrace(None)
         sys.stdout, sys.stderr = old_out, old_err
-        return json.dumps({"status": "input", "out": buf.getvalue(), "prompt": ask.prompt})
+        _flush_text()
+        return json.dumps({"status": "input", "out": _hub_text(),
+                           "events": _events, "prompt": ask.prompt})
     except HubTooLong as stop:
         ok = False
         print("")
@@ -464,6 +517,8 @@ def _hub_run(source, seconds=10.0):
     finally:
         sys.settrace(None)
         sys.stdout, sys.stderr = old_out, old_err
-    return json.dumps({"status": "done", "out": buf.getvalue(), "ok": ok})
+    _flush_text()
+    return json.dumps({"status": "done", "out": _hub_text(),
+                       "events": _events, "ok": ok})
 `;
 })();
