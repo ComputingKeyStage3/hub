@@ -631,13 +631,31 @@ const apiReady = !OFFLINE && API && API.indexOf("PASTE_") !== 0;
    missing file is normal rather than an error. */
 async function dbLesson(){
   if (!apiReady) throw new Error("missing");
+  const grp = localStorage.getItem("hub_group") || "";
+  const where = API + "/api/catalog?lesson=" + encodeURIComponent(lessonId) +
+                (grp ? "&group=" + encodeURIComponent(grp) : "");
+  const ask = (headers) => fetch(where, { headers: headers, cache:"no-store" });
+
   /* A teacher looking at an unpublished lesson needs to be recognised as one.
      teacher.js knows what to send: the session first, the key only where
      there is no second factor to make one. */
   const auth = window.teacherAuth.headers();
-  const grp = localStorage.getItem("hub_group") || "";
-  const r = await fetch(API + "/api/catalog?lesson=" + encodeURIComponent(lessonId) + (grp ? "&group=" + encodeURIComponent(grp) : ""),
-                        { headers: auth, cache:"no-store" });
+  let r = await ask(auth);
+  /* A teacher sign-in left behind on a machine and since gone stale (the key
+     was changed, or a second factor was switched on after it was saved) makes
+     the server refuse the WHOLE request rather than answer it as a student's.
+     The lesson list still filled, because that is asked for with no sign-in at
+     all, so a child saw their finished lesson on the home page and was told it
+     could not be found the moment they opened it. On that machine only, past
+     signing out, signing back in and refreshing. Drop the dead sign-in and ask
+     again as nobody in particular. */
+  if (!r.ok && Object.keys(auth).length && window.teacherAuth.rejected(r.status)){
+    /* On a machine that is signed in as a student it is dead weight, so it
+       goes for good. Elsewhere it may be a teacher whose session has simply
+       run out, and the console is the place to put that right. */
+    if (localStorage.getItem("hub_token") && !spectate) window.teacherAuth.forget();
+    r = await ask({});
+  }
   if (!r.ok) throw new Error("missing");
   const d = await r.json();
   if (!d.lesson) throw new Error("missing");

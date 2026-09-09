@@ -18,6 +18,35 @@
     ["atkinson","Atkinson Hyperlegible \u2014 extra-clear letters","'Atkinson Hyperlegible'"]
   ];
   function prefs(){ try{ return JSON.parse(localStorage.getItem("hub_prefs") || "{}"); }catch(e){ return {}; } }
+
+  /* Everything a browser can be left holding that is neither a display choice
+     nor the child's own work.
+
+     A teacher sign-in saved on a machine goes stale as soon as the key is
+     changed or a second factor is switched on, and after that the server
+     refuses any request carrying it instead of answering it as a student's.
+     The home page still filled, because the lesson list is asked for with no
+     sign-in at all, so a child saw their finished lesson and was told it could
+     not be found the moment they opened it. On that one machine, and signing
+     out, signing back in and refreshing all left it exactly where it was.
+
+     Kept here, on the one script every page loads, because signing out and the
+     help pop-up on the sign-in page both want the same list, and a list that
+     lives in two places grows apart. Saved work is deliberately not on it. */
+  window.hubClearStrays = function(){
+    const strays = [];
+    try{
+      for (let i = 0; i < localStorage.length; i++){
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k === "hub_tkey" || k === "hub_tdevice" || k === "hub_inspect" ||
+            k === "hub_preview" || k.indexOf("hub_rel_") === 0) strays.push(k);
+      }
+      strays.forEach(k => localStorage.removeItem(k));
+    }catch(e){}
+    try{ sessionStorage.removeItem("hub_ttoken"); }catch(e){}
+    return strays.length;
+  };
   function overlay(){
     /* Loaded from <head> on most pages, so the first call happens before
        <body> exists. Nothing to attach to yet; apply() runs again on

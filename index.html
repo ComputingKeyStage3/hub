@@ -14,6 +14,7 @@
 
 <div class="homebar">
   <div class="title">Computing KS3</div>
+  <button class="btn-ghost iconbtn" id="helpBtn" title="Help" aria-label="Help" hidden>?</button>
   <button class="btn-ghost settings-btn" id="setBtn"><span class="ico">&#9881;&#65038;</span><span class="lbl"> Settings</span></button>
   <div class="auth" id="auth"></div>
 </div>
@@ -54,6 +55,35 @@
     <div id="resultList"><p class="hint"></p></div>
   </div>
 
+</div>
+
+<!-- Only offered while nobody is signed in. Half of it is about signing in,
+     and the other half clears this browser out, which is not something to put
+     within reach of a child in the middle of a lesson. -->
+<div class="modal-back no-print" id="helpModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 style="margin-top:0">Help</h2>
+    <div class="modal-scroll">
+      <!-- Read through rather than glanced at, so it is ranged left under its
+           heading instead of centred the way a one line pop-up message is. -->
+      <div class="set-group" style="text-align:left">
+        <span class="set-label">How to sign in</span>
+        <p class="modal-text">Type in your computer username, and then a password you have set.</p>
+        <p class="modal-text">If this is your first time, leave the password box empty and press Sign in.
+          You will be asked to pick a password of your own.</p>
+        <p class="modal-text">If you have forgotten your password, press Forgot password and put your
+          hand up, so your teacher can let you back in.</p>
+      </div>
+      <div class="set-group">
+        <span class="set-label">Something not working?</span>
+        <button class="btn-ghost" id="helpFix">Fix problems on this device</button>
+        <p class="hint" id="helpFixMsg" style="margin-top:10px"></p>
+        <p class="subnote">This clears anything left over in this browser and loads the page again.
+          Your saved work is not deleted.</p>
+      </div>
+    </div>
+    <button class="btn-primary modal-cta" id="helpDone">Close</button>
+  </div>
 </div>
 
 <div class="modal-back no-print" id="sayModal" hidden>
@@ -190,12 +220,23 @@ function offlineHome(){
 
 function renderAuth(){
   const name = localStorage.getItem("hub_name");
+  const help = $("helpBtn");
   if (OFFLINE){ offlineHome(); return; }
   if (name && localStorage.getItem("hub_token")){
+    if (help) help.hidden = true;
     $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn"><span class="ico">&#9099;</span><span class="lbl"> Sign out</span></button>';
     $("auth").querySelector("b").textContent = name;
     on("outBtn", "click", () => {
       ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
+      /* Not only the token. A teacher sign-in left on this machine goes stale
+         when the key changes or a second factor is switched on, and after that
+         the server refused the whole of a lesson request rather than answering
+         it as a student's: the list below still filled, being asked for with no
+         sign-in at all, but opening a finished lesson from Past said it could
+         not be found. Signing out used to leave it sitting there, which is why
+         signing out and back in never fixed it. Saved work still stays: the
+         same child coming back keeps working without waiting. */
+      try{ window.hubClearStrays(); }catch(e){}
       forgetEverything();
       renderAuth();
     });
@@ -206,11 +247,31 @@ function renderAuth(){
     signedInView(true);
   } else {
     $("auth").innerHTML = "";
+    if (help) help.hidden = false;
     $("loginCard").hidden = false;
     $("headline").textContent = "Sign in";
     signedInView(false);
   }
 }
+
+/* ---- the help pop-up, on the sign-in page only ---- */
+on("helpBtn", "click", () => { $("helpModal").hidden = false; $("helpDone").focus(); });
+on("helpDone", "click", () => { $("helpModal").hidden = true; $("helpBtn").focus(); });
+$("helpModal").addEventListener("mousedown", (e) => {
+  if (e.target === $("helpModal")) $("helpModal").hidden = true;
+});
+/* The way out of anything this machine is holding that stops it working: a
+   teacher sign-in gone stale is the one that has actually happened, and it
+   made the server refuse a student's lesson requests on that machine alone.
+   Reached only from the sign-in page, so a child clearing things out has
+   already left their lesson rather than being sat in the middle of one. */
+on("helpFix", "click", () => {
+  const btn = $("helpFix");
+  btn.disabled = true;
+  $("helpFixMsg").textContent = "All tidied up. Loading the page again…";
+  try{ window.hubClearStrays(); }catch(e){}
+  setTimeout(() => location.reload(), 700);
+});
 renderAuth();
 
 on("loginBtn", "click", async () => {
