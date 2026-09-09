@@ -346,6 +346,21 @@ function show(view, quiet){
 try{
   window.addEventListener("popstate", (e) => {
     const st = e.state;
+    /* Closing a pop-up steps back off its own history entry, and that popstate
+       arrives here looking exactly like the Back button. It is not one, and by
+       the time it lands the caller may already have opened the next pop-up: it
+       is why Schedule inside Manage flashed up and then took every pop-up away
+       with it. Ours is ignored; the one Back really causes is not. */
+    if (pendingBacks.length){
+      backLanded(pendingBacks[0]);
+      /* If a new pop-up has already taken the closed one's place, hand it the
+         history entry that closing just spent, so Back still takes it away and
+         does not eat the entry belonging to the view underneath. */
+      if (!$("tmodal").hidden && !(history.state && history.state.modal)){
+        try{ history.pushState({ modal: modalDepth }, "", location.pathname + location.search); }catch(e){}
+      }
+      return;
+    }
     /* A pop-up is the first thing Back should take away. */
     if (!$("tmodal").hidden){
       if (modalDepth > 0) modalDepth--;
@@ -392,6 +407,19 @@ function scrollBody(box){
    rather than navigating out from underneath it. Closing any other way steps
    back off that entry, so Back never has to be pressed twice. */
 let modalDepth = 0;
+/* One record for every history.back() we have asked for and not yet seen
+   arrive. It has to be a queue rather than a count: two pop-ups replacing each
+   other in quick succession ask for two, and a listener that settles on any
+   popstate settles both on the first one. */
+let pendingBacks = [];
+function backLanded(rec){
+  const i = pendingBacks.indexOf(rec);
+  if (i >= 0) pendingBacks.splice(i, 1);
+  if (rec.done) return;
+  rec.done = true;
+  /* after the popstate handler has had its turn, not during it */
+  setTimeout(rec.resolve, 0);
+}
 function openModal(build){
   const box = $("tmodalBox");
   box.innerHTML = "";
@@ -412,7 +440,12 @@ function openModal(build){
   $("tmodal").hidden = false;
   if (!wasOpen){
     modalDepth++;
-    try{ history.pushState({ modal: modalDepth }, "", location.pathname + location.search); }catch(e){}
+    /* One pop-up replacing another: the entry the old one was using is about
+       to be stepped off, and pushing now only adds one for that step to land
+       on. The popstate puts a fresh entry back once it has landed. */
+    if (!pendingBacks.length){
+      try{ history.pushState({ modal: modalDepth }, "", location.pathname + location.search); }catch(e){}
+    }
   }
 }
 /* Returns once the pop-up is really gone, history and all.
@@ -434,18 +467,11 @@ function closeModal(fromBack){
     try{
       if (history.state && history.state.modal){
         return new Promise(resolve => {
-          let done = false;
-          const settled = () => {
-            if (done) return;
-            done = true;
-            window.removeEventListener("popstate", settled);
-            /* after the popstate handler has had its turn, not during it */
-            setTimeout(resolve, 0);
-          };
-          window.addEventListener("popstate", settled);
+          const rec = { resolve: resolve, done: false };
+          pendingBacks.push(rec);
           history.back();
           /* never leave a caller waiting on an event that is not coming */
-          setTimeout(settled, 300);
+          setTimeout(() => backLanded(rec), 300);
         });
       }
     }catch(e){}
