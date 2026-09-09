@@ -2630,6 +2630,29 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
   background:var(--panel-2); cursor:pointer; font-size:13px; font-family:var(--body); color:var(--text)}
 .rt-imgsize button:hover{border-color:var(--amber)}
 
+/* In the top bar this button sits beside a lesson title that can be any
+   length, and flex was shrinking the button rather than the title until its
+   words wrapped onto a second line. A two line button took the height of the
+   whole bar with it, which on a phone is height the lesson needed. The title
+   is the elastic one, and it already ends in an ellipsis when it runs out. */
+.topbar #saveBtn{ white-space:nowrap; flex:0 0 auto }
+/* Which makes the title the one that has to give, and a flex item will not
+   shrink below its own text unless it is told it may. Without this its
+   ellipsis never got a chance and the button was pushed off the end.
+
+   The bar itself needs the same permission for a different reason: body is a
+   grid, so the bar is a grid item, and a grid item is also allowed to be as
+   wide as its own contents. A long lesson title therefore widened the column
+   the whole lesson sits in, and the tracker, the brief and every task under
+   them came out wider than the phone with it. */
+.topbar{ min-width:0 }
+.topbar .title{ min-width:0 }
+/* "¹3 Saved" carries a tick the other wordings do not, so on a phone it is
+   set a little smaller and takes about the same room as what it replaced. */
+@media (max-width:640px){
+  .topbar #saveBtn[data-saved=yes]{ font-size:13px }
+}
+
 /* a Save button that has nothing to save looks settled rather than urgent */
 .done-save[data-saved=yes],.resp-save[data-saved=yes],#saveBtn[data-saved=yes],
 #saveFb[data-saved=yes]{
@@ -3235,6 +3258,27 @@ html[data-bg=dark] .pg-t code, html[data-bg=dark] .brief code{
 .seg:not(:disabled):hover .seg-n{background:var(--mint); border-color:var(--mint); color:#fff}
 .seg:focus-visible .seg-n{opacity:1; transform:translate(-50%,-50%) scale(1); outline:2px solid var(--amber)}
 html[data-bg=dark] .seg-n{background:#2A303B}
+
+/* On a touch screen the blanket 44px touch target set for buttons catches
+   every one of these, because each segment is one, and a progress bar built
+   out of 44px blocks reads as a row of beads rather than as a bar. Ten pixels
+   is still a band a finger can find, each one being most of a centimetre
+   wide, and the Back button in the dock is the dependable way back for
+   anybody who misses.
+
+   This has to sit below the rules above rather than beside the other phone
+   sizing further up, because .seg is given its padding and its hover height
+   there and later wins. */
+@media (pointer:coarse){
+  .tracker, .tracker:hover{ padding:8px 20px 4px }
+  .seg, .tracker:hover .seg{ height:10px; min-height:10px }
+  /* a ring meant for a 6px line is a block of amber around a 10px one */
+  .seg.now{ box-shadow:0 0 0 2px color-mix(in srgb, var(--amber) 18%, transparent) }
+  /* the page number in the middle of a segment is a hover affordance, and a
+     finger has no hover; left in, a stuck :hover shows 22px circles on a
+     10px bar */
+  .seg-n{ display:none }
+}
 
 /* the way back off the summary */
 .done-back{margin-bottom:10px; font-size:14px}

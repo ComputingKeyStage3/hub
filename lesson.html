@@ -488,12 +488,31 @@ function linkPossible(){
 
 /* The top right button cannot know which it is until the lesson has loaded
    and its tasks can be looked at, so it starts as the PDF and is repainted
-   once that is known. */
-function topSaveLabel(){ return linkPossible() ? "Copy my work link" : "Save as PDF"; }
+   once that is known.
+
+   It also cannot be wordy. It shares the bar with a lesson title, and on a
+   narrow phone "Save Work" wrapped onto a second line and took the height of
+   the whole bar down with it. There is nothing else up there to save, so on a
+   small screen the second word goes. */
+const narrowBar = window.matchMedia("(max-width: 420px)");
+function topSaveLabel(){
+  const tight = narrowBar.matches;
+  if (!OFFLINE) return tight ? "Save" : "Save Work";
+  if (linkPossible()) return tight ? "Copy link" : "Copy my work link";
+  return "Save as PDF";
+}
 function paintTopSave(){
   const b = $("saveBtn");
-  if (b && OFFLINE && !spectate) b.textContent = topSaveLabel();
+  if (b && !spectate) b.textContent = topSaveLabel();
 }
+/* A phone turned on its side crosses that width, and turned back crosses it
+   again. Only ever swaps one resting wording for another: the tick, "Saving"
+   and the two failure messages say something this does not know about. */
+const RESTING_LABELS = ["Save Work", "Save", "Copy my work link", "Copy link", "Save as PDF"];
+narrowBar.addEventListener("change", () => {
+  const b = $("saveBtn");
+  if (b && RESTING_LABELS.indexOf(b.textContent) >= 0) b.textContent = topSaveLabel();
+});
 
 /* The address a student hands their teacher, or null if this lesson's work
    is too heavy to travel in one. It opens the marking viewer, so a teacher
@@ -4962,9 +4981,12 @@ const saveButtons = [];
 function paintSaveButtons(state){
   saveButtons.forEach(entry => {
     const btn = entry.btn;
+    /* The one in the top bar takes its wording from the width of the screen,
+       so it is asked each time rather than remembered once. */
+    const resting = typeof entry.label === "function" ? entry.label() : entry.label;
     if (state === "saving"){ btn.textContent = "Saving\u2026"; btn.disabled = true; btn.dataset.saved = "no"; }
     else if (state === "saved"){ btn.textContent = "\u2713 Saved"; btn.disabled = false; btn.dataset.saved = "yes"; }
-    else { btn.textContent = entry.label; btn.disabled = false; btn.dataset.saved = "no"; }
+    else { btn.textContent = resting; btn.disabled = false; btn.dataset.saved = "no"; }
   });
 }
 
@@ -5292,7 +5314,8 @@ $("saveBtn").addEventListener("click", manualSave);
    own, so it says the same as the one under the response tasks at the same
    moment. Offline it copies a link instead, which is not a saved state. */
 if (!OFFLINE && !spectate){
-  saveButtons.push({ btn: $("saveBtn"), label: "Save Work" });
+  saveButtons.push({ btn: $("saveBtn"), label: topSaveLabel });
+  paintTopSave();                        // the short wording, if this is a narrow phone
   if (!unsavedTyping) $("saveBtn").dataset.saved = "yes";
 }
 
