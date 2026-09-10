@@ -197,9 +197,27 @@
     while ((m = re.exec(xml)) !== null) out.push(m[1]);
     return out;
   }
-  const unescape2 = (t) => String(t)
-    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  /* XML also lets any character be written as a number, and some writers use
+     that instead of the character itself. An .xlsx out of Arbor has apostrophes
+     in it as &#039;, so a reader that knew only the five named entities put
+     "O&#039;Brien" in the class list. Excel shows the same file as "O'Brien".
+
+     One pass over the string rather than a chain of replaces. A file that has
+     been escaped twice holds "&amp;#039;" for a cell whose text really is
+     "&#039;", and a chain that put & back first and then read numbers would
+     turn that into an apostrophe the cell never had. */
+  const NAMED = { lt:"<", gt:">", quot:'"', apos:"'", amp:"&" };
+  const unescape2 = (t) => String(t).replace(
+    /&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-zA-Z]+));/g,
+    (whole, dec, hex, name) => {
+      if (name) return NAMED[name] !== undefined ? NAMED[name] : whole;
+      const code = parseInt(dec || hex, dec ? 10 : 16);
+      /* Anything that is not a character leaves the text as it was found,
+         rather than throwing and losing the rest of the class list. */
+      if (!code || code > 0x10FFFF) return whole;
+      try { return String.fromCodePoint(code); }
+      catch (e){ return whole; }
+    });
 
   /* "B3" -> column 1 */
   function colOf(ref){
