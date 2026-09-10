@@ -1125,6 +1125,40 @@ function myClasses(list){
 }
 let hubYear = "", hubUnit = "";
 const assignsFor = (id) => assigns.filter(a => a.lesson_id === id);
+/* One list behind both the count on a lesson card and the ticks in "Give to
+   classes", so the two can never disagree.
+
+   The classes offered are the ones this teacher takes, plus any class the
+   lesson has already been given to. That second part is the whole point: the
+   count used to come from the assignments and the ticks from the classes
+   with students in them, and three ordinary things put a class in one list
+   and not the other. A class nobody has been added to yet is not in the
+   students table. A class renamed since leaves its old name on the
+   assignment. A class belonging to another teacher is filtered out of the
+   ticks but was still counted. Each of those showed "1 class" on the card
+   with nothing ticked underneath, and no box to untick to clear it. */
+const classChoices = (id) => {
+  const given = new Map();
+  assignsFor(id).forEach(a => {
+    const key = String(a.group_name || "").toLowerCase();
+    if (key) given.set(key, a);
+  });
+  const real = new Set(allClasses().map(g => String(g.name || "").toLowerCase()));
+  const out = [], seen = new Set();
+  myClasses(allClasses()).forEach(g => {
+    const key = String(g.name || "").toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({ name: g.name, given: given.get(key) || null, note: "" });
+  });
+  given.forEach((a, key) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ name: a.group_name, given: a,
+               note: real.has(key) ? "another teacher's class" : "no longer a class" });
+  });
+  return out;
+};
 const unitsOfYear = (y) => (cat.units || []).filter(u => (u.year || "") === y);
 const lessonsOfUnit = (u) => (cat.lessons || []).filter(l => (l.unit || "") === u);
 
@@ -1311,7 +1345,7 @@ function lessonCards(list, box){
     if (OFFLINE){
       card.appendChild(el("p","lp-note", l.code ? "Code " + l.code : "No code yet"));
     } else {
-      const mine = assignsFor(l.lesson_id);
+      const mine = classChoices(l.lesson_id).filter(c => c.given);
       card.appendChild(el("p","lp-note", mine.length
         ? mine.length + " class" + (mine.length === 1 ? "" : "es")
         : "Not given to any class yet"));
@@ -1521,20 +1555,21 @@ function distribute(id){
     x.addEventListener("click", closeModal); box.appendChild(x);
     modalTitle(box, "Give “" + titleOf(id) + "” to classes");
     box.appendChild(el("p","hint","Every class you tick gets it as a draft. Publish it to them from the class page when they are ready."));
-    const has = {};
-    assignsFor(id).forEach(a => { has[a.group_name.toLowerCase()] = a; });
+    const choices = classChoices(id);
     const picks = {};
-    myClasses(groups || []).forEach(g => {
+    choices.forEach(c => {
       const row = el("label","opt");
       const cb = el("input"); cb.type = "checkbox";
-      const already = has[g.name.toLowerCase()];
-      cb.checked = !!already;
-      picks[g.name] = { cb: cb, already: !!already };
+      cb.checked = !!c.given;
+      picks[c.name] = { cb: cb, already: !!c.given };
       row.appendChild(cb);
-      row.appendChild(el("span","", g.name + (already ? (already.published ? ", published" : ", draft") : "")));
+      const state = c.given ? (c.given.published ? ", published" : ", draft") : "";
+      row.appendChild(el("span","", c.name + state + (c.note ? " (" + c.note + ")" : "")));
       box.appendChild(row);
     });
-    if (!myClasses(groups || []).length) box.appendChild(el("p","modal-text","There are no classes to give this to."));
+    if (choices.some(c => c.note))
+      box.appendChild(el("p","hint","A class in brackets is not one of yours, or is not a class any more. Untick it to take the lesson off it."));
+    if (!choices.length) box.appendChild(el("p","modal-text","There are no classes to give this to."));
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Save");
     go.addEventListener("click", async () => {
