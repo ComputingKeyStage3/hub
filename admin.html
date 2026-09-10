@@ -1762,7 +1762,18 @@ function paintStudents(){
     const dl = el("button","btn-ghost iconbtn","\u{1F5D1}"); dl.title = "Delete " + st.display_name; dl.style.marginLeft = "6px";
     ed.addEventListener("click", () => editStudent(st));
     dl.addEventListener("click", () => confirmDelete(st));
-    td3.appendChild(ed); td3.appendChild(dl);
+    td3.appendChild(ed);
+    /* Only in the All (Admin) view. A child changing set happens a handful of
+       times a year, and that view is the one that already holds every class,
+       so the pop-up has something to offer without fetching anything. */
+    if (!meCode){
+      const mv = el("button","btn-ghost iconbtn","\u2192");
+      mv.title = "Move " + st.display_name + " to another class";
+      mv.style.marginLeft = "6px";
+      mv.addEventListener("click", () => moveStudent(st));
+      td3.appendChild(mv);
+    }
+    td3.appendChild(dl);
     tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
     t.appendChild(tr);
   });
@@ -1797,6 +1808,58 @@ function editStudent(st){
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "Could not save.");
         closeModal(); loadStudents();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+}
+/* Moving a student to another class. Their work and their marks hang off
+   their student row rather than the class name, so they come with them and
+   nothing has to be copied. What does not follow is the lessons: those are
+   given to a class, not to a person, so the pop-up says so rather than
+   leaving a child looking at an empty list wondering where their work went. */
+function moveStudent(st){
+  openModal(box => {
+    modalTitle(box, "Move " + st.display_name);
+    const others = allClasses()
+      .map(g => g.name)
+      .filter(n => n.toLowerCase() !== cls.toLowerCase())
+      .sort((a, b) => a.localeCompare(b));
+    if (!others.length){
+      box.appendChild(el("p","modal-text","There is nowhere to move them to yet. Make the other class first."));
+      const shut = el("button","btn-primary modal-cta","Right you are");
+      shut.addEventListener("click", closeModal);
+      box.appendChild(shut);
+      return;
+    }
+    box.appendChild(el("p","modal-text",
+      "Everything they have done stays with them. Their work, their marks and their password all move across."));
+    const w = el("div","field");
+    w.appendChild(el("label","","Move to"));
+    const sel = document.createElement("select");
+    others.forEach(n => {
+      const o = document.createElement("option");
+      o.value = n; o.textContent = n;
+      sel.appendChild(o);
+    });
+    w.appendChild(sel);
+    box.appendChild(w);
+    box.appendChild(el("p","subnote",
+      "Lessons are given to a class, not to a person, so they will only see what their new class has been given. Check the new class has the lessons they need."));
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Move");
+    go.addEventListener("click", async () => {
+      const to = sel.value;
+      if (!to) return;
+      msg.textContent = "Moving\u2026";
+      try{
+        const r = await fetch(API + "/api/teacher/update-student", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ username: st.username, group: to }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Could not move them.");
+        closeModal();
+        loadStudents();
+        refreshGroups();      // both classes have a different number in them now
       }catch(e){ msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(msg);
