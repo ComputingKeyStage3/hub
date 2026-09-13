@@ -395,7 +395,8 @@ function scrollBody(box){
   const middle = kids.filter(n =>
     !n.classList.contains("modal-x") &&
     !n.classList.contains("modal-cta") &&
-    !n.classList.contains("modal-stay"));
+    !n.classList.contains("modal-stay") &&
+    !n.classList.contains("modal-foot"));
   if (middle.length < 2) return;
   const scroller = el("div","modal-scroll");
   const first = middle[0];
@@ -2711,8 +2712,11 @@ function openManage(){
     box.appendChild(bar);
     box.appendChild(el("p","hint","")).id = "relMsg";
     const list = el("div"); list.id = "taskList"; box.appendChild(list);
-    const done = el("button","btn-ghost modal-stay","Close"); done.addEventListener("click", closeModal);
-    box.appendChild(done);
+    /* Whether the class can finish is the one thing a teacher wants at a
+       glance, so it is pinned under the list rather than scrolled to. The
+       cross in the corner closes the pop-up; a button down here would only
+       push this off the bottom again. */
+    const foot = el("div","modal-foot"); foot.id = "summaryFoot"; box.appendChild(foot);
     paintTasks();
   });
 }
@@ -2794,7 +2798,11 @@ function paintTasks(){
     row.appendChild(btns);
     list.appendChild(row);
   });
-  if (!lessonJson.assessment) list.appendChild(summaryRow());
+  const foot = $("summaryFoot");
+  if (foot){
+    foot.innerHTML = "";
+    if (!lessonJson.assessment) foot.appendChild(summaryRow());
+  }
 }
 
 /* One more row under the pages for the summary, the screen a student reaches
@@ -2807,7 +2815,7 @@ function summaryRow(){
   const row = el("div","taskrow summary-row" + (open ? "" : " shut"));
   row.appendChild(el("span","tn","\u{1F3C1}"));
   const t = el("span",""); t.style.flex = "1";
-  t.appendChild(el("span","","Summary page"));
+  t.appendChild(el("span","sumname","Summary page"));
   t.appendChild(el("span","sub", open ? "Students can finish the lesson" : "Students cannot finish yet"));
   row.appendChild(t);
   row.appendChild(el("span","statechip " + (open ? "open" : "shut"), open ? "Open" : "Locked"));

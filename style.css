@@ -3539,8 +3539,17 @@ html[data-build=compact] .pagestrip{top:var(--buildbar-h); margin:-14px -14px 12
 /* The summary row in Manage lesson. It is one more page under the real ones,
    but it is not one of the teacher's own pages, so it says so: a dashed edge
    and a line underneath telling them what locking it does. */
-.taskrow.summary-row{border-style:dashed}
+.taskrow.summary-row{border-style:dashed; margin:0}
 .taskrow .sub{display:block; font-size:12.5px; font-weight:600; color:var(--muted)}
+/* On a phone the row is narrow enough to break "Summary page" in half. The
+   sentence underneath is the part that should wrap, not the name. */
+.taskrow .sumname{white-space:nowrap}
+/* Whether a class can finish is what a teacher opens this pop-up to see, so
+   it sits against the bottom the way a closing button used to, with the list
+   of pages scrolling behind it. .modal > * is flex:0 0 auto already, so this
+   only has to separate itself from the scrolling part above. */
+.modal-foot{margin-top:14px; padding-top:14px; border-top:1.5px solid var(--line)}
+.modal-foot:empty{display:none}
 
 /* ---------- a page the teacher has kept shut, on the progress bar ----------
    The segment keeps the green it had, faded, so a page that was skipped over
