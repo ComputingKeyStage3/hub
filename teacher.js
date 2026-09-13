@@ -51,9 +51,11 @@ async function signIn(k, code){
   let d = {};
   try{ d = await r.json(); }catch(e){}
   if (!r.ok){
-    /* A note of the last code that is out of date is worse than none: it makes
-       every sign-in ask for a code and never replaces it. */
-    if (d.needCode){ try{ localStorage.removeItem("hub_tdevice"); }catch(e){} }
+    /* Only when the server looked at the note and found it no good. It used to
+       go on any request for a code, including one asked because the database
+       could not be reached, so a blip at the server cost this machine the rest
+       of its sixty days. */
+    if (d.staleDevice){ try{ localStorage.removeItem("hub_tdevice"); }catch(e){} }
     const err = new Error(d.error || "That was not accepted.");
     err.needCode = !!d.needCode;
     throw err;

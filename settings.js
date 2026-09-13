@@ -39,7 +39,13 @@
       for (let i = 0; i < localStorage.length; i++){
         const k = localStorage.key(i);
         if (!k) continue;
-        if (k === "hub_tkey" || k === "hub_tdevice" || k === "hub_inspect" ||
+        /* hub_tdevice is deliberately not on this list. It is not a sign-in
+           and is never sent with a request: it is only the note that this
+           browser has answered a code, good for sixty days. Clearing it here
+           fixed nothing, and every child signing out on a teacher's machine
+           took those sixty days with them, so the code was wanted again the
+           next time the console was opened. */
+        if (k === "hub_tkey" || k === "hub_inspect" ||
             k === "hub_preview" || k.indexOf("hub_rel_") === 0) strays.push(k);
       }
       strays.forEach(k => localStorage.removeItem(k));
