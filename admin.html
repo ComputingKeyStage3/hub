@@ -2272,7 +2272,7 @@ function paintLessonGrid(){
     const a = assignOf(l.lesson_id);
     const live = a ? !!a.published : !!l.published;
     const waiting = live && a && a.release_at && a.release_at > new Date().toISOString();
-    const closed = live && a && a.close_on && a.close_on < new Date().toISOString().slice(0, 10);
+    const closed = live && a && a.close_on && a.close_on < ymd(new Date());
     const card = el("div","lessonpill");
     const head = el("div","lp-head");
     head.appendChild(el("b","", titleOf(l.lesson_id)));
@@ -2284,7 +2284,7 @@ function paintLessonGrid(){
     const when = !live               ? "Schedule"
                : waiting             ? "Edit schedule"
                : closed              ? niceDate(a.close_on)
-               : sameDay(a && a.release_at) ? "Opened " + (a.release_at || "").slice(11, 16)
+               : sameDay(a && a.release_at) ? "Opened " + hhmm(a && a.release_at)
                : niceDate(a && a.release_at);
     chip.appendChild(el("span","chip-state", state));
     chip.appendChild(el("span","chip-when", when));
@@ -2292,7 +2292,7 @@ function paintLessonGrid(){
     chip.addEventListener("click", (e) => { e.stopPropagation(); schedulePopup(l.lesson_id); });
     head.appendChild(chip);
     if (a && a.release_at && waiting)
-      card.appendChild(el("p","lp-note","Opens " + niceDate(a.release_at) + " at " + a.release_at.slice(11, 16)));
+      card.appendChild(el("p","lp-note","Opens " + niceDate(a.release_at) + " at " + hhmm(a.release_at)));
     else if (a && a.close_on && live)
       card.appendChild(el("p","lp-note", (closed ? "Closed " : "Closes ") + niceDate(a.close_on)));
     card.appendChild(head);
@@ -2402,8 +2402,23 @@ const PERIODS = [
   ["12:55","Period 4","Year 7, 8, 11, 12"],
   ["13:55","Period 5",""]
 ];
-const sameDay = (iso) => String(iso || "").slice(0, 10) === new Date().toISOString().slice(0, 10);
 const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+/* release_at is a moment in time, stored as UTC ("2026-09-13T07:50:00.000Z").
+   Reading the hour straight out of that string gives the UTC hour, so through
+   British Summer Time every scheduled lesson read back an hour early: Period 1
+   was saved correctly as 08:50 here and shown as 07:50. Worse, the pop-up
+   seeded its time box the same way, so reopening a schedule and saving it
+   again really did move it an hour earlier each time. These two turn the
+   stored moment into the clock time this computer is on. */
+const hhmm = (iso) => {
+  const d = new Date(String(iso || ""));
+  return isNaN(d) ? "" : String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+};
+const localDay = (iso) => {
+  const d = new Date(String(iso || ""));
+  return isNaN(d) ? "" : ymd(d);
+};
+const sameDay = (iso) => !!iso && localDay(iso) === ymd(new Date());
 function niceDate(iso){
   if (!iso) return "";
   const d = new Date(iso.length <= 10 ? iso + "T00:00:00" : iso);
@@ -2423,8 +2438,8 @@ function schedulePopup(id){
     const live = already && already.published;
     modalTitle(box, "Schedule \u201c" + titleOf(id) + "\u201d");
     /* start from what is already set, so this edits rather than replaces */
-    let date = (already && already.release_at) ? already.release_at.slice(0, 10) : ymd(new Date());
-    let time = (already && already.release_at) ? already.release_at.slice(11, 16) : "";
+    let date = (already && already.release_at) ? localDay(already.release_at) : ymd(new Date());
+    let time = (already && already.release_at) ? hhmm(already.release_at) : "";
     let close = (already && already.close_on) ? already.close_on : "";
     const summary = el("p","modal-text","");
     const dateRow = el("div","bfield");
