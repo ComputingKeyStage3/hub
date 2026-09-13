@@ -3587,3 +3587,58 @@ html[data-build=compact] .pagestrip{top:var(--buildbar-h); margin:-14px -14px 12
    further down, so the two states win again. */
 html[data-bg=dark] .seg.done{background:var(--mint)}
 html[data-bg=dark] .seg.now{background:var(--amber)}
+
+/* ---------- the way back to the summary, on the progress bar ----------
+   A student who has finished and gone back into a task had no way back to
+   the summary but a reload. This pill appears on the end of the bar the
+   moment they have been there, in the school blue rather than the green the
+   finished pages wear: it is somewhere to go, not another page they have
+   done. It is not a .seg, so the pages keep their widths when it arrives. */
+.seg-end{
+  position:relative; flex:0 0 auto;
+  width:0; margin-left:0; opacity:0;
+  height:6px; border-radius:999px; background:var(--brand);
+  border:none; padding:0; font:inherit;
+  appearance:none; -webkit-appearance:none;
+  transition:width .22s ease, margin-left .22s ease, opacity .22s ease, height .18s ease;
+}
+/* The gap before it is wider than the one between pages, because it is not
+   one of them. */
+.seg-end.on{width:26px; margin-left:9px; opacity:1; cursor:pointer}
+.tracker:hover .seg-end.on{height:8px}
+/* The flag stands proud of the bar the way the page numbers do on hover, so
+   the bar makes the same room for it while the pill is there. */
+.tracker.has-end{padding-top:14px; padding-bottom:12px}
+.seg-flag{
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) scale(.6);
+  width:22px; height:22px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; line-height:1;
+  background:var(--panel); border:2px solid var(--brand);
+  opacity:0; pointer-events:none;
+  transition:opacity .22s ease, transform .22s ease;
+}
+.seg-end.on .seg-flag{opacity:1; transform:translate(-50%,-50%) scale(1)}
+/* Filled in while the summary is the thing on screen, the way a page they are
+   on is filled in rather than outlined. */
+.seg-end.here{box-shadow:0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent)}
+.seg-end.here .seg-flag,
+.seg-end:not(:disabled):hover .seg-flag{background:var(--brand); border-color:var(--brand)}
+.seg-end:focus-visible .seg-flag{outline:2px solid var(--brand); outline-offset:1px}
+
+@media (pointer:coarse){
+  /* The pages fall back on the Back button in the dock for anyone who misses
+     them, so they keep a 10px band. This one is the only way back to the
+     summary, so the tap area matches the flag rather than the bar, and stays
+     inside the room the bar has already made for it. */
+  /* The blanket 44px minimum for buttons catches this one exactly as it
+     catches the segments, and a bar with a 44px lozenge on the end is not a
+     bar. Pinned to the same band the pages use; the tap area below does the
+     work instead. */
+  .seg-end, .tracker:hover .seg-end{height:10px; min-height:10px}
+  .seg-end.on{width:30px}
+  .seg-end.on::after{
+    content:""; position:absolute; left:50%; top:50%;
+    transform:translate(-50%,-50%); width:38px; height:30px;
+  }
+}

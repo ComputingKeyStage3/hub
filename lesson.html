@@ -1225,6 +1225,26 @@ function buildTracker(){
     });
     t.appendChild(seg);
   });
+  /* The way back to the summary, on the end of the bar. Deliberately not a
+     .seg: paintTracker walks those by index to work out which page each one
+     stands for, and one more would be read as a page that is not there.
+
+     An assessment is left out. Its summary is a score with staged animations
+     and its own way back into the questions, so arriving there from here
+     would not be the screen they left. */
+  if (lesson && lesson.assessment) return;
+  const end = el("button","seg-end");
+  end.type = "button";
+  end.disabled = true;                       // until they have been there
+  end.title = "Back to the summary";
+  end.setAttribute("aria-label", "Back to the summary");
+  end.appendChild(el("span","seg-flag","\u{1F3C1}"));
+  end.addEventListener("click", () => {
+    if (end.disabled) return;
+    hideLockTip();
+    showLessonComplete(true);                // a revisit: no confetti, nothing re-sent
+  });
+  t.appendChild(end);
 }
 function showStep(i){
   /* inside the builder's preview, keep a note of the page so a refresh comes
@@ -1495,6 +1515,18 @@ function paintTracker(){
     seg.title = canGo ? "Back to page " + (n + 1) : shut ? why : "Page " + (n + 1);
     seg.setAttribute("aria-label", seg.title);
   });
+  /* The summary pill: there from the moment they have been to the summary,
+     and lit while that is what they are looking at. The bar takes a little
+     more height to hold the flag, the same room hovering it already makes
+     for the page numbers. */
+  const end = $("tracker").querySelector(".seg-end");
+  if (end){
+    const done = $("doneScreen");
+    end.disabled = !finished;
+    end.classList.toggle("on", !!finished);
+    end.classList.toggle("here", !!finished && !!done && !done.hidden);
+    $("tracker").classList.toggle("has-end", !!finished);
+  }
 }
 
 let lastSubmittedPayload = "";
@@ -5085,8 +5117,13 @@ function doneShell(title){
    thirty times over. */
 const DONE_WORDS = ["Well done!", "Nice work!", "That's the lot!",
                     "All finished!", "Great effort!"];
+/* Picked once and kept. Going back into a task and returning by the flag on
+   the progress bar rebuilds this screen, and a different greeting each time
+   read as though the page had lost its place. */
+let donePicked = "";
 function doneWords(){
-  return DONE_WORDS[Math.floor(Math.random() * DONE_WORDS.length)];
+  if (!donePicked) donePicked = DONE_WORDS[Math.floor(Math.random() * DONE_WORDS.length)];
+  return donePicked;
 }
 
 /* every score gets the tick, the words change with the result */
