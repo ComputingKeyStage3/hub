@@ -2609,6 +2609,7 @@ function defaultLocks(){
   const out = new Set();
   if (!lessonJson || lessonJson.assessment) return out;
   const b = lessonJson.blocks || [];
+  out.add(b.length);          // the summary page, see summaryRow()
   const said = b.some(x => x.startLocked !== undefined);
   if (said){ b.forEach((x, i) => { if (x.startLocked) out.add(i); }); return out; }
   let firstDo = -1;
@@ -2687,7 +2688,7 @@ function openManage(){
     bar.appendChild(sch);
     if (!lessonJson.assessment){
       const oa = el("button","btn-ghost","Open all tasks"); oa.addEventListener("click", () => postLocks(new Set()));
-      const la = el("button","btn-ghost","Lock all tasks"); la.addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i))));
+      const la = el("button","btn-ghost","Lock all tasks"); la.addEventListener("click", () => postLocks(new Set(lessonJson.blocks.map((_, i) => i).concat([lessonJson.blocks.length]))));
       bar.appendChild(oa); bar.appendChild(la);
     }
     box.appendChild(bar);
@@ -2744,8 +2745,9 @@ function paintTasks(){
   list.innerHTML = "";
   const msg = $("relMsg");
   if (msg){
+    const rows = lessonJson.blocks.length + (lessonJson.assessment ? 0 : 1);   // + the summary
     const base = locks.size === 0 ? "Every task is open for " + cls + "."
-      : locks.size === lessonJson.blocks.length ? "Every task is locked for " + cls + "."
+      : locks.size >= rows ? "Every task is locked for " + cls + "."
       : locks.size + " task" + (locks.size === 1 ? "" : "s") + " locked for " + cls + ".";
     msg.textContent = usingDefaults ? base + " (starting pattern, unlock as you teach)" : base;
   }
@@ -2775,6 +2777,37 @@ function paintTasks(){
     row.appendChild(btns);
     list.appendChild(row);
   });
+  if (!lessonJson.assessment) list.appendChild(summaryRow());
+}
+
+/* One more row under the pages for the summary, the screen a student reaches
+   by pressing Finish. It locks like a page and is numbered like one, one past
+   the last, so the same locks list carries it and the backend needed no
+   change. While it is locked, Finish tells them to wait. */
+function summaryRow(){
+  const i = lessonJson.blocks.length;
+  const open = !locks.has(i);
+  const row = el("div","taskrow summary-row" + (open ? "" : " shut"));
+  row.appendChild(el("span","tn","\u{1F3C1}"));
+  const t = el("span",""); t.style.flex = "1";
+  t.appendChild(el("span","","Summary page"));
+  t.appendChild(el("span","sub", open ? "Students can finish the lesson" : "Students cannot finish yet"));
+  row.appendChild(t);
+  row.appendChild(el("span","statechip " + (open ? "open" : "shut"), open ? "Open" : "Locked"));
+  const btns = el("span","taskbtns");
+  const lock = el("button","btn-ghost iconbtn", open ? "\u{1F513}" : "\u{1F512}");
+  lock.title = open ? "Stop students finishing the lesson" : "Let students finish the lesson";
+  lock.addEventListener("click", () => {
+    const next = new Set(locks);
+    if (open) next.add(i); else next.delete(i);
+    postLocks(next);
+  });
+  const who = el("button","btn-ghost iconbtn","\u{1F465}");
+  who.title = "Who has finished the lesson?";
+  who.addEventListener("click", () => whoFinished(true));
+  btns.appendChild(lock); btns.appendChild(who);
+  row.appendChild(btns);
+  return row;
 }
 
 /* ---------- markbook for an assessment ---------- */
@@ -3115,6 +3148,39 @@ async function whoDone(i, b, backToManage){
     const done2 = el("button","btn-ghost modal-stay","Close");
     done2.addEventListener("click", () => { closeModal(); if (backToManage) openManage(); });
     box.appendChild(done2);
+  });
+}
+
+/* Who has pressed Finish. The work row carries __done, set the moment they
+   do, so there is nothing to work out from the tasks themselves. */
+async function whoFinished(backToManage){
+  openModal(async (box) => {
+    modalTitle(box, "Who has finished?");
+    box.appendChild(el("p","modal-text","Students who have reached the summary page and pressed Finish."));
+    const holder = el("div"); box.appendChild(holder);
+    holder.appendChild(el("p","hint","Loading…"));
+    try{
+      const roster = await getRoster(), rows = await getWorkRows();
+      holder.innerHTML = "";
+      roster.forEach(st => {
+        const idx = rows.findIndex(w => w.username === st.username);
+        const row = rows[idx];
+        const d = row && row.data;
+        const done = !!(d && d.__done);
+        const line = el("div","who-row");
+        line.appendChild(el("span","nm", st.display_name));
+        line.appendChild(el("span","st " + (done ? "yes" : "no"), done ? "Finished ✓" : "Not yet"));
+        const v = el("button","btn-ghost iconbtn","\u{1F441}"); v.title = "View their work";
+        const pf = el("button","btn-ghost iconbtn","\u{1F4C4}"); pf.title = "See it as a PDF";
+        if (row){ v.addEventListener("click", () => inspect(rows, idx)); pf.addEventListener("click", () => printWork(rows, idx)); }
+        else { v.disabled = true; pf.disabled = true; }
+        line.appendChild(v); line.appendChild(pf);
+        holder.appendChild(line);
+      });
+    }catch(e){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
+    const shut = el("button","btn-ghost modal-stay","Close");
+    shut.addEventListener("click", () => { closeModal(); if (backToManage) openManage(); });
+    box.appendChild(shut);
   });
 }
 

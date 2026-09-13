@@ -73,7 +73,7 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="waitTitle">
     <p class="modal-eyebrow">Not yet</p>
     <h2 id="waitTitle">Keep working on this task</h2>
-    <p class="modal-text">Your teacher will let you know when to move on.</p>
+    <p class="modal-text" id="waitText">Your teacher will let you know when to move on.</p>
     <button class="btn-primary modal-cta" id="waitOk">OK</button>
   </div>
 </div>
@@ -724,6 +724,9 @@ function defaultLocks(){
   const out = new Set();
   if (!lesson || lesson.assessment) return out;
   const blocks = lesson.blocks || [];
+  /* The summary counts as one more page on the end, so a class cannot finish
+     until the teacher opens it. Same numbering as the console uses. */
+  out.add(summaryIndex());
   /* The teacher may have set this per page in the builder. */
   const said = blocks.some(b => b.startLocked !== undefined);
   if (said){
@@ -740,6 +743,10 @@ function defaultLocks(){
   for (let i = firstDo + 1; i < blocks.length; i++) out.add(i);
   return out;
 }
+/* The summary is numbered one past the last page, so the teacher console can
+   lock it in the same list as the pages. Counted off lesson.blocks rather
+   than steps so both ends agree even if a block fails to build. */
+function summaryIndex(){ return (lesson && lesson.blocks ? lesson.blocks : steps).length; }
 /* Offline or signed out, nothing is locked, never strand a student. */
 const isLocked = (i) => !waved(i) && !!apiReady && !!token && lockedSet.has(i);
 /* Without a server a page is shut until its passcode has been typed. Kept
@@ -763,7 +770,13 @@ function nextOpen(from, dir){
 async function continueTarget(){
   if (bypassed || !apiReady || !token) return step + 1;
   await fetchRelease();                 // freshen; offline keeps the last known
-  return nextOpen(step + 1, +1);
+  const at = nextOpen(step + 1, +1);
+  if (at !== null) return at;
+  if (lesson && lesson.assessment) return null;       // a test is not paced this way
+  /* Nothing open ahead of them. If the summary itself is open, finishing is
+     the way on: a teacher who opens the summary with pages still locked means
+     the class to finish from where they are, not to walk through the rest. */
+  return isLocked(summaryIndex()) ? null : summaryIndex();
 }
 
 /* ---------- cooldown on the Continue button ----------
@@ -797,7 +810,12 @@ $("nextBtn").addEventListener("mouseenter", () => { if (coolingDown()) $("nextTi
 $("nextBtn").addEventListener("mouseleave", () => { $("nextTip").hidden = true; });
 
 /* ---------- "not yet" pop-up ---------- */
-function showWaitModal(){ $("waitModal").hidden = false; $("waitOk").focus(); }
+function showWaitModal(words){
+  const w = words || {};
+  $("waitTitle").textContent = w.title || "Keep working on this task";
+  $("waitText").textContent = w.text || "Your teacher will let you know when to move on.";
+  $("waitModal").hidden = false; $("waitOk").focus();
+}
 function hideWaitModal(){ $("waitModal").hidden = true; }
 
 /* ---------- load ---------- */
@@ -1261,12 +1279,13 @@ async function tryContinue(){
     }
   }
   softSkip = false;
-  if (step === steps.length - 1){ finishLesson(); return; }
+  if (step === steps.length - 1){ await tryFinish(); return; }
 
   $("nextBtn").classList.add("checking");
   const target = await continueTarget();
   $("nextBtn").classList.remove("checking");
 
+  if (target === summaryIndex()){ finishLesson(); return; }
   if (target !== null){
     /* Without a server nothing releases the next page, so the passcode does.
        Asked here rather than on the page itself, because the question is
@@ -1480,6 +1499,23 @@ async function manualSave(){
     btn.classList.remove("flash-bad");
     paintSaveButtons(unsavedTyping ? "idle" : "saved");
   }, 2500);
+}
+/* Pressing Finish asks the same question Continue does: is the next thing
+   open yet? The summary is that next thing. Nothing is disabled, they are
+   told to wait, the same as a locked page. */
+async function tryFinish(){
+  if (bypassed || !apiReady || !token){ finishLesson(); return; }
+  if (lesson && lesson.assessment){ finishLesson(); return; }   // never hold up a test
+  $("nextBtn").classList.add("checking");
+  await fetchRelease();
+  $("nextBtn").classList.remove("checking");
+  if (isLocked(summaryIndex())){
+    showWaitModal({ title: "Not quite time to finish",
+                    text: "Your teacher will let you know when you can finish this lesson." });
+    startCooldown();
+    return;
+  }
+  finishLesson();
 }
 function finishLesson(){
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
