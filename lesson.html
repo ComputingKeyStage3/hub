@@ -283,13 +283,48 @@ function marksButton(res, review){
   return { open: open2 };
 }
 
+/* ---------- lending a task's section to a pop-up ----------
+   Each task has one section, built once, and it lives in #blocks. A pop-up
+   that shows the work does not copy it, it moves that very element into
+   itself, so whatever the pop-up then does to its own contents happens to the
+   real page. Emptying the pop-up left the page it had borrowed from blank,
+   and the student found that when they went back to their work.
+
+   A marker is left where the section was standing and the section is put back
+   against it, so it lands between the right neighbours however many have been
+   borrowed at once. */
+function borrowSection(stp){
+  if (!stp || !stp.section) return null;
+  if (!stp.sectionHome && stp.section.parentNode){
+    const mark = document.createComment("task");
+    stp.section.parentNode.insertBefore(mark, stp.section);
+    stp.sectionHome = mark;
+  }
+  return stp.section;
+}
+function returnSection(stp){
+  const mark = stp && stp.sectionHome;
+  if (!mark) return;
+  if (mark.parentNode){
+    mark.parentNode.insertBefore(stp.section, mark);
+    mark.parentNode.removeChild(mark);
+  }
+  stp.sectionHome = null;
+  /* Back in #blocks behind whatever is on screen. showStep decides which one
+     is shown again; leaving it visible would spill every task down the page. */
+  stp.section.hidden = true;
+}
+function returnAllSections(){ steps.forEach(returnSection); }
+
 /* Everything they did, on one scrollable page, in a pop-up. */
 function openWorkPopup(){
   {
     const back = el("div","modal-back");
     const popup = el("div","modal wide");
+    /* Every way out of here puts the borrowed sections back first. */
+    const shut = () => { returnAllSections(); back.remove(); };
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
-    x.addEventListener("click", () => back.remove());
+    x.addEventListener("click", shut);
     popup.appendChild(x);
     popup.appendChild(el("h2","","Your work"));
     const holder = el("div","allpages");
@@ -301,13 +336,13 @@ function openWorkPopup(){
       if (b && b.title) head.appendChild(el("b","", b.title));
       sec.appendChild(head);
       stepFor.section.hidden = false;
-      sec.appendChild(stepFor.section);
+      sec.appendChild(borrowSection(stepFor));
       holder.appendChild(sec);
     });
     popup.appendChild(holder);
     scrollBody(popup);
   back.appendChild(popup);
-    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    back.addEventListener("mousedown", (e) => { if (e.target === back) shut(); });
     document.body.appendChild(back);
   }
 }
@@ -384,12 +419,10 @@ function snapshot(){
   Object.entries(fields).forEach(([id, f]) => { data[id] = f.get(); });
   return data;
 }
-let dirtyCount = 0;          // goes up every time anything is typed
 function markDirty(){
   if (spectate || !restoreDone) return;
   if (!unsavedTyping) paintSaveButtons("idle");   // they stand out again
   unsavedTyping = true;
-  dirtyCount++;
   refreshGate();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 400);
@@ -1030,6 +1063,12 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
          the summary is drawn, or it shows as though nothing was left. */
       if (lesson.practical) await loadMyMark();
       if (!teacherNote) await loadMyFeedback();
+      /* The progress bar on the summary says which pages the teacher kept
+         shut, so it needs the same answer the lesson itself starts with. On a
+         machine that has never opened this lesson there is nothing cached to
+         fall back on, and every locked page looked like an ordinary finished
+         one. */
+      if (!lesson.assessment) await fetchRelease();
       hideLoader();
       if (lesson.assessment){ renderAssessmentComplete(false); }
       else { showLessonComplete(true); }
@@ -1161,6 +1200,9 @@ async function loadSaved(){
 /* ---------- shell ---------- */
 /* Leaving the summary, whether by the button on it or by the progress bar. */
 function leaveSummary(i){
+  /* A pop-up may still be holding a task's section, and the page it came
+     from is blank without it. */
+  returnAllSections();
   const done = $("doneScreen");
   if (done) done.hidden = true;
   $("dock").classList.remove("gone");
@@ -1177,6 +1219,8 @@ function buildTracker(){
     seg.appendChild(el("span","seg-n", String(i + 1)));
     seg.addEventListener("click", () => {
       if (seg.disabled) return;
+      if (seg.dataset.shut === "1"){ showLockTip(seg, seg.dataset.why); return; }
+      hideLockTip();
       leaveSummary(i);
     });
     t.appendChild(seg);
@@ -1383,11 +1427,54 @@ function paintRubricButton(){
 }
 $("rubricBtn").addEventListener("click", showRubric);
 
+/* Why a page cannot be opened, or "" when it can. A teacher's lock and a
+   passcode page are two different waits, so they say two different things. */
+function whyShut(n){
+  if (isLocked(n)) return "Your teacher has kept this task locked.";
+  if (pageShut(n)) return "This page opens when your teacher gives you the code.";
+  return "";
+}
+/* The tooltip under the progress bar. A shut segment is deliberately left
+   enabled: a disabled button fires no click at all, so there would be nothing
+   to hang this on, and silently doing nothing is what had students clicking
+   at a locked page over and over. */
+let lockTipTimer = null;
+function showLockTip(seg, words){
+  const bar = $("tracker");
+  let tip = bar.querySelector(".locktip");
+  if (!tip){ tip = el("span","tip locktip"); bar.appendChild(tip); }
+  tip.textContent = words;
+  tip.hidden = false;
+  /* Centred on the segment, then pulled back inside the bar so the tooltip
+     over the first or last page is not cut off at the edge of the screen. */
+  const b = bar.getBoundingClientRect(), s = seg.getBoundingClientRect();
+  const half = tip.offsetWidth / 2;
+  const want = s.left - b.left + s.width / 2;
+  const at = Math.round(Math.min(Math.max(want, half + 4), Math.max(b.width - half - 4, half + 4)));
+  tip.style.left = at + "px";
+  /* Pulled back from the edge, the middle of the box is no longer over the
+     segment, so the little arrow is placed against the segment rather than
+     against the box. */
+  tip.style.setProperty("--arrow", Math.round(Math.min(Math.max(want - at + half, 12), tip.offsetWidth - 12)) + "px");
+  clearTimeout(lockTipTimer);
+  lockTipTimer = setTimeout(() => { tip.hidden = true; }, 3000);
+}
+function hideLockTip(){
+  const tip = $("tracker").querySelector(".locktip");
+  if (tip) tip.hidden = true;
+  clearTimeout(lockTipTimer);
+}
+
 function paintTracker(){
-  Array.from($("tracker").children).forEach((seg, n) => {
+  Array.from($("tracker").querySelectorAll(".seg")).forEach((seg, n) => {
     // Once finished, every segment is complete, including the last one, which
     // previously stayed amber forever because "n < step" can never include it.
-    const shut = (isLocked(n) || pageShut(n)) && !finished;
+    /* Finishing does not open a page the teacher kept shut, so this is asked
+       whether or not they have finished. Tying it to "not finished" turned
+       every locked page on the summary into an ordinary green one that could
+       be clicked into, which is not where the student had been. */
+    const why = whyShut(n);
+    const shut = !!why;
     const done = finished ? true : n < step;
     seg.className = "seg" + (done ? " done" : n === step ? " now" : "")
                   + (shut ? " locked-seg" : "");
@@ -1399,8 +1486,13 @@ function paintTracker(){
        so excluding "the page you are on" left the final task as the one thing
        that could not be reached from the summary. */
     const canGo = done && !shut && (finished || n !== step);
-    seg.disabled = !canGo;
-    seg.title = canGo ? "Back to page " + (n + 1) : "Page " + (n + 1);
+    seg.dataset.shut = shut ? "1" : "";
+    seg.dataset.why = why;
+    /* A shut page stays pressable so that pressing it can say why. Everything
+       else out of reach is switched off as it always was. */
+    seg.disabled = !canGo && !shut;
+    seg.setAttribute("aria-disabled", canGo ? "false" : "true");
+    seg.title = canGo ? "Back to page " + (n + 1) : shut ? why : "Page " + (n + 1);
     seg.setAttribute("aria-label", seg.title);
   });
 }
@@ -5108,15 +5200,12 @@ function showLessonComplete(revisit, justFinished){
      the title says so, so a Save button here would only confuse. Offline
      nothing has been sent anywhere: the PDF is the hand-in, and this is the
      moment to make it, so the button belongs here. */
-  /* Their work opens in a pop-up, where the list of tasks used to sit on
-     the page. This takes the place of "Back to Home". Offline it comes
-     first, since checking the work is what you do before handing it in. */
-  if (!spectate){
-    const see = el("button", (OFFLINE ? "btn-ghost" : "btn-primary") + " done-save",
-                   OFFLINE ? "Check my work" : "View my work");
-    see.addEventListener("click", () => openTaskPopup());
-    hero.appendChild(see);
-  }
+  /* Their work used to open in a pop-up here. Going into a task from that
+     list and coming back out left the page blank, because the pop-up owns
+     what it is emptying, and there was never any need for a second way in:
+     "Back to my work" at the top of this screen and the progress bar both
+     lead to the real pages, where the task behaves exactly as it did.
+     An assessment still has its pop-up, which only reads the work. */
   if (OFFLINE && !spectate){
     hero.appendChild(saveButton(status));
     /* The PDF stays on this screen whatever happens, so a student whose link
@@ -5154,164 +5243,6 @@ function showLessonComplete(revisit, justFinished){
     status.textContent = "Saved earlier \u2713";
     paintSaveButtons("saved");
   }
-}
-
-/* Every task, in a pop-up big enough to work in. */
-function openTaskPopup(){
-  const back = el("div","modal-back");
-  const popup = el("div","modal wide taskpopup");
-  /* The cross closes the pop-up; once a task is open it becomes a way back
-     to the list, since closing everything from there loses their place. */
-  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
-  x.title = "Close";
-  x.addEventListener("click", () => leaving());
-  popup.appendChild(x);
-  const heading = el("h2","","Your work");
-  popup.appendChild(heading);
-
-  const listView = el("div","");
-  const editView = el("div",""); editView.hidden = true;
-  popup.appendChild(listView);
-  popup.appendChild(editView);
-
-  /* which tasks have been changed since the pop-up opened */
-  const updated = new Set();
-
-  /* Whether anything was typed while a task was open. Counting what the page
-     itself records is far more reliable than listening for events on the
-     task, which do not always reach us from a canvas or a rich text box. */
-  let openedAt = dirtyCount;
-  const touchedNow = () => dirtyCount > openedAt;
-
-  /* Asked inside the pop-up, so nothing is lost by pressing the wrong thing. */
-  function leaving(){
-    if (!touchedNow()){ back.remove(); return; }
-    const sheet = el("div","modal-ask");
-    sheet.appendChild(el("h3","","You have made changes to your work."));
-    sheet.appendChild(el("p","modal-text","Do you want to save them?"));
-    const row = el("div","modal-askrow");
-    const yes = el("button","btn-primary","Yes, save them");
-    yes.addEventListener("click", async () => {
-      yes.disabled = true;
-      yes.textContent = "Saving\u2026";
-      const state = await submitWork();
-      if (state === "done" || state === "offline"){
-        paintSaveButtons("saved");
-        back.remove();
-      } else {
-        yes.disabled = false;
-        yes.textContent = "Yes, save them";
-        sheet.appendChild(el("p","hint","That did not reach your teacher. Try again in a moment."));
-      }
-    });
-    const no = el("button","btn-ghost","No, leave them");
-    no.addEventListener("click", () => back.remove());
-    row.appendChild(yes); row.appendChild(no);
-    sheet.appendChild(row);
-    popup.appendChild(sheet);
-  }
-
-  function showList(){
-    openedAt = dirtyCount;
-    x.textContent = "\u2715";
-    x.title = "Close";
-    heading.textContent = "Your work";
-    editView.hidden = true; editView.innerHTML = "";
-    listView.hidden = false;
-    listView.innerHTML = "";
-    buildOverview(listView, null, (i) => openOne(i), updated);
-  }
-
-  /* One task on its own, with no Continue and no bar along the bottom:
-     there is nowhere to continue to from in here. */
-  function openOne(i){
-    const stp = steps[i];
-    if (!stp) return;
-    openedAt = dirtyCount;
-    /* from here the cross means "back to the list" */
-    x.textContent = "\u2190";
-    x.title = "Back to your work";
-    listView.hidden = true;
-    editView.hidden = false;
-    editView.innerHTML = "";
-
-    const b = (typeof stp.brief === "function") ? stp.brief() : (stp.brief || {});
-    heading.textContent = b.title || "Task " + (i + 1);
-    if (b.text) editView.appendChild(el("p","modal-text", b.text));
-
-    stp.section.hidden = false;
-    editView.appendChild(stp.section);
-
-    const bar = el("div","toolrow taskedit-bar");
-    const save = el("button","btn-primary","Save & Go Back");
-    const msg = el("p","hint","");
-    save.addEventListener("click", async () => {
-      save.disabled = true;
-      save.textContent = "Saving\u2026";
-      const state = await submitWork();
-      save.disabled = false;
-      save.textContent = "Save & Go Back";
-      if (state === "done" || state === "offline"){
-        updated.add(i);
-        paintSaveButtons("saved");
-        document.querySelectorAll(".handin").forEach(n => {
-          n.dataset.state = "done";
-          n.textContent = "Saved your changes \u2713";
-        });
-        showList();
-      } else {
-        msg.textContent = "That did not reach your teacher. Try again in a moment.";
-      }
-    });
-    bar.appendChild(save);
-    editView.appendChild(bar);
-    editView.appendChild(msg);
-    popup.scrollTop = 0;
-  }
-
-  showList();
-  scrollBody(popup);
-  back.appendChild(popup);
-  back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
-  document.body.appendChild(back);
-}
-
-/* every task, clickable to reopen and edit */
-function taskPreview(b){
-  const v = fields[b.id] ? fields[b.id].get() : null;
-  if (b.type === "question" || b.type === "short"){
-    const t = String(v || "").trim();
-    return t ? t.slice(0, 60) + (t.length > 60 ? "\u2026" : "") : "No answer yet";
-  }
-  if (b.type === "image") return v ? "Screenshot added \u2713" : "No screenshot yet";
-  if (b.type === "python") return (v && String(v).trim()) ? "Code written \u2713" : "Not run yet";
-  if (b.type === "text") return "Reading";
-  const empty = v === null || v === undefined || v === "" ||
-    (Array.isArray(v) && !v.some(x => x)) ||
-    (typeof v === "object" && v !== null && !Object.keys(v).length);
-  return empty ? "" : "Done \u2713";
-}
-function buildOverview(box, onPick, openHere, updated){
-  const ov = el("div","ov");
-  steps.forEach((stp, i) => {
-    const b = lesson.blocks[i] || {};
-    const bb = (typeof stp.brief === "function") ? stp.brief() : (stp.brief || {});
-    const row = el("button","ov-row"); row.type = "button";
-    row.appendChild(el("span","n", (i + 1) + "."));
-    row.appendChild(el("span","t", bb.title || b.type || "Task"));
-    row.appendChild(el("span","p", taskPreview(b)));
-    row.appendChild(el("span","edit", spectate ? "View \u2192" : "Edit \u270E"));
-    if (updated && updated.has(i)) row.appendChild(el("span","ov-updated","Updated"));
-    row.addEventListener("click", () => {
-      if (openHere){ openHere(i); return; }    // stay in the pop-up
-      if (onPick) onPick();          // close the pop-up before going to the task
-      $("doneScreen").hidden = true;
-      $("dock").classList.remove("gone");
-      showStep(i);
-    });
-    ov.appendChild(row);
-  });
-  box.appendChild(ov);
 }
 
 /* ---------- Python via Pyodide ---------- */

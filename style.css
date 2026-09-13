@@ -716,8 +716,7 @@ textarea.code{background:var(--code-bg) !important; color:var(--code-fg) !import
 .online-pill.off{border-color:var(--line-2); color:var(--muted)}
 .online-pill.off .odot{background:var(--line-2); animation:none}
 
-/* lesson completion overview (click a task to edit it) */
-.ov{border-top:1px solid var(--line); margin-top:26px; padding-top:22px}
+/* the list of tasks in the teacher console and the builder */
 .ov-row{display:flex; gap:12px; align-items:center; width:100%; text-align:left;
   background:var(--panel); border:1.5px solid var(--line); border-radius:12px;
   padding:13px 16px; margin:0 0 10px; cursor:pointer; font-size:16.5px; color:var(--text)}
@@ -2416,18 +2415,11 @@ body.workpage .homebar .grow{flex:1}
 /* a finished screen with nothing beside it sits in the middle */
 .done-layout.alone{grid-template-columns:minmax(0,1fr); justify-items:center; text-align:center}
 .done-layout.alone .done-hero-col{max-width:640px}
-/* the pop-up showing every task */
-.taskpopup{min-height:70vh}
-.taskpopup .ov-row{cursor:pointer}
-
 /* every page at once: no bars, nothing to press but the work itself */
 body.allmode .homebar,body.allmode .topbar,body.allmode .dock,
 body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:none !important}
 /* the task buttons under the preview, with the summary at the end */
 .tasknav-btn.summary{min-width:auto; padding:8px 14px}
-.ov-updated{margin-left:auto; font-size:12px; font-weight:700; letter-spacing:.06em;
-  text-transform:uppercase; color:var(--mint)}
-.taskedit-bar{margin-top:14px; justify-content:flex-end}
 
 /* while the class is still being fetched */
 .loadpane{align-items:center; justify-content:center}
@@ -2850,7 +2842,6 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 
 /* --- anything else measured against the screen --- */
 .fullprev{ height:88vh; height:88dvh }
-.taskpopup{ min-height:70vh; min-height:70dvh }
 .banklist{ max-height:46vh; max-height:46dvh }
 .label-layout .label-pic img{ max-height:50vh; max-height:50dvh }
 /* .rubriccol used to be given flex-basis:78vw here. This block is not inside a
@@ -3025,12 +3016,6 @@ html[data-build=compact][data-preview=full] .homebar{display:none}
 .board-stage[data-tool=text] .board-canvas{cursor:text}
 /* colours inside the strip beside something picked up */
 .board-pickcolour{width:20px !important; min-width:20px; height:20px; min-height:20px}
-/* asking about unsaved changes, inside the pop-up it belongs to */
-.modal-ask{position:absolute; inset:auto 0 0 0; z-index:8; padding:16px 18px;
-  background:var(--panel); border-top:1.5px solid var(--line-2);
-  box-shadow:0 -6px 18px rgba(0,0,0,.12); text-align:center}
-.modal-ask h3{margin:0 0 4px; font-size:17px}
-.modal-askrow{display:flex; gap:10px; justify-content:center; margin-top:10px}
 /* a labelled picture can use the height of the page */
 .label-layout .label-pic img{max-height:calc(100vh - 190px); max-height:calc(100dvh - 190px)}
 
@@ -3556,3 +3541,40 @@ html[data-build=compact] .pagestrip{top:var(--buildbar-h); margin:-14px -14px 12
    and a line underneath telling them what locking it does. */
 .taskrow.summary-row{border-style:dashed}
 .taskrow .sub{display:block; font-size:12.5px; font-weight:600; color:var(--muted)}
+
+/* ---------- a page the teacher has kept shut, on the progress bar ----------
+   The segment keeps the green it had, faded, so a page that was skipped over
+   looks skipped rather than done. It stays pressable on purpose: a disabled
+   button fires no click, and there would be nothing to hang the tooltip on.
+   Only the cursor and the tooltip say it leads nowhere.
+
+   These have to sit here rather than beside .seg.locked-seg further up,
+   because .seg.done comes after that and is what sets the colour they keep. */
+.seg.locked-seg{opacity:.55; cursor:not-allowed}
+.seg.locked-seg:hover .seg-n{background:var(--panel); border-color:var(--line-2); color:var(--muted)}
+
+/* The tooltip hangs below the bar, since the bar is at the very top of the
+   page and there is nothing above it to hang into. Placed against the
+   segment that was pressed, so the left is set as an inline style. */
+.tracker{position:relative}
+.locktip{
+  top:calc(100% + 8px); bottom:auto; right:auto; left:0;
+  transform:translateX(-50%); text-align:center;
+  white-space:normal; max-width:min(260px, calc(100vw - 32px));
+  /* Without this the box is squeezed into whatever room is left between its
+     own left edge and the end of the bar, so the tooltip over the last page
+     came out as a narrow column of single words. */
+  width:max-content;
+}
+.locktip::after{
+  top:auto; bottom:100%; left:var(--arrow, 50%); right:auto; margin-left:-6px;
+  border-top-color:transparent; border-bottom-color:var(--line-2);
+}
+
+/* On a dark background html[data-bg=dark] .seg sets the resting grey, and it
+   outranks the .seg.done and .seg.now further up because of the html in front
+   of it. The whole bar came out one flat colour, showing no progress at all
+   and leaving nothing for a skipped page to look different from. Same weight,
+   further down, so the two states win again. */
+html[data-bg=dark] .seg.done{background:var(--mint)}
+html[data-bg=dark] .seg.now{background:var(--amber)}
