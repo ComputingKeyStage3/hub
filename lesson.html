@@ -1273,17 +1273,22 @@ function showStep(i){
 
   // The welcome-back note belongs to the page they came back to, and nowhere
   // else. Show it on that first render only, then never again.
-  $("resumeNote").hidden = true;
+  /* The note used to be taken out of the document once it had faded, and from
+     then on this line threw: every later showStep stopped here, having already
+     swapped the page over but not yet painted the brief, so a student moving on
+     landed on the next page still reading the last one's title and subtitle.
+     Hiding it takes it out of the layout just as well and leaves it findable. */
+  const note = $("resumeNote");
+  if (note) note.hidden = true;
   /* Someone who has finished and gone back into a task does not need telling
      their work was saved, they need a way back to the summary. */
-  if (restoredWork && !resumeShown && !wasDone){
-    const note = $("resumeNote");
+  if (note && restoredWork && !resumeShown && !wasDone){
     note.hidden = false;
     resumeShown = true;
-    /* five seconds to read, three to fade, then out of the layout entirely */
+    /* five seconds to read, three to fade, then out of the way */
     setTimeout(() => {
       note.classList.add("fading");
-      setTimeout(() => { if (note.parentNode) note.parentNode.removeChild(note); }, 3000);
+      setTimeout(() => { note.hidden = true; note.classList.remove("fading"); }, 3000);
     }, 5000);
   }
   const sb = steps[step].brief;
@@ -1328,7 +1333,10 @@ async function tryContinue(){
     return;
   }
   const st = steps[step];
-  if (st && !softSkip){
+  /* A page a teacher has waved through is not asked whether it is finished.
+     They have already said this student may leave it, and a nudge asking them
+     to finish it first reads as the code not having worked. */
+  if (st && !softSkip && !waved(step)){
     /* whichever the task offers: its own encouragement, or the plain check */
     let res = { ok:true };
     if (st.soft) res = st.soft();
@@ -1693,7 +1701,16 @@ function askBypass(){
       return;
     }
     if (word === "SKIP"){
+      /* Waving the page they are standing on is not what gets them off it.
+         What holds them is the page ahead: the teacher's lock, and without a
+         server the passcode on it. Waving only this one closed the pop-up and
+         left them exactly where they were, which looked like the code had
+         done nothing at all. The page they are being let on to is waved with
+         it, and the summary too when they are already on the last page, or
+         Finish would still tell them to wait. */
       skipped.add(step);
+      skipped.add(step + 1);
+      if (step === steps.length - 1) skipped.add(summaryIndex());
       const st = steps[step];
       if (st && st.unlock) st.unlock();
       back.remove(); showStep(step);
