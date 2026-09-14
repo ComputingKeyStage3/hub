@@ -1363,9 +1363,48 @@ async function tryContinue(){
        Asked here rather than on the page itself, because the question is
        "may I move on yet", not "can I do this task". */
     if (OFFLINE && !(await passGate(target))) return;
+    const leaving = step;                  // showStep is about to move it on
     hideWaitModal(); showStep(target);
+    /* After the move, so the position stored with the work is the page they
+       have arrived at: coming back to the lesson should carry on, not repeat
+       the page they just finished. */
+    autosaveOnLeaving(leaving);
   }
   else { showWaitModal(); startCooldown(); }
+}
+
+/* ---------- saving as they leave a page ----------
+   A teacher can set any page to send the work off as the student goes forward
+   from it, so a lesson that runs out of time still has what was done in it.
+
+   Only the first time they leave that page, and only when they actually got
+   through: a locked page ahead means they are still on this one. Pressing
+   Continue again after wandering back would be another write per student, and
+   810 of them a dozen pages deep is thousands of writes an hour for work that
+   has mostly not changed. Whatever they type afterwards is theirs to save, or
+   goes with the save at the end.
+
+   Nothing waits on this. The next page is already on screen; the button in the
+   corner says what is happening, which is where a student looks for it. */
+const autosavedSteps = new Set();
+function autosaveOnLeaving(i){
+  if (OFFLINE || spectate || bypassed) return;
+  if (!token || !apiReady || !restoreDone) return;
+  const st = steps[i];
+  if (!st || !st.autosave) return;
+  if (autosavedSteps.has(i)) return;
+  autosavedSteps.add(i);            // before the await, so a fast second press does nothing
+  save();                           // into this browser first, as a manual save does
+  paintSaveButtons("saving");
+  submitWork().then(state => {
+    /* A save that never reached the server has not happened, so the page is
+       allowed to try again next time they go forward from it. */
+    if (state !== "done") autosavedSteps.delete(i);
+    paintSaveButtons(state === "done" ? "saved" : "idle");
+  }).catch(() => {
+    autosavedSteps.delete(i);
+    paintSaveButtons("idle");
+  });
 }
 
 /* ---------- the passcode on a locked page (no server) ----------
@@ -2175,6 +2214,10 @@ function renderBlock(b, i){
   }
   final = applyLock(b, final);
   final.qid = b.id;                 // so the marked work can find this question
+  /* A page a teacher has set to save as they leave it. Kept on the step
+     rather than looked up from lesson.blocks later, because a block that
+     fails to build is never pushed and the two lists drift apart. */
+  final.autosave = b.type === "page" && b.autosave === true;
   final.section.hidden = true;
   $("blocks").appendChild(final.section);
   steps.push(final);

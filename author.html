@@ -462,6 +462,7 @@ function compileOne(b, id, target){
     (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
     push({ type:"page", id, title: b.title || "Tasks", task: b.task || "",
            startLocked: b.startLocked !== false,
+           autosave: b.autosave === true ? true : undefined,
            passHash: b.passHash || undefined, blocks: kids });
     return;
   }
@@ -1812,6 +1813,15 @@ function card(b, i, arr){
     if (!viewAll){
       F("Title", "title", { then: paintHead });
       R("Subtitle", "task", { rows:2 });
+      /* Off unless a teacher asks for it. Every page left on would be a write
+         to the database per student per page, and 810 students getting through
+         a dozen pages is nearly ten thousand of them in an hour. */
+      toggleRow([["autosave","Save their work on Continue", false]], "Saving");
+      body.appendChild(el("p","bhelp",
+        "Off by default. With this on, the first time a student goes forward "
+        + "from this page their work is sent to you, so a lesson that runs out "
+        + "of time still has it. It happens once per page, and they can press "
+        + "Save Work themselves whenever they like."));
     }
 
     const inner = el("div","pagekids");
@@ -3754,6 +3764,7 @@ function fromCompiled(data, meta){
        quietly unlocked every page in it. */
     if (b.type === "page") return { type:"page", title:b.title || "", task:b.task || "",
                                     startLocked: b.startLocked !== false,
+                                    autosave: b.autosave === true,
                                     passHash: b.passHash || undefined,
                                     blocks:(b.blocks || []).map(back) };
     if (b.type === "extension") return { type:"extension", title:b.title || "",
