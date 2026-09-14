@@ -5203,16 +5203,26 @@ function heroBits(title, sub){
    top and one under the response tasks. They are the same action, so they
    move together, and they stay looking "saved" until something changes. */
 const saveButtons = [];
+/* What every Save button is saying at the moment, so one built later can be
+   made to agree with the ones already on screen.
+
+   It starts plain. The settled green outline belongs to the "Saved" wording
+   and nothing else: a button reading "Save Work" in the saved colours was
+   telling a student two things at once, and a lesson just opened has not
+   saved anything yet. */
+let saveState = "idle";
+function paintOneSave(entry, state){
+  const btn = entry.btn;
+  /* The one in the top bar takes its wording from the width of the screen,
+     so it is asked each time rather than remembered once. */
+  const resting = typeof entry.label === "function" ? entry.label() : entry.label;
+  if (state === "saving"){ btn.textContent = "Saving\u2026"; btn.disabled = true; btn.dataset.saved = "no"; }
+  else if (state === "saved"){ btn.textContent = "\u2713 Saved"; btn.disabled = false; btn.dataset.saved = "yes"; }
+  else { btn.textContent = resting; btn.disabled = false; btn.dataset.saved = "no"; }
+}
 function paintSaveButtons(state){
-  saveButtons.forEach(entry => {
-    const btn = entry.btn;
-    /* The one in the top bar takes its wording from the width of the screen,
-       so it is asked each time rather than remembered once. */
-    const resting = typeof entry.label === "function" ? entry.label() : entry.label;
-    if (state === "saving"){ btn.textContent = "Saving\u2026"; btn.disabled = true; btn.dataset.saved = "no"; }
-    else if (state === "saved"){ btn.textContent = "\u2713 Saved"; btn.disabled = false; btn.dataset.saved = "yes"; }
-    else { btn.textContent = resting; btn.disabled = false; btn.dataset.saved = "no"; }
-  });
+  saveState = state;
+  saveButtons.forEach(entry => paintOneSave(entry, state));
 }
 
 /* The PDF, as its own button. On its own where a lesson is too heavy for a
@@ -5264,8 +5274,9 @@ function saveButton(statusEl){
     return pdfButton(statusEl, true);
   }
   const btn = el("button","btn-primary done-save","Save Work");
-  saveButtons.push({ btn: btn, label: "Save Work" });
-  if (!unsavedTyping) btn.dataset.saved = "yes";
+  const entry = { btn: btn, label: "Save Work" };
+  saveButtons.push(entry);
+  paintOneSave(entry, saveState);      // say what the one in the corner says
   btn.addEventListener("click", async () => {
     paintSaveButtons("saving");
     const st = await submitWork();
@@ -5380,7 +5391,6 @@ $("saveBtn").addEventListener("click", manualSave);
 if (!OFFLINE && !spectate){
   saveButtons.push({ btn: $("saveBtn"), label: topSaveLabel });
   paintTopSave();                        // the short wording, if this is a narrow phone
-  if (!unsavedTyping) $("saveBtn").dataset.saved = "yes";
 }
 
 /* ---------- build the PDF and download it, no dialog ----------
