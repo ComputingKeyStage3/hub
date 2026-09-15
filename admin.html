@@ -225,7 +225,7 @@ setTimeout(function(){
       <button class="btn-ghost" id="importBtn">Import from Arbor</button>
     </div>
     <div id="resetBox"></div>
-    <div class="loading" id="stuWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Loading the students</span></div>
+    <div class="loading mid" id="stuWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Loading the students</span></div>
     <table class="stutable" id="stuTable"></table>
     <p class="hint" id="stuMsg" style="margin-top:12px"></p>
   </div>
@@ -1537,8 +1537,14 @@ const lessonsOfUnit = (u) => (cat.lessons || []).filter(l => (l.unit || "") === 
 
 on("openHub", "click", async () => {
   show("hubView");
-  wait("hubYears", "Loading the lessons", true);
-  try{ await loadCatalogue(true); paintYears(); }
+  /* The catalogue is held for as long as the page is open and this screen has
+     a refresh button, so opening the hub asks for it rather than insisting on
+     a fresh copy. Forcing one every time meant two round trips to the server
+     before a list the teacher had already seen would come back. Nothing is
+     drawn at all if the answer is here already: a flash of dots over a list
+     that was about to appear reads as slower than no dots. */
+  if (!catLoaded) wait("hubYears", "Loading the lessons", true);
+  try{ await loadCatalogue(); paintYears(); }
   catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
 on("hubHome", "click", toHome);
@@ -2500,14 +2506,21 @@ async function fetchCatalogue(){
      offline mode's and nothing here reads it, or a file left behind from a
      spell offline would put its own title on a lesson that has since been
      rewritten. */
-  try{
-    const reply = await fetch(API + "/api/teacher/lessons", { headers: H(), cache: "no-store" });
-    const d2 = await reply.json();
-    fileLessons = (d2.lessons || []).map(l =>
-      ({ id: l.id, title: l.title || l.id, unit: l.unit || "", fromDb: true }));
-  }catch(e){}
-  const r = await fetch(API + "/api/catalog", { headers: H(), cache: "no-store" });
-  cat = await r.json();
+  /* Both at once, not one after the other. Neither needs anything from the
+     other, and waited for in turn they made opening the hub two round trips
+     to Vercel deep, which on a school connection is most of a second of dots
+     for nothing. Promise.all rather than two bare awaits, so a failure has
+     somewhere to go the moment it happens: the titles still do not matter
+     enough to stop the hub, and the catalogue still does. */
+  const [titles, catalog] = await Promise.all([
+    fetch(API + "/api/teacher/lessons", { headers: H(), cache: "no-store" })
+      .then(r => r.json()).catch(() => null),
+    fetch(API + "/api/catalog", { headers: H(), cache: "no-store" })
+      .then(r => r.json())
+  ]);
+  fileLessons = ((titles && titles.lessons) || []).map(l =>
+    ({ id: l.id, title: l.title || l.id, unit: l.unit || "", fromDb: true }));
+  cat = catalog;
   assigns = cat.assignments || [];
 }
 const catOf = (id) => (cat.lessons || []).find(l => l.lesson_id === id) || { unit: "", published: 0, position: 0 };
@@ -2521,7 +2534,7 @@ async function catPost(payload){
 
 on("openLessons", "click", async () => {
   show("unitsView");
-  wait("unitGrid", "Loading the units", true);
+  if (!catLoaded) wait("unitGrid", "Loading the units", true);
   try{ await loadCatalogue(); paintClassUnits(); }
   catch(e){ $("unitGrid").innerHTML = '<p class="hint">' + e.message + '</p>'; }
 });

@@ -362,13 +362,30 @@ async function fetchLessons(){
   if (!token){ box.innerHTML = ""; return false; }               // signing in comes first
   wait(box, "Loading your lessons");
   const group = localStorage.getItem("hub_group") || "";
+  /* All three at once. Neither the locked list nor the finished list needs
+     anything from the catalogue, and asked for in turn they made this three
+     round trips deep, so a child at the start of a lesson watched the dots
+     for three times as long as they had to. Each one is given something to
+     do with a failure as it starts rather than later, or a refusal that
+     arrives while another is still in the air has nowhere to go.
+
+     Every lesson comes from the database. The lessons folder belongs to
+     offline mode, and this list is never shown there, so nothing here reads
+     it: a file left behind from a spell offline must not put a lesson in
+     front of a class that was never published to them. */
+  const catalogueComing = fetch(API + "/api/catalog" +
+    (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })
+    .then(r => r.json());
+  const lockedComing = (ready && token && group)
+    ? fetch(API + "/api/release?all=1&group=" + encodeURIComponent(group), { cache: "no-store" })
+        .then(r => r.json()).catch(() => null)
+    : Promise.resolve(null);
+  const doneComing = (ready && token)
+    ? fetch(API + "/api/work?done=1", { headers: { Authorization: "Bearer " + token }, cache: "no-store" })
+        .then(r => r.json()).catch(() => null)
+    : Promise.resolve(null);
   try{
-    /* Every lesson comes from the database. The lessons folder belongs to
-       offline mode, and this list is never shown there, so nothing here
-       reads it: a file left behind from a spell offline must not put a
-       lesson in front of a class that was never published to them. */
-    catalogue = await (await fetch(API + "/api/catalog" +
-      (group ? "?group=" + encodeURIComponent(group) : ""), { cache: "no-store" })).json();
+    catalogue = await catalogueComing;
 
     const byId = {};
     (catalogue.lessons || []).forEach(c => {
@@ -381,23 +398,15 @@ async function fetchLessons(){
     try{ pruneStorage(Object.keys(byId)); }catch(e){}
 
     lockedLessons = new Set();
-    if (ready && token && group){
-      try{
-        const rel = await (await fetch(API + "/api/release?all=1&group=" + encodeURIComponent(group), { cache: "no-store" })).json();
-        (rel.rows || []).forEach(r => { if (r.lessonLocked) lockedLessons.add(r.lesson); });
-      }catch(e){}
-    }
+    const rel = await lockedComing;
+    if (rel) (rel.rows || []).forEach(r => { if (r.lessonLocked) lockedLessons.add(r.lesson); });
 
     doneLessons = new Set();
     Object.keys(byId).forEach(id => {         // this machine's own record
       try{ const w = JSON.parse(localStorage.getItem("hub_work_" + id) || "null"); if (w && w.__done) doneLessons.add(id); }catch(e){}
     });
-    if (ready && token){                      // and the authoritative one
-      try{
-        const d = await (await fetch(API + "/api/work?done=1", { headers: { Authorization: "Bearer " + token }, cache: "no-store" })).json();
-        (d.done || []).forEach(id => doneLessons.add(id));
-      }catch(e){}
-    }
+    const fin = await doneComing;             // and the authoritative one
+    if (fin) (fin.done || []).forEach(id => doneLessons.add(id));
     lastById = byId;
     loadedOk = true;
     paintLessons(byId);
