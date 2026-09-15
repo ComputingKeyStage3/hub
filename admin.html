@@ -19,13 +19,44 @@
 <!-- The console opens on the dots with the sign-in hidden behind them, so a
      teacher whose browser fills the key never sees a sign-in screen at all.
      The first line is in the markup rather than written in afterwards, so it
-     is there in the same frame as the dots instead of a blank gap under them. -->
-<div class="loadscreen" id="loadScreen">
+     is there in the same frame as the dots instead of a blank gap under them.
+
+     Shut to begin with, and opened a few lines below only if there is really
+     something to wait for. Drawing it first and taking it away once the
+     answer was known meant a teacher coming back to a console they were
+     already signed in to watched an animation play for no reason.
+
+     "gone" and not only hidden: .loadscreen sets display:grid, which beats
+     the browser's own rule for a hidden element. -->
+<div class="loadscreen gone" id="loadScreen" hidden>
   <div class="load-inner">
     <div class="load-dots"><span></span><span></span><span></span></div>
     <p id="loadMsg">Signing you in</p>
   </div>
 </div>
+<script>
+/* Whether this browser is signed in already, worked out before anything is
+   drawn, because the answer is what decides whether anything is drawn.
+   teacher.js is loaded from the head, so its few-hour copy can be asked for
+   here. The console's script takes the answer from window.hubLive rather than
+   working it out a second time. */
+(function(){
+  window.hubLive = "";
+  if (window.HUB && window.HUB.OFFLINE) return;
+  try{ window.hubLive = sessionStorage.getItem("hub_ttoken") || ""; }catch(e){}
+  /* Nothing in this tab, but perhaps a sign-in left by another one that is
+     still inside its six hours. Copied in here as well, so everything that
+     reads the session, on this page and in a builder opened from it, finds it
+     where it has always been. */
+  if (!window.hubLive && window.teacherAuth){
+    window.hubLive = window.teacherAuth.kept();
+    if (window.hubLive){ try{ sessionStorage.setItem("hub_ttoken", window.hubLive); }catch(e){} }
+  }
+  if (window.hubLive) return;          // straight into the console, no animation
+  var dots = document.getElementById("loadScreen");
+  if (dots){ dots.hidden = false; dots.classList.remove("gone"); }
+})();
+</script>
 <script>
 /* Its own script, so that it still runs if the console's does not. Were that
    to happen the dots would sit there for ever with nothing behind them, and
@@ -41,9 +72,11 @@
 setTimeout(function(){
   if (window.consoleReady) return;
   if (window.HUB && window.HUB.OFFLINE) return;
+  /* Whether the dots are up or not. A script that stopped before the end
+     leaves nothing on screen either way, and the sign-in box is the one
+     thing that gives a teacher a way on from here. */
   var dots = document.getElementById("loadScreen");
-  if (!dots || dots.hidden) return;
-  dots.hidden = true; dots.classList.add("gone");
+  if (dots){ dots.hidden = true; dots.classList.add("gone"); }
   var box = document.getElementById("keyView");
   if (box) box.hidden = false;
 }, 8000);
@@ -791,6 +824,16 @@ function changeTeacher(){ show("whoView", true); }
 let keyStage = "wait";
 let typedKey = false, autoTried = false;
 
+/* The dots, when something really is being waited for. The same two lines as
+   the little script at the top of the page, which cannot call this because it
+   runs long before this script is parsed. */
+function showLoader(){
+  const dots = $("loadScreen");
+  if (!dots || !dots.hidden) return;
+  dots.hidden = false;
+  dots.classList.remove("gone");
+  if (!loadTimer) runLoadLines();
+}
 function hideLoader(){
   if (loadTimer){ clearInterval(loadTimer); loadTimer = null; }
   const dots = $("loadScreen");
@@ -833,7 +876,9 @@ function runLoadLines(){
     at++;
   }, 1600);
 }
-runLoadLines();
+/* Only when the dots are actually up. A teacher who came back inside their
+   six hours has none, and wants no timer going round behind the console. */
+if ($("loadScreen") && !$("loadScreen").hidden) runLoadLines();
 /* The dots come down and the sign-in comes out. Everything that gives up on
    the browser filling the box ends here, and it only happens once. */
 function askForKey(){
@@ -3517,32 +3562,32 @@ if (OFFLINE){
   /* Still signed in from earlier in the same browser session? Carry on, and
      otherwise fill the key box in ready. This is the top level of the script,
      so it cannot return early: the two paths are written out instead. */
-  let live = "";
-  try{ live = sessionStorage.getItem("hub_ttoken") || ""; }catch(e){}
-  /* Nothing in this tab, but perhaps a sign-in from another one still inside
-     its few hours. Copied into this tab as well, so everything that reads the
-     session, here and in a builder opened from here, finds it where it
-     always was. */
-  if (!live && window.teacherAuth){
-    live = window.teacherAuth.kept();
-    if (live){ try{ sessionStorage.setItem("hub_ttoken", live); }catch(e){} }
-  }
+  /* Worked out by the little script at the top of the page, before anything
+     was drawn, because it is what decided whether anything was drawn. */
+  const live = window.hubLive || "";
   if (live){
-    /* The dots stay up while a session from earlier in this browser is
-       checked, so refreshing does not flash the sign-in box on the way past
-       it. Without the stage being set here, the timer waiting on the browser
-       would find an empty box and put the sign-in on screen underneath. */
+    /* Nothing is on screen while a session this browser already has is
+       checked. It is normally over in a few hundredths of a second, and an
+       animation for that reads as the console doing work it is not doing.
+       A slow morning at the server is another matter: rather than leave a
+       blank page the dots come out, late and only if they are needed. */
+    const lateDots = setTimeout(showLoader, 400);
+    /* Without the stage being set here, the timer waiting on the browser to
+       fill the key box would find it empty and put the sign-in on screen
+       underneath a session that is still being checked. */
     TOKEN = live;
     keyStage = "trying";
     fetch(API + "/api/teacher/groups", { headers: H(), cache:"no-store" })
       .then(r => r.ok ? r.json() : Promise.reject(new Error("no")))
       .then(async (d) => {
+        clearTimeout(lateDots);
         groups = d.groups || [];
         $("topbar").hidden = false;
         await loadTeachers();
         await afterSignIn();
       })
       .catch(() => {
+        clearTimeout(lateDots);
         TOKEN = "";
         try{ sessionStorage.removeItem("hub_ttoken"); }catch(e){}
         /* It was refused, so the copy the other tabs would pick up is no
@@ -3553,6 +3598,9 @@ if (OFFLINE){
            nothing, TOKEN having been set, so one is taken now. */
         keyStage = "wait";
         decideKey();
+        /* Only now is there something to wait for: decideKey has either
+           started a sign-in of its own or put the box on screen. */
+        if (keyStage === "trying") showLoader();
       });
   }
   /* Nothing in the other case: the dots are already up, and decideKey decides
