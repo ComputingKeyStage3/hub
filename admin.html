@@ -235,19 +235,6 @@ setTimeout(function(){
     <h2 style="margin:22px 0 4px">Backups and devices</h2>
 
     <section class="station" style="margin-bottom:18px">
-      <h3 style="margin:0 0 4px">Signed-in devices</h3>
-      <p class="modal-text">Browsers that have answered a code from the authenticator app. Each one
-        can sign in with the key alone until its sixty days are up. Give them names you will
-        recognise. Sign the others out if a machine has been lost, or if there is anything
-        here you cannot account for.</p>
-      <div id="deviceList"><div class="loading"><div class="load-dots"><span></span><span></span><span></span></div><span>Loading the devices</span></div></div>
-      <div class="toolrow">
-        <button class="btn-ghost" id="signOutOthers">Sign out every other device</button>
-      </div>
-      <p class="hint" id="deviceMsg"></p>
-    </section>
-
-    <section class="station" style="margin-bottom:18px">
       <h3 style="margin:0 0 4px">Weekly backup</h3>
       <p class="hint" id="backupWhen"></p>
       <p class="modal-text">Downloads the entire database as one file. Keep it somewhere safe if
@@ -270,6 +257,21 @@ setTimeout(function(){
         more room than anything else.</p>
       <button class="btn-ghost" id="storeBtn">Check</button>
       <div id="storeOut"></div>
+    </section>
+
+    <section class="station" style="margin-bottom:18px">
+      <h3 style="margin:0 0 4px">Signed-in devices</h3>
+      <p class="modal-text">Browsers that have answered a code from the authenticator app. Each one
+        can sign in with the key alone until its sixty days are up. Give them names you will
+        recognise. Sign the others out if a machine has been lost, or if there is anything
+        here you cannot account for.</p>
+      <button class="btn-ghost" id="showDevicesBtn">Show the devices</button>
+      <div id="deviceList"></div>
+      <div class="toolrow" id="deviceTools" hidden>
+        <button class="btn-ghost" id="devRefresh">&#8635; Refresh</button>
+        <button class="btn-ghost" id="signOutOthers">Sign out every other device</button>
+      </div>
+      <p class="hint" id="deviceMsg"></p>
     </section>
 
     <!-- The end of year clear-out used to be here: pick a date, save a file,
@@ -1152,7 +1154,7 @@ function saveJson(obj, name){
 }
 const stamp = () => new Date().toISOString().slice(0, 10);
 
-on("keepBtn", "click", () => { show("keepView"); paintBackupWhen(); loadDevices(); });
+on("keepBtn", "click", () => { show("keepView"); paintBackupWhen(); resetDevices(); });
 
 /* ---------- the browsers that have answered a code ---------- */
 function whenWords(iso){
@@ -1195,10 +1197,22 @@ function renameDevice(x){
     setTimeout(() => { try{ inp.focus(); }catch(e){} }, 30);
   });
 }
+/* Nearly every visit to this screen is for a backup, so the list waits to be
+   asked for rather than fetching on the way in. */
+function resetDevices(){
+  $("deviceList").innerHTML = "";
+  $("deviceMsg").textContent = "";
+  $("deviceTools").hidden = true;
+  $("showDevicesBtn").hidden = false;
+}
+on("showDevicesBtn", "click", () => loadDevices());
+on("devRefresh", "click", () => loadDevices());
 async function loadDevices(){
   const box = $("deviceList");
   wait(box, "Loading the devices");
   $("deviceMsg").textContent = "";
+  $("showDevicesBtn").hidden = true;
+  $("deviceTools").hidden = false;
   try{
     const r = await fetch(API + "/api/teacher/devices", { headers: H(), cache:"no-store" });
     const d = await r.json();
@@ -1507,15 +1521,20 @@ const assignsFor = (id) => assigns.filter(a => a.lesson_id === id);
 /* One list behind both the count on a lesson card and the ticks in "Give to
    classes", so the two can never disagree.
 
-   The classes offered are the ones this teacher takes, plus any class the
-   lesson has already been given to. That second part is the whole point: the
-   count used to come from the assignments and the ticks from the classes
-   with students in them, and three ordinary things put a class in one list
-   and not the other. A class nobody has been added to yet is not in the
-   students table. A class renamed since leaves its old name on the
-   assignment. A class belonging to another teacher is filtered out of the
-   ticks but was still counted. Each of those showed "1 class" on the card
-   with nothing ticked underneath, and no box to untick to clear it. */
+   The classes offered are the ones this teacher takes, plus any name the
+   lesson has been given to that is no longer a class at all. That second part
+   is the whole point: the count used to come from the assignments and the
+   ticks from the classes with students in them, and two ordinary things put a
+   class in one list and not the other. A class nobody has been added to yet is
+   not in the students table. A class renamed since leaves its old name on the
+   assignment. Either showed "1 class" on the card with nothing ticked
+   underneath, and no box to untick to clear it.
+
+   A class another teacher takes is left out entirely while one teacher is
+   chosen, since a pop-up listing names they do not recognise is only harder to
+   read, and it is not theirs to hand out or take back anyway. Under Admin
+   (All) every class is one of yours, so they all appear. The count on the card
+   comes off this same list, so it says what is ticked either way. */
 const classChoices = (id) => {
   const given = new Map();
   assignsFor(id).forEach(a => {
@@ -1532,9 +1551,9 @@ const classChoices = (id) => {
   });
   given.forEach((a, key) => {
     if (seen.has(key)) return;
+    if (meCode && real.has(key)) return;      // someone else's class, and not this teacher's to change
     seen.add(key);
-    out.push({ name: a.group_name, given: a,
-               note: real.has(key) ? "another teacher's class" : "no longer a class" });
+    out.push({ name: a.group_name, given: a, note: "no longer a class" });
   });
   return out;
 };
@@ -1953,7 +1972,7 @@ function distribute(id){
       box.appendChild(row);
     });
     if (choices.some(c => c.note))
-      box.appendChild(el("p","hint","A class in brackets is not one of yours, or is not a class any more. Untick it to take the lesson off it."));
+      box.appendChild(el("p","hint","A class in brackets is not a class any more. Untick it to take the lesson off it."));
     if (!choices.length) box.appendChild(el("p","modal-text","There are no classes to give this to."));
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Save");
