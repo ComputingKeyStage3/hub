@@ -52,7 +52,15 @@
     window.hubLive = window.teacherAuth.kept();
     if (window.hubLive){ try{ sessionStorage.setItem("hub_ttoken", window.hubLive); }catch(e){} }
   }
-  if (window.hubLive) return;          // straight into the console, no animation
+  if (window.hubLive){
+    /* No dots, and no fade either. Every direct child of body arrives with a
+       third of a second of fade-up, which is right for a page being built and
+       wrong for one that is already there: it is the whole of what a refresh
+       costs. Set here, before the first of those children has been parsed,
+       because an animation cannot be called off once it has started. */
+    document.documentElement.dataset.arrive = "off";
+    return;
+  }
   var dots = document.getElementById("loadScreen");
   if (dots){ dots.hidden = false; dots.classList.remove("gone"); }
 })();

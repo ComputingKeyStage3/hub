@@ -3684,3 +3684,19 @@ button.who::after{
 }
 button.who:hover b{color:var(--amber)}
 button.who:focus-visible{outline:2px solid var(--amber); outline-offset:3px; border-radius:6px}
+
+
+/* ---- arriving with no fade, when there is nothing to arrive from ----
+   Every direct child of body fades up over a third of a second as the page
+   loads. That is right for a console being put together in front of somebody
+   and wrong for one a teacher is already signed in to: there the page is
+   ready, and the third of a second is the whole of what refreshing costs.
+   admin.html sets the mark before the first of those children is parsed.
+
+   The selector is the one above written out again rather than shortened.
+   :not(#hubTint) puts an id's worth of weight into it, so a plainer rule
+   loses to it however late it comes. That same weight is why the line giving
+   the bars a shorter .24s has never had any effect either. */
+html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell){
+  animation:none;
+}

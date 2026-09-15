@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="shortmatch.js"></script>
 <script src="richtext.js"></script>
 <script src="pyedit.js"></script>
 <script src="teacher.js"></script>
@@ -78,7 +79,7 @@
         <div class="palbody" hidden>
           <button class="pal" data-add="text"><b>Paragraph</b><span>Words, with formatting</span></button>
           <button class="pal" data-add="question"><b>Written answer</b><span>They type a response</span></button>
-          <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
+          <button class="pal" data-add="short"><b>Short answer</b><span>Matched to the answers you set</span></button>
           <button class="pal" data-add="keywords"><b>Keyword definitions</b><span>They write what each word means</span></button>
         </div>
       </div>
@@ -150,7 +151,7 @@
           <button class="pal" data-add="mc"><b>Multiple choice</b><span>One right answer</span></button>
           <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
           <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
-          <button class="pal" data-add="short"><b>Short answer</b><span>Checked for keywords</span></button>
+          <button class="pal" data-add="short"><b>Short answer</b><span>Matched to the answers you set</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
           <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
         </div>
@@ -255,7 +256,7 @@ const BLANK = {
                      showPlace:true, numbers:"" }),
   binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
                      showPlace:true, showCarry:true, pairs:"" }),
-  short:    () => ({ type:"short", prompt:"", keywords:"", keywordLabels:"", model:"", why:"", topic:"" }),
+  short:    () => ({ type:"short", prompt:"", answers:[""], model:"", why:"", topic:"" }),
   password: () => ({ type:"password", title:"Password strength challenge",
                      task:"Invent a made-up password that turns all five checks green." }),
   /* The teacher writes the real message and picks a shift; the coded text and
@@ -407,7 +408,7 @@ function keepArrays(o){
   Object.keys(o).forEach(k => {
     const v = o[k];
     if (v === "" || v === undefined) delete o[k];
-    if (Array.isArray(v) && !v.length && (k === "distractors" || k === "keywords")) delete o[k];
+    if (Array.isArray(v) && !v.length && (k === "distractors" || k === "keywords" || k === "answers")) delete o[k];
   });
   return o;
 }
@@ -685,8 +686,7 @@ function compileOne(b, id, target){
         items: (b.items || []).filter(x => x !== ""), topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "short")
       push(keepArrays({ type:"short", id, prompt: b.prompt || "",
-        keywords: (b.keywords || "").split(";").map(g => g.split(/\s*,\s*/).map(x => x.trim()).filter(Boolean)).filter(g => g.length),
-        keywordLabels: (b.keywordLabels || "").split(";").map(x => x.trim()).filter(Boolean),
+        answers: (b.answers || []).map(x => String(x).trim()).filter(Boolean),
         model: b.model || "", topic: lesson.assessment ? b.topic : "" }));
   }
 }
@@ -1163,6 +1163,34 @@ function headLabel(b, i){
   return pageNumber(b) + ". Page" + (t ? ": " + t : "");
 }
 
+/* What is wrong with the answers a teacher has typed, said under the box
+   rather than at save time: a half-written question is normal while it is
+   being written, and a pop-up on every save would be in the way.
+
+   Two answers that only differ by capitals, spacing or punctuation are one
+   answer once the comparison has finished with them, and a teacher adding
+   both has not made the question any easier. shortmatch.js decides that, so
+   the warning cannot drift away from the marking. */
+function shortAnswerNotes(body, b){
+  const said = [];
+  const list = (b.answers || []).map(x => String(x).trim()).filter(Boolean);
+  if (b.wasKeywords)
+    said.push("This question used to be checked for keywords. Each keyword is " +
+              "now an answer on its own line. Students have to type one of them " +
+              "exactly, so delete any that are not a whole answer.");
+  if (!list.length)
+    said.push("No answers yet, so nobody can get this right. It saves and students " +
+              "can still write in it, but it will mark as wrong until you add one.");
+  const seen = new Map();
+  list.forEach(a => {
+    const key = window.shortAnswer.normalise(a, list);
+    if (seen.has(key) && seen.get(key) !== a) said.push("“" + seen.get(key) + "” and “" + a +
+      "” already count as the same answer, so one of them can go.");
+    else seen.set(key, a);
+  });
+  said.forEach(text => body.appendChild(el("p","bhelp warn", text)));
+}
+
 function card(b, i, arr){
   const c = el("div","bcard");
   c.draggable = false;
@@ -1429,13 +1457,16 @@ function card(b, i, arr){
     if (help) w.appendChild(el("p","bhelp", help));
     body.appendChild(w);
   }
-  function listField(label, key, help){
+  /* onChange fires whenever a line is typed in, added or removed, for the
+     lists that have something to put right once a teacher has touched them. */
+  function listField(label, key, help, onChange){
+    const changed = () => { if (onChange) onChange(); };
     const w = el("div","bfield");
     w.appendChild(el("label","", label));
     b[key].forEach((val, k) => {
       const row = el("div","brow");
       const input = el("input"); input.value = val;
-      input.addEventListener("input", () => { b[key][k] = input.value; saveDraft(); schedulePreview(); });
+      input.addEventListener("input", () => { b[key][k] = input.value; changed(); saveDraft(); schedulePreview(); });
       row.appendChild(input);
       if (b.answer !== undefined){
         const pick = el("button","btn-ghost bmini" + (Number(b.answer) === k ? " right" : ""), "\u2713");
@@ -1444,12 +1475,12 @@ function card(b, i, arr){
         row.appendChild(pick);
       }
       const del = el("button","btn-ghost bmini","\u2715"); del.title = "Remove";
-      del.addEventListener("click", () => { b[key].splice(k, 1); render(); schedulePreview(); });
+      del.addEventListener("click", () => { b[key].splice(k, 1); changed(); render(); schedulePreview(); });
       row.appendChild(del);
       w.appendChild(row);
     });
     const add = el("button","btn-ghost bmini2","+ Add another");
-    add.addEventListener("click", () => { b[key].push(""); render(); });
+    add.addEventListener("click", () => { b[key].push(""); changed(); render(); });
     w.appendChild(add);
     if (help) w.appendChild(el("p","bhelp", help));
     body.appendChild(w);
@@ -2199,9 +2230,18 @@ function card(b, i, arr){
   }
   if (b.type === "short"){
     R("Question", "prompt", { rows:2 });
-    F("Keywords", "keywords", { help:"Groups separated by ; and alternatives by ,, e.g. loop, repeat; count" });
-    F("What each group means", "keywordLabels", { help:"One phrase per group, separated by ;, students see these when they check their answer." });
-    F("Model answer", "model", { area:true, rows:2 });
+    if (!Array.isArray(b.answers)) b.answers = [""];
+    listField("Accepted answers", "answers",
+      "The student has to type one of these. Capitals, extra spaces and stray " +
+      "punctuation are ignored, so add a line only for answers that are really " +
+      "different, such as CPU and central processing unit.",
+      /* The note about the old keyword marking has been read and acted on the
+         moment the list is touched, so it goes rather than sitting there for
+         the rest of the afternoon. */
+      () => { delete b.wasKeywords; });
+    shortAnswerNotes(body, b);
+    F("Model answer", "model", { area:true, rows:2,
+      help:"Shown to a student who gets it wrong, and printed beside their work." });
     if (lesson.assessment) F("Topic tag", "topic");
   }
   c.appendChild(body);
@@ -3801,8 +3841,18 @@ function fromCompiled(data, meta){
         q:q.q || "", options:q.options || ["",""],
         answers: q.answers !== undefined ? q.answers.slice() : [q.answer || 0],
         answer:q.answer || 0, hint:q.hint || "", why:q.why || "" })) };
-    if (b.type === "short") return { type:"short", prompt:b.prompt || "",
-      keywords:(b.keywords || []).map(g => g.join(", ")).join("; "), model:b.model || "", topic:b.topic || "" };
+    /* A question written before short answers were matched rather than
+       scanned for keywords. Every keyword becomes an answer in its own right,
+       which is a starting point and not the same rule, so the editor says so
+       and the teacher can put it right before saving. */
+    if (b.type === "short"){
+      const converted = window.shortAnswer.legacy(b);
+      const answers = converted
+        ? b.keywords.reduce((all, g) => all.concat(g), []).map(x => String(x).trim()).filter(Boolean)
+        : window.shortAnswer.accepted(b);
+      return { type:"short", prompt:b.prompt || "", answers: answers.length ? answers : [""],
+               wasKeywords: converted, model:b.model || "", topic:b.topic || "" };
+    }
     if (b.type === "blanks") return { type:"blanks", prompt:b.prompt || "", text:b.text || "",
       distractors:(b.distractors || []).join(", "), topic:b.topic || "" };
     /* A saved cipher holds only the coded text and a hash, never the message.
