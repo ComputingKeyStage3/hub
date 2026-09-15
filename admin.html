@@ -853,17 +853,23 @@ async function restoreSpot(spot){
     if (spot.view === "classesView"){ toClasses(); return; }
     if (here && spot.view === "classView"){ openClass(cls); return; }
     if (here && spot.view === "studentsView"){ openClass(cls); show("studentsView"); loadStudents(); return; }
+    /* Nothing is put on screen before the catalogue has come. show() is what
+       takes the dots away, so calling it for a page on the way past showed
+       that page instead of the dots and then replaced it a moment later:
+       going back to the lesson hub flashed Home first, and going back to a
+       class's units flashed the class. The dots stay until the screen that
+       was actually asked for is ready. */
     if (here && spot.view === "unitsView"){
-      openClass(cls); await loadCatalogue(); show("unitsView"); paintClassUnits(); return;
+      nameClass(cls); await loadCatalogue(); show("unitsView"); paintClassUnits(); return;
     }
     if (here && spot.view === "lessonsView"){
-      openClass(cls); await loadCatalogue(); await loadClassLocks();
+      nameClass(cls); await loadCatalogue(); await loadClassLocks();
       show("lessonsView"); paintLessonGrid(); return;
     }
-    show("homeView");
     if (spot.view === "hubView"){ await loadCatalogue(); show("hubView"); paintYears(); return; }
     if (spot.view === "hubUnitsView"){ await loadCatalogue(); openYear(hubYear); return; }
     if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit); return; }
+    show("homeView");          // a note pointing at nothing we can open
   }catch(e){
     console.warn("could not go back to where you were:", e);
     show("homeView");
@@ -2028,14 +2034,18 @@ function deleteLesson(id, then){
 }
 
 /* ---------- one class ---------- */
-async function openClass(name){
+/* The class's name into every place that shows it, without opening its page.
+   Kept apart from openClass because going back to one of a class's deeper
+   lists wants the name set while the dots are still up, and putting the class
+   page on screen on the way past is exactly the flicker this avoids. */
+function nameClass(name){
   cls = name;
   /* the lock information is only needed on the lessons grid, so it is
      fetched there rather than every time a class is opened */
   $("clsName").textContent = cls;
   document.querySelectorAll(".bk").forEach(b => b.textContent = cls);
-  show("classView");
 }
+async function openClass(name){ nameClass(name); show("classView"); }
 on("backClasses", "click", () => { refreshGroups(); show("classesView"); });
 on("openClasses", "click", toClasses);
 on("backHome", "click", toHome);
