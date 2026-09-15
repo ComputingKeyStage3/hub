@@ -47,7 +47,10 @@
   <div class="banner banner-ok no-print" id="resumeNote" hidden>
     ↩︎ Welcome back, your saved work has been put back on the page.
   </div>
-  <div id="blocks"></div>
+  <div class="stagerow">
+    <nav class="taskrail no-print" id="taskRail" aria-label="The tasks on this page" hidden></nav>
+    <div id="blocks"></div>
+  </div>
 </div>
 
 <div class="dock" id="dock">
@@ -1303,6 +1306,11 @@ function showStep(i){
     ? (scoredNow ? "Finish & see my score" : "Finish 🏁")
     : "Continue →";
   $("stage").scrollTop = 0;
+  /* After the brief above the stage has been written, not before. The bar is
+     given its height from the stage, and a brief that has just grown a second
+     line makes the stage shorter: measured any earlier, the bar was told it
+     had room that had already gone and ran on under the bottom bar. */
+  paintRail();
   refreshGate();
 }
 function refreshGate(){
@@ -1535,6 +1543,361 @@ function paintTracker(){
     end.classList.toggle("here", !!finished && !!done && !done.hidden);
     $("tracker").classList.toggle("has-end", !!finished);
   }
+}
+
+/* =====================================================================
+   THE TASK BAR DOWN THE LEFT OF A PAGE
+   =====================================================================
+   A page holds several tasks one under the other, and the only way back to
+   one of them was to scroll until it turned up. This is one button for each
+   task, in the order they stand on the page, and pressing it puts that task
+   at the top.
+
+   It is a way about the page and nothing else. It never stops anybody, it
+   never asks anything, and the tick it puts on a finished task is the same
+   encouragement the task is already giving in its own place.
+
+   Only a page gets one: a step that is a single task has nowhere to go.
+   ===================================================================== */
+
+/* What each kind of task is drawn as, and what it is called.
+
+   Line drawings rather than the emoji this started with. Emoji arrive in the
+   operating system's own colours, which is five or six of them in a row down
+   the side of the work, all shouting louder than the work does. These are one
+   path each, drawn in whatever colour the button is, so the bar reads as a
+   margin note and the page keeps the eye.
+
+   The name is the tooltip and what a screen reader says, so a small drawing of
+   a padlock never has to be guessed at. */
+const TASK_ICON = {
+  /* a paragraph */
+  text:      { name:"Reading",
+               d:'<path d="M5 6h14M5 10h14M5 14h11M5 18h7"/>' },
+  picture:   { name:"Picture",
+               d:'<rect x="3" y="5" width="18" height="14" rx="2"/>' +
+                 '<circle cx="8.5" cy="10" r="1.4"/><path d="M4 17.5l4.5-4.5 3 3 4-4 4.5 4.5"/>' },
+  embed:     { name:"Video",
+               d:'<rect x="3" y="5" width="18" height="14" rx="2"/>' +
+                 '<path d="M10.5 9.3l4.7 2.7-4.7 2.7z"/>' },
+  /* a browser window */
+  frame:     { name:"Website",
+               d:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/>' +
+                 '<path d="M6 7h.01M8.4 7h.01"/>' },
+  /* an arrow leaving a box */
+  link:      { name:"Link",
+               d:'<path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L12 12"/>' +
+                 '<path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>' },
+  question:  { name:"Written answer",
+               d:'<path d="M4 20l4.4-1L19 8.4a2.1 2.1 0 0 0-3-3L5 16z"/><path d="M14.5 6.9l3 3"/>' },
+  short:     { name:"Short answer",
+               d:'<path d="M20 6.5A1.5 1.5 0 0 0 18.5 5h-13A1.5 1.5 0 0 0 4 6.5v7A1.5 1.5 0 0 0 5.5 15H8v4l4-4h6.5a1.5 1.5 0 0 0 1.5-1.5z"/>' },
+  /* a list with a bullet against each line */
+  keywords:  { name:"Keywords",
+               d:'<path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01M9 7h10.5M9 12h10.5M9 17h7"/>' },
+  quiz:      { name:"Quiz",
+               d:'<circle cx="12" cy="12" r="8.5"/>' +
+                 '<path d="M9.8 9.9a2.3 2.3 0 0 1 4.5.6c0 1.5-2.3 2-2.3 3.3"/><path d="M12 17h.01"/>' },
+  mc:        { name:"Multiple choice",
+               d:'<circle cx="12" cy="12" r="8.5"/>' +
+                 '<path d="M9.8 9.9a2.3 2.3 0 0 1 4.5.6c0 1.5-2.3 2-2.3 3.3"/><path d="M12 17h.01"/>' },
+  /* a gap in a line */
+  blanks:    { name:"Fill the gaps",
+               d:'<path d="M3 12h4"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M17 12h4"/>' },
+  order:     { name:"Put in order",
+               d:'<path d="M7 5v14"/><path d="M4 16l3 3 3-3"/><path d="M13 6.5h7M13 12h5M13 17.5h3"/>' },
+  label:     { name:"Label a picture",
+               d:'<path d="M3.5 3.5h8l9 9-8 8-9-9z"/><path d="M7.5 7.5h.01"/>' },
+  notes:     { name:"Notes",
+               d:'<path d="M6.5 3.5h7l4.5 4.5v12.5h-11.5z"/><path d="M13.5 3.5V8H18"/>' +
+                 '<path d="M9 13h6M9 16.5h4"/>' },
+  mindmap:   { name:"Mind map",
+               d:'<circle cx="5.5" cy="12" r="2.5"/><circle cx="18" cy="6.5" r="2"/>' +
+                 '<circle cx="18" cy="17.5" r="2"/><path d="M8 11l8-3.6M8 13l8 3.6"/>' },
+  /* a board on a stand */
+  board:     { name:"Whiteboard",
+               d:'<rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M12 17v3"/>' +
+                 '<path d="M7 12.8c1.8-4.4 3.7 1.6 5.6-1.4 1.1-1.7 2.5-.4 3.4 0"/>' },
+  ide:       { name:"Python",
+               d:'<path d="M8.5 8L4 12l4.5 4M15.5 8l4.5 4-4.5 4M13.6 5.5l-3.2 13"/>' },
+  /* the same brackets, in a page of their own, so a lesson carrying both a
+     Python task and a web one does not show the same drawing twice */
+  web:       { name:"Web page",
+               d:'<rect x="3" y="4.5" width="18" height="15" rx="2"/>' +
+                 '<path d="M9.7 9.8L7.2 12l2.5 2.2M14.3 9.8l2.5 2.2-2.5 2.2"/>' },
+  password:  { name:"Password checker",
+               d:'<rect x="4.5" y="10.5" width="15" height="9.5" rx="2"/>' +
+                 '<path d="M8.5 10.5v-3a3.5 3.5 0 0 1 7 0v3"/>' },
+  /* the shift, gone round */
+  caesar:    { name:"Caesar cipher",
+               d:'<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20.5 3.5v5.2h-5.2"/>' },
+  /* on or off */
+  binary:    { name:"Binary",
+               d:'<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="16" cy="12" r="2"/>' },
+  binadd:    { name:"Binary addition",
+               d:'<path d="M12 6.5v11M6.5 12h11"/>' },
+  image:     { name:"Screenshot",
+               d:'<path d="M4 8.5h3.4L9.4 6h5.2l2 2.5H20a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1z"/>' +
+                 '<circle cx="12" cy="13.5" r="3.2"/>' },
+  pastelink: { name:"Paste a link",
+               d:'<path d="M16.5 7.5l-6.8 6.8a2 2 0 0 0 2.8 2.8l7.3-7.3a3.7 3.7 0 0 0-5.2-5.2L6.7 11.5a5.4 5.4 0 0 0 7.6 7.6l4.4-4.4"/>' },
+  /* the path forks */
+  choice:    { name:"Choose one",
+               d:'<path d="M3.5 8H7l3 8h3.5"/><path d="M3.5 16H7l1.6-4.2"/>' +
+                 '<path d="M13.5 5l3 3-3 3"/><path d="M13.5 13l3 3-3 3"/>' },
+  extension: { name:"Extension tasks",
+               d:'<path d="M12 4.5l2.35 4.76 5.25.76-3.8 3.7.9 5.23L12 16.48l-4.7 2.47.9-5.23-3.8-3.7 5.25-.76z"/>' }
+};
+const TASK_ICON_OTHER = { name:"Task", d:'<circle cx="12" cy="12" r="4"/>' };
+const taskLook = (type) => TASK_ICON[type] || TASK_ICON_OTHER;
+const taskIcon = (type) =>
+  '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + taskLook(type).d + '</svg>';
+
+/* The tasks on the page being looked at, or nothing at all if this step is
+   one task, or if there is only one task on the page: a bar with a single
+   button on it describes nothing. */
+function railList(){
+  const st = steps[step];
+  if (!st || typeof st.railItems !== "function") return null;
+  const list = st.railItems();
+  return list.length > 1 ? list : null;
+}
+
+function paintRail(){
+  const rail = $("taskRail");
+  if (!rail) return;
+  const list = railList();
+  if (!list){ rail.hidden = true; rail.innerHTML = ""; rail._items = null; rail._key = ""; return; }
+
+  /* The buttons are only rebuilt when the page holds a different run of
+     tasks. Building them afresh on every keystroke would take the button a
+     student was pressing out from under their finger. */
+  const key = list.map(t => t.type).join("|");
+  if (rail._key !== key){
+    rail._key = key;
+    rail.innerHTML = "";
+    rail._btns = list.map((t, i) => {
+      const btn = el("button","railbtn", taskIcon(t.type));
+      btn.type = "button";
+      btn.addEventListener("click", () => goToTask(i));
+      rail.appendChild(btn);
+      return btn;
+    });
+  }
+  rail._items = list;
+  rail.hidden = false;
+
+  list.forEach((t, i) => {
+    const btn = rail._btns[i];
+    const look = taskLook(t.type);
+    /* "Python: Python" says nothing twice. Where a teacher has given the task
+       a heading of its own, both are worth having. */
+    const head = stripTags(t.label);
+    const name = (head && head.toLowerCase() !== look.name.toLowerCase())
+      ? look.name + ": " + head : look.name;
+    btn.classList.toggle("shut", !!t.shut);
+    btn.disabled = !!t.shut;
+    btn.title = t.shut ? name + " (not yet)" : name;
+    btn.setAttribute("aria-label",
+      "Task " + (i + 1) + " of " + list.length + ", " + btn.title);
+  });
+  layoutRail();
+}
+
+/* ---------- where every icon sits ----------
+   An icon rides level with the start of its own task, so the bar is a picture
+   of where the tasks are rather than a list of them: scrolling the page slides
+   the icons down the line.
+
+   Only the tasks on screen get an icon. The rest shrink to a dot and gather at
+   whichever end of the line their task went off: a run of dots at the top is
+   the work already passed, a run at the bottom is the work still to come. That
+   is what leaves the line clear for the tasks that are showing, so each of
+   their icons can sit exactly beside its own work rather than being shoved
+   along by the ones that are not. A dot is still pressable, so nothing on the
+   page becomes unreachable.
+
+   A run of dots never takes more than the room two icons would have, however
+   many are in it: they close up instead. Otherwise a student near the foot of
+   a long page had eleven dots at the top of the line pushing the icon for the
+   task they were actually reading a long way below it.
+
+   Read everything first and write everything afterwards. Interleaving the two
+   makes the browser lay the page out again between each one, and this runs on
+   every scroll event. */
+function layoutRail(){
+  const rail = $("taskRail");
+  if (!rail || rail.hidden || !rail._items || !rail._btns || !rail._btns.length) return;
+  /* No width means the stylesheet has taken the bar off this screen, which is
+     what a phone gets. Nothing to place, and nothing worth measuring for. */
+  if (!rail.offsetWidth) return;
+  const stage = $("stage"), blocks = $("blocks");
+  const items = rail._items, btns = rail._btns, n = items.length;
+
+  /* The line is as long as the tasks it runs beside, and never longer than
+     what can be seen of the page. clientHeight counts the stage's own padding
+     and the bar stands inside that, along with the work. */
+  let padTop = 0, padBottom = 0;
+  try{
+    const cs = getComputedStyle(stage);
+    padTop = parseFloat(cs.paddingTop) || 0;
+    padBottom = parseFloat(cs.paddingBottom) || 0;
+  }catch(e){}
+  const room = Math.max(0, stage.clientHeight - padTop - padBottom);
+  const height = Math.max(0, Math.min(blocks.offsetHeight, room));
+  const wanted = height + "px";
+  if (rail.style.height !== wanted) rail.style.height = wanted;
+
+  const railTop = rail.getBoundingClientRect().top;
+  /* The bar is exactly one icon wide, so its own width is the icon size. Asked
+     for here rather than written down, which keeps the phone size and the
+     desktop size together in the stylesheet with the rest of the sizing. */
+  const size = rail.offsetWidth || 34;
+  const DOT = 7;                       // and .railbtn.dot in the stylesheet
+  const air = 5;                       // never quite touching
+  const apart = size + air;            // between two icons, centre to centre
+  const nextTo = (size + DOT) / 2 + air;   // between an icon and a dot
+  const beads = Math.min(DOT + air, 11);   // between two dots, before closing up
+  const runCap = size * 2;             // the most a run of dots may take
+
+  const mark = stage.getBoundingClientRect().top + 72;
+  let now = -1, lastShowing = -1;
+
+  /* read: where each task is, and whether any of it is beside the line */
+  /* The centre each one wants. Anything that turns out not to be on the screen
+     is left at the bottom of the scale, so that a task with no place of its own
+     falls in behind the one before it rather than coming out as nothing. */
+  const mid = new Array(n).fill(-Infinity);
+  let firstIcon = -1, lastIcon = -1;
+  items.forEach((t, i) => {
+    /* A task a quiz is holding back is not on the page at all. It belongs
+       after everything showing, which is the bottom of the line. */
+    if (t.shut || !t.el || !t.el.getBoundingClientRect) return;
+    const box = t.el.getBoundingClientRect();
+    if (box.bottom <= railTop + 1 || box.top - railTop >= height - 1) return;
+    lastShowing = i;
+    if (box.top <= mark) now = i;
+    if (firstIcon < 0) firstIcon = i;
+    lastIcon = i;
+    /* The icon's top against the task's top, so it reads as a mark in the
+       margin beside where that task begins. A task running off the top of the
+       screen keeps its icon at the top of the line: it is still the one being
+       read. */
+    mid[i] = Math.min(Math.max(box.top - railTop, 0), Math.max(0, height - size)) + size / 2;
+  });
+  /* The last task on a page is usually too short to be brought up to the top,
+     so measuring against that line alone would light the one above it however
+     far down the student went. At the bottom of the page they are on the last
+     task, whatever the arithmetic says.
+
+     Only where there is a bottom to reach. A page that fits on the screen is
+     at its own bottom from the moment it is drawn, and that lit the last task
+     on a short page before the student had read the first. */
+  if (lastShowing >= 0 && stage.scrollHeight > stage.clientHeight + 2
+      && stage.scrollTop + stage.clientHeight >= stage.scrollHeight - 2)
+    now = lastShowing;
+  if (now < 0) now = lastShowing >= 0 ? lastShowing : 0;
+
+  /* the dots above, from the top down, closing up if there are a lot of them */
+  const overhead = firstIcon < 0 ? n : firstIcon;
+  let step = overhead > 1 ? Math.min(beads, runCap / (overhead - 1)) : 0;
+  for (let i = 0; i < overhead; i++) mid[i] = DOT / 2 + i * step;
+  /* the dots below, from the bottom up */
+  const under = lastIcon < 0 ? 0 : n - 1 - lastIcon;
+  step = under > 1 ? Math.min(beads, runCap / (under - 1)) : 0;
+  for (let k = 0; k < under; k++) mid[n - 1 - k] = height - DOT / 2 - k * step;
+
+  /* the icons in between, each beside its own task, never nearer to its
+     neighbour than one icon, and never over the dots at either end */
+  if (firstIcon >= 0){
+    const top = (overhead ? mid[overhead - 1] + nextTo : size / 2);
+    const foot = (under ? mid[n - under] - nextTo : height - size / 2);
+    for (let i = firstIcon; i <= lastIcon; i++){
+      mid[i] = Math.max(mid[i], top);
+      if (i > firstIcon) mid[i] = Math.max(mid[i], mid[i - 1] + apart);
+    }
+    mid[lastIcon] = Math.min(mid[lastIcon], foot);
+    for (let i = lastIcon - 1; i >= firstIcon; i--)
+      mid[i] = Math.min(mid[i], mid[i + 1] - apart);
+    /* squeezed from both ends there is nothing left to give, so start from the
+       top and let the last of them crowd rather than fall off the bottom */
+    if (mid[firstIcon] < top){
+      for (let i = firstIcon; i <= lastIcon; i++)
+        mid[i] = Math.min(i === firstIcon ? top : mid[i - 1] + apart, height - size / 2);
+    }
+  }
+
+  /* write */
+  btns.forEach((btn, i) => {
+    const icon = i >= firstIcon && i <= lastIcon && firstIcon >= 0;
+    btn.classList.toggle("dot", !icon);
+    btn.classList.toggle("now", i === now);
+    btn.style.transform =
+      "translate(-50%," + Math.round(mid[i] - (icon ? size : DOT) / 2) + "px)";
+  });
+}
+try{ new ResizeObserver(layoutRail).observe($("stage")); }catch(e){}
+/* Turning a phone over changes the stage too, and this arrives whether or not
+   the observer above could be made. */
+window.addEventListener("resize", layoutRail);
+/* Not throttled. A browser raises this at most once a frame already, and the
+   icons are meant to travel with the page rather than catch it up a moment
+   later. */
+$("stage").addEventListener("scroll", layoutRail, { passive:true });
+
+/* Put a task at the top of the stage. Nothing is checked on the way: this is
+   only a way of looking at the page they are already on. */
+function goToTask(i){
+  const rail = $("taskRail");
+  const t = rail && rail._items && rail._items[i];
+  if (!t || t.shut || !t.el) return;
+  const stage = $("stage");
+  const from = stage.scrollTop;
+  /* Where the stage would have to be scrolled to for this task to be at the
+     top of it, with a little room above so it is not jammed against the edge.
+     Worked out here rather than left to scrollIntoView, which gives no room
+     and reaches for the window as well. */
+  const aim = () => Math.max(0, stage.scrollTop + t.el.getBoundingClientRect().top
+                                - stage.getBoundingClientRect().top - 10);
+  const top = aim();
+  let smooth = true;
+  try{ smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
+  stage.scrollTo({ top: top, behavior: smooth ? "smooth" : "auto" });
+
+  /* A smooth scroll is a request, not a promise. In the preview this was
+     built in the browser never ran one, and the bar did nothing whatever when
+     it was pressed. If nothing at all has moved a moment later, go there
+     outright: arriving without the slide is the whole point of the button,
+     and arriving nowhere is not. */
+  if (smooth && top !== from){
+    setTimeout(() => { if (stage.scrollTop === from) stage.scrollTop = top; }, 250);
+  }
+  /* A task can move while the page is on its way to it: a picture above it
+     finishing loading pushes everything below it down, and the student lands
+     somewhere else entirely. Once the scroll has arrived, line it up again
+     against where the task is now.
+
+     Only when the stage is sitting exactly where it was sent. Anything else
+     means either that the slide is still running, which the second look
+     catches, or that the student has taken over and started scrolling
+     themselves, and pulling the page back from under them would be worse than
+     the miss. */
+  const settle = () => {
+    if (Math.abs(stage.scrollTop - top) <= 1){
+      const near = aim();
+      if (Math.abs(near - stage.scrollTop) > 4) stage.scrollTop = near;
+    }
+    layoutRail();
+  };
+  /* twice: once for a short slide that is already over, once for a long one
+     down a page whose pictures are still arriving */
+  setTimeout(settle, 350);
+  setTimeout(settle, 900);
+
+  /* the same flash the page gives when it moves them on by itself, so being
+     taken somewhere always looks the same */
+  t.el.classList.add("justopened");
+  setTimeout(() => t.el.classList.remove("justopened"), 1400);
 }
 
 let lastSubmittedPayload = "";
@@ -1879,9 +2242,18 @@ function buildBlock(b, i){
     console.error("Block " + (i+1) + " (" + b.type + ") failed:", err);
     const s = el("section","station");
     s.appendChild(el("p","err","This activity could not be displayed. Continue and tell your teacher."));
-    return { section:s, check:() => ({ ok:true }), brief:{ eyebrow:"Notice", title:"Activity unavailable", text:"" } };
+    return { section:s, check:() => ({ ok:true }),
+             brief:{ eyebrow:"Notice", title:"Activity unavailable", text:"" } };
   }
 }
+
+/* The tasks that can be finished outright, as against a written answer, which
+   is never "done". Bringing the next task into view reads this.
+
+   "Put in order" used to be in here and did nothing: any order can be handed
+   in, so its check passes from the moment it is drawn. Nothing ever became
+   finished, so nothing was ever brought into view. */
+const FINISHABLE = ["quiz","mc","blanks","binary","binadd","label","caesar","password"];
 
 /* A page: several activities stacked together, one Continue at the end.
    This is how a Trinket-style page works, explanation, code, then questions. */
@@ -1920,7 +2292,7 @@ function rPage(b){
     item.appendChild(built.section);
     slots.place(item, child);
     kids.push(built);
-    items.push({ item, built, type: child.type });
+    items.push({ item, built, type: child.type, name: bb.title || "" });
   });
 
   /* When a task is definitely finished, and there is another below it on the
@@ -1929,7 +2301,6 @@ function rPage(b){
      Only tasks that can be finished outright count. A written answer is never
      "done", so moving the page while somebody is still typing would be worse
      than leaving them alone. */
-  const FINISHABLE = ["quiz","mc","order","blanks","binary","binadd","label","caesar","password"];
   const was = items.map(entry => {
     try{ return entry.built.check().ok; }catch(e){ return false; }
   });
@@ -1989,8 +2360,36 @@ function rPage(b){
     if (h && h.watch) h.watch(refreshHold);
   });
 
-  s.addEventListener("click", () => { refreshHold(); scrollToNextTask(); });
-  s.addEventListener("change", () => { refreshHold(); scrollToNextTask(); });
+  s.addEventListener("click", () => { refreshHold(); scrollToNextTask(); paintRail(); });
+  s.addEventListener("change", () => { refreshHold(); scrollToNextTask(); paintRail(); });
+
+  /* ---------- what the task bar down the left is made of ----------
+     Worked out afresh each time it is painted rather than kept in a list,
+     because what is on the page changes while the student is standing on it:
+     a quiz can hold back everything under it, and a task they have just
+     finished has to pick up its tick. */
+  const railItems = () => {
+    const out = [];
+    items.forEach(entry => {
+      const row = entry.item.parentNode;
+      const inRow = !!(row && row.classList && row.classList.contains("pg-pair"));
+      /* A picture and the task beside it are one row on the page, so they are
+         one button here. Two pointing at the same place would only make the
+         bar longer than the page it describes. */
+      if (entry.type === "picture" && inRow && row.children.length > 1) return;
+      out.push({
+        el: inRow ? row : entry.item,
+        type: entry.type,
+        label: entry.name,
+        /* held back by a quiz above it: still shown, so they can see there is
+           more to come, but there is nothing to jump to yet */
+        shut: !!entry.item.hidden || !!(inRow && row.hidden)
+      });
+    });
+    extras.forEach(x => out.push({ el:x.section, type:"extension", label:"",
+                                   shut:!!x.section.hidden }));
+    return out;
+  };
 
   /* Whatever the teacher put them among, extension tasks belong at the end. */
   extras.forEach(x => s.appendChild(x.section));
@@ -2006,7 +2405,13 @@ function rPage(b){
       for (const k of kids){ const r = k.check(); if (!r.ok) return r; }
       return { ok:true };
     },
-    brief: { eyebrow:"Tasks", title: b.title || "Tasks", text: b.task || "" }
+    brief: { eyebrow:"Tasks", title: b.title || "Tasks", text: b.task || "" },
+    /* A teacher can turn the task bar off for a page. Handing back nothing in
+       place of the list is what the bar reads as "not on this page", so there
+       is one test for it rather than a flag to carry about as well. On unless
+       it was turned off, which is what keeps it on every lesson written before
+       the setting existed. */
+    railItems: b.taskbar === false ? null : railItems
   };
 }
 
@@ -5009,6 +5414,8 @@ function showEverything(){
     const n = $(id);
     if (n) n.hidden = true;
   });
+  const rail = $("taskRail");
+  if (rail) rail.hidden = true;
   const wrap = el("div","allpages");
   steps.forEach((st, i) => {
     const b = (typeof st.brief === "function") ? st.brief() : st.brief;
@@ -5031,6 +5438,8 @@ function showEverything(){
 
 function showPdfView(){
   $("dock").classList.add("gone");
+  const rail = $("taskRail");
+  if (rail) rail.hidden = true;
   const shell = el("div","pdfshell");
   const bar = el("div","pdfbar");
   bar.appendChild(el("span","pdfname", (inspectName || "Student") + " \u00b7 " + (lesson.title || lessonId)));
@@ -5094,6 +5503,11 @@ function confetti(){
 
 function doneShell(title){
   steps.forEach(st => { st.section.hidden = true; });
+  /* The summary is not one of the pages, so the bar down the left has nothing
+     to point at while it is up. leaveSummary goes back through showStep,
+     which paints it again. */
+  const rail = $("taskRail");
+  if (rail) rail.hidden = true;
   let box = $("doneScreen");
   if (!box){ box = el("section"); box.id = "doneScreen"; $("blocks").appendChild(box); }
   box.hidden = false; box.innerHTML = "";

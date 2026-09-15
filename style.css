@@ -3730,3 +3730,114 @@ button.who:focus-visible{outline:2px solid var(--amber); outline-offset:3px; bor
 html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell){
   animation:none;
 }
+
+
+/* =====================================================================
+   THE TASK BAR DOWN THE LEFT OF A PAGE
+   =====================================================================
+   A thin line beside the work with one small icon on it for each task, and
+   each icon rides level with its own task, so scrolling the page slides them
+   down the line. Pressing one brings that task to the top.
+
+   A task that has scrolled off the screen shrinks to a dot and waits at that
+   end of the line, which is what leaves room for the tasks that are showing
+   to sit exactly beside their own work. lesson.html places them; it also sets
+   the height, because only the stage knows how much of itself is showing, and
+   a sticky box asked for a percentage gets a percentage of the whole page
+   below it instead.
+
+   Everything here is drawn in the theme's own greys. It is a note in the
+   margin beside the work, not a second thing competing with it, which is why
+   there is no panel behind it and no colour in the icons.
+
+   These rules are at the end of the file, so they beat the phone breakpoints
+   in the middle of it. The phone rule for the bar is in here with them,
+   underneath, for the same reason. */
+.stagerow{display:flex; align-items:flex-start; gap:14px}
+.stagerow > #blocks{flex:1 1 auto; min-width:0}
+
+.taskrail{
+  position:sticky; top:0; z-index:5; flex:0 0 auto;
+  width:34px; margin:0; padding:0;
+}
+.taskrail[hidden]{display:none}
+/* the line the icons travel down */
+.taskrail::before{
+  content:""; position:absolute; top:0; bottom:0; left:50%;
+  width:1px; margin-left:-.5px; background:var(--line-2);
+}
+
+.railbtn{
+  position:absolute; left:50%; top:0;
+  width:34px; height:34px; min-height:0; padding:0;
+  display:flex; align-items:center; justify-content:center;
+  /* the line must not show through an icon sitting on it */
+  background:var(--bg); color:var(--dim);
+  border:1px solid var(--line-2); border-radius:999px;
+  cursor:pointer;
+  transition:color .15s ease, border-color .15s ease, background .15s ease;
+}
+.railbtn svg{
+  width:17px; height:17px; display:block;
+  fill:none; stroke:currentColor; stroke-width:1.7;
+  stroke-linecap:round; stroke-linejoin:round;
+}
+.railbtn:hover{color:var(--text); border-color:var(--muted); background:var(--panel)}
+.railbtn:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+/* the task the top of the screen belongs to */
+.railbtn.now{color:var(--amber); border-color:var(--amber); background:var(--panel)}
+/* held back by a quiz above it: still on the line, so they can see more is
+   coming, but there is nothing to go to yet */
+.railbtn.shut{opacity:.35; cursor:default}
+
+/* A task that is not on the screen. Small enough that a dozen of them wait at
+   the end of the line in the room one icon would have taken. */
+.railbtn.dot{
+  width:7px; height:7px;
+  background:var(--line-2); border:0; color:transparent;
+}
+.railbtn.dot svg{display:none}
+.railbtn.dot:hover{background:var(--muted)}
+.railbtn.dot.now{background:var(--amber)}
+.railbtn.dot.shut:hover{background:var(--line-2)}
+/* A dot is too small to aim at, so what a finger hits is bigger than what the
+   eye sees. The same trick the tracker's segments use. */
+.railbtn.dot::after{
+  content:""; position:absolute; left:50%; top:50%;
+  transform:translate(-50%,-50%); width:34px; height:15px;
+}
+
+/* Being taken to a task looks the same however it happened, whether the page
+   moved them on by itself or they pressed the bar. */
+.pg-item.justopened, .pg-pair.justopened, .extension.justopened{
+  animation:taskflash 1.4s ease-out;
+  border-radius:var(--r);
+}
+@keyframes taskflash{
+  from{background:color-mix(in srgb, var(--amber) 15%, transparent)}
+  to{background:transparent}
+}
+
+/* A finger needs a bigger target than a mouse does, and the blanket 44px
+   minimum for buttons on a touch screen only gives it the height. Without the
+   width to match, every icon is a tall lozenge. This is for a tablet: a phone
+   has no bar at all. */
+@media (pointer:coarse){
+  .taskrail{width:44px}
+  .railbtn{width:44px; height:44px}
+  .railbtn.dot{width:9px; height:9px}
+  .railbtn.dot::after{width:44px; height:18px}
+}
+
+/* Not on a phone. The bar is worth a column of the screen where there is a
+   column to spare, and on a phone there is not: every task on the page is
+   already narrower than it wants to be, and taking another 44px from the work
+   to say where the work is, is the wrong way round. The same breakpoint the
+   lesson shell uses to pull its own padding in. */
+@media (max-width:720px){
+  .taskrail{display:none}
+  .stagerow{display:block}
+}
+/* Nothing to navigate on a printed page: .no-print already takes the bar out,
+   and this puts the work back to the full width it had before. */
+@media print{ .stagerow{display:block} }
