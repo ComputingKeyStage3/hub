@@ -21,6 +21,7 @@
   <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
   <button class="btn-ghost iconbtn" id="keepBtn" title="Backups and devices">&#128190;</button>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
+  <div class="auth" id="whoBar" hidden></div>
 </div>
 
 <nav class="crumbbar" id="crumbBar" hidden></nav>
@@ -32,11 +33,18 @@
     <section class="station">
       <h2 style="margin:0 0 6px">Teacher console</h2>
       <p class="hint" style="margin:0 0 16px">Sign in to load your classes.</p>
-      <div class="field"><input type="password" id="keyIn" placeholder="Teacher key" autocomplete="off"></div>
-      <div class="field" id="codeField" hidden>
-        <input type="text" id="codeIn" placeholder="6-digit code" autocomplete="one-time-code"
-               inputmode="numeric" maxlength="6"></div>
-      <button class="btn-primary" id="keyGo" style="margin-top:10px; width:100%">Sign in</button>
+      <!-- A real form with a named password box, because that is what Edge and
+           Chrome look for before they offer to remember a sign-in and before
+           they will fill one back in. autocomplete="off" here is what stopped
+           them: the box was left empty and the key typed out every lesson. -->
+      <form id="keyForm">
+        <div class="field"><input type="password" id="keyIn" name="teacher-key"
+             placeholder="Teacher key" autocomplete="current-password"></div>
+        <div class="field" id="codeField" hidden>
+          <input type="text" id="codeIn" name="code" placeholder="6-digit code" autocomplete="one-time-code"
+                 inputmode="numeric" maxlength="6"></div>
+        <button class="btn-primary" id="keyGo" type="submit" style="margin-top:10px; width:100%">Sign in</button>
+      </form>
       <p class="hint" id="keyMsg" style="margin:12px 0 0"></p>
     </section>
   </div>
@@ -322,6 +330,7 @@ function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
   clearInterval(relTimer);
   paintCrumbs();
+  paintWho();
   /* Remember where we are, so Back and the swipe gesture step through the
      console rather than leaving the site. */
   /* Kept in sessionStorage, so refreshing lands back where you were but
@@ -539,7 +548,7 @@ function fieldRow(box, label, type, value){
    page rather than left there to fail when pressed. */
 async function offlineConsole(){
   $("topbar").hidden = false;
-  ["pwBtn","keepBtn","hubHome","hubNewYear","hubNewUnit",
+  ["pwBtn","keepBtn","whoBar","hubHome","hubNewYear","hubNewUnit",
    "renameYearBtn","deleteYearBtn","renameHubUnitBtn","deleteHubUnitBtn"]
     .forEach(id => { const e = $(id); if (e) e.remove(); });
   show("hubView");
@@ -601,21 +610,90 @@ async function tryKey(){
     groups = gd.groups || [];
     $("topbar").hidden = false;
     await loadTeachers();
-    show("whoView", true);
+    await afterSignIn();
   }catch(e){
     $("keyMsg").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
+    /* Back to the box that needs putting right. It matters most when the
+       attempt was the browser's rather than the teacher's: without this they
+       are looking at a message beside a box they have not touched. */
+    if ($("codeField").hidden) $("keyIn").focus();
   }
 }
-on("keyGo", "click", tryKey);
-on("whoGo", "click", async () => {
-  meCode = $("whoAmI").value || "";
-  try{ localStorage.setItem("hub_me", meCode); }catch(e){}
+/* The button is type="submit" and the boxes are in a form, so the press and
+   Enter arrive here as the same event. Nothing is really sent: submitting is
+   only how a password manager is told the sign-in happened, and how it is
+   asked whether to remember the key.
+
+   Enter is also sent here by hand. A form does that on its own, but only for
+   Enter the browser itself decided counts, and one handler that always runs
+   is worth more than working out which presses those are. preventDefault
+   stops the browser adding a second submit of its own on top. */
+on("keyForm", "submit", (e) => { e.preventDefault(); tryKey(); });
+function submitKey(e){
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const f = $("keyForm");
+  if (f && f.requestSubmit) f.requestSubmit(); else tryKey();
+}
+on("keyIn", "keydown", submitKey);
+on("codeIn", "keydown", submitKey);
+
+/* ---------- who is teaching ----------
+   The picker chooses whose classes to show. It is not a permission, everyone
+   shares one key, so the answer can be kept and a teacher who has answered it
+   once goes from the key box to Home without being asked again. The name in
+   the top bar says who it thinks they are and presses back to the picker.
+
+   All (Admin) is a real answer and its value is "", which is why a second key
+   records that an answer was given at all rather than reading "" as nobody. */
+function rememberedTeacher(){
+  let asked = "", who = "";
+  try{
+    asked = localStorage.getItem("hub_me_set") || "";
+    who = localStorage.getItem("hub_me") || "";
+  }catch(e){}
+  if (!asked) return null;
+  if (who && teacherCodes.indexOf(who) < 0) return null;   // that teacher has since gone
+  return who;
+}
+async function afterSignIn(){
+  const who = rememberedTeacher();
+  if (who === null){ show("whoView", true); return; }
+  meCode = who;
+  await enterConsole();
+}
+async function enterConsole(){
   await refreshGroups();
   paintClasses();
   show("homeView");
   await restoreSpot();
   nudgeBackup();           // the once-a-week reminder to take a backup
+}
+on("whoGo", "click", async () => {
+  meCode = $("whoAmI").value || "";
+  try{
+    localStorage.setItem("hub_me", meCode);
+    localStorage.setItem("hub_me_set", "1");
+  }catch(e){}
+  await enterConsole();
 });
+
+/* Who is signed in, shown the way a student's name is shown on theirs. It is
+   kept off the key box and the picker, where there is nobody to name yet. */
+function paintWho(){
+  const bar = $("whoBar");
+  if (!bar) return;
+  const entry = !$("keyView").hidden || !$("whoView").hidden;
+  if (OFFLINE || entry || !TOKEN){ bar.hidden = true; bar.innerHTML = ""; return; }
+  bar.hidden = false;
+  bar.innerHTML = "";
+  const b = el("button","who","");
+  b.type = "button";
+  b.title = "Change teacher";
+  b.appendChild(el("b","", meCode ? (teacherNames[meCode] || meCode) : "All (Admin)"));
+  b.addEventListener("click", changeTeacher);
+  bar.appendChild(b);
+}
 
 /* Back to whichever screen the refresh interrupted. Anything that cannot be
    reopened, because the class or unit has gone, quietly stays at Home. */
@@ -642,8 +720,44 @@ async function restoreSpot(){
 }
 /* changing who you are, without signing in again */
 function changeTeacher(){ show("whoView", true); }
-on("keyIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
-on("codeIn", "keydown", (e) => { if (e.key === "Enter") tryKey(); });
+
+/* ---------- letting the browser sign you in ----------
+   Edge and Chrome fill the key box themselves once a teacher has told the
+   browser to remember the key. None of that is this site's doing: the key
+   lives in the password manager, nothing is written down here, and all that
+   happens below is that a box which filled on its own presses Sign in. A
+   teacher opens the console address and lands on Home.
+
+   Filling does not announce itself the same way everywhere, so three things
+   are watched. Chromium marks the box :-webkit-autofill, and style.css starts
+   a do-nothing animation on it purely so that an event arrives. An input
+   event carrying no inputType is a value that came from somewhere other than
+   the keyboard. And a short poll covers a fill that landed before this script
+   ran, or a browser that says nothing at all.
+
+   Anything typed stops all of it, because half a key must never be sent, and
+   it is only ever tried once: a key the server refuses would otherwise be
+   sent again and again and use up the attempts before a teacher could type. */
+let typedKey = false, autoTried = false;
+function autoSignIn(){
+  if (OFFLINE || autoTried || typedKey || TOKEN) return;
+  if ($("keyView").hidden) return;            // already past the key box
+  if (!$("codeField").hidden) return;         // a code has been asked for, and that is theirs to type
+  if (($("keyIn").value || "").trim().length < 4) return;
+  autoTried = true;
+  $("keyMsg").textContent = "Signing you in…";
+  tryKey();
+}
+on("keyIn", "keydown", () => { typedKey = true; });
+on("keyIn", "paste", () => { typedKey = true; });
+on("keyIn", "input", (e) => {
+  if (e.inputType) typedKey = true;           // a keystroke, a paste, a deletion
+  else setTimeout(autoSignIn, 0);             // a value that arrived on its own
+});
+on("keyIn", "animationstart", (e) => {
+  if (e.animationName === "autofilled") setTimeout(autoSignIn, 0);
+});
+[60, 250, 600, 1200].forEach(ms => setTimeout(autoSignIn, ms));
 
 /* ---------- classes grid ---------- */
 /* Every class there is: the ones with students in them, and the ones somebody
@@ -1088,6 +1202,7 @@ let assigns = [];
 let teacherCodes = [];        // HTS, SNG, EJL, from the database, not the code
 let classTeachers = {};       // class -> [codes]
 let classNames = {};          // the same keys, holding the name as it was typed
+let teacherNames = {};        // code -> name, empty until somebody fills one in
 let meCode = "";              // who is signed in
 
 async function loadTeachers(){
@@ -1095,6 +1210,8 @@ async function loadTeachers(){
     const r = await fetch(API + "/api/teacher/teachers", { headers: H(), cache:"no-store" });
     const d = await r.json();
     teacherCodes = (d.teachers || []).map(t => t.code);
+    teacherNames = {};
+    (d.teachers || []).forEach(t => { if (t.code) teacherNames[t.code] = t.name || ""; });
     classTeachers = {};
     classNames = {};
     (d.classes || []).forEach(l => {
@@ -1105,7 +1222,7 @@ async function loadTeachers(){
       classNames[k] = l.group_name;
       (classTeachers[k] = classTeachers[k] || []).push(l.code);
     });
-  }catch(e){ teacherCodes = []; classTeachers = {}; classNames = {}; }
+  }catch(e){ teacherCodes = []; teacherNames = {}; classTeachers = {}; classNames = {}; }
   const sel = $("whoAmI");
   if (sel){
     const was = sel.value;
@@ -1118,8 +1235,10 @@ async function loadTeachers(){
       o.value = c; o.textContent = c;
       sel.appendChild(o);
     });
-    /* filled in from last time, but they still press the button */
-    sel.value = was || meCode || localStorage.getItem("hub_me") || "";
+    /* filled in from last time, so changing teacher opens on the current one */
+    let last = "";
+    try{ last = localStorage.getItem("hub_me") || ""; }catch(e){}
+    sel.value = was || meCode || last || "";
   }
 }
 /* the classes this teacher takes; everything when nobody is chosen */
@@ -3281,15 +3400,22 @@ if (OFFLINE){
         groups = d.groups || [];
         $("topbar").hidden = false;
         await loadTeachers();
-        show("whoView", true);
+        await afterSignIn();
       })
       .catch(() => {
         TOKEN = "";
         try{ sessionStorage.removeItem("hub_ttoken"); }catch(e){}
-        try{ const k = localStorage.getItem("hub_tkey"); if (k) $("keyIn").value = k; }catch(e){}
+        /* The key box is live again now the stale session has gone, and the
+           looks that ran while it was being checked all did nothing. */
+        $("keyIn").focus();
+        [0, 300].forEach(ms => setTimeout(autoSignIn, ms));
       });
   } else {
-    try{ const k = localStorage.getItem("hub_tkey"); if (k) $("keyIn").value = k; }catch(e){}
+    /* The box is left empty for the browser to fill. It used to be filled
+       from a copy of the key kept in localStorage, which is a password
+       written down on a shared staffroom machine for anyone to read. The
+       password manager holds it now, behind the Windows sign-in. */
+    $("keyIn").focus();
   }
 }
 </script>

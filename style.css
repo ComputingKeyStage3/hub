@@ -3651,3 +3651,36 @@ html[data-bg=dark] .seg.now{background:var(--amber)}
     transform:translate(-50%,-50%); width:38px; height:30px;
   }
 }
+
+
+/* ---- the teacher console sign-in, and who is signed in ----
+   Both rules are pinned to one id and one element, so nothing above them is
+   beaten, including the phone breakpoints in the middle of this file. */
+
+/* Chromium and Edge mark a box the password manager filled, but they raise no
+   event for it. Starting an animation that changes nothing is the only way to
+   be told: admin.html listens for animationstart and presses Sign in. The
+   selector is Chromium's own, so other browsers drop this rule and fall back
+   to the poll there. */
+@keyframes autofilled{ from{ outline-color:transparent } to{ outline-color:transparent } }
+#keyIn:-webkit-autofill{ animation-name:autofilled; animation-duration:.01s }
+
+/* The teacher's name at the top right of the console. It reads exactly like
+   the name a student sees on theirs, and presses back to "Who is teaching?",
+   so the button underneath has to stop looking like a button. font-size is
+   left to .who above rather than reset here, or the phone size would go. */
+button.who{
+  position:relative; background:none; border:0; padding:0; margin:0; cursor:pointer;
+  font-family:var(--body); font-weight:500; line-height:inherit;
+  /* The blanket 44px minimum for buttons on a touch screen catches this one,
+     and a name that tall makes the whole bar 57px on a phone against the 45px
+     it has to stay under. The tap area below does that job instead, the way
+     the lesson tracker's end flag does. */
+  min-height:0;
+}
+button.who::after{
+  content:""; position:absolute; left:50%; top:50%;
+  transform:translate(-50%,-50%); width:100%; min-width:44px; height:44px;
+}
+button.who:hover b{color:var(--amber)}
+button.who:focus-visible{outline:2px solid var(--amber); outline-offset:3px; border-radius:6px}
