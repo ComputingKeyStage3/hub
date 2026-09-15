@@ -16,6 +16,30 @@
 </head>
 <body>
 
+<!-- The console opens on the dots with the sign-in hidden behind them, so a
+     teacher whose browser fills the key never sees a sign-in screen at all.
+     No wording with them: until the browser has had its go there is nothing
+     true to say, and "Sign in" flashing up and away reads as a fault. -->
+<div class="loadscreen" id="loadScreen">
+  <div class="load-inner">
+    <div class="load-dots"><span></span><span></span><span></span></div>
+  </div>
+</div>
+<script>
+/* Its own script, so that it still runs if the console's does not. Were that
+   to happen the dots would otherwise sit there for ever with nothing behind
+   them; this way the worst case is typing the key by hand. Long enough that a
+   slow morning at the server is not mistaken for one. */
+setTimeout(function(){
+  var dots = document.getElementById("loadScreen");
+  if (!dots || dots.hidden) return;
+  if (window.HUB && window.HUB.OFFLINE) return;
+  dots.hidden = true; dots.classList.add("gone");
+  var box = document.getElementById("keyView");
+  if (box) box.hidden = false;
+}, 8000);
+</script>
+
 <div class="homebar" id="topbar" hidden>
   <div class="title">Computing Teacher Console</div>
   <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
@@ -29,7 +53,7 @@
 <div class="page">
 
   <!-- ============ key ============ -->
-  <div class="keywrap" id="keyView">
+  <div class="keywrap" id="keyView" hidden>
     <section class="station">
       <h2 style="margin:0 0 6px">Teacher console</h2>
       <p class="hint" style="margin:0 0 16px">Sign in to load your classes.</p>
@@ -329,6 +353,7 @@ let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
   clearInterval(relTimer);
+  hideLoader();
   paintCrumbs();
   paintWho();
   /* Remember where we are, so Back and the swipe gesture step through the
@@ -613,10 +638,13 @@ async function tryKey(){
     await afterSignIn();
   }catch(e){
     $("keyMsg").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
-    /* Back to the box that needs putting right. It matters most when the
-       attempt was the browser's rather than the teacher's: without this they
-       are looking at a message beside a box they have not touched. */
-    if ($("codeField").hidden) $("keyIn").focus();
+    /* An attempt the browser set going has failed, so the dots come down and
+       the box appears underneath the message. A spinner that never stops is
+       the one ending this must not have. */
+    askForKey();
+    /* Focus after the box is on screen, not before. The code box was being
+       focused while it was still behind the dots, which does nothing. */
+    ($("codeField").hidden ? $("keyIn") : $("codeIn")).focus();
   }
 }
 /* The button is type="submit" and the boxes are in a form, so the press and
@@ -657,6 +685,7 @@ function rememberedTeacher(){
   return who;
 }
 async function afterSignIn(){
+  keyStage = "in";
   const who = rememberedTeacher();
   if (who === null){ show("whoView", true); return; }
   meCode = who;
@@ -738,13 +767,39 @@ function changeTeacher(){ show("whoView", true); }
    Anything typed stops all of it, because half a key must never be sent, and
    it is only ever tried once: a key the server refuses would otherwise be
    sent again and again and use up the attempts before a teacher could type. */
+
+/* How far the sign-in has got, which is what decides whether the dots are
+   still the right thing to be showing:
+     wait    the dots are up and the browser is being given its go at the box
+     trying  an attempt nobody pressed is in the air, dots still up
+     ask     the box is on screen for the teacher to type in
+     in      the console is open
+   It is not the same question as which view is showing, because for most of
+   "wait" no view is showing at all. */
+let keyStage = "wait";
 let typedKey = false, autoTried = false;
+
+function hideLoader(){
+  const dots = $("loadScreen");
+  if (!dots || dots.hidden) return;
+  dots.hidden = true;
+  dots.classList.add("gone");
+}
+/* The dots come down and the sign-in comes out. Everything that gives up on
+   the browser filling the box ends here, and it only happens once. */
+function askForKey(){
+  if (keyStage === "ask" || keyStage === "in") return;
+  keyStage = "ask";
+  show("keyView");                            // which takes the dots away
+  $("keyIn").focus();
+}
 function autoSignIn(){
   if (OFFLINE || autoTried || typedKey || TOKEN) return;
-  if ($("keyView").hidden) return;            // already past the key box
+  if (keyStage !== "wait" && keyStage !== "ask") return;
   if (!$("codeField").hidden) return;         // a code has been asked for, and that is theirs to type
   if (($("keyIn").value || "").trim().length < 4) return;
   autoTried = true;
+  if (keyStage === "wait") keyStage = "trying";
   $("keyMsg").textContent = "Signing you in…";
   tryKey();
 }
@@ -757,7 +812,30 @@ on("keyIn", "input", (e) => {
 on("keyIn", "animationstart", (e) => {
   if (e.animationName === "autofilled") setTimeout(autoSignIn, 0);
 });
-[60, 250, 600, 1200].forEach(ms => setTimeout(autoSignIn, ms));
+
+/* One last look at the box, and if it is still empty the browser is not going
+   to fill it and the teacher had better be asked. */
+function decideKey(){
+  if (OFFLINE || keyStage !== "wait") return;
+  autoSignIn();
+  if (keyStage === "wait") askForKey();
+}
+if (!OFFLINE){
+  /* When to stop waiting is the whole of this. Chromium fills at about the
+     moment the page finishes loading, so the answer is known a little after
+     that; the floor stops the dots flashing up and away inside a single
+     frame, which looks like a fault, and the ceiling stops one slow picture
+     somewhere keeping the sign-in hidden. */
+  const DOTS_FLOOR = 450, DOTS_CEILING = 1500, AFTER_LOAD = 250;
+  const dotsFrom = Date.now();
+  const settle = () => setTimeout(decideKey, Math.max(0, DOTS_FLOOR - (Date.now() - dotsFrom)));
+  if (document.readyState === "complete") settle();
+  else window.addEventListener("load", () => setTimeout(settle, AFTER_LOAD));
+  setTimeout(decideKey, DOTS_CEILING);
+  /* Early looks as well, so a fill that has already landed is acted on at
+     once rather than waiting out the floor. */
+  [60, 250].forEach(ms => setTimeout(autoSignIn, ms));
+}
 
 /* ---------- classes grid ---------- */
 /* Every class there is: the ones with students in them, and the ones somebody
@@ -3393,7 +3471,12 @@ if (OFFLINE){
   let live = "";
   try{ live = sessionStorage.getItem("hub_ttoken") || ""; }catch(e){}
   if (live){
+    /* The dots stay up while a session from earlier in this browser is
+       checked, so refreshing does not flash the sign-in box on the way past
+       it. Without the stage being set here, the timer waiting on the browser
+       would find an empty box and put the sign-in on screen underneath. */
     TOKEN = live;
+    keyStage = "trying";
     fetch(API + "/api/teacher/groups", { headers: H(), cache:"no-store" })
       .then(r => r.ok ? r.json() : Promise.reject(new Error("no")))
       .then(async (d) => {
@@ -3405,18 +3488,18 @@ if (OFFLINE){
       .catch(() => {
         TOKEN = "";
         try{ sessionStorage.removeItem("hub_ttoken"); }catch(e){}
-        /* The key box is live again now the stale session has gone, and the
-           looks that ran while it was being checked all did nothing. */
-        $("keyIn").focus();
-        [0, 300].forEach(ms => setTimeout(autoSignIn, ms));
+        /* The stale session is gone, so it is back to the browser's go at the
+           box. Every look that ran while the session was being checked did
+           nothing, TOKEN having been set, so one is taken now. */
+        keyStage = "wait";
+        decideKey();
       });
-  } else {
-    /* The box is left empty for the browser to fill. It used to be filled
-       from a copy of the key kept in localStorage, which is a password
-       written down on a shared staffroom machine for anyone to read. The
-       password manager holds it now, behind the Windows sign-in. */
-    $("keyIn").focus();
   }
+  /* Nothing in the other case: the dots are already up, and decideKey decides
+     whether the box is wanted. It used to be filled here from a copy of the
+     key kept in localStorage, which is a password written down on a shared
+     staffroom machine for anyone to read. The password manager holds it now,
+     behind the Windows sign-in. */
 }
 </script>
 </body>
