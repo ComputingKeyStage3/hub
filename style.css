@@ -3798,9 +3798,6 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
 .railbtn:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
 /* the task the top of the screen belongs to */
 .railbtn.now{color:var(--amber); border-color:var(--amber); background:var(--panel)}
-/* held back by a quiz above it: still on the line, so they can see more is
-   coming, but there is nothing to go to yet */
-.railbtn.shut{opacity:.35; cursor:default}
 
 /* A task that is not on the screen. Small enough that a dozen of them wait at
    the end of the line in the room one icon would have taken. */
@@ -3811,7 +3808,6 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
 .railbtn.dot svg{display:none}
 .railbtn.dot:hover{background:var(--muted)}
 .railbtn.dot.now{background:var(--amber)}
-.railbtn.dot.shut:hover{background:var(--line-2)}
 /* A dot is too small to aim at, so what a finger hits is bigger than what the
    eye sees. The same trick the tracker's segments use. */
 .railbtn.dot::after{
