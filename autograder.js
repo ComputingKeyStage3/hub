@@ -529,11 +529,6 @@
       wrap.classList.toggle("can-tick", manualOn);
       items.forEach(it => { if (it.manual) it.li.title = manualOn ? "Click to tick this off" : ""; });
     };
-    /* Only the automatic lines can be finished by the student, so only those
-       decide whether they are nudged about it. */
-    wrap.autoAllDone = function(){
-      return items.every(it => it.manual || it.li.dataset.state === "yes");
-    };
     tally();
     return wrap;
   };

@@ -527,7 +527,6 @@ function compileOne(b, id, target){
         blk.checks = b.checks.filter(c => (c.label || "").trim())
                              .map(c => Object.assign({}, c,
                                c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
-        if (b.nudge === true) blk.nudge = true;   // off unless asked for
       }
       if (b.title) blk.title = b.title;              // headings stay optional
       if (b.task) blk.task = b.task;
@@ -551,14 +550,14 @@ function compileOne(b, id, target){
              /* zero is a real setting, so it has to survive being saved:
                 "|| 20" turned "no length wanted" back into twenty words */
              minWords: b.minWords === undefined ? 20 : Math.max(0, Number(b.minWords) || 0),
-             /* the questions after the first, each with its own length and
-                whether it nudges; ones with nothing written are dropped */
+             /* the questions after the first, each with its own recommended
+                length; ones with nothing written are dropped */
              extra: (b.extra || [])
                .filter(q => (window.cleanRichText ? window.cleanRichText(q.prompt || "") : (q.prompt || "")).trim())
                .map(q => ({
                  prompt: window.cleanRichText ? window.cleanRichText(q.prompt) : q.prompt,
-                 minWords: q.minWords === undefined ? 20 : Math.max(0, Number(q.minWords) || 0),
-                 required: q.required !== false })) }));
+                 minWords: q.minWords === undefined ? 20 : Math.max(0, Number(q.minWords) || 0)
+               })) }));
     else if (b.type === "password")
       push({ type:"password", id, title: b.title || "", task: b.task || "" });
     else if (b.type === "caesar"){
@@ -579,7 +578,6 @@ function compileOne(b, id, target){
         blk.checks = b.checks.filter(c => (c.label || "").trim())
                              .map(c => Object.assign({}, c,
                                c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
-        if (b.nudge === true) blk.nudge = true;   // off unless asked for
       }
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
@@ -840,7 +838,7 @@ function firstPageOpen(){
 }
 /* Rebuilding the list empties it, and an emptied list has scrolled back to
    the top. Every toggle on a card calls render(), which is why pressing
-   something like "Nudge to finish it" threw the page up to the top and lost
+   something like "Turtle canvas" threw the page up to the top and lost
    a teacher's place. The position is measured before and put back after.
 
    When something has just been added there is somewhere better to be, so the
@@ -1404,17 +1402,6 @@ function card(b, i, arr){
     body.appendChild(w);
   }
   /* on/off buttons; each entry is [key, label, defaultOn] */
-  /* Nudging about the checklist is a setting about the code like any other, so
-     it sits on the same row, in the place Run required used to hold. Off unless
-     it is asked for, and only offered once there is a checklist to nudge about.
-
-     Run required is gone entirely. Making Continue wait on the Run button held
-     up students who had written perfectly good code, and the checklist already
-     says what a task needs. */
-  function codeOptions(defs){
-    if ((b.checks || []).length) defs.splice(1, 0, ["nudge","Nudge to finish it", false]);
-    return defs;
-  }
   function toggleRow(defs, label){
     const w = el("div","bfield");
     w.appendChild(el("label","", label || "Options"));
@@ -1565,9 +1552,9 @@ function card(b, i, arr){
     if (b.files.indexOf("html") >= 0) F("Starting HTML", "html", { area:true, rows:6, mono:true });
     if (b.files.indexOf("css") >= 0) F("Starting CSS", "css", { area:true, rows:5, mono:true });
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
-    toggleRow(codeOptions([["run","Running", true], ["edit","Editing", true],
+    toggleRow([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true],
-               ["addFiles","Students can add files", false]]));
+               ["addFiles","Students can add files", false]]);
     F("Code must contain (optional)", "expect");
   }
   if (b.type === "ide"){
@@ -1609,27 +1596,15 @@ function card(b, i, arr){
          will never see. */
       if (!b.startFrom) PY("Starter code", "starter");
     }
-    toggleRow(codeOptions([["turtle","Turtle canvas", false],
+    toggleRow([["turtle","Turtle canvas", false],
                ["run","Running", true],
-               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]));
+               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]);
     F("Output must contain (optional)", "expect", { help:"Leave empty unless you want Continue to wait for the right output." });
   }
   if (b.type === "question"){
     F("Heading (optional)", "heading");
     R("Context (optional)", "context", { rows:3 });
     R("The question", "prompt", { rows:2 });
-    const w = el("div","bfield");
-    w.appendChild(el("label","","Options"));
-    const row = el("div","brow");
-    const on = b.required !== false;
-    const nudge = el("button","btn-ghost bmini2" + (on ? " right" : ""),
-                     "Nudge for an answer: " + (on ? "on" : "off"));
-    nudge.title = on ? "They are encouraged to write more before continuing"
-                     : "They can continue whatever they have written";
-    nudge.addEventListener("click", () => { b.required = !on; render(); schedulePreview(); });
-    row.appendChild(nudge);
-    w.appendChild(row);
-    body.appendChild(w);
     const ww = el("div","bfield");
     ww.appendChild(el("label","","Recommended word count"));
     const wrow = el("div","stepper");
@@ -1647,8 +1622,8 @@ function card(b, i, arr){
 
     /* Written answers usually come in runs of two or three. Another one joins
        this task rather than becoming a task of its own: it shares the heading
-       and the context already written above, and only needs its own question,
-       length and nudge. */
+       and the context already written above, and only needs its own question
+       and its own recommended length. */
     if (!Array.isArray(b.extra)) b.extra = [];
     b.extra.forEach((q, k) => {
       const wrapx = el("div","bfield extraq");
@@ -1677,20 +1652,13 @@ function card(b, i, arr){
       numx.addEventListener("input", () => { q.minWords = Math.max(0, parseInt(numx.value,10) || 0); saveDraft(); schedulePreview(); });
       st.appendChild(lessx); st.appendChild(numx); st.appendChild(morex);
       rowx.appendChild(st);
-
-      const onx = q.required !== false;
-      const nx = el("button","btn-ghost bmini2" + (onx ? " right" : ""),
-                    "Nudge for an answer: " + (onx ? "on" : "off"));
-      nx.type = "button";
-      nx.addEventListener("click", () => { q.required = !onx; render(); schedulePreview(); });
-      rowx.appendChild(nx);
       wrapx.appendChild(rowx);
       body.appendChild(wrapx);
     });
 
     const another = el("button","btn-ghost bmini2","+ Another question");
     another.addEventListener("click", () => {
-      b.extra.push({ prompt:"", minWords:20, required:true });
+      b.extra.push({ prompt:"", minWords:20 });
       render(); schedulePreview();
     });
     body.appendChild(another);

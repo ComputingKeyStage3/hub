@@ -60,16 +60,6 @@
   </span>
 </div>
 
-<div class="modal-back no-print" id="softModal" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="softTitle">
-    <p class="modal-eyebrow">Nearly there</p>
-    <h2 id="softTitle">Keep typing</h2>
-    <p class="modal-text">Add a bit more to your answer before moving on.</p>
-    <button class="btn-primary modal-cta" id="softStay">Keep writing</button>
-    <button class="btn-ghost modal-stay" id="softGo">Continue anyway</button>
-  </div>
-</div>
-
 <div class="modal-back no-print" id="waitModal" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="waitTitle">
     <p class="modal-eyebrow">Not yet</p>
@@ -1326,32 +1316,17 @@ $("backBtn").addEventListener("click", () => {
   const b = nextOpen(step - 1, -1);
   if (b !== null) showStep(b);
 });
-let softSkip = false;
+/* Continue never stops to ask whether a task is finished. Where the work is
+   unfinished the task already says so in its own place: the words under an
+   answer box, the checklist beside code, the quiz's own marking. A pop-up on
+   top of that was one more thing to press past, and it taught a class that
+   the way through a task is the button reading "move on anyway". */
 async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
   if (spectate){                                   // teachers roam freely
     if (step === steps.length - 1){ finishLesson(); } else { showStep(step + 1); }
     return;
   }
-  const st = steps[step];
-  /* A page a teacher has waved through is not asked whether it is finished.
-     They have already said this student may leave it, and a nudge asking them
-     to finish it first reads as the code not having worked. */
-  if (st && !softSkip && !waved(step)){
-    /* whichever the task offers: its own encouragement, or the plain check */
-    let res = { ok:true };
-    if (st.soft) res = st.soft();
-    else if (st.check) res = st.check();
-    if (!res.ok){
-      showSoftModal(res.words || {
-        title: "Nearly there",
-        text: res.message || "There is still something to do on this page.",
-        stay: "Let me finish", go: "Move on anyway"
-      });
-      return;
-    }
-  }
-  softSkip = false;
   if (step === steps.length - 1){ await tryFinish(); return; }
 
   $("nextBtn").classList.add("checking");
@@ -1468,21 +1443,6 @@ function passGate(target){
   });
 }
 $("nextBtn").addEventListener("click", tryContinue);
-
-function showSoftModal(words){
-  const w = words || {};
-  $("softTitle").textContent = w.title || "Keep typing";
-  $("softModal").querySelector(".modal-text").textContent =
-    w.text || "Add a bit more to your answer before moving on.";
-  $("softStay").textContent = w.stay || "Keep writing";
-  $("softGo").textContent = w.go || "Continue anyway";
-  $("softModal").hidden = false;
-  $("softStay").focus();
-}
-function hideSoftModal(){ $("softModal").hidden = true; }
-$("softStay").addEventListener("click", hideSoftModal);
-$("softGo").addEventListener("click", () => { hideSoftModal(); softSkip = true; tryContinue(); });
-$("softModal").addEventListener("mousedown", (e) => { if (e.target === $("softModal")) hideSoftModal(); });
 
 /* A practical assessment is marked against a rubric, so the student should be
    able to read it while they work rather than only after it is marked. Nothing
@@ -1700,7 +1660,7 @@ function finishLesson(){
 $("waitOk").addEventListener("click", hideWaitModal);
 $("waitModal").addEventListener("mousedown", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
 
-document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); hideSoftModal(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); } });
 
 /* ---------- bypass ---------- */
 $("bypassDot").addEventListener("dblclick", askBypass);   // double-click: a stray single click does nothing
@@ -1947,8 +1907,7 @@ function rPage(b){
     }
     if (child.required === false){
       built.check = () => ({ ok:true });
-      built.soft = () => ({ ok:true });
-      /* A task that cannot hold Continue up must not hold the page shut either. */
+      /* A task nobody has to do must not hold the page shut either. */
       built.hold = null;
     }
     const item = el("div","pg-item");
@@ -1974,7 +1933,7 @@ function rPage(b){
   const was = items.map(entry => {
     try{ return entry.built.check().ok; }catch(e){ return false; }
   });
-  const nudgeAlong = () => {
+  const scrollToNextTask = () => {
     items.forEach((entry, i) => {
       if (!FINISHABLE.includes(entry.type)) return;
       let ok = false;
@@ -1994,7 +1953,7 @@ function rPage(b){
   /* A quiz on this page can be set to keep everything below it out of sight
      until the student reaches its pass mark, so a class reads, answers, and
      only then gets the work that follows. Nothing is locked: Continue still
-     works, and what they meet there is the quiz's own nudge. */
+     works, and the quiz marks itself where they can see it. */
   const holdNote = el("p","pg-hold");
   holdNote.hidden = true;
   function refreshHold(){
@@ -2030,8 +1989,8 @@ function rPage(b){
     if (h && h.watch) h.watch(refreshHold);
   });
 
-  s.addEventListener("click", () => { refreshHold(); nudgeAlong(); });
-  s.addEventListener("change", () => { refreshHold(); nudgeAlong(); });
+  s.addEventListener("click", () => { refreshHold(); scrollToNextTask(); });
+  s.addEventListener("change", () => { refreshHold(); scrollToNextTask(); });
 
   /* Whatever the teacher put them among, extension tasks belong at the end. */
   extras.forEach(x => s.appendChild(x.section));
@@ -2045,18 +2004,6 @@ function rPage(b){
                     refreshHold(); },
     check: () => {
       for (const k of kids){ const r = k.check(); if (!r.ok) return r; }
-      return { ok:true };
-    },
-    soft: () => {
-      /* Carry the first unfinished task's own wording up with it, so the
-         nudge says what is left rather than "something to do on this page". */
-      for (const k of kids){
-        if (!k.soft) continue;
-        const res = k.soft();
-        if (res.ok) continue;
-        const said = res.message || (k.check ? (k.check().message || "") : "");
-        return said ? { ok:false, message: said } : { ok:false };
-      }
       return { ok:true };
     },
     brief: { eyebrow:"Tasks", title: b.title || "Tasks", text: b.task || "" }
@@ -2122,20 +2069,12 @@ function rChoice(b){
              }
              return { ok:true };
            },
-           soft:() => {
-             if (picked < 0) return { ok:false };
-             for (const k of opts[picked].kids){
-               if (!k.soft) continue;
-               const r = k.soft(); if (!r.ok) return r;
-             }
-             return { ok:true };
-           },
            brief:{ eyebrow:"Choose", title:b.title || "", text:stripTags(b.task || "") } };
 }
 
 /* Extension tasks: a page within a page. It holds whatever a teacher wants and
    is hidden until the rest of its page is finished with. Nothing inside it can
-   ever hold a student up, so its check and its soft word both always pass. */
+   ever hold a student up, so its check always passes. */
 function rExtension(b){
   const s = el("section","extension");
 
@@ -2195,18 +2134,16 @@ function rExtension(b){
   return { section:s,
            onShow: () => kids.forEach(k => { if (k.onShow) k.onShow(); }),
            check:() => ({ ok:true }),
-           soft:() => ({ ok:true }),
            brief:{ eyebrow:"Extension", title:b.title || "Extension tasks", text:b.task || "" } };
 }
 
 function renderBlock(b, i){
   const built = buildBlock(b, i);
   if (!built) return;
-  /* A teacher can turn off the "finish this first" rule on any task. The
-     task still works and is still saved, it just never blocks Continue. */
+  /* A teacher can mark a task as one nobody has to do. It still works and is
+     still saved; it is only left out of anything that counts it as finished. */
   if (b.required === false){
     built.check = () => ({ ok:true });
-    built.soft = () => ({ ok:true });
   }
   let final = built;
   if (lesson && lesson.assessment && ["mc","order","blanks","short"].includes(b.type)){
@@ -2325,9 +2262,9 @@ function rQuestion(b){
     s.appendChild(ctx);
   }
   /* One task can hold several questions. They share the heading and the
-     context above them, and each has its own box, its own recommended length
-     and its own say in whether the student is nudged. */
-  const asked = [{ prompt: b.prompt, minWords: b.minWords, required: b.required }]
+     context above them, and each has its own box and its own recommended
+     length. */
+  const asked = [{ prompt: b.prompt, minWords: b.minWords }]
     .concat(Array.isArray(b.extra) ? b.extra : []);
   const parts = [];
 
@@ -2355,7 +2292,7 @@ function rQuestion(b){
     }
     ta.addEventListener("input", () => { tick(); markDirty(); });
     s.appendChild(ta); s.appendChild(counter); tick();
-    parts.push({ ta, tick, min, required: q.required !== false });
+    parts.push({ ta, tick, min });
   });
 
   fields[b.id] = {
@@ -2369,8 +2306,6 @@ function rQuestion(b){
   };
   return { section:s,
            check:() => ({ ok:true }),
-           /* nudged about the first one that is short of its own length */
-           soft:() => ({ ok: parts.every(x => !x.required || wordCount(x.ta.value) >= x.min) }),
            brief:{ eyebrow:"Answer", title:b.heading || "", text:stripTags(b.task || "") } };
 }
 
@@ -2632,8 +2567,7 @@ function attachChecklist(section, checks, runner, blockId){
   }
   /* An assessment adds a coding task up from these, so the result of the last
      run has to be readable rather than only drawn on the page. */
-  return { list, refresh, done: () => (list.autoAllDone ? list.autoAllDone() : list.dataset.allDone === "yes"),
-           results: () => last };
+  return { list, refresh, results: () => last };
 }
 
 function rIDE(b){
@@ -3021,12 +2955,6 @@ function rIDE(b){
 
   return { section:s,
            onShow: carryIn,
-           /* An unfinished checklist is worth a word, not a locked door. */
-           soft:() => (b.checks && b.checks.length && b.nudge === true && checklist && !checklist.done())
-             ? { ok:false, words:{ title:"Keep coding",
-                                   text:"There are still things on your checklist to try.",
-                                   stay:"Keep coding", go:"Move on anyway" } }
-             : { ok:true },
            check:() => {
              if (!canRun) return { ok:true };            // nothing to run, nothing to wait for
              if (!ran) return { ok:false, message:"Press Run to try your code" };
@@ -3546,11 +3474,6 @@ function rWeb(b){
   };
 
   return { section:s,
-           soft:() => (b.checks && b.checks.length && b.nudge === true && checklist && !checklist.done())
-             ? { ok:false, words:{ title:"Keep coding",
-                                   text:"There are still things on your checklist to try.",
-                                   stay:"Keep coding", go:"Move on anyway" } }
-             : { ok:true },
            check:() => {
              if (!canRun) return { ok:true };
              if (!ran) return { ok:false, message:"Press Run to see your page" };
@@ -3829,7 +3752,6 @@ function wrapExtra(b, build, eyebrow){
     check: () => (b.required === false || made.done())
       ? { ok:true }
       : { ok:false, message:"Have a go at this before carrying on" },
-    soft: () => ({ ok: b.required === false || made.done() }),
     brief: { eyebrow: eyebrow, title: b.title || "", text: b.task || "" }
   };
 }
@@ -4012,7 +3934,6 @@ function rQuiz(b){
            check:() => (!n || !needed() || passed())
              ? { ok:true }
              : { ok:false, message:"Get " + needed() + " out of " + n + " right to carry on" },
-           soft:() => ({ ok: !n || !needed() || passed() }),
            /* A teacher can ask for the rest of the page to stay shut until the
               pass mark is reached. The quiz hides nothing itself: it answers
               these, and the page it sits on does the hiding.
@@ -4175,7 +4096,6 @@ function applyLock(b, built){
   const at = steps.length;
   return {
     section: built.section,
-    soft: built.soft,
     check: () => (unlocked || waved(at)) ? origCheck() : { ok:false, message:"Wait for your teacher to give you the code" },
     brief: () => (unlocked || waved(at)) ? origBrief : {
       eyebrow: "Locked",
