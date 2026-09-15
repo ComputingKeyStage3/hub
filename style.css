@@ -213,6 +213,11 @@ body.bypassed .btn-continue:disabled{background:var(--amber); color:var(--amber-
 .prose b{color:var(--text); font-weight:600}
 
 textarea.answer{min-height:150px; font-size:19px; line-height:1.55}
+/* A short answer is one line, the way a form asks for one. Held back from
+   the full width so it reads as a short answer rather than an essay. */
+input.answer{font-size:19px; line-height:1.55; flex:1 1 260px; max-width:520px}
+.short-row{display:flex; flex-wrap:wrap; align-items:center; gap:12px}
+.short-row .short-check{flex:0 0 auto}
 .counter{font-family:var(--mono); font-size:13px; color:var(--dim); margin:10px 0 0; letter-spacing:.03em}
 .counter[data-ok=true]{color:var(--mint)}
 
@@ -250,6 +255,9 @@ iframe.embed{
 .feedback{margin:16px 0; padding:15px 17px; border-radius:12px; font-size:17px; line-height:1.5; border:1px solid var(--line)}
 .feedback[hidden]{display:none}
 .feedback b{display:block; font-family:var(--display); font-size:17px; margin-bottom:4px}
+/* Feedback arrives as one sentence per span. Inline, two of them ran into
+   each other with no gap: "...try again.The answer we are after..." */
+.feedback span{display:block}
 .feedback[data-verdict=correct]{background:var(--panel); border-color:var(--mint); color:var(--text)}
 .feedback[data-verdict=correct] b{color:var(--mint)}
 .feedback[data-verdict=incorrect]{background:var(--panel); border-color:var(--red); color:var(--text)}
@@ -3153,6 +3161,7 @@ body > .loadscreen{ animation:none }
 .choice-panel .pg-t{font-size:13.5px; color:var(--muted)}
 .choice-panel .q-ask{font-size:14.5px; margin-bottom:6px}
 .choice-panel textarea.answer{min-height:96px; font-size:14.5px; padding:9px 11px}
+.choice-panel input.answer{font-size:14.5px; padding:9px 11px}
 .choice-panel .counter{font-size:12.5px}
 .choice-panel .pg-item{padding-top:2px}
 

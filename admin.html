@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="shortmatch.js"></script>
 <script src="xlsx.js"></script>
 <script src="menus.js"></script>
 <script src="teacher.js"></script>
@@ -2888,12 +2889,9 @@ function markQuestion(b, v){
     });
     return { max: accepted.length, got: got };
   }
-  if (b.type === "short"){
-    const ans = normAns(v);
-    const groups = b.keywords || [];
-    const ok = groups.length ? groups.every(g => g.some(k => ans.includes(normAns(k)))) : false;
-    return { max:1, got: ok ? 1 : 0 };
-  }
+  /* Marked by shortmatch.js, the same code the lesson page and the assessment
+     use, so a mark in the markbook is the mark the student was shown. */
+  if (b.type === "short") return { max:1, got: window.shortAnswer.mark(b, v).ok ? 1 : 0 };
   return null;
 }
 function assessmentQuestions(){

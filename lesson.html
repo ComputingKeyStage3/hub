@@ -10,6 +10,7 @@
 <script src="pyhub.js"></script>
 <script src="webhub.js"></script>
 <script src="autograder.js"></script>
+<script src="shortmatch.js"></script>
 <script src="richtext.js"></script>
 <script src="pyedit.js"></script>
 <script src="teacher.js"></script>
@@ -4421,61 +4422,71 @@ function rBlanks(b){
            brief:{ eyebrow:"Fill in the blanks", title:stripTags(b.prompt) || "", text:b.note || "" } };
 }
 
-/* Short answer, auto-checked by keywords at the end. */
+/* Short answer. One question, one answer box, and the answer has to be one
+   of the ones the teacher accepts. What counts as the same answer is decided
+   in shortmatch.js, in one place, so this page, the assessment mark and the
+   markbook can never disagree about a student's work. */
 function rShort(b){
   const s = el("section");
-  const ta = el("textarea","answer"); ta.rows = 4; ta.placeholder = "Type your answer here\u2026";
-  ta.addEventListener("input", markDirty);
-  s.appendChild(ta);
+  const ans = el("input","answer");
+  ans.type = "text";
+  ans.autocomplete = "off"; ans.autocapitalize = "off"; ans.spellcheck = false;
+  ans.placeholder = "Type your answer…";
+  ans.addEventListener("input", markDirty);
+  /* The box and its Check button sit on one line, the way a form asks a
+     question, and drop onto two when the screen is too narrow for both. */
+  const row = el("div","short-row");
+  row.appendChild(ans);
+  s.appendChild(row);
 
   /* In an assessment everything is marked at the end. In a lesson the student
      can check their own answer here and try again. */
   const inLesson = !(lesson && lesson.assessment);
-  let checked = false;
   if (inLesson){
     const fb = el("div","feedback"); fb.hidden = true;
-    const btn = el("button","btn-primary","Check answer");
-    btn.style.marginTop = "12px";
+    const btn = el("button","btn-primary short-check","Check answer");
     btn.addEventListener("click", () => {
-      const ans = normAns(ta.value);
-      if (!ans){ 
+      if (!ans.value.trim()){
         fb.hidden = false; fb.dataset.verdict = "incorrect";
         fb.innerHTML = ""; fb.appendChild(el("b","","Write something first"));
         return;
       }
-      const groups = b.keywords || [];
-      const hits = groups.map((g, i) => ({
-        ok: g.some(k => ans.includes(normAns(k))),
-        label: (b.keywordLabels && b.keywordLabels[i]) || ""
-      }));
-      const ok = hits.length ? hits.every(h => h.ok) : true;
-      checked = true;
+      const r = window.shortAnswer.mark(b, ans.value);
       fb.hidden = false;
-      fb.dataset.verdict = ok ? "correct" : "incorrect";
+      fb.dataset.verdict = r.ok ? "correct" : "incorrect";
       fb.innerHTML = "";
-      fb.appendChild(el("b","", ok ? "That covers it" : "Not quite yet"));
-      if (ok){
-        fb.appendChild(el("span","", "You have mentioned everything we were looking for."));
-      } else {
-        const missing = hits.filter(h => !h.ok).map(h => h.label);
-        const got = hits.filter(h => h.ok).map(h => h.label);
+      fb.appendChild(el("b","", r.ok ? "That is right" : "Not quite yet"));
+      if (r.ok){
+        fb.appendChild(el("span","", "Well done."));
+      } else if (r.mode === "keywords"){
+        /* An older question, still marked on what it mentions. */
+        const missing = r.groups.filter(g => !g.ok).map(g => g.label);
+        const got = r.groups.filter(g => g.ok).map(g => g.label);
         if (got.length) fb.appendChild(el("span","", "Good so far: you have " + joinWords(got) + "."));
-        if (missing.length && b.keywordLabels)
-          fb.appendChild(el("span","", "Still to add: " + joinWords(missing) + "."));
-        else if (missing.length)
-          fb.appendChild(el("span","", "There is still something missing, try to say a bit more."));
+        if (missing.length) fb.appendChild(el("span","", "Still to add: " + joinWords(missing) + "."));
         if (b.model) fb.appendChild(el("span","", "A good answer mentions: " + b.model));
+      } else if (r.mode === "none"){
+        /* No accepted answers were ever typed, so nothing here can be right.
+           Saying "wrong" to a student for that would be unfair. */
+        fb.dataset.verdict = "correct";
+        fb.innerHTML = "";
+        fb.appendChild(el("b","","Answer saved"));
+        fb.appendChild(el("span","", "Your teacher will read this one."));
+      } else {
+        fb.appendChild(el("span","", "Check your spelling and try again."));
+        if (b.model) fb.appendChild(el("span","", "The answer we are after: " + b.model));
       }
       markDirty();
     });
-    ta.addEventListener("input", () => { fb.hidden = true; });
-    s.appendChild(btn);
+    ans.addEventListener("input", () => { fb.hidden = true; });
+    ans.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); btn.click(); } });
+    row.appendChild(btn);
     s.appendChild(fb);
   }
 
-  fields[b.id] = { get:() => ta.value, set:(v) => { ta.value = v || ""; } };
+  fields[b.id] = { get:() => ans.value, set:(v) => { ans.value = v || ""; } };
   return { section:s,
-           check:() => ta.value.trim() ? { ok:true } : { ok:false, message:"Write an answer" },
+           check:() => ans.value.trim() ? { ok:true } : { ok:false, message:"Write an answer" },
            brief:{ eyebrow:"Short answer", title:inlineHtml(b.prompt) || "", text:b.note || "" } };
 }
 
@@ -4527,13 +4538,11 @@ function computeAssessment(){
       });
     } else if (b.type === "short"){
       max = 1;
-      const ans = normAns(v);
-      const groups = (b.keywords || []).map((g, i) => ({
-        ok: g.some(k => ans.includes(normAns(k))),
-        label: (b.keywordLabels && b.keywordLabels[i]) || ("key idea " + (i+1))
-      }));
-      pts = groups.length && groups.every(g => g.ok) ? 1 : 0;
-      review = { yours: String(v || "").trim() || "(not answered)", groups, model: b.model || "" };
+      const r = window.shortAnswer.mark(b, v);
+      pts = r.ok ? 1 : 0;
+      review = { yours: String(v || "").trim() || "(not answered)",
+                 mode: r.mode, groups: r.groups, accepted: r.accepted,
+                 model: b.model || "" };
     }
     /* A teacher can disagree with the automatic marking, and their word is
        final. Their marks arrive with the work in the link that comes back. */
@@ -4811,8 +4820,18 @@ function renderAssessmentComplete(justFinished, res, st, sent){
 
     if (q.type === "short"){
       body.appendChild(el("div","rev-quote", q.review.yours));
-      const found = q.review.groups.map(g => (g.ok ? "\u2713 " : "\u2717 ") + g.label).join("   ");
-      body.appendChild(el("span","why", "Checked for: " + found));
+      if (q.review.mode === "keywords"){
+        const found = q.review.groups.map(g => (g.ok ? "\u2713 " : "\u2717 ") + g.label).join("   ");
+        body.appendChild(el("span","why", "Checked for: " + found));
+      } else if (q.review.mode === "answers"){
+        const list = q.review.accepted || [];
+        body.appendChild(el("span","why", q.pts
+          ? "That matches the answer."
+          : (list.length === 1 ? "The answer: " + list[0]
+                               : "Accepted answers: " + list.join(", "))));
+      } else {
+        body.appendChild(el("span","why", "This one has no answer set, so your teacher marks it."));
+      }
       if (q.pts < q.max && q.review.model) body.appendChild(el("span","", "A good answer mentions: " + q.review.model));
     }
 
@@ -5792,6 +5811,13 @@ function buildPdf(){
       out.push(label("Their answer"));
       out.push(answerBox(String(v || "").trim(), "Not answered"));
       if (b.model) out.push({ t: "text", face: "small", text: "A good answer mentions: " + b.model });
+      /* Without a model answer the accepted list is the next best thing to
+         print beside their work, so a marked copy can be read on paper. */
+      else {
+        const list = window.shortAnswer.accepted(b);
+        if (list.length) out.push({ t: "text", face: "small",
+          text: (list.length === 1 ? "The answer: " : "Accepted answers: ") + list.join(", ") });
+      }
       return out;
     }
     if (b.type === "mc"){
