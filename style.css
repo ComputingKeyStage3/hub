@@ -3137,7 +3137,10 @@ html[data-build=compact][data-preview=full] .homebar{display:none}
   from{ opacity:0; transform:translateY(7px) }
   to{ opacity:1; transform:none }
 }
-body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell){
+/* A help bubble is left out of this because it is placed by measuring where
+   its question mark is: a seventh of a second sliding up from 7px below puts
+   it somewhere it was never asked to be. */
+body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell):not(.helpbub){
   animation:hub-arrive .34s cubic-bezier(.22,.61,.36,1);
 }
 /* the bars settle a little sooner than what sits underneath them */
@@ -3727,7 +3730,7 @@ button.who:focus-visible{outline:2px solid var(--amber); outline-offset:3px; bor
    :not(#hubTint) puts an id's worth of weight into it, so a plainer rule
    loses to it however late it comes. That same weight is why the line giving
    the bars a shorter .24s has never had any effect either. */
-html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell){
+html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell):not(.helpbub){
   animation:none;
 }
 
@@ -3850,3 +3853,59 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
 /* Nothing to navigate on a printed page: .no-print already takes the bar out,
    and this puts the work back to the full width it had before. */
 @media print{ .stagerow{display:block} }
+
+/* ---- the question marks in the builder, and the notes they open ---- */
+/* These took the place of the grey paragraphs that used to sit under every
+   box in a task. The dot is meant to be quiet: there for the first time
+   somebody meets a setting, ignorable after that. */
+.helpdot{
+  flex:none; width:20px; height:20px; padding:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1.5px solid var(--line-2); border-radius:999px;
+  background:var(--panel); color:var(--dim);
+  font-family:var(--body); font-size:12.5px; font-weight:700; line-height:1;
+  cursor:pointer;
+}
+.helpdot:hover{border-color:var(--amber); color:var(--amber)}
+.helpdot.on{border-color:var(--amber); background:var(--amber); color:var(--amber-ink)}
+.helpdot:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+
+/* A box and its dot on one line, the dot at the right-hand end of the box it
+   is about. A tall box keeps it level with the first line rather than
+   floating it halfway down a textarea; 10px is what centres it on a
+   single-line box, so both cases land in the same place. */
+.bctl{display:flex; align-items:flex-start; gap:6px}
+.bctl > :first-child{min-width:0}
+.bctl > .helpdot{margin-top:10px}
+/* The boxes that fill the field on their own have to be told to keep doing
+   it, because a flex row otherwise shrinks them to their contents. The
+   single-line boxes are left alone: stretching only the ones that happen to
+   have a note beside them would leave the field above and the field below at
+   different widths. */
+.bctl > .rt,.bctl > .ide,.bctl > select{flex:1}
+
+/* Hung off <body> and placed against the window, because a task card scrolls
+   inside the middle column and would clip anything sitting at its edge. Above
+   the pop-up backdrop, so a note opened inside a pop-up can be read. */
+.helpbub{
+  position:fixed; z-index:140;
+  max-width:min(320px, calc(100vw - 16px));
+  padding:10px 12px;
+  background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px;
+  box-shadow:0 10px 28px rgba(0,0,0,.18);
+}
+.helpbub p{margin:0; font-size:13px; line-height:1.5; color:var(--text)}
+.helpbub p + p{margin-top:8px}
+
+/* A finger needs a bigger target than a mouse does, but the blanket 44px
+   minimum for buttons on a touch screen catches this one and turns a 20px
+   circle into a lozenge as tall as the box beside it. The same answer the
+   tracker's end flag and the teacher's name use: keep the shape, and reach
+   out around it for the finger. */
+@media (pointer:coarse){
+  .helpdot{position:relative; min-height:0; min-width:0}
+  .helpdot::after{
+    content:""; position:absolute; left:50%; top:50%;
+    transform:translate(-50%,-50%); width:44px; height:44px;
+  }
+}

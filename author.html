@@ -210,6 +210,92 @@ function el(tag, cls, text){
 }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
+/* ---------------- the little question marks ---------------- */
+/* Every note that used to sit under a box as a grey paragraph is now behind
+   one of these. Half a dozen of them down one task read as a page of
+   instructions with a few boxes buried in it, and each one is wanted once
+   rather than every time the task is opened. One dot per thing: where several
+   notes belong to the same row they are collated into one, as separate
+   paragraphs in the same bubble.
+
+   The bubble hangs off <body> and is placed against the window rather than
+   inside the field, because the middle column scrolls and a card would clip
+   anything sitting at its edge. */
+let openHelp = null;
+
+function closeHelp(){
+  if (!openHelp) return;
+  openHelp.dot.classList.remove("on");
+  openHelp.dot.setAttribute("aria-expanded", "false");
+  openHelp.bubble.remove();
+  openHelp = null;
+}
+
+function placeHelp(){
+  if (!openHelp) return;
+  /* render() rebuilds the whole card, so the dot we are holding may have been
+     thrown away since the bubble was opened */
+  const r = openHelp.dot.getBoundingClientRect();
+  if (!openHelp.dot.isConnected || (!r.width && !r.height)){ closeHelp(); return; }
+  const bubble = openHelp.bubble, gap = 8;
+  const w = bubble.offsetWidth, h = bubble.offsetHeight;
+  let left = r.left + r.width / 2 - w / 2;
+  left = Math.max(gap, Math.min(left, window.innerWidth - w - gap));
+  let top = r.bottom + gap;
+  if (top + h > window.innerHeight - gap) top = Math.max(gap, r.top - h - gap);
+  bubble.style.left = Math.round(left) + "px";
+  bubble.style.top = Math.round(top) + "px";
+}
+
+/* text is one string, or several of them for the notes that were collated */
+function helpDot(text){
+  const dot = el("button","helpdot","?");
+  dot.type = "button";
+  dot.title = "What is this?";
+  dot.setAttribute("aria-label", "What is this?");
+  dot.setAttribute("aria-expanded", "false");
+  dot.addEventListener("click", (e) => {
+    /* the head of a card opens and shuts it wherever it is clicked, and the
+       dots inside a pop-up sit on rows that have their own handlers */
+    e.preventDefault(); e.stopPropagation();
+    const mine = openHelp && openHelp.dot === dot;
+    closeHelp();
+    if (mine) return;                      // pressing it again puts it away
+    const bubble = el("div","helpbub");
+    (Array.isArray(text) ? text : [text]).forEach(t => bubble.appendChild(el("p","", t)));
+    document.body.appendChild(bubble);
+    openHelp = { dot: dot, bubble: bubble };
+    dot.classList.add("on");
+    dot.setAttribute("aria-expanded", "true");
+    placeHelp();
+  });
+  return dot;
+}
+
+/* A box and its dot side by side, so the dot lands at the right-hand end of
+   the thing it is about. Tall boxes get it level with their first line. */
+function withHelp(node, help){
+  if (!help) return node;
+  const row = el("div","bctl");
+  row.appendChild(node);
+  row.appendChild(helpDot(help));
+  return row;
+}
+
+document.addEventListener("click", (e) => {
+  if (!openHelp) return;
+  const t = e.target;
+  if (t && t.closest && (t.closest(".helpdot") || t.closest(".helpbub"))) return;
+  closeHelp();
+});
+/* Registered before the one that shuts a pop-up, so Escape puts the note away
+   first and leaves the pop-up it was opened from where it was. */
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && openHelp){ e.stopImmediatePropagation(); closeHelp(); }
+});
+window.addEventListener("resize", placeHelp);
+window.addEventListener("scroll", placeHelp, true);
+
 /* ---------------- the lesson being built ---------------- */
 let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical:false, homework:false, topics:{}, responses:{}, extensions:[], blocks:[] };
 
@@ -875,6 +961,8 @@ function render(){
 }
 
 function renderNow(){
+  /* the dot a note was hanging off is about to be thrown away */
+  closeHelp();
   wireList();
   firstPageOpen();
   /* the palette is hidden only while writing feedback sentences */
@@ -1370,8 +1458,7 @@ function card(b, i, arr){
       saveDraft(); schedulePreview();
       if (o.then) o.then();
     });
-    w.appendChild(input);
-    if (o.help) w.appendChild(el("p","bhelp", o.help));
+    w.appendChild(withHelp(input, o.help));
     body.appendChild(w);
   }
   /* The starter code is the very thing a student opens in the editor, so it
@@ -1390,8 +1477,7 @@ function card(b, i, arr){
     });
     shell.appendChild(ed.editor);
     shell.appendChild(ed.probs);
-    w.appendChild(shell);
-    if (o.help) w.appendChild(el("p","bhelp", o.help));
+    w.appendChild(withHelp(shell, o.help));
     body.appendChild(w);
   }
   function R(label, key, opts){
@@ -1400,12 +1486,11 @@ function card(b, i, arr){
     w.appendChild(el("label","", label));
     const ed = window.richText(b[key] || "", (html) => { b[key] = html; saveDraft(); schedulePreview(); },
                                { rows: o.rows || 4, placeholder: o.placeholder });
-    w.appendChild(ed);
-    if (o.help) w.appendChild(el("p","bhelp", o.help));
+    w.appendChild(withHelp(ed, o.help));
     body.appendChild(w);
   }
   /* on/off buttons; each entry is [key, label, defaultOn] */
-  function toggleRow(defs, label){
+  function toggleRow(defs, label, help){
     const w = el("div","bfield");
     w.appendChild(el("label","", label || "Options"));
     const row = el("div","brow");
@@ -1426,6 +1511,7 @@ function card(b, i, arr){
       }
       row.appendChild(btn);
     });
+    if (help) row.appendChild(helpDot(help));
     w.appendChild(row);
     body.appendChild(w);
   }
@@ -1443,8 +1529,8 @@ function card(b, i, arr){
       btn.addEventListener("click", () => { b[key] = d[0]; render(); schedulePreview(); });
       row.appendChild(btn);
     });
+    if (help) row.appendChild(helpDot(help));
     w.appendChild(row);
-    if (help) w.appendChild(el("p","bhelp", help));
     body.appendChild(w);
   }
   /* onChange fires whenever a line is typed in, added or removed, for the
@@ -1471,8 +1557,12 @@ function card(b, i, arr){
     });
     const add = el("button","btn-ghost bmini2","+ Add another");
     add.addEventListener("click", () => { b[key].push(""); changed(); render(); });
-    w.appendChild(add);
-    if (help) w.appendChild(el("p","bhelp", help));
+    if (help){
+      const foot = el("div","brow");
+      foot.appendChild(add);
+      foot.appendChild(helpDot(help));
+      w.appendChild(foot);
+    } else w.appendChild(add);
     body.appendChild(w);
   }
 
@@ -1530,8 +1620,8 @@ function card(b, i, arr){
       render(); schedulePreview();
     });
     row.appendChild(py); row.appendChild(web);
+    row.appendChild(helpDot("Pick one and the right options appear. You can delete the task and start again if you change your mind."));
     w.appendChild(row);
-    w.appendChild(el("p","bhelp","Pick one and the right options appear. You can delete the task and start again if you change your mind."));
     body.appendChild(w);
   }
   if (b.type === "web"){
@@ -1584,15 +1674,12 @@ function card(b, i, arr){
         b.startFrom = sel.value || undefined;
         saveDraft(); render(); schedulePreview();
       });
-      w.appendChild(sel);
-      if (!earlier.length){
-        w.appendChild(el("p","bhelp","Nothing to start from yet: this is the first coding task."));
-      } else if (b.startFrom){
-        w.appendChild(el("p","bhelp",
-          "Their code from that task is put in here the first time they open this one, "
-          + "so they can keep building on it. Anything they have already written here is "
-          + "left alone."));
-      }
+      const startHelp = ["Pick an earlier coding task and their code from it is put in "
+                         + "here the first time they open this one, so they can keep "
+                         + "building on it. Anything they have already written here is "
+                         + "left alone."];
+      if (!earlier.length) startHelp.unshift("Nothing to start from yet: this is the first coding task.");
+      w.appendChild(withHelp(sel, startHelp));
       body.appendChild(w);
       /* Nothing to write when the code comes from somewhere else: a starter box
          sitting under it only invites a teacher to fill in something a student
@@ -1715,12 +1802,14 @@ function card(b, i, arr){
         row.appendChild(del);
         ow.appendChild(row);
       });
-      ow.appendChild(el("p","bhelp", q.answers.length > 1
-        ? "Students must tick all " + q.answers.length + " to get it right."
-        : "Tick a second option to make it a multiple-answer question."));
       const addOpt = el("button","btn-ghost bmini2","+ Add another option");
       addOpt.addEventListener("click", () => { q.options.push(""); render(); });
-      ow.appendChild(addOpt); box.appendChild(ow);
+      const optFoot = el("div","brow");
+      optFoot.appendChild(addOpt);
+      optFoot.appendChild(helpDot(q.answers.length > 1
+        ? "Students must tick all " + q.answers.length + " to get it right."
+        : "Tick a second option to make it a multiple-answer question."));
+      ow.appendChild(optFoot); box.appendChild(ow);
       /* The lesson page has always been able to show this; there was simply
          nowhere to write it. */
       const yw = el("div","bfield");
@@ -1753,6 +1842,11 @@ function card(b, i, arr){
       btn.addEventListener("click", () => { b.pass.mode = pair[0]; render(); schedulePreview(); });
       modes.appendChild(btn);
     });
+    modes.appendChild(helpDot(b.pass.mode === "percent"
+      ? "Below this they are asked to have another go before moving on."
+      : b.pass.mode === "count"
+        ? "They have to get at least this many right before moving on."
+        : "They can move on however they do."));
     pw.appendChild(modes);
     if (b.pass.mode !== "none"){
       const row = el("div","stepper");
@@ -1772,9 +1866,6 @@ function card(b, i, arr){
       num.addEventListener("input", () => setPass(num.value));
       row.appendChild(less); row.appendChild(num); row.appendChild(more);
       pw.appendChild(row);
-      pw.appendChild(el("p","bhelp", b.pass.mode === "percent"
-        ? "Below this they are asked to have another go before moving on."
-        : "They have to get at least this many right before moving on."));
       /* Holding the page back only means anything where there is something
          below the quiz to hold back, so it sits with the pass mark rather
          than among the quiz's own settings. */
@@ -1786,12 +1877,10 @@ function card(b, i, arr){
                         : "Tasks under this quiz are on the page from the start";
       hb.addEventListener("click", () => { b.pass.hold = !holdOn; render(); schedulePreview(); });
       holdRow.appendChild(hb);
-      pw.appendChild(holdRow);
-      pw.appendChild(el("p","bhelp", holdOn
+      holdRow.appendChild(helpDot(holdOn
         ? "Tasks below this quiz on the same page stay out of sight until they have finished it and got enough right. Continue still works, so nobody is stuck."
         : "Everything else on the page is there from the start."));
-    } else {
-      pw.appendChild(el("p","bhelp","They can move on however they do."));
+      pw.appendChild(holdRow);
     }
     body.appendChild(pw);
   }
@@ -1822,17 +1911,15 @@ function card(b, i, arr){
          getting through a dozen pages is nearly ten thousand of them in an
          hour. */
       toggleRow([["taskbar","Task bar", true],
-                 ["autosave","Save their work on Continue", false]], "This page");
-      body.appendChild(el("p","bhelp",
-        "The task bar is the line of small icons down the left of the page, one "
-        + "for each task, that a student can press to get straight to that task. "
-        + "It is on by default, and it is not shown on a phone or where the page "
-        + "holds only one task."));
-      body.appendChild(el("p","bhelp",
-        "Saving is off by default. With it on, the first time a student goes "
-        + "forward from this page their work is sent to you, so a lesson that "
-        + "runs out of time still has it. It happens once per page, and they "
-        + "can press Save Work themselves whenever they like."));
+                 ["autosave","Save their work on Continue", false]], "This page",
+        ["The task bar is the line of small icons down the left of the page, one "
+         + "for each task, that a student can press to get straight to that task. "
+         + "It is on by default, and it is not shown on a phone or where the page "
+         + "holds only one task.",
+         "Saving is off by default. With it on, the first time a student goes "
+         + "forward from this page their work is sent to you, so a lesson that "
+         + "runs out of time still has it. It happens once per page, and they "
+         + "can press Save Work themselves whenever they like."]);
     }
 
     const inner = el("div","pagekids");
@@ -1857,11 +1944,11 @@ function card(b, i, arr){
   }
   if (b.type === "extension"){
     F("Heading", "title");
-    R("Subtitle", "task", { rows:2, help:"Shown under “Finished early?” once they open it." });
-    body.appendChild(el("p","bhelp",
+    R("Subtitle", "task", { rows:2, help:[
       "The lesson shows “Finished early?” with a box to tick. These open "
       + "when it is ticked, or on their own once everything else on the page is "
-      + "finished. They never hold anybody up, so nobody is asked to complete them."));
+      + "finished. They never hold anybody up, so nobody is asked to complete them.",
+      "The subtitle is shown under “Finished early?” once they open it."] });
     const inner = el("div","pagekids");
     if (!b.blocks) b.blocks = [];
     if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
@@ -1970,13 +2057,15 @@ function card(b, i, arr){
     if (!Array.isArray(b.checks)) b.checks = [];
     const w = el("div","bfield");
     w.appendChild(el("label","","Checklist"));
-    w.appendChild(el("p","bhelp",
-      "Students see these above the editor and press Check my work. Leave empty for no checklist."));
     const n = b.checks.length;
     const open2 = el("button","btn-ghost bmini2",
       n ? "Edit the checklist (" + n + ")" : "+ Add a checklist");
     open2.addEventListener("click", () => checklistPopup(b, isWeb));
-    w.appendChild(open2);
+    const checkRow = el("div","brow");
+    checkRow.appendChild(open2);
+    checkRow.appendChild(helpDot(
+      "Students see these above the editor and press Check my work. Leave empty for no checklist."));
+    w.appendChild(checkRow);
     body.appendChild(w);
   }
   if (b.type === "keywords"){
@@ -1985,9 +2074,6 @@ function card(b, i, arr){
     if (!Array.isArray(b.words)) b.words = [];
     const w = el("div","bfield");
     w.appendChild(el("label","","The keywords"));
-    w.appendChild(el("p","bhelp",
-      "One per row. The hint is optional and sits under the word, for anything "
-      + "that needs narrowing down."));
     b.words.forEach((entry, k) => {
       const row = el("div","brow kwrow");
       const word = el("input");
@@ -2012,7 +2098,12 @@ function card(b, i, arr){
     });
     const add = el("button","btn-ghost bmini2","+ Another keyword");
     add.addEventListener("click", () => { b.words.push({ word:"", hint:"" }); render(); schedulePreview(); });
-    w.appendChild(add);
+    const kwFoot = el("div","brow");
+    kwFoot.appendChild(add);
+    kwFoot.appendChild(helpDot(
+      "One per row. The hint is optional and sits under the word, for anything "
+      + "that needs narrowing down."));
+    w.appendChild(kwFoot);
     body.appendChild(w);
   }
   if (b.type === "notes"){
@@ -2029,9 +2120,8 @@ function card(b, i, arr){
   if (b.type === "board"){
     F("Heading (optional)", "title");
     F("Instruction (optional)", "task", { area:true, rows:2 });
-    F("How tall, in pixels", "height", { num:true });
-    body.appendChild(el("p","bhelp",
-      "What they draw is kept as the strokes themselves, not a picture, so it takes very little room."));
+    F("How tall, in pixels", "height", { num:true,
+      help:"What they draw is kept as the strokes themselves, not a picture, so it takes very little room." });
   }
   if (b.type === "label"){
     F("Heading (optional)", "title");
@@ -2040,8 +2130,10 @@ function card(b, i, arr){
     if (!Array.isArray(b.spots)) b.spots = [];
 
     const w = el("div","bfield");
-    w.appendChild(el("label","","The picture, and where the labels go"));
-    w.appendChild(el("p","bhelp","Drag on the picture to draw a box, then type the word for it below."));
+    const labHead = el("div","brow");
+    labHead.appendChild(el("label","","The picture, and where the labels go"));
+    labHead.appendChild(helpDot("Drag on the picture to draw a box, then type the word for it below."));
+    w.appendChild(labHead);
 
     /* With no picture there is nothing to draw boxes on, so only the hint
        shows. This used to return from card() instead, which handed
@@ -2658,10 +2750,8 @@ function checklistPopup(block, isWeb){
         });
         /* on the same row as the box it adds a condition to, not under it */
         mainRow.appendChild(addMore);
-        if (c.more.length > 1){
-          card.appendChild(el("p","bhelp",
-            "Read left to right: “A and B or C” means “(A and B) or C”."));
-        }
+        if (c.more.length > 1)
+          mainRow.appendChild(helpDot("Read left to right: “A and B or C” means “(A and B) or C”."));
 
         /* Last, so it applies whatever kind of check this is. Left empty, the
            built-in wording is used. Teacher-checked lines never reach here:
@@ -2750,9 +2840,6 @@ function paintTargets(into){
   Object.keys(lesson.topics || {}).forEach(k => { used[k] = true; });
   const names = Object.keys(used);
   if (lesson.practical) markingSetup(into);
-  into.appendChild(el("p","hint", lesson.practical
-    ? "These become a bank you can pick from when marking, so you are not writing the same sentence twice."
-    : "The topic a student did best in gives their Strength; their weakest gives their Target."));
   const addBtn = el("button","btn-primary bmini2","+ New topic");
   addBtn.addEventListener("click", () => {
     let n = 1;
@@ -2760,7 +2847,12 @@ function paintTargets(into){
     lesson.topics["Topic " + n] = { label:"Topic " + n, strength:"", target:"" };
     saveDraft(); render();
   });
-  into.appendChild(addBtn);
+  const addRow = el("div","brow");
+  addRow.appendChild(addBtn);
+  addRow.appendChild(helpDot(lesson.practical
+    ? "These become a bank you can pick from when marking, so you are not writing the same sentence twice."
+    : "The topic a student did best in gives their Strength; their weakest gives their Target."));
+  into.appendChild(addRow);
   if (!names.length && !Object.keys(lesson.topics || {}).length){
     into.appendChild(el("p","hint", lesson.practical
       ? "No topics yet, press \u201c+ New topic\u201d."
@@ -3400,6 +3492,7 @@ function scrollBody(box){
 }
 
 function openModal(build){
+  closeHelp();                 // whatever it was hanging off is behind this now
   const box = $("mBox");
   box.innerHTML = "";
   build(box);
@@ -3416,6 +3509,7 @@ function openModal(build){
   $("mBack").hidden = false;
 }
 function closeModal(){
+  closeHelp();
   $("mBack").hidden = true;
   /* the Save pop-up borrows the real year and unit pickers, and puts them
      back when it hears this */
