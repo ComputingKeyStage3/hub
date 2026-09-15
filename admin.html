@@ -335,6 +335,7 @@ function el(tag, cls, text){
 function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, ""); }
 
 let KEY = "", TOKEN = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
+let groupsAt = 0;             // when the class list last came from the server
 let workCache = { key: "", rows: [], t: 0 };
 let relTimer = null;
 
@@ -404,6 +405,11 @@ function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
   clearInterval(relTimer);
   hideLoader();
+  /* The bar comes out with whatever it sits above, in the same frame. Showing
+     it the moment the first answer came back, while the page underneath was
+     still waiting on the second and third, is what made the console arrive in
+     pieces: bar first, then a pause, then the rest of it. */
+  if (TOKEN && !OFFLINE){ const bar = $("topbar"); if (bar) bar.hidden = false; }
   paintCrumbs();
   paintWho();
   /* Remember where we are, so Back and the swipe gesture step through the
@@ -686,7 +692,7 @@ async function tryKey(){
     const gd = await g.json();
     if (!g.ok) throw new Error(gd.error || "That key was not accepted.");
     groups = gd.groups || [];
-    $("topbar").hidden = false;
+    groupsAt = Date.now();
     await loadTeachers();
     await afterSignIn();
   }catch(e){
@@ -745,10 +751,17 @@ async function afterSignIn(){
   await enterConsole();
 }
 async function enterConsole(){
-  await refreshGroups();
+  /* The class list came back moments ago on the way in. Asking for it again
+     here was a third request in a row for something already in hand, and the
+     page could not be drawn until it answered. */
+  if (Date.now() - groupsAt > 30000) await refreshGroups();
   paintClasses();
-  show("homeView");
-  await restoreSpot();
+  /* Read before anything is put on screen. Showing a view writes this same
+     note, so Home went up, wrote "homeView" over where the refresh had
+     interrupted, and restoreSpot then read it back and found Home: nobody
+     has ever been put back in their class. restoreSpot shows Home itself
+     when there is nothing to go back to. */
+  await restoreSpot(lastSpot());
   nudgeBackup();           // the once-a-week reminder to take a backup
 }
 on("whoGo", "click", async () => {
@@ -777,31 +790,58 @@ function paintWho(){
   bar.appendChild(b);
 }
 
-/* Back to whichever screen the refresh interrupted. Anything that cannot be
-   reopened, because the class or unit has gone, quietly stays at Home. */
-async function restoreSpot(){
-  let spot = null;
-  try{ spot = JSON.parse(sessionStorage.getItem("hub_spot") || "null"); }catch(e){}
-  if (!spot || !spot.view || spot.view === "homeView") return;
+/* Where this tab was when it was last on a view, kept in sessionStorage by
+   show(). Read on the way in, before anything is drawn over it. */
+function lastSpot(){
+  try{ return JSON.parse(sessionStorage.getItem("hub_spot") || "null"); }catch(e){ return null; }
+}
+
+/* Back to whichever screen the refresh interrupted, and Home when there is
+   nothing to go back to or it cannot be opened again because the class or
+   unit has gone.
+
+   Home is not put up first and then replaced. The screens that need nothing
+   fetched arrive whole, with no flash of somewhere the teacher was not. The
+   ones that need the catalogue show their own parent while it comes, which
+   for a class's lists is that class and for the hub is Home: better than a
+   blank page, and where they would have ended up anyway if it failed. */
+async function restoreSpot(spot){
+  if (!spot || !spot.view || spot.view === "homeView"){ show("homeView"); return; }
   cls = spot.cls || ""; unit = spot.unit || "";
   hubYear = spot.hubYear || ""; hubUnit = spot.hubUnit || "";
+  /* A class renamed or deleted from another machine is not there to go back
+     to. openClass asks nothing and would put its name over an empty page, so
+     the note is held against the classes that actually exist and anything
+     else falls through to Home. */
+  const here = cls && allClasses().some(g => String(g.name).toLowerCase() === cls.toLowerCase());
   try{
-    if (spot.view === "hubView"){ await loadCatalogue(); show("hubView"); paintYears(); return; }
-    if (spot.view === "hubUnitsView"){ await loadCatalogue(); openYear(hubYear); return; }
-    if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit); return; }
     if (spot.view === "classesView"){ toClasses(); return; }
-    if (!cls) return;
-    if (spot.view === "classView"){ openClass(cls); return; }
-    if (spot.view === "studentsView"){ openClass(cls); show("studentsView"); loadStudents(); return; }
-    if (spot.view === "unitsView"){ openClass(cls); await loadCatalogue(); show("unitsView"); paintClassUnits(); return; }
-    if (spot.view === "lessonsView"){
+    if (here && spot.view === "classView"){ openClass(cls); return; }
+    if (here && spot.view === "studentsView"){ openClass(cls); show("studentsView"); loadStudents(); return; }
+    if (here && spot.view === "unitsView"){
+      openClass(cls); await loadCatalogue(); show("unitsView"); paintClassUnits(); return;
+    }
+    if (here && spot.view === "lessonsView"){
       openClass(cls); await loadCatalogue(); await loadClassLocks();
       show("lessonsView"); paintLessonGrid(); return;
     }
-  }catch(e){ console.warn("could not go back to where you were:", e); }
+    show("homeView");
+    if (spot.view === "hubView"){ await loadCatalogue(); show("hubView"); paintYears(); return; }
+    if (spot.view === "hubUnitsView"){ await loadCatalogue(); openYear(hubYear); return; }
+    if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit); return; }
+  }catch(e){
+    console.warn("could not go back to where you were:", e);
+    show("homeView");
+  }
 }
 /* changing who you are, without signing in again */
-function changeTeacher(){ show("whoView", true); }
+function changeTeacher(){
+  /* Wherever they were belongs to the teacher they were being. Coming back as
+     somebody else starts at Home rather than in the other one's class, which
+     they may not even take. */
+  try{ sessionStorage.removeItem("hub_spot"); }catch(e){}
+  show("whoView", true);
+}
 
 /* ---------- letting the browser sign you in ----------
    Edge and Chrome fill the key box themselves once a teacher has told the
@@ -1005,7 +1045,7 @@ async function refreshGroups(){
   try{
     const r = await fetch(API + "/api/teacher/groups", { headers: H(), cache: "no-store" });
     const d = await r.json();
-    if (r.ok) { groups = d.groups || []; paintClasses(); }
+    if (r.ok) { groups = d.groups || []; groupsAt = Date.now(); paintClasses(); }
   }catch(e){}
 }
 
@@ -3578,20 +3618,32 @@ if (OFFLINE){
        checked. It is normally over in a few hundredths of a second, and an
        animation for that reads as the console doing work it is not doing.
        A slow morning at the server is another matter: rather than leave a
-       blank page the dots come out, late and only if they are needed. */
-    const lateDots = setTimeout(showLoader, 400);
+       blank page the dots come out, late and only if they are needed.
+
+       Late enough that they mean it. At four hundredths this fired eighteen
+       thousandths of a second before the console was ready, so the dots were
+       put up and taken away again in the same blink. One request now does
+       what three did, so anything still going at three quarters of a second
+       is a wait worth telling somebody about. */
+    const lateDots = setTimeout(showLoader, 750);
     /* Without the stage being set here, the timer waiting on the browser to
        fill the key box would find it empty and put the sign-in on screen
        underneath a session that is still being checked. */
     TOKEN = live;
     keyStage = "trying";
-    fetch(API + "/api/teacher/groups", { headers: H(), cache:"no-store" })
-      .then(r => r.ok ? r.json() : Promise.reject(new Error("no")))
-      .then(async (d) => {
+    /* Both at once. They were asked for one after the other, and with the
+       class list asked for a second time further on that made three round
+       trips in a row before a teacher saw anything. Neither needs the other,
+       so neither should wait for it. */
+    Promise.all([
+      fetch(API + "/api/teacher/groups", { headers: H(), cache:"no-store" })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error("no"))),
+      loadTeachers()          // sees to its own trouble and never rejects
+    ])
+      .then(async ([d]) => {
         clearTimeout(lateDots);
         groups = d.groups || [];
-        $("topbar").hidden = false;
-        await loadTeachers();
+        groupsAt = Date.now();
         await afterSignIn();
       })
       .catch(() => {
