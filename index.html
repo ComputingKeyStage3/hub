@@ -49,7 +49,7 @@
       <button class="on" id="tabActive">Active</button>
       <button id="tabDone">Past</button>
     </div>
-    <div id="lessonList"><p class="hint">Loading…</p></div>
+    <div id="lessonList"><div class="loading mid"><div class="load-dots"><span></span><span></span><span></span></div><span>Loading your lessons</span></div></div>
   </div>
   <div id="view-results" hidden>
     <div id="resultList"><p class="hint"></p></div>
@@ -135,6 +135,21 @@ const ready = !(window.HUB && window.HUB.OFFLINE) && API && API.indexOf("PASTE_"
 const $ = (id) => document.getElementById(id);
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text; return e; }
+/* The waiting dots, the same three the lesson screen uses, for a list that is
+   still on its way. A plain "Loading" line read as if the page had finished
+   and there was simply nothing in the list. */
+function wait(box, what){
+  const b = typeof box === "string" ? $(box) : box;
+  if (!b) return null;
+  b.innerHTML = "";
+  const d = el("div","loading mid");
+  const dots = el("div","load-dots");
+  dots.appendChild(el("span")); dots.appendChild(el("span")); dots.appendChild(el("span"));
+  d.appendChild(dots);
+  d.appendChild(el("span","", what || "Loading"));
+  b.appendChild(d);
+  return b;
+}
 /* wiring a button that isn't there should not stop the rest of the page */
 function on(id, ev, fn){
   const e = document.getElementById(id);
@@ -345,7 +360,7 @@ async function fetchLessons(){
   const box = $("lessonList");
   const token = localStorage.getItem("hub_token");
   if (!token){ box.innerHTML = ""; return false; }               // signing in comes first
-  box.innerHTML = '<p class="hint">Loading…</p>';
+  wait(box, "Loading your lessons");
   const group = localStorage.getItem("hub_group") || "";
   try{
     /* Every lesson comes from the database. The lessons folder belongs to
@@ -733,7 +748,7 @@ async function fetchResults(){
   }
   if (!token){ box.innerHTML = ""; return; }
   if (!ready){ box.innerHTML = '<p class="hint">Site not connected to its server yet.</p>'; return; }
-  box.innerHTML = '<p class="hint">Loading…</p>';
+  wait(box, "Loading your results");
   try{
     const r = await fetch(API + "/api/results", { headers: { Authorization: "Bearer " + token } });
     const d = await r.json();

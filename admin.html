@@ -216,6 +216,7 @@ setTimeout(function(){
       <button class="btn-ghost" id="importBtn">Import from Arbor</button>
     </div>
     <div id="resetBox"></div>
+    <div class="loading" id="stuWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Loading the students</span></div>
     <table class="stutable" id="stuTable"></table>
     <p class="hint" id="stuMsg" style="margin-top:12px"></p>
   </div>
@@ -230,7 +231,7 @@ setTimeout(function(){
         can sign in with the key alone until its sixty days are up. Give them names you will
         recognise. Sign the others out if a machine has been lost, or if there is anything
         here you cannot account for.</p>
-      <div id="deviceList"><p class="hint">Loading&hellip;</p></div>
+      <div id="deviceList"><div class="loading"><div class="load-dots"><span></span><span></span><span></span></div><span>Loading the devices</span></div></div>
       <div class="toolrow">
         <button class="btn-ghost" id="signOutOthers">Sign out every other device</button>
       </div>
@@ -333,6 +334,31 @@ function el(tag, cls, text){
   return e;
 }
 function stripTags(x){ return String(x || "").replace(/<[^>]*>/g, ""); }
+
+/* The waiting dots, the same three that cover the sign-in screen, for a panel
+   or a pop-up that is holding its place while an answer comes back. Every
+   plain "Loading…" line in the console is one of these now: a teacher on a
+   slow school connection could not tell a list that was still coming from a
+   list that had come back empty.
+
+   waiting() hands back the block; wait() puts it into a box, emptying the box
+   first, which is the point of it. Whatever was in there belongs to the thing
+   you have just navigated away from. */
+function waiting(what, middle){
+  const d = el("div", "loading" + (middle ? " mid" : ""));
+  const dots = el("div","load-dots");
+  dots.appendChild(el("span")); dots.appendChild(el("span")); dots.appendChild(el("span"));
+  d.appendChild(dots);
+  d.appendChild(el("span","", what || "Loading"));
+  return d;
+}
+function wait(box, what, middle){
+  const b = typeof box === "string" ? $(box) : box;
+  if (!b) return null;
+  b.innerHTML = "";
+  b.appendChild(waiting(what, middle));
+  return b;
+}
 
 let KEY = "", TOKEN = "", groups = [], cls = "", students = [], lessons = [], lessonId = "", lessonJson = null;
 let groupsAt = 0;             // when the class list last came from the server
@@ -633,7 +659,7 @@ async function offlineConsole(){
    "renameYearBtn","deleteYearBtn","renameHubUnitBtn","deleteHubUnitBtn"]
     .forEach(id => { const e = $(id); if (e) e.remove(); });
   show("hubView");
-  $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
+  wait("hubYears", "Loading the lessons", true);
   try{ await loadCatalogue(true); paintYears(); }
   catch(e){
     $("hubYears").innerHTML = "";
@@ -1161,7 +1187,7 @@ function renameDevice(x){
 }
 async function loadDevices(){
   const box = $("deviceList");
-  box.innerHTML = '<p class="hint">Loading…</p>';
+  wait(box, "Loading the devices");
   $("deviceMsg").textContent = "";
   try{
     const r = await fetch(API + "/api/teacher/devices", { headers: H(), cache:"no-store" });
@@ -1507,23 +1533,23 @@ const lessonsOfUnit = (u) => (cat.lessons || []).filter(l => (l.unit || "") === 
 
 on("openHub", "click", async () => {
   show("hubView");
-  $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
+  wait("hubYears", "Loading the lessons", true);
   try{ await loadCatalogue(true); paintYears(); }
   catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
 on("hubHome", "click", toHome);
 on("refYear", "click", async () => {
-  $("hubUnits").innerHTML = '<p class="hint">Loading\u2026</p>';
+  wait("hubUnits", "Loading the units", true);
   try{ await loadCatalogue(true); paintHubUnits(); }
   catch(e){ $("hubUnits").innerHTML = ""; $("hubUnits").appendChild(el("p","hint", e.message)); }
 });
 on("refUnitPage", "click", async () => {
-  $("hubList").innerHTML = '<p class="hint">Loading\u2026</p>';
+  wait("hubList", "Loading the lessons", true);
   try{ await loadCatalogue(true); paintHub(); }
   catch(e){ $("hubList").innerHTML = ""; $("hubList").appendChild(el("p","hint", e.message)); }
 });
 on("refHub", "click", async () => {
-  $("hubYears").innerHTML = '<p class="hint">Loading…</p>';
+  wait("hubYears", "Loading the lessons", true);
   try{ await loadCatalogue(true); paintYears(); }
   catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
@@ -2005,12 +2031,12 @@ on("openClasses", "click", toClasses);
 on("backHome", "click", toHome);
 on("refStudents", "click", () => { students = []; workCache = { key:"", rows:[], t:0 }; loadStudents(); });
 on("refUnits", "click", async () => {
-  $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
+  wait("unitGrid", "Loading the units", true);
   try{ await loadCatalogue(true); paintClassUnits(); }
   catch(e){ $("unitGrid").innerHTML = ""; $("unitGrid").appendChild(el("p","hint", e.message)); }
 });
 on("refLessons", "click", async () => {
-  $("lessonGrid").innerHTML = '<p class="hint">Loading…</p>';
+  wait("lessonGrid", "Loading the lessons", true);
   try{ await loadCatalogue(true); await loadClassLocks(); paintLessonGrid(); }
   catch(e){ $("lessonGrid").innerHTML = ""; $("lessonGrid").appendChild(el("p","hint", e.message)); }
 });
@@ -2081,15 +2107,29 @@ async function resetAction(action, username){
 
 async function loadStudents(){
   loadResets();
-  $("stuMsg").textContent = "Loading\u2026";
+  /* The table is emptied before the request goes out, not after the answer
+     comes back. Left standing it went on showing whoever was in the class you
+     were looking at a moment ago, so opening 8B straight after 8A read as a
+     roomful of 8A's children with 8B's name over them until the fetch landed.
+     The dots say the names on their way are not here yet. */
+  const wanted = cls;
+  $("stuTable").innerHTML = "";
+  students = [];
+  $("stuMsg").textContent = "";
+  $("stuWait").hidden = false;
   try{
     const r = await fetch(API + "/api/teacher/students?group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" });
     const d = await r.json();
+    /* Two classes opened quickly leave two requests in the air, and the slower
+       one can answer last. Anything that is no longer the class on screen is
+       dropped rather than painted over it. */
+    if (wanted !== cls) return;
     if (!r.ok) throw new Error(d.error || "Could not load students.");
     students = d.students || [];
     paintStudents();
     $("stuMsg").textContent = students.length ? "" : "No students in " + cls + " yet, add the first above.";
-  }catch(e){ $("stuMsg").textContent = e.message; }
+  }catch(e){ if (wanted === cls) $("stuMsg").textContent = e.message; }
+  finally{ if (wanted === cls) $("stuWait").hidden = true; }
 }
 function paintStudents(){
   const t = $("stuTable"); t.innerHTML = "";
@@ -2477,7 +2517,7 @@ async function catPost(payload){
 
 on("openLessons", "click", async () => {
   show("unitsView");
-  $("unitGrid").innerHTML = '<p class="hint">Loading…</p>';
+  wait("unitGrid", "Loading the units", true);
   try{ await loadCatalogue(); paintClassUnits(); }
   catch(e){ $("unitGrid").innerHTML = '<p class="hint">' + e.message + '</p>'; }
 });
@@ -2655,7 +2695,7 @@ function paintLessonGrid(){
       lessonId = l.lesson_id;
       workCache = { key: "", rows: [], t: 0 };
       openModal(box => { box.classList.add("wide"); modalTitle(box, titleOf(l.lesson_id));
-                         box.appendChild(el("p","hint","Loading\u2026")); });
+                         box.appendChild(waiting("Loading the markbook", true)); });
       try{ lessonJson = await fetchLesson(l.lesson_id); openMarkbook(false); }
       catch(e){ say("Could not open the markbook", e.message); }
     });
@@ -2993,7 +3033,7 @@ async function manageLesson(id){
   openModal(box => {                       // something to look at while it loads
     box.classList.add("wide");
     modalTitle(box, titleOf(id));
-    box.appendChild(el("p","hint","Loading\u2026"));
+    box.appendChild(waiting("Loading the lesson", true));
   });
   try{
     lessonJson = await fetchLesson(id);
@@ -3254,7 +3294,7 @@ async function openMarkbook(backToManage){
     box.appendChild(x);
     modalTitle(box, "Markbook, " + titleOf(lessonId) + " \u00b7 " + cls);
     const holder = el("div"); box.appendChild(holder);
-    holder.appendChild(el("p","hint","Loading\u2026"));
+    holder.appendChild(waiting("Loading the marks", true));
     try{
       const [roster, work, res] = [await getRoster(), await getWorkRows(), await getResults()];
       markbookTasks = responseTaskIds();
@@ -3487,7 +3527,7 @@ async function whoDone(i, b, backToManage){
     modalTitle(box, "Task " + (i+1) + ", who's done it?");
     box.appendChild(el("p","modal-text", stepTitle(b, i)));
     const holder = el("div"); box.appendChild(holder);
-    holder.appendChild(el("p","hint","Loading\u2026"));
+    holder.appendChild(waiting("Loading the class", true));
     try{
       const roster = await getRoster(), rows = await getWorkRows();
       holder.innerHTML = "";
@@ -3520,7 +3560,7 @@ async function whoFinished(backToManage){
     modalTitle(box, "Who has finished?");
     box.appendChild(el("p","modal-text","Students who have reached the summary page and pressed Finish."));
     const holder = el("div"); box.appendChild(holder);
-    holder.appendChild(el("p","hint","Loading…"));
+    holder.appendChild(waiting("Loading the class", true));
     try{
       const roster = await getRoster(), rows = await getWorkRows();
       holder.innerHTML = "";
