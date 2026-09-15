@@ -1760,8 +1760,16 @@ function layoutRail(){
   const beads = Math.min(DOT + air, 11);   // between two dots, before closing up
   const runCap = size * 2;             // the most a run of dots may take
 
-  const mark = stage.getBoundingClientRect().top + 72;
-  let now = -1, lastShowing = -1;
+  /* The task lit on the line is whichever one fills most of the screen.
+
+     It used to be whichever one had its top nearest the top of the screen,
+     which read as the wrong task for most of the time a student spent on a
+     long one: a paragraph of reading three screens deep handed the light to
+     the task underneath it the moment its heading scrolled away, and kept it
+     there while the reading still filled the view. Measuring what is actually
+     on the screen also did away with a patch that lit the last task whenever
+     the page was scrolled to the bottom. */
+  let now = -1, most = 0;
 
   /* read: where each task is, and whether any of it is beside the line */
   /* The centre each one wants. Anything that turns out not to be on the screen
@@ -1775,28 +1783,19 @@ function layoutRail(){
     if (t.shut || !t.el || !t.el.getBoundingClientRect) return;
     const box = t.el.getBoundingClientRect();
     if (box.bottom <= railTop + 1 || box.top - railTop >= height - 1) return;
-    lastShowing = i;
-    if (box.top <= mark) now = i;
+    /* how much of this task is on the screen; they are all the same width, so
+       the height of what shows is the whole of the comparison */
+    const showing = Math.min(box.bottom, railTop + height) - Math.max(box.top, railTop);
+    if (showing > most){ most = showing; now = i; }
     if (firstIcon < 0) firstIcon = i;
     lastIcon = i;
     /* The icon's top against the task's top, so it reads as a mark in the
-       margin beside where that task begins. A task running off the top of the
-       screen keeps its icon at the top of the line: it is still the one being
-       read. */
+       margin beside where that task begins. A task long enough to run off the
+       top of the screen keeps its icon at the top of the line, which is as
+       near to where it starts as the line can get. */
     mid[i] = Math.min(Math.max(box.top - railTop, 0), Math.max(0, height - size)) + size / 2;
   });
-  /* The last task on a page is usually too short to be brought up to the top,
-     so measuring against that line alone would light the one above it however
-     far down the student went. At the bottom of the page they are on the last
-     task, whatever the arithmetic says.
-
-     Only where there is a bottom to reach. A page that fits on the screen is
-     at its own bottom from the moment it is drawn, and that lit the last task
-     on a short page before the student had read the first. */
-  if (lastShowing >= 0 && stage.scrollHeight > stage.clientHeight + 2
-      && stage.scrollTop + stage.clientHeight >= stage.scrollHeight - 2)
-    now = lastShowing;
-  if (now < 0) now = lastShowing >= 0 ? lastShowing : 0;
+  if (now < 0) now = 0;      // nothing on the screen at all: light the first
 
   /* the dots above, from the top down, closing up if there are a lot of them */
   const overhead = firstIcon < 0 ? n : firstIcon;

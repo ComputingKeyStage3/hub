@@ -3775,7 +3775,16 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
   background:var(--bg); color:var(--dim);
   border:1px solid var(--line-2); border-radius:999px;
   cursor:pointer;
-  transition:color .15s ease, border-color .15s ease, background .15s ease;
+  /* Nothing fades, and this has to say so out loud because every button on the
+     site is given a transition further up the file.
+
+     An icon and a dot differ in their size, their fill and the colour of the
+     drawing inside them, and a task turns from one into the other every time
+     it scrolls off the screen or back on. With a transition on any of that,
+     each change spent a sixth of a second as a pale filled disc with no icon
+     in it: a mark on the line standing next to nothing, appearing and going
+     again the whole way down a page. */
+  transition:none;
 }
 .railbtn svg{
   width:17px; height:17px; display:block;
