@@ -21,10 +21,10 @@
      The first line is in the markup rather than written in afterwards, so it
      is there in the same frame as the dots instead of a blank gap under them.
 
-     Shut to begin with, and opened a few lines below only if there is really
-     something to wait for. Drawing it first and taking it away once the
-     answer was known meant a teacher coming back to a console they were
-     already signed in to watched an animation play for no reason.
+     Shut to begin with and opened by the script just below, which is the only
+     thing that knows whether this is a console being signed in to or one
+     being come back to. Either way something has to be asked of the server
+     before there is a console to show, and the dots are what fills that.
 
      "gone" and not only hidden: .loadscreen sets display:grid, which beats
      the browser's own rule for a hidden element. -->
@@ -53,14 +53,23 @@
     if (window.hubLive){ try{ sessionStorage.setItem("hub_ttoken", window.hubLive); }catch(e){} }
   }
   if (window.hubLive){
-    /* No dots, and no fade either. Every direct child of body arrives with a
-       third of a second of fade-up, which is right for a page being built and
-       wrong for one that is already there: it is the whole of what a refresh
-       costs. Set here, before the first of those children has been parsed,
-       because an animation cannot be called off once it has started. */
+    /* No fade. Every direct child of body arrives with a third of a second of
+       fade-up, which is right for a page being built in front of somebody and
+       wrong for one that is already there: when the console is ready it
+       should be there, not settle into place. Set here, before the first of
+       those children has been parsed, because an animation cannot be called
+       off once it has started. */
     document.documentElement.dataset.arrive = "off";
-    return;
+    /* They are signed in; saying otherwise on every refresh reads as having
+       been signed out. */
+    var line = document.getElementById("loadMsg");
+    if (line) line.textContent = "Loading the console";
   }
+  /* The dots either way. Even coming back to a console already signed in to,
+     the session has to be put to the server before there is anything to
+     draw, and for that half a second a blank page looks like a page that has
+     failed. They are hidden again the moment the first view goes up, so on a
+     quick answer they are gone inside a frame or two. */
   var dots = document.getElementById("loadScreen");
   if (dots){ dots.hidden = false; dots.classList.remove("gone"); }
 })();
@@ -898,16 +907,6 @@ function changeTeacher(){
 let keyStage = "wait";
 let typedKey = false, autoTried = false;
 
-/* The dots, when something really is being waited for. The same two lines as
-   the little script at the top of the page, which cannot call this because it
-   runs long before this script is parsed. */
-function showLoader(){
-  const dots = $("loadScreen");
-  if (!dots || !dots.hidden) return;
-  dots.hidden = false;
-  dots.classList.remove("gone");
-  if (!loadTimer) runLoadLines();
-}
 function hideLoader(){
   if (loadTimer){ clearInterval(loadTimer); loadTimer = null; }
   const dots = $("loadScreen");
@@ -931,7 +930,12 @@ let loadTimer = null;
 function runLoadLines(){
   const line = $("loadMsg");
   if (!line) return;
-  const order = LOAD_LINES.slice();
+  /* Whatever is already under the dots comes out of the list, so the first
+     change is always a change. Which line that is depends on the way in:
+     "Signing you in" is not in the list, but "Loading the console" is, and
+     without this it could come up again as the first of the shuffle. */
+  const opening = line.textContent;
+  const order = LOAD_LINES.filter(x => x !== opening);
   for (let i = order.length - 1; i > 0; i--){
     const j = Math.floor(Math.random() * (i + 1));
     const keep = order[i]; order[i] = order[j]; order[j] = keep;
@@ -3654,18 +3658,6 @@ if (OFFLINE){
      was drawn, because it is what decided whether anything was drawn. */
   const live = window.hubLive || "";
   if (live){
-    /* Nothing is on screen while a session this browser already has is
-       checked. It is normally over in a few hundredths of a second, and an
-       animation for that reads as the console doing work it is not doing.
-       A slow morning at the server is another matter: rather than leave a
-       blank page the dots come out, late and only if they are needed.
-
-       Late enough that they mean it. At four hundredths this fired eighteen
-       thousandths of a second before the console was ready, so the dots were
-       put up and taken away again in the same blink. One request now does
-       what three did, so anything still going at three quarters of a second
-       is a wait worth telling somebody about. */
-    const lateDots = setTimeout(showLoader, 750);
     /* Without the stage being set here, the timer waiting on the browser to
        fill the key box would find it empty and put the sign-in on screen
        underneath a session that is still being checked. */
@@ -3681,13 +3673,11 @@ if (OFFLINE){
       loadTeachers()          // sees to its own trouble and never rejects
     ])
       .then(async ([d]) => {
-        clearTimeout(lateDots);
         groups = d.groups || [];
         groupsAt = Date.now();
         await afterSignIn();
       })
       .catch(() => {
-        clearTimeout(lateDots);
         TOKEN = "";
         try{ sessionStorage.removeItem("hub_ttoken"); }catch(e){}
         /* It was refused, so the copy the other tabs would pick up is no
@@ -3697,10 +3687,10 @@ if (OFFLINE){
            box. Every look that ran while the session was being checked did
            nothing, TOKEN having been set, so one is taken now. */
         keyStage = "wait";
+        /* The dots have been up all along, so there is nothing to put back:
+           decideKey either starts a sign-in of its own under them, or takes
+           them away and puts the box on screen. */
         decideKey();
-        /* Only now is there something to wait for: decideKey has either
-           started a sign-in of its own or put the box on screen. */
-        if (keyStage === "trying") showLoader();
       });
   }
   /* Nothing in the other case: the dots are already up, and decideKey decides
