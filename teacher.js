@@ -33,6 +33,88 @@ function have(){ return !!(token() || key()); }
 function forget(){
   try{ sessionStorage.removeItem("hub_ttoken"); }catch(e){}
   try{ localStorage.removeItem("hub_tkey"); }catch(e){}
+  dropKept();
+}
+
+/* ---- carrying a sign-in between tabs, for a few hours ----
+   The token lives in sessionStorage, which belongs to one tab and no other.
+   Refreshing the console keeps it, which is what that was for, but opening
+   the console in a second tab, or closing that tab and opening it again,
+   meant signing in from nothing.
+
+   So a copy is kept where every tab can see it, good only while two things
+   are true. It runs out six hours after signing in, which is about a school
+   day. And it is tied to a tag held in a session cookie, which is the one
+   thing a browser throws away when it is closed: a copy whose tag has gone
+   is dead, and is deleted the moment it is looked at.
+
+   The tag is a random number and nothing else. The token itself stays in
+   localStorage and never leaves the browser, because a cookie is sent up with
+   every request for a page, a stylesheet or a picture, and a sign-in has no
+   business riding along on all of those.
+
+   Six hours is the site's own doing, not the server's: the token it holds is
+   an ordinary one, and what runs out is this browser's willingness to offer
+   it. */
+const KEEP_HOURS = 6;
+const TAG = "hub_bsid";      // the session cookie: a tag, and nothing more
+const BOX = "hub_keep";      // the copy of the token, in localStorage
+
+/* Scoped to the folder the site is served from. On Pages that is /hub/, and
+   a cookie at / would be handed to every other project sharing the same
+   github.io address. */
+function cookiePath(){ return location.pathname.replace(/[^/]*$/, "") || "/"; }
+function tag(){
+  try{
+    const hit = ("; " + document.cookie).split("; " + TAG + "=")[1];
+    return hit ? decodeURIComponent(hit.split(";")[0]) : "";
+  }catch(e){ return ""; }
+}
+function newTag(){
+  try{
+    const r = new Uint8Array(16);
+    crypto.getRandomValues(r);
+    return Array.from(r, (b) => b.toString(16).padStart(2, "0")).join("");
+  }catch(e){
+    /* A tag, never a secret. All it has to say is which run of the browser
+       this is, so something unguessable is not what is wanted here. */
+    return String(Date.now()) + Math.random().toString(36).slice(2);
+  }
+}
+/* No Max-Age and no Expires on purpose: that is what makes it a session
+   cookie, and what makes closing the browser the end of it. */
+function setTag(v){
+  try{
+    document.cookie = TAG + "=" + encodeURIComponent(v) + "; path=" + cookiePath() +
+                      "; SameSite=Strict" + (location.protocol === "https:" ? "; Secure" : "");
+  }catch(e){}
+}
+function keep(t){
+  if (!t) return;
+  let v = tag();
+  if (!v){ v = newTag(); setTag(v); }
+  try{
+    localStorage.setItem(BOX, JSON.stringify(
+      { tag: v, token: t, exp: Date.now() + KEEP_HOURS * 3600 * 1000 }));
+  }catch(e){}
+}
+/* The sign-in a tab with none of its own may pick up, or "" when there is
+   none to pick up. */
+function kept(){
+  let box = null;
+  try{ box = JSON.parse(localStorage.getItem(BOX) || "null"); }catch(e){}
+  if (!box || !box.token) return "";
+  /* Either its six hours are up, or the browser it was left by has since
+     been closed. Neither is worth keeping, and a sign-in left lying about
+     after it has stopped counting is worth less than that. */
+  if (box.tag !== tag() || Date.now() > (box.exp || 0)){ dropKept(); return ""; }
+  return box.token;
+}
+function dropKept(){
+  try{ localStorage.removeItem(BOX); }catch(e){}
+  try{
+    document.cookie = TAG + "=; path=" + cookiePath() + "; Max-Age=0; SameSite=Strict";
+  }catch(e){}
 }
 
 /* A 401 or 403 means whatever was being sent is no longer any good: expired,
@@ -136,6 +218,6 @@ function form(box, opts){
   setTimeout(() => { try{ kIn.focus(); }catch(e){} }, 30);
 }
 
-window.teacherAuth = { headers, json, have, forget, signIn, form, rejected };
+window.teacherAuth = { headers, json, have, forget, signIn, form, rejected, keep, kept, dropKept };
 
 })();

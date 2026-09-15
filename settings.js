@@ -45,7 +45,10 @@
            fixed nothing, and every child signing out on a teacher's machine
            took those sixty days with them, so the code was wanted again the
            next time the console was opened. */
-        if (k === "hub_tkey" || k === "hub_inspect" ||
+        /* hub_keep is the console's few-hour copy of a teacher session,
+           written by teacher.js. Its cookie can stay: the tag on its own is
+           a random number that opens nothing. */
+        if (k === "hub_tkey" || k === "hub_keep" || k === "hub_inspect" ||
             k === "hub_preview" || k.indexOf("hub_rel_") === 0) strays.push(k);
       }
       strays.forEach(k => localStorage.removeItem(k));

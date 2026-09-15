@@ -625,6 +625,9 @@ async function tryKey(){
       throw new Error(d.error || "That was not accepted.");
     }
     TOKEN = d.token || "";
+    /* Where the other tabs can see it, for six hours or until this browser
+       is closed, whichever comes first. teacher.js says how. */
+    if (window.teacherAuth) window.teacherAuth.keep(TOKEN);
     try{
       sessionStorage.setItem("hub_ttoken", TOKEN);
       /* Only sent back when a code was answered, so this is the moment the
@@ -3516,6 +3519,14 @@ if (OFFLINE){
      so it cannot return early: the two paths are written out instead. */
   let live = "";
   try{ live = sessionStorage.getItem("hub_ttoken") || ""; }catch(e){}
+  /* Nothing in this tab, but perhaps a sign-in from another one still inside
+     its few hours. Copied into this tab as well, so everything that reads the
+     session, here and in a builder opened from here, finds it where it
+     always was. */
+  if (!live && window.teacherAuth){
+    live = window.teacherAuth.kept();
+    if (live){ try{ sessionStorage.setItem("hub_ttoken", live); }catch(e){} }
+  }
   if (live){
     /* The dots stay up while a session from earlier in this browser is
        checked, so refreshing does not flash the sign-in box on the way past
@@ -3534,6 +3545,9 @@ if (OFFLINE){
       .catch(() => {
         TOKEN = "";
         try{ sessionStorage.removeItem("hub_ttoken"); }catch(e){}
+        /* It was refused, so the copy the other tabs would pick up is no
+           better and goes with it. */
+        if (window.teacherAuth) window.teacherAuth.dropKept();
         /* The stale session is gone, so it is back to the browser's go at the
            box. Every look that ran while the session was being checked did
            nothing, TOKEN having been set, so one is taken now. */
