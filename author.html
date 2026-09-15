@@ -2032,92 +2032,93 @@ function card(b, i, arr){
     w.appendChild(el("label","","The picture, and where the labels go"));
     w.appendChild(el("p","bhelp","Drag on the picture to draw a box, then type the word for it below."));
 
-    if (!b.image){
-      w.appendChild(el("p","hint","Paste a picture address above to start."));
-      body.appendChild(w);
-      return;
-    }
-
-    const holder = el("div","label-pic label-edit");
-    const img = el("img");
-    img.src = b.image;
-    img.draggable = false;
-    holder.appendChild(img);
-    const ghost = el("div","label-ghost");
-    ghost.hidden = true;
-    holder.appendChild(ghost);
-    w.appendChild(holder);
-
-    const list = el("div","label-list");
-    w.appendChild(list);
-
-    function paintSpots(){
-      holder.querySelectorAll(".label-spot").forEach(n => n.remove());
-      list.innerHTML = "";
-      b.spots.forEach((sp, i) => {
-        const mark = el("div","label-spot");
-        mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
-        mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
-        mark.textContent = sp.answer || String(i + 1);
-        holder.appendChild(mark);
-
-        /* the word for this box, typed underneath rather than in a list
-           of commas somewhere else */
-        const row = el("div","label-row");
-        row.appendChild(el("span","label-num", String(i + 1)));
-        const word = el("input","checkname");
-        word.value = sp.answer || "";
-        word.placeholder = "The word that goes in box " + (i + 1);
-        word.addEventListener("input", () => {
-          sp.answer = word.value;
-          mark.textContent = word.value || String(i + 1);
-          saveDraft(); schedulePreview();
-        });
-        const rm = el("button","btn-ghost bmini","\u2715");
-        rm.title = "Remove this box";
-        rm.addEventListener("click", () => { b.spots.splice(i, 1); saveDraft(); paintSpots(); schedulePreview(); });
-        row.appendChild(word); row.appendChild(rm);
-        list.appendChild(row);
-      });
-      if (!b.spots.length) list.appendChild(el("p","hint","No boxes yet. Drag on the picture to draw one."));
-    }
-
-    let from = null;
-    const pct = (e) => {
-      const r = holder.getBoundingClientRect();
-      return { x: ((e.clientX - r.left) / r.width) * 100,
-               y: ((e.clientY - r.top) / r.height) * 100 };
-    };
-    holder.addEventListener("pointerdown", (e) => {
-      if (e.target.classList.contains("label-spot")) return;
-      e.preventDefault();
-      holder.setPointerCapture(e.pointerId);
-      from = pct(e);
-      ghost.hidden = false;
-      ghost.style.left = from.x + "%"; ghost.style.top = from.y + "%";
-      ghost.style.width = "0%"; ghost.style.height = "0%";
-    });
-    holder.addEventListener("pointermove", (e) => {
-      if (!from) return;
-      const now = pct(e);
-      ghost.style.left = Math.min(from.x, now.x) + "%";
-      ghost.style.top = Math.min(from.y, now.y) + "%";
-      ghost.style.width = Math.abs(now.x - from.x) + "%";
-      ghost.style.height = Math.abs(now.y - from.y) + "%";
-    });
-    holder.addEventListener("pointerup", (e) => {
-      if (!from) return;
-      const now = pct(e);
-      const spot = { x: Math.min(from.x, now.x), y: Math.min(from.y, now.y),
-                     w: Math.abs(now.x - from.x), h: Math.abs(now.y - from.y), answer:"" };
-      from = null;
+    /* With no picture there is nothing to draw boxes on, so only the hint
+       shows. This used to return from card() instead, which handed
+       appendChild an undefined card: adding a Label a picture task blanked
+       the whole page in the builder, because a fresh one has no image yet. */
+    if (!b.image) w.appendChild(el("p","hint","Paste a picture address above to start."));
+    else {
+      const holder = el("div","label-pic label-edit");
+      const img = el("img");
+      img.src = b.image;
+      img.draggable = false;
+      holder.appendChild(img);
+      const ghost = el("div","label-ghost");
       ghost.hidden = true;
-      if (spot.w < 3 || spot.h < 3) return;      // a stray click, not a box
-      b.spots.push(spot);
-      saveDraft(); paintSpots(); schedulePreview();
-    });
+      holder.appendChild(ghost);
+      w.appendChild(holder);
 
-    paintSpots();
+      const list = el("div","label-list");
+      w.appendChild(list);
+
+      function paintSpots(){
+        holder.querySelectorAll(".label-spot").forEach(n => n.remove());
+        list.innerHTML = "";
+        b.spots.forEach((sp, i) => {
+          const mark = el("div","label-spot");
+          mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
+          mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
+          mark.textContent = sp.answer || String(i + 1);
+          holder.appendChild(mark);
+
+          /* the word for this box, typed underneath rather than in a list
+             of commas somewhere else */
+          const row = el("div","label-row");
+          row.appendChild(el("span","label-num", String(i + 1)));
+          const word = el("input","checkname");
+          word.value = sp.answer || "";
+          word.placeholder = "The word that goes in box " + (i + 1);
+          word.addEventListener("input", () => {
+            sp.answer = word.value;
+            mark.textContent = word.value || String(i + 1);
+            saveDraft(); schedulePreview();
+          });
+          const rm = el("button","btn-ghost bmini","\u2715");
+          rm.title = "Remove this box";
+          rm.addEventListener("click", () => { b.spots.splice(i, 1); saveDraft(); paintSpots(); schedulePreview(); });
+          row.appendChild(word); row.appendChild(rm);
+          list.appendChild(row);
+        });
+        if (!b.spots.length) list.appendChild(el("p","hint","No boxes yet. Drag on the picture to draw one."));
+      }
+
+      let from = null;
+      const pct = (e) => {
+        const r = holder.getBoundingClientRect();
+        return { x: ((e.clientX - r.left) / r.width) * 100,
+                 y: ((e.clientY - r.top) / r.height) * 100 };
+      };
+      holder.addEventListener("pointerdown", (e) => {
+        if (e.target.classList.contains("label-spot")) return;
+        e.preventDefault();
+        holder.setPointerCapture(e.pointerId);
+        from = pct(e);
+        ghost.hidden = false;
+        ghost.style.left = from.x + "%"; ghost.style.top = from.y + "%";
+        ghost.style.width = "0%"; ghost.style.height = "0%";
+      });
+      holder.addEventListener("pointermove", (e) => {
+        if (!from) return;
+        const now = pct(e);
+        ghost.style.left = Math.min(from.x, now.x) + "%";
+        ghost.style.top = Math.min(from.y, now.y) + "%";
+        ghost.style.width = Math.abs(now.x - from.x) + "%";
+        ghost.style.height = Math.abs(now.y - from.y) + "%";
+      });
+      holder.addEventListener("pointerup", (e) => {
+        if (!from) return;
+        const now = pct(e);
+        const spot = { x: Math.min(from.x, now.x), y: Math.min(from.y, now.y),
+                       w: Math.abs(now.x - from.x), h: Math.abs(now.y - from.y), answer:"" };
+        from = null;
+        ghost.hidden = true;
+        if (spot.w < 3 || spot.h < 3) return;      // a stray click, not a box
+        b.spots.push(spot);
+        saveDraft(); paintSpots(); schedulePreview();
+      });
+
+      paintSpots();
+    }
     body.appendChild(w);
   }
   if (b.type === "binary" || b.type === "binadd"){
@@ -2137,6 +2138,23 @@ function card(b, i, arr){
     w.appendChild(st);
     body.appendChild(w);
     F("How many questions", "count", { num:true });
+    if (b.type === "binary"){
+      const mw = el("div","bfield");
+      mw.appendChild(el("label","","Which way round"));
+      const row = el("div","brow");
+      [["toDenary","Binary to denary"],["toBinary","Denary to binary"],["either","A mixture"]].forEach(pair => {
+        const btn = el("button","btn-ghost bmini2" + (b.mode === pair[0] ? " right" : ""), pair[1]);
+        btn.addEventListener("click", () => { b.mode = pair[0]; render(); schedulePreview(); });
+        row.appendChild(btn);
+      });
+      mw.appendChild(row); body.appendChild(mw);
+      F("Set numbers (optional)", "numbers", { help:"Separate with commas, e.g. 13, 200. Left empty, numbers are made up each time." });
+      toggleRow([["showPlace","Place values", true]]);
+    } else {
+      F("Set sums (optional)", "pairs", { help:"One per line, e.g. 10 + 5. Left empty, sums are made up each time." });
+      toggleRow([["showPlace","Place values", true], ["showCarry","Row for carrying", true]]);
+    }
+  }
   if (b.type === "password"){
     F("Heading (optional)", "title");
     F("What they have to do", "task", { area:true, rows:2 });
@@ -2178,23 +2196,6 @@ function card(b, i, arr){
     sw.appendChild(coded);
     body.appendChild(sw);
     F("Label above the answer box", "prompt");
-  }
-    if (b.type === "binary"){
-      const mw = el("div","bfield");
-      mw.appendChild(el("label","","Which way round"));
-      const row = el("div","brow");
-      [["toDenary","Binary to denary"],["toBinary","Denary to binary"],["either","A mixture"]].forEach(pair => {
-        const btn = el("button","btn-ghost bmini2" + (b.mode === pair[0] ? " right" : ""), pair[1]);
-        btn.addEventListener("click", () => { b.mode = pair[0]; render(); schedulePreview(); });
-        row.appendChild(btn);
-      });
-      mw.appendChild(row); body.appendChild(mw);
-      F("Set numbers (optional)", "numbers", { help:"Separate with commas, e.g. 13, 200. Left empty, numbers are made up each time." });
-      toggleRow([["showPlace","Place values", true]]);
-    } else {
-      F("Set sums (optional)", "pairs", { help:"One per line, e.g. 10 + 5. Left empty, sums are made up each time." });
-      toggleRow([["showPlace","Place values", true], ["showCarry","Row for carrying", true]]);
-    }
   }
   if (b.type === "short"){
     R("Question", "prompt", { rows:2 });
