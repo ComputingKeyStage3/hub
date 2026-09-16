@@ -47,7 +47,7 @@
 <div class="build-top">
   <p class="hint" id="ownerNote" hidden></p>
   <div class="build-titles">
-    <button class="btn-ghost" id="titleBtn">Title &amp; description</button>
+    <button class="btn-ghost" id="optionsBtn">Lesson options</button>
     <select id="lYear" title="Year group"></select>
     <select id="lUnit" title="Unit"></select>
   </div>
@@ -504,6 +504,7 @@ function compile(){
   if (lesson.unit) out.unit = lesson.unit;
   if (lesson.year) out.year = lesson.year;
   if (lesson.homework) out.homework = true;
+  if (lesson.linger) out.linger = true;
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
   if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
   if (lesson.practical){
@@ -3019,26 +3020,82 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
 function showTitle(){
   const t = (lesson.title || "").trim();
   $("titleShow").textContent = t ? " \u2022 " + t : "";
-  $("titleBtn").textContent = t ? "Title & description" : "Set a title";
+  $("optionsBtn").textContent = t ? "Lesson options" : "Set a title";
 }
-on("titleBtn", "click", () => {
+/* Everything that belongs to the lesson rather than to a page: what it is
+   called, where it sits in the hub, and how its work is saved. One pop-up in
+   both layouts, because the top row it used to sit on is not there at all
+   below 1100px and a setting a teacher cannot reach on an iPad may as well
+   not exist.
+
+   Each field writes as it is typed rather than waiting for Done, so closing
+   with the X keeps the change. The year and unit pickers already worked that
+   way and having half the pop-up behave differently is how a teacher loses a
+   title without noticing. */
+on("optionsBtn", "click", () => {
+  const titles = document.querySelector(".build-titles");
   openModal(box => {
-    box.appendChild(el("h2","","Title and description"));
+    box.appendChild(el("h2","","Lesson options"));
+
     const w1 = el("div","bfield");
     w1.appendChild(el("label","","Lesson title"));
     const t1 = el("input"); t1.value = lesson.title || "";
-        w1.appendChild(t1); box.appendChild(w1);
-    const field = el("div","bfield");
-    field.appendChild(el("label","","One line for the home page"));
-    const table = el("input"); table.value = lesson.intro || "";
-    field.appendChild(table); box.appendChild(field);
+    t1.addEventListener("input", () => {
+      lesson.title = t1.value; saveDraft(); showTitle(); schedulePreview(); });
+    w1.appendChild(t1); box.appendChild(w1);
+
+    const w2 = el("div","bfield");
+    w2.appendChild(el("label","","One line for the home page"));
+    const t2 = el("input"); t2.value = lesson.intro || "";
+    t2.addEventListener("input", () => {
+      lesson.intro = t2.value; saveDraft(); schedulePreview(); });
+    w2.appendChild(t2); box.appendChild(w2);
+
+    /* The real pickers are moved in, not copied, so "+ New year group" and
+       everything else attached to them still works. */
+    const w3 = el("div","bfield savepickers");
+    w3.appendChild(el("label","","Year group and unit"));
+    w3.appendChild($("lYear"));
+    w3.appendChild($("lUnit"));
+    box.appendChild(w3);
+
+    const w4 = el("div","bfield");
+    w4.appendChild(el("label","","Saving"));
+    const row = el("div","brow");
+    const tog = el("button","btn-ghost bmini2","");
+    const paint = () => {
+      tog.textContent = "Autosave: " + (lesson.linger ? "on" : "off");
+      tog.classList.toggle("right", !!lesson.linger);
+    };
+    tog.addEventListener("click", () => {
+      lesson.linger = !lesson.linger; paint(); saveDraft(); schedulePreview(); });
+    paint();
+    row.appendChild(tog);
+    row.appendChild(helpDot(
+      ["Still being tested, so it is off by default. Work reaches you when a "
+       + "student presses Continue, Finish or Save Work, which leaves whatever "
+       + "they are in the middle of unsaved. With this on their work is also "
+       + "sent half a minute after they stop typing, and at least every three "
+       + "minutes while they keep going, so a task that takes twenty minutes is "
+       + "not twenty minutes at risk. Worth having on for lessons with long "
+       + "writing or coding in them."]));
+    w4.appendChild(row); box.appendChild(w4);
+
     const go = el("button","btn-primary modal-cta","Done");
-    go.addEventListener("click", () => {
-      lesson.title = t1.value; lesson.intro = table.value;
-      saveDraft(); showTitle(); schedulePreview(); closeModal();
-    });
+    go.addEventListener("click", closeModal);
     box.appendChild(go);
+    scrollBody(box);
   });
+  /* however the pop-up closes, the pickers go home */
+  if (titles){
+    const back = () => {
+      if (!$("mBack").hidden) return;
+      titles.appendChild($("lYear"));
+      titles.appendChild($("lUnit"));
+      document.removeEventListener("hubModalClosed", back);
+    };
+    document.addEventListener("hubModalClosed", back);
+  }
 });
 
 /* Without a server a year or unit is nothing but a word written into
@@ -3723,8 +3780,8 @@ async function saveToSite(){
   finally{ btn.disabled = false; btn.textContent = "Save to the site"; }
 }
 on("saveSite", "click", () => {
-  /* On a narrow screen the title, year and unit are not on the page, so
-     Save is where they get asked for. */
+  /* On a narrow screen Save is a button in the corner rather than a wide
+     one that says where it is sending the lesson, so it confirms first. */
   if (isCompact()) savePopup(); else saveToSite();
 });
 
@@ -3872,6 +3929,7 @@ function fromCompiled(data, meta){
                 unit: data.unit || (meta && meta.unit) || "", year: data.year || "",
                 assessment: !!data.assessment && !data.practical, practical: !!data.practical,
                 homework: !!data.homework,
+                linger: !!data.linger,
                 marking: data.marking || "score", outOf: data.outOf || 20, rubric: data.rubric || [],
                 topics: data.topics || {}, responses: {}, extensions: [], blocks: [] };
   const back = (b) => {
@@ -4013,14 +4071,18 @@ function applyBuildLayout(){
   /* Nothing to move about if the page never got built, which is how the
      checking scripts run it. */
   if (!actions || !titles || !homeSlot || !topSlot){ paintBuildBar(); return; }
+  /* The top row is display:none below 1100px, so the one button on it that a
+     teacher still needs moves into the bar rather than being duplicated. */
+  const options = $("optionsBtn");
   if (compact){
-    /* Save and the menu sit beside the cog; everything else on that row is
-       folded into the Save pop-up. */
+    /* Save and the menu sit beside the cog; Lesson options joins the bar. */
     homeSlot.appendChild(actions);
+    if (options) $("buildBarScroll").appendChild(options);
     $("buildBar").hidden = false;
     $("modeChip").hidden = false;
     $("saveSite").textContent = "Save";
   } else {
+    if (options) titles.insertBefore(options, titles.firstChild);
     topSlot.appendChild(titles);
     topSlot.appendChild(actions);
     $("buildBar").hidden = true;
@@ -4084,34 +4146,15 @@ function modePicker(force){
 on("modeChip", "click", () => modePicker(false));
 
 /* ---------- the Save pop-up ----------
-   Everything that used to sit along the top of the page, asked for at the
-   moment it matters rather than taking up room while a lesson is written. */
+   A last look before it goes to the class. The title, year and unit it used
+   to ask for live in Lesson options now, which is reachable in both layouts,
+   so this only has to confirm and say what is about to be saved. */
 function savePopup(){
-  const titles = document.querySelector(".build-titles");
-  const home = titles.parentNode;                  // to put the pickers back
   openModal(box => {
     box.appendChild(el("h2","","Save this lesson"));
-
-    const w1 = el("div","bfield");
-    w1.appendChild(el("label","","Lesson title"));
-    const t1 = el("input"); t1.value = lesson.title || "";
-    t1.addEventListener("input", () => { lesson.title = t1.value; saveDraft(); showTitle(); });
-    w1.appendChild(t1); box.appendChild(w1);
-
-    const w2 = el("div","bfield");
-    w2.appendChild(el("label","","One line for the home page"));
-    const t2 = el("input"); t2.value = lesson.intro || "";
-    t2.addEventListener("input", () => { lesson.intro = t2.value; saveDraft(); });
-    w2.appendChild(t2); box.appendChild(w2);
-
-    /* The real pickers are moved in, not copied, so "+ New year group" and
-       everything else attached to them still works. */
-    const w3 = el("div","bfield savepickers");
-    w3.appendChild(el("label","","Year group and unit"));
-    w3.appendChild($("lYear"));
-    w3.appendChild($("lUnit"));
-    box.appendChild(w3);
-
+    box.appendChild(el("p","modal-text",
+      (lesson.title || "Untitled lesson")
+      + (lesson.unit ? " · " + lesson.unit : "")));
     const go = el("button","btn-primary modal-cta","Save to the site");
     go.addEventListener("click", () => { closeModal(); saveToSite(); });
     box.appendChild(go);
@@ -4119,14 +4162,6 @@ function savePopup(){
     later.addEventListener("click", closeModal);
     box.appendChild(later);
   });
-  /* however the pop-up closes, the pickers go home */
-  const back = () => {
-    if (!$("mBack").hidden) return;
-    titles.appendChild($("lYear"));
-    titles.appendChild($("lUnit"));
-    document.removeEventListener("hubModalClosed", back);
-  };
-  document.addEventListener("hubModalClosed", back);
 }
 
 /* ---------- the live preview ---------- */

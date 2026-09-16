@@ -32,6 +32,7 @@
   <a class="home" id="homeLink" href="index.html">&larr; Home</a>
   <span class="sep">/</span>
   <div class="title" id="lessonTitle">Lesson</div>
+  <span class="savetime no-print" id="saveTime"></span>
   <button class="btn-ghost iconbtn no-print" id="setBtn" title="Settings">&#9881;&#65038;</button>
   <button class="btn-primary no-print" id="saveBtn">Save Work</button>
 </div>
@@ -413,13 +414,21 @@ function snapshot(){
   Object.entries(fields).forEach(([id, f]) => { data[id] = f.get(); });
   return data;
 }
+/* Bumped on every edit. submitWork takes a copy before it sends and checks it
+   again afterwards: a request carries the work as it was when it left, so
+   anything typed while it was in the air has not been saved and the tick
+   would be a lie. Comparing snapshots cannot answer this, since each one
+   stamps the time. */
+let typedAt = 0;
 function markDirty(){
   if (spectate || !restoreDone) return;
   if (!unsavedTyping) paintSaveButtons("idle");   // they stand out again
   unsavedTyping = true;
+  typedAt++;
   refreshGate();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 400);
+  lingerTouch();
 }
 function save(){
   if (spectate || !restoreDone) return;
@@ -1387,12 +1396,78 @@ function autosaveOnLeaving(i){
   submitWork().then(state => {
     /* A save that never reached the server has not happened, so the page is
        allowed to try again next time they go forward from it. */
-    if (state !== "done") autosavedSteps.delete(i);
+    if (state !== "done") autosavedSteps.delete(i); else noteSaved(true);
     paintSaveButtons(state === "done" ? "saved" : "idle");
   }).catch(() => {
     autosavedSteps.delete(i);
     paintSaveButtons("idle");
   });
+}
+
+/* ---------- saving while they stay on one page ----------
+   Saving on Continue covers the moment a student goes forward, which leaves
+   the page they are sitting on now unsaved. That is fine where a page takes
+   two minutes and bad where it takes twenty-five, which is the shape of most
+   coding tasks: the longer the work, the more of it is at risk, so the pages
+   that most need saving are exactly the ones Continue does least for.
+
+   There is no event to hang this on. Signing out of Windows kills the browser
+   without running pagehide, beforeunload or anything else, and a request
+   started at that point would not finish anyway. It has to be a clock.
+
+   Two of them. The pause timer is where most saves land and costs nothing
+   extra, because a student who has stopped typing has usually stopped for a
+   while. The ceiling is for the child who types without stopping, and is what
+   makes the worst case a known number rather than the length of the page.
+
+   The ceiling stretches for a heavy page. The whole lesson is saved as one
+   blob, so a pasted screenshot of nearly a megabyte rides along with every
+   save, thirty of them in one room. A screenshot is also ten seconds to take
+   again where the writing bundled with it is not, so backing off on the big
+   payloads gives up the least of anything available here.
+
+   Nothing waits on any of this and nothing interrupts: the button in the
+   corner says what is happening, which is where a student looks for it. */
+const LINGER_IDLE_MS        = 30000;    // after they stop typing
+const LINGER_CEILING_MS     = 180000;   // at most, while they keep going
+const LINGER_HEAVY_MS       = 300000;   // and for a page carrying a picture
+const LINGER_HEAVY_BYTES    = 250000;
+
+let lingerIdleTimer = null, lingerCeilingTimer = null;
+
+function lingerSave(){
+  clearTimeout(lingerIdleTimer);    lingerIdleTimer = null;
+  clearTimeout(lingerCeilingTimer); lingerCeilingTimer = null;
+  if (OFFLINE || spectate || bypassed) return;
+  if (!token || !apiReady || !restoreDone) return;
+  save();                           // into this browser first, as the others do
+  paintSaveButtons("saving");
+  submitWork()
+    .then(state => {
+      if (state === "done") noteSaved(true);
+      paintSaveButtons(state === "done" ? "saved" : "idle");
+    })
+    .catch(() => paintSaveButtons("idle"));
+}
+
+/* Called on every edit. Set for the lesson rather than for a page: what is
+   saved is the whole lesson in one piece whichever page they are on, so there
+   was never anything for a page to decide.
+
+   The pause timer restarts on each keystroke. The ceiling deliberately does
+   not, or a student who never stops typing would push it back for ever, which
+   is the one case it exists for. */
+function lingerTouch(){
+  if (OFFLINE || spectate || bypassed) return;
+  if (!token || !apiReady || !restoreDone) return;
+  if (!lesson || !lesson.linger) return;
+  clearTimeout(lingerIdleTimer);
+  lingerIdleTimer = setTimeout(lingerSave, LINGER_IDLE_MS);
+  if (lingerCeilingTimer) return;
+  /* lastSaved is the payload as it went into this browser a moment ago, near
+     enough to tell whether a picture is riding along with it. */
+  const heavy = (lastSaved || "").length >= LINGER_HEAVY_BYTES;
+  lingerCeilingTimer = setTimeout(lingerSave, heavy ? LINGER_HEAVY_MS : LINGER_CEILING_MS);
 }
 
 /* ---------- the passcode on a locked page (no server) ----------
@@ -1944,6 +2019,7 @@ async function submitWork(){
      last successful write, pressing Save Work twice costs nothing. */
   if (!token || !apiReady) return "offline";
   const payload = JSON.stringify(snapshot());
+  const mark = typedAt;             // what they had typed when this one left
   if (payload === lastSubmittedPayload){ unsavedTyping = false; return "done"; }
   try{
     const r = await fetch(API + "/api/submit", {
@@ -1953,7 +2029,7 @@ async function submitWork(){
     });
     if (!r.ok) return "failed";
     lastSubmittedPayload = payload;
-    unsavedTyping = false;          // it has reached the teacher
+    if (typedAt === mark) unsavedTyping = false;   // it has reached the teacher
     return "done";
   }catch(e){ return "failed"; }
 }
@@ -2005,7 +2081,7 @@ async function manualSave(){
   btn.classList.remove("flash-ok","flash-bad");
   paintSaveButtons("saving");
   const state = await submitWork();
-  if (state === "done"){ paintSaveButtons("saved"); return; }
+  if (state === "done"){ noteSaved(false); paintSaveButtons("saved"); return; }
   paintSaveButtons("idle");
   btn.textContent = state === "offline" ? "Sign in to save" : "Try again";
   btn.classList.add("flash-bad");
@@ -5607,7 +5683,19 @@ function paintOneSave(entry, state){
   else if (state === "saved"){ btn.textContent = "\u2713 Saved"; btn.disabled = false; btn.dataset.saved = "yes"; }
   else { btn.textContent = resting; btn.disabled = false; btn.dataset.saved = "no"; }
 }
+/* When the work last reached the teacher. It stays on screen after they
+   start typing again, because it is still true: it says when the last save
+   happened, not that everything is saved now. The button says that. */
+function noteSaved(auto){
+  const line = $("saveTime");
+  if (!line) return;
+  const at = new Date().toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+  line.textContent = (auto ? "Saved automatically at " : "Saved at ") + at;
+}
 function paintSaveButtons(state){
+  /* Typed while the last save was in flight? Then something is still unsaved
+     and a tick would say otherwise. */
+  if (state === "saved" && unsavedTyping) state = "idle";
   saveState = state;
   saveButtons.forEach(entry => paintOneSave(entry, state));
 }
@@ -5667,6 +5755,7 @@ function saveButton(statusEl){
   btn.addEventListener("click", async () => {
     paintSaveButtons("saving");
     const st = await submitWork();
+    if (st === "done") noteSaved(false);
     paintStatus(statusEl, st);
     paintSaveButtons(st === "done" ? "saved" : "idle");
   });

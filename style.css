@@ -153,6 +153,14 @@ body.lesson{
   margin-right:auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .topbar .sep{color:var(--line-2)}
+/* When the work last reached the teacher. Beside the button rather than under
+   it: a second line here grows the bar, and on a phone the bar's height is
+   height the lesson needed. The title gives way first, as it already does. */
+.topbar .savetime{
+  font-family:var(--body); font-size:12px; color:var(--muted);
+  white-space:nowrap; flex:0 1 auto; min-width:0;
+  overflow:hidden; text-overflow:ellipsis;
+}
 
 /* signature: segmented mission tracker */
 .tracker{display:flex; gap:3px; padding:6px 20px 0; background:var(--panel)}
@@ -2701,6 +2709,9 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
    set a little smaller and takes about the same room as what it replaced. */
 @media (max-width:640px){
   .topbar #saveBtn[data-saved=yes]{ font-size:13px }
+  /* No room for it beside a phone's title and button, and the bar may not
+     grow to make room. The button still says whether the work is saved. */
+  .topbar .savetime{ display:none }
 }
 
 /* a Save button that has nothing to save looks settled rather than urgent */
