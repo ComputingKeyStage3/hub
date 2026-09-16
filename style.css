@@ -1012,10 +1012,19 @@ body.spectating{padding-top:40px}
    own background, which does not change with the page theme. */
 .ide-gutter .gl.bad{color:#E8615A; font-weight:800}
 .ide-codewrap{position:relative; flex:1; overflow:hidden}
+/* The colours are painted on a layer behind a see-through textarea, so the
+   two have to lay their text out in exactly the same place. Anything that
+   moves one and not the other shows up as text you cannot click accurately:
+   the caret lands where the textarea thinks the letter is, which is not where
+   you can see it. The builder's Starter code box sits in a .bfield, and
+   `.bfield textarea` (padding 9px 11px, a 1.5px border) beat the padding and
+   border here on specificity, putting the real text 8px right and 2px up from
+   the coloured one. Hence !important on everything that decides where a
+   character sits, font and size included. */
 .ide-hl,.ide-code{
-  margin:0; padding:12px 12px 12px 4px; font-family:var(--mono) !important;
-  font-size:var(--ed-size) !important; line-height:1.55; tab-size:4; white-space:pre;
-  overflow:auto; border:none; box-sizing:border-box;
+  margin:0 !important; padding:12px 12px 12px 4px !important; font-family:var(--mono) !important;
+  font-size:var(--ed-size) !important; line-height:1.55 !important; letter-spacing:normal !important;
+  tab-size:4; white-space:pre; overflow:auto; border:none !important; box-sizing:border-box;
 }
 .ide-hl{position:absolute; inset:0; pointer-events:none; color:var(--ed-fg); background:var(--ed-bg)}
 .ide-hl .hl-line{min-height:calc(var(--ed-size) * 1.55)}
@@ -1522,7 +1531,12 @@ pre, code{overflow-wrap:anywhere}
   button, .pal, .lessonCard, .classtile, .ov-row, .opt{min-height:44px}
   .bmini{min-height:38px; min-width:38px}
   .iconbtn{min-height:42px; min-width:42px}
-  .ide-code, .ide-hl{font-size:max(var(--ed-size), 15px) !important}
+  /* Bigger code on a touch screen, by changing the size the whole editor is
+     built from rather than the font on two of its parts. Setting the font
+     size alone left the line numbers on their old 14px spacing while the
+     code moved to 15px, so each number sat further above its line than the
+     one before it. */
+  .ide, .ide[data-idesize=s], .ide[data-idesize=m]{--ed-size:15px}
 }
 
 /* ---------- small screens: the bars stay put, pop-ups always have a way out ---------- */
