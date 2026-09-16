@@ -350,6 +350,17 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
   .masthead h1{font-size:30px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none !important; animation:none !important}}
+/* ...except the waiting dots. Windows 11 keeps one Animation effects switch
+   under Accessibility, the school has it off on every machine, and Chromium
+   reports that as prefers-reduced-motion. The line above then stopped the one
+   thing on the site whose whole job is to say the page has not finished yet,
+   and three still dots read as a list that has come back empty. Three dots
+   bobbing a few pixels are not the sweeping movement the setting exists to
+   spare anyone, and a busy indicator that is not busy is worse than none.
+
+   One line, because the animation itself is kept in --dot-hop where the dots
+   are defined. More specific than the * above, so it wins wherever it sits. */
+@media (prefers-reduced-motion:reduce){ .load-dots span{animation:var(--dot-hop) !important} }
 
 @media print{
   body.lesson{height:auto; display:block; overflow:visible}
@@ -860,9 +871,14 @@ body.spectating{padding-top:40px}
 .load-inner{text-align:center}
 .load-inner p{margin:16px 0 0; color:var(--muted); font-size:16.5px; font-weight:700}
 .load-dots{display:flex; gap:10px; justify-content:center}
-.load-dots span{width:13px; height:13px; border-radius:50%; background:var(--amber); animation:loadb 1s ease-in-out infinite}
-.load-dots span:nth-child(2){animation-delay:.15s; background:var(--mint)}
-.load-dots span:nth-child(3){animation-delay:.3s}
+/* The whole animation is held in one property and each dot only says how long
+   it waits before joining in, so the reduced-motion exception near the top of
+   this file can put it back in a single line rather than keeping a copy of the
+   timing that drifts out of step the first time anyone retunes it. */
+.load-dots span{width:13px; height:13px; border-radius:50%; background:var(--amber);
+  --dot-wait:0s; --dot-hop:loadb 1s ease-in-out var(--dot-wait) infinite; animation:var(--dot-hop)}
+.load-dots span:nth-child(2){--dot-wait:.15s; background:var(--mint)}
+.load-dots span:nth-child(3){--dot-wait:.3s}
 @keyframes loadb{0%,80%,100%{transform:translateY(0); opacity:.45} 40%{transform:translateY(-11px); opacity:1}}
 
 /* The same three dots inside a panel that is waiting for an answer, rather
@@ -883,7 +899,8 @@ body.spectating{padding-top:40px}
 .loading .load-dots{gap:7px}
 /* Its own keyframes rather than the big one: the hop is measured against the
    dot, and an 11px hop on a 9px dot looks like it has come loose. */
-.loading .load-dots span{width:9px; height:9px; animation-name:loadsmall}
+.loading .load-dots span{width:9px; height:9px;
+  --dot-hop:loadsmall 1s ease-in-out var(--dot-wait) infinite}
 @keyframes loadsmall{0%,80%,100%{transform:translateY(0); opacity:.45} 40%{transform:translateY(-7px); opacity:1}}
 /* Holding a whole list open, rather than sitting in a panel with more
    underneath it. The height is what centres it: the box is otherwise as short
