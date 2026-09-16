@@ -1,0 +1,64 @@
+/* What has changed, newest first.
+
+   The list is written out here rather than read from anywhere, because the
+   site is static and there is nothing to read it from. Adding a version is
+   one line at the top of CHANGES, and the console picks up the newest entry
+   as the version it is running.
+
+   Keep each line short enough to read at a glance. A teacher opening this
+   wants to know whether the thing they noticed is meant to be there, not a
+   full account of the work. */
+window.CHANGES = [
+  { v:"9.0.0", text:"Lessons in the builder save themselves, 30 seconds after you stop typing and again when you leave them alone." },
+  { v:"8.9.3", text:"Progress bar in View Work moves through every page." },
+  { v:"8.9.2", text:"Loading dots now appear everywhere something is being fetched." },
+  { v:"8.9.1", text:"Animations show on school computers, where Windows has effects turned off." },
+  { v:"8.9",   text:"Give to classes lists only your own classes. Backups page redesigned." },
+  { v:"8.8",   text:"Tooltips and a question button in the builder, so the help is there when you want it." },
+  { v:"8.7",   text:"Sidebar on lesson pages, so students can see what is left to do." },
+  { v:"8.6",   text:"Fixes across the builder and the lesson pages." },
+  { v:"8.5",   text:"Loading dots replace the word Loading, everywhere, including on the way in to this console." },
+  { v:"8.4",   text:"Teacher sign-in is remembered for six hours, and the browser can fill in the key." },
+  { v:"8.3",   text:"Short Answer tasks work like Microsoft Forms. Autosave on Continue can be set per page." },
+  { v:"8.2",   text:"Unlocking a page updates its title and its SKIP straight away." },
+  { v:"8.1",   text:"Flag button in the progress bar goes back to the summary page." },
+  { v:"8.0",   text:"Summary page lock pinned to the bottom of Manage lesson." },
+  { v:"7.9",   text:"Summary page fixes: locked tasks no longer show as finished." },
+  { v:"7.8",   text:"Signing a student out on a shared device no longer leaves their work behind." },
+  { v:"7.7",   text:"Scheduling shows the right time through British Summer Time." },
+  { v:"7.6",   text:"Summary pages can be unlocked from Manage." },
+  { v:"7.5",   text:"Students can be moved between classes. Mobile layout fixes." },
+  { v:"7.4",   text:"A stale sign-in no longer hides the lessons. Help pop-up on the sign-in page." },
+  { v:"7.3",   text:"Schedule button in Manage lesson works again." },
+  { v:"7.2",   text:"Image tasks keep their positions. Arbor import brings passwords with it." },
+  { v:"7.1",   text:"Python playback no longer stalls on time.sleep." },
+  { v:"7.0",   text:"Lessons are built as pages rather than one long list." },
+  { v:"6.9",   text:"Quizzes can gate the next task. Security improvements." },
+  { v:"6.8",   text:"Folding pages in the builder. Fixes to rich text, checklists and the progress bar." },
+  { v:"6.7",   text:"Better checklists, and keyboard support in the rich text box." },
+  { v:"6.6",   text:"Pop-out preview, keyword definitions and checklist fixes." },
+  { v:"6.5",   text:"Extension tasks and Choice tasks added." },
+  { v:"6.4",   text:"Layout fixes for phones and iPads. Offline lessons stay out of the way when online." },
+  { v:"6.3",   text:"Quiz rework and easier Response task creation." },
+  { v:"6.2",   text:"Link sharing and feedback work in offline mode." },
+  { v:"6.0",   text:"Offline mode overhauled, so lessons carry on if the school blocks the server." },
+  { v:"5.1",   text:"Whiteboard, Label a picture, Notes and Mind map tasks added." },
+  { v:"5.0",   text:"Marks stay current. Feedback panel redesigned." },
+  { v:"4.9",   text:"Feedback bank updated." },
+  { v:"4.8",   text:"Assessment summary page updated." },
+  { v:"4.7",   text:"Restoring a backup, the live state pill and the autograder." },
+  { v:"4.6",   text:"Weekly backups and the end of year purge." },
+  { v:"4.5",   text:"Offline mode added, for when there is no connection to the server." },
+  { v:"4.4",   text:"Home learning option. Bulk import of students from Arbor." },
+  { v:"4.3",   text:"Design overhaul." },
+  { v:"4.2",   text:"Grade rubric for practical assessments." },
+  { v:"4.1",   text:"Teacher profiles." },
+  { v:"4.0",   text:"Practical assessments." },
+  { v:"3.9",   text:"Student work viewer rebuilt." },
+  { v:"3.8",   text:"Scheduling, teacher feedback and mark adjustments." },
+  { v:"3.7",   text:"iPad and phone support." },
+  { v:"3.6",   text:"Markbook improvements." },
+  { v:"3.5",   text:"Assessment and Response task improvements." },
+  { v:"3.4",   text:"Response tasks and My Results fixed." },
+  { v:"3.0",   text:"The hub as it is now: classes, lessons, work and marking in one place." }
+];

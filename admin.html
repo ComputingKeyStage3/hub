@@ -13,6 +13,7 @@
 <script src="menus.js"></script>
 <script src="teacher.js"></script>
 <script src="settings.js"></script>
+<script src="changelog.js"></script>
 </head>
 <body>
 
@@ -103,6 +104,7 @@ setTimeout(function(){
   <div class="title">Computing Teacher Console</div>
   <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
   <button class="btn-ghost iconbtn" id="keepBtn" title="Backups and devices">&#128190;</button>
+  <button class="btn-ghost iconbtn" id="logBtn" title="What has changed">&#128220;</button>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
   <div class="auth" id="whoBar" hidden></div>
 </div>
@@ -1156,6 +1158,32 @@ const stamp = () => new Date().toISOString().slice(0, 10);
 
 on("keepBtn", "click", () => { show("keepView"); paintBackupWhen(); resetDevices(); });
 
+/* ---------- what has changed ----------
+   The list itself is in changelog.js. Nothing here knows what version the
+   site is on beyond the newest entry in that list, which is the point: one
+   line added there covers the pop-up and the version line together. */
+on("logBtn", "click", () => {
+  const list = Array.isArray(window.CHANGES) ? window.CHANGES : [];
+  openModal(box => {
+    box.classList.add("changes");
+    box.appendChild(el("h2","","What has changed"));
+    box.appendChild(el("p","hint", list.length
+      ? "This console is on v" + list[0].v + "."
+      : "The list of changes could not be loaded."));
+    const wrap = el("div","changelog");
+    list.forEach(item => {
+      const row = el("div","changerow");
+      row.appendChild(el("span","changever","v" + item.v));
+      row.appendChild(el("span","changewhat", item.text));
+      wrap.appendChild(row);
+    });
+    box.appendChild(wrap);
+    const ok = el("button","btn-primary modal-cta","Close");
+    ok.addEventListener("click", closeModal);
+    box.appendChild(ok);
+  });
+});
+
 /* ---------- the browsers that have answered a code ---------- */
 function whenWords(iso){
   if (!iso) return "";
@@ -1293,12 +1321,14 @@ on("signOutOthers", "click", () => {
     box.appendChild(no);
   });
 });
-/* A quiet reminder once a week, rather than a pop-up in the way. */
+/* A quiet reminder once a week. It lives in the button's tooltip and in the
+   line at the top of the backups page. There used to be a blue dot and a blue
+   tint on the button as well, which read as an error on a console that is blue
+   for anything you can press. */
 function nudgeBackup(){
   const last = Number(localStorage.getItem("hub_backup_when") || 0);
   const days = last ? Math.floor((Date.now() - last) / 86400000) : 999;
   const btn = $("keepBtn");
-  if (btn) btn.classList.toggle("due", days >= 7);
   if (btn) btn.title = days >= 7 ? "Backups and devices, a backup is due" : "Backups and devices";
 }
 function paintBackupWhen(){

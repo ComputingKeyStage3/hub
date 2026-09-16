@@ -17,6 +17,8 @@
      defines      value          def <value>( appears
      calls        value          <value>( appears
      uses         value          a for loop, while loop, if, input, list…
+     usesCount    value,count,compare  how many of those there are: 3 elifs
+     codeCount    value,count,compare  how many times this text appears
      outputHas    value          the printed output contains this
      outputIs     value          the printed output is exactly this
      lineCount    count          at least this many lines of real code
@@ -70,6 +72,15 @@
     });
   }
 
+  /* Comments are the one thing that cannot be found in the tidied code,
+     because tidying is what removes them, so these are passed the untouched
+     code as a second argument. Quoted text goes first, or a hash inside a
+     message the student prints reads as the start of a comment. */
+  function commentLines(raw){
+    return String(raw || "").split("\n")
+      .filter(l => /#/.test(l.replace(/"[^"]*"|'[^']*'/g, "")));
+  }
+
   const PY_PATTERNS = {
     "for loop":    /\bfor\s+\w+\s+in\b.*:/,
     "while loop":  (code) => soundLine(code, "while"),
@@ -81,10 +92,106 @@
     "list":        /=\s*\[|\.append\s*\(/,
     "function":    /\bdef\s+\w+\s*\(/,
     "variable":    /^\s*\w+\s*=[^=]/m,
-    "comment":     /#/,
+    "comment":     (code, raw) => commentLines(raw).length > 0,
     "random":      /\brandom\b/,
     "turtle":      /\bturtle\b|\bforward\s*\(|\bpenup\s*\(/
   };
+
+  /* ---------- counting ----------
+     "Three elifs" is a different question from "an elif somewhere", and it is
+     the one a teacher asks when the shape of the program is the point: three
+     branches, two loops, a comment on every section.
+
+     The same soundness rules apply as for `uses`. A line that would not run is
+     not one of the three, or a student with "elif x = 1:" written three times
+     is told they have what was asked for and left to wonder why nothing works. */
+  function countLines(code, re){
+    return code.split("\n").filter(l => re.test(l)).length;
+  }
+  function soundLines(code, word){
+    const re = new RegExp("^\\s*" + word + "\\b");
+    return code.split("\n").filter(line => {
+      if (!re.test(line)) return false;
+      if (!/:/.test(line)) return false;
+      return conditionLooksRight(line);
+    }).length;
+  }
+  /* Occurrences of a pattern anywhere, for the things that are calls rather
+     than lines of their own: "print" three times on one line is three prints. */
+  function countAll(code, re){
+    const found = String(code || "").match(re);
+    return found ? found.length : 0;
+  }
+
+  const PY_COUNTS = {
+    "for loop":    (code) => countLines(code, /\bfor\s+\w+\s+in\b.*:/),
+    "while loop":  (code) => soundLines(code, "while"),
+    "if":          (code) => soundLines(code, "if"),
+    "else":        (code) => countLines(code, /\belse\s*:/),
+    "elif":        (code) => soundLines(code, "elif"),
+    "input":       (code) => countAll(code, /\binput\s*\(/g),
+    "print":       (code) => countAll(code, /\bprint\s*\(/g),
+    "list":        (code) => countAll(code, /=\s*\[|\.append\s*\(/g),
+    "function":    (code) => countAll(code, /\bdef\s+\w+\s*\(/g),
+    "variable":    (code) => countLines(code, /^[^\S\n]*\w+\s*=[^=]/),
+    "comment":     (code, raw) => commentLines(raw).length,
+    "random":      (code) => countAll(code, /\brandom\b/g),
+    "turtle":      (code) => countAll(code, /\bturtle\b|\bforward\s*\(|\bpenup\s*\(/g)
+  };
+
+  /* What to call these when there is more than one. Most would take an s, but
+     "2 ifs" and "2 elses" are not what anyone says out loud, and the words a
+     student reads should be the words their teacher uses. */
+  const COUNT_WORDS = {
+    "for loop":    ["for loop", "for loops"],
+    "while loop":  ["while loop", "while loops"],
+    "if":          ["if statement", "if statements"],
+    "else":        ["else", "else lines"],
+    "elif":        ["elif", "elifs"],
+    "input":       ["input", "inputs"],
+    "print":       ["print", "prints"],
+    "list":        ["list", "lists"],
+    "function":    ["function", "functions"],
+    "variable":    ["variable", "variables"],
+    "comment":     ["comment", "comments"],
+    "random":      ["use of random", "uses of random"],
+    "turtle":      ["turtle command", "turtle commands"]
+  };
+  function amount(n, which){
+    const words = COUNT_WORDS[which] || [which, which + "s"];
+    if (n === 0) return "no " + words[1];
+    if (n === 1) return "1 " + words[0];
+    return n + " " + words[1];
+  }
+  function times(n){
+    if (n === 0) return "is not there yet";
+    if (n === 1) return "is there once";
+    return "is there " + n + " times";
+  }
+
+  /* How a count is judged, and what to say when it is not right yet. The
+     sentence always says what they have as well as what is wanted: one short
+     and one too many are different problems and need different next steps. */
+  const COMPARES = { atLeast:1, exactly:1, atMost:1 };
+  function countsUp(label, got, check, sofar){
+    /* A count left out would read as zero and tick itself off whatever the
+       student wrote, which is worse than saying nothing at all. Zero itself is
+       a real setting: "at most 0" is how a teacher asks for none. */
+    const said = String(check.count == null ? "" : check.count).trim();
+    if (said === "" || isNaN(parseInt(said, 10)))
+      return broken(label, "This check does not say how many.");
+    const want = Math.max(0, parseInt(said, 10));
+    const how = COMPARES[check.compare] ? check.compare : "atLeast";
+    const ok = how === "exactly" ? got === want
+             : how === "atMost"  ? got <= want
+             :                     got >= want;
+    if (ok) return pass(label);
+    if (how === "exactly")
+      return fail(label, sofar + " There should be exactly " + want + ".");
+    if (how === "atMost")
+      return fail(label, sofar + " There should be no more than " + want + ".");
+    return fail(label, sofar + " You need at least " + want + ".");
+  }
 
   /* ---------- extra conditions on a check ----------
      A check can carry more conditions after the first, joined with and/or, so
@@ -165,6 +272,14 @@
         return !has(bare, value, cased) ? pass(label)
           : fail(label, "Try doing this without “" + value + "”.");
 
+      /* Counting a piece of text the teacher typed: three calls to a function
+         they wrote, two print lines, no more than one input. */
+      case "codeCount": {
+        if (!value) return broken(label, "This check has nothing to count.");
+        const got = countText(bare, value, cased);
+        return countsUp(label, got, check, "“" + value + "” " + times(got) + ".");
+      }
+
       case "defines": {
         if (!value) return broken(label, "This check does not say which function.");
         const re = new RegExp("\\bdef\\s+" + value.replace(/[^\w]/g, "") + "\\s*\\(", cased ? "" : "i");
@@ -185,13 +300,22 @@
         const which = String(value || "for loop").toLowerCase();
         const test = PY_PATTERNS[which];
         if (!test) return broken(label, "Unknown thing to look for: " + which);
-        const found = typeof test === "function" ? test(bare) : test.test(bare);
+        const found = typeof test === "function" ? test(bare, code) : test.test(bare);
         if (found) return pass(label);
         /* say so when the right word is there but written wrongly */
         const nearly = new RegExp("\\b" + which.split(" ")[0] + "\\b").test(bare);
         return fail(label, nearly
           ? "There is a " + which + " there, but it is not quite right yet."
           : "Your code does not use a " + which + " yet.");
+      }
+
+      /* The same list of things, asked about by number. */
+      case "usesCount": {
+        const which = String(value || "for loop").toLowerCase();
+        const counter = PY_COUNTS[which];
+        if (!counter) return broken(label, "Unknown thing to count: " + which);
+        const got = counter(bare, code);
+        return countsUp(label, got, check, "You have " + amount(got, which) + ".");
       }
 
       case "outputHas":
@@ -395,6 +519,21 @@
   function same(a, b, cased){
     const x = String(a == null ? "" : a), y = String(b == null ? "" : b);
     return cased ? x === y : x.toLowerCase() === y.toLowerCase();
+  }
+  /* How many times a piece of text appears, counted the way someone reading
+     down the page would count it: no overlaps, so "aa" appears once in "aaa". */
+  function countText(hay, needle, cased){
+    const h = String(hay == null ? "" : hay), n = String(needle == null ? "" : needle);
+    if (!n) return 0;
+    const inHay = cased ? h : h.toLowerCase();
+    const inNeedle = cased ? n : n.toLowerCase();
+    let from = 0, found = 0;
+    for (;;){
+      const at = inHay.indexOf(inNeedle, from);
+      if (at < 0) return found;
+      found++;
+      from = at + inNeedle.length;
+    }
   }
 
   window.buildChecklist = function(checks){
