@@ -25,6 +25,16 @@
   <div class="load-inner">
     <div class="load-dots"><span></span><span></span><span></span></div>
     <p id="loadMsg">Loading your lesson…</p>
+    <!-- Appears only if the wait goes on too long. Hidden markup rather than
+         built in script, so it is here even if the script is what is stuck. -->
+    <div class="load-stuck" id="loadStuck" hidden>
+      <p id="loadStuckMsg">This is taking longer than it should. The school network may be busy.</p>
+      <div class="row">
+        <button class="btn-primary" id="loadRetry" type="button">Try again</button>
+        <button class="btn-ghost" id="loadCarryOn" type="button" hidden>Carry on without it</button>
+        <a class="btn-ghost" href="index.html">Back to my lessons</a>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -374,9 +384,55 @@ function hideLoader(msg){
   const el2 = document.getElementById("loadScreen");
   if (!el2) return;
   if (msg){ const m = document.getElementById("loadMsg"); if (m) m.textContent = msg; return; }
+  clearTimeout(stuckTimer);
   el2.hidden = true;
   if (el2.classList) el2.classList.add("gone");
 }
+
+/* A way off the loading screen.
+
+   The screen covers the whole page, so a load that never finished left a
+   child looking at three dots with nothing to press, and only a refresh got
+   them out. Calls now give up on their own (see config.js), so this is the
+   backstop for the slow-but-alive case: a network answering, eventually, but
+   not before the lesson is over.
+
+   Where the lesson itself has arrived, the page behind this is real and they
+   are only waiting on their saved work, so they are offered the way through.
+   Where it has not, there is nothing behind to show and the honest options
+   are trying again or going back. */
+let stuckTimer = null;
+function watchForStuck(){
+  clearTimeout(stuckTimer);
+  stuckTimer = setTimeout(() => {
+    const box = document.getElementById("loadStuck");
+    const screen = document.getElementById("loadScreen");
+    if (!box || !screen || screen.hidden) return;
+    const gotLesson = !!lesson;
+    const msg = document.getElementById("loadStuckMsg");
+    if (msg) msg.textContent = gotLesson
+      ? "Your work is taking a long time to arrive. You can start the lesson now, but anything you did last time may not be here yet."
+      : "This is taking longer than it should. The school network may be busy.";
+    const carryOn = document.getElementById("loadCarryOn");
+    if (carryOn) carryOn.hidden = !gotLesson;
+    box.hidden = false;
+  }, 25000);       // past the time limit on a single call, so only a real jam shows this
+}
+/* Set once they have taken the way out, so the rest of the loading, which is
+   still going on behind this, does not later drag them off the page they have
+   started reading. Saving is deliberately NOT switched on here: their saved
+   work may still be on its way, and letting a save go first would write over
+   it. The boot turns saving on as soon as it knows one way or the other. */
+let carriedOn = false;
+document.getElementById("loadRetry").addEventListener("click", () => location.reload());
+document.getElementById("loadCarryOn").addEventListener("click", () => {
+  carriedOn = true;
+  /* The lesson is drawn but no page has been put on screen yet, so without
+     this they would be handed an empty stage. */
+  try{ if (steps.length) showStep(step); }catch(e){}
+  hideLoader();
+});
+watchForStuck();
 function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!==undefined)e.innerHTML=html; return e; }
 /* Same, but the words are shown exactly as written, so "<h1>" appears as
    "<h1>" instead of turning into a heading. Used for anything that talks
@@ -1086,7 +1142,10 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
       $("dock").classList.add("gone");
       return;
     }
-    showStep(step);
+    /* Somebody who got bored of waiting is already on a page. Putting them
+       back on the one this arrived with would take the lesson out of their
+       hands at the moment it finally started working. */
+    if (!carriedOn) showStep(step);
   })
   .catch((e) => {
     hideLoader();
@@ -1337,6 +1396,14 @@ $("backBtn").addEventListener("click", () => {
   const b = nextOpen(step - 1, -1);
   if (b !== null) showStep(b);
 });
+/* One press at a time. Each press asks the server which page is open next,
+   and a child who gets no answer presses again, and again. A browser allows
+   only six connections to one address, so the seventh press used to queue
+   behind six that were never coming back, and nothing reached the server
+   after that, saving included. The button is still never disabled: an extra
+   press simply lands on the question already being asked. */
+let askingToMoveOn = false;
+
 /* Continue never stops to ask whether a task is finished. Where the work is
    unfinished the task already says so in its own place: the words under an
    answer box, the checklist beside code, the quiz's own marking. A pop-up on
@@ -1344,15 +1411,21 @@ $("backBtn").addEventListener("click", () => {
    the way through a task is the button reading "move on anyway". */
 async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
+  if (askingToMoveOn) return;                      // one is already in the air
   if (spectate){                                   // teachers roam freely
     if (step === steps.length - 1){ finishLesson(); } else { showStep(step + 1); }
     return;
   }
   if (step === steps.length - 1){ await tryFinish(); return; }
 
+  askingToMoveOn = true;
   $("nextBtn").classList.add("checking");
-  const target = await continueTarget();
-  $("nextBtn").classList.remove("checking");
+  let target;
+  try{ target = await continueTarget(); }
+  finally{
+    askingToMoveOn = false;
+    $("nextBtn").classList.remove("checking");
+  }
 
   if (target === summaryIndex()){ finishLesson(); return; }
   if (target !== null){
@@ -2036,8 +2109,10 @@ async function submitWork(){
 
 /* Mid-lesson manual save, for lessons that run out of time. */
 let flashTimer = null;
+let savingNow = false;                   // one send at a time, as with Continue
 async function manualSave(){
-  save();
+  save();                                // into this browser, always, straight away
+  if (savingNow) return;
   const btn = $("saveBtn");
   /* Offline there is no teacher to send anything to. Handing in is a link
      where the work is light enough to travel in one, and a PDF where it is
@@ -2080,7 +2155,10 @@ async function manualSave(){
   clearTimeout(flashTimer);
   btn.classList.remove("flash-ok","flash-bad");
   paintSaveButtons("saving");
-  const state = await submitWork();
+  savingNow = true;
+  let state;
+  try{ state = await submitWork(); }
+  finally{ savingNow = false; }
   if (state === "done"){ noteSaved(false); paintSaveButtons("saved"); return; }
   paintSaveButtons("idle");
   btn.textContent = state === "offline" ? "Sign in to save" : "Try again";
@@ -2096,9 +2174,14 @@ async function manualSave(){
 async function tryFinish(){
   if (bypassed || !apiReady || !token){ finishLesson(); return; }
   if (lesson && lesson.assessment){ finishLesson(); return; }   // never hold up a test
+  if (askingToMoveOn) return;                  // see tryContinue: one at a time
+  askingToMoveOn = true;
   $("nextBtn").classList.add("checking");
-  await fetchRelease();
-  $("nextBtn").classList.remove("checking");
+  try{ await fetchRelease(); }
+  finally{
+    askingToMoveOn = false;
+    $("nextBtn").classList.remove("checking");
+  }
   if (isLocked(summaryIndex())){
     showWaitModal({ title: "Not quite time to finish",
                     text: "Your teacher will let you know when you can finish this lesson." });
@@ -2882,15 +2965,68 @@ function rPython(b){
   const s = el("section");
   const ta = el("textarea","code"); ta.spellcheck = false; ta.value = b.starter || "";
   ta.addEventListener("input", markDirty);
-  fields[b.id] = { get:() => ta.value, set:(v) => { if (v) ta.value = v; } };
-  s.appendChild(ta);
   const row = el("div","row no-print"); row.style.marginTop = "14px";
   const run = el("button","btn-primary","Run"); const err = el("span","err");
   const out = el("div","output"); out.setAttribute("aria-live","polite");
-  let ran = false;
-  run.addEventListener("click", async () => { await runPython(ta.value, out, err); ran = true; markDirty(); });
+
+  /* A program that calls input() has to be answered somewhere, and this task
+     has no console of its own, so the question appears under the output. Each
+     answer joins the list and the program runs again from the top with all of
+     them ready, which is how the full editor handles it too. */
+  const askRow = el("div","py-ask no-print"); askRow.hidden = true;
+  const askText = tel("span","py-ask-prompt");
+  const askIn = el("input"); askIn.type = "text";
+  askIn.autocomplete = "off"; askIn.spellcheck = false;
+  const askGo = el("button","btn-ghost","Answer");
+  askRow.appendChild(askText); askRow.appendChild(askIn); askRow.appendChild(askGo);
+
+  let ran = false, runs = 0, lastOut = "", answers = [];
+
+  async function go(){
+    run.disabled = true;
+    const label = run.textContent;
+    run.textContent = "Running\u2026";
+    try{
+      const res = await runPython(ta.value, out, err, answers);
+      if (res){
+        lastOut = res.out || "";
+        if (res.status === "input"){
+          askText.textContent = res.prompt || ">";
+          askRow.hidden = false; askIn.value = ""; askIn.focus();
+        } else {
+          askRow.hidden = true;
+          answers = [];              // the next press starts the program afresh
+          ran = true; runs++;
+        }
+      }
+    } finally {
+      run.disabled = false; run.textContent = label;
+    }
+    markDirty();
+  }
+  const answer = () => { answers.push(askIn.value); askRow.hidden = true; go(); };
+  run.addEventListener("click", () => { answers = []; go(); });
+  askGo.addEventListener("click", answer);
+  askIn.addEventListener("keydown", (e) => {
+    if (e.key === "Enter"){ e.preventDefault(); answer(); }
+  });
+
+  /* Work saved before this task kept its output is a plain string, so both
+     shapes have to come back. */
+  fields[b.id] = {
+    get:() => ({ code: ta.value, out: lastOut.slice(0, 4000), ran: ran, runs: runs }),
+    set:(v) => {
+      if (!v) return;
+      if (typeof v === "string"){ ta.value = v; return; }
+      if (typeof v.code === "string") ta.value = v.code;
+      if (typeof v.out === "string" && v.out){ lastOut = v.out; out.textContent = v.out; }
+      ran = !!v.ran;
+      runs = typeof v.runs === "number" ? v.runs : (v.ran ? 1 : 0);
+    }
+  };
+  s.appendChild(ta);
   row.appendChild(run); row.appendChild(err);
-  s.appendChild(row); s.appendChild(out);
+  s.appendChild(row); s.appendChild(out); s.appendChild(askRow);
   return { section:s,
            check:() => ran ? { ok:true } : { ok:false, message:"Press Run at least once" },
            brief:{ eyebrow:"Code", title:"Python", text:b.task || "Read the code, run it, then change it." } };
@@ -5845,19 +5981,38 @@ async function ensurePyodide(out){
   }
   return pyLoading;
 }
-async function runPython(code, out, err){
+/* Runs the older Python task's code (type "python", kept for lessons written
+   before the full editor replaced it).
+
+   This used to be a bare exec() with no time limit of any kind, on the page's
+   only thread. A student writing "while True:" locked the whole tab up for
+   good: no output, no working buttons, and no way back but closing it. Two
+   classes lost machines to it before anyone worked out what they had typed.
+
+   It now goes through _hub_run in pyhub.js, the same guarded runner the full
+   editor uses, which gives up after ten seconds and says in plain words what
+   probably went wrong. Returns what the run said so the caller can deal with
+   a program that stopped to ask a question. */
+async function runPython(code, out, err, answers){
   err.textContent = "";
   try{
-    const py = await ensurePyodide(out);
+    const py = await ensureHubPython(out);
     await loadPyImports(py, code, out);
-    py.globals.set("_user_code", code);
-    out.textContent = py.runPython(
-      "import sys, io\n_buf = io.StringIO()\n_so, _se = sys.stdout, sys.stderr\n" +
-      "sys.stdout = sys.stderr = _buf\ntry:\n    exec(compile(_user_code, '<student>', 'exec'), {})\n" +
-      "except Exception:\n    import traceback; traceback.print_exc()\n" +
-      "finally:\n    sys.stdout, sys.stderr = _so, _se\n_buf.getvalue()\n"
-    ) || "(no output)";
-  }catch(e){ out.textContent = ""; err.textContent = e.message || "Something went wrong running your code."; }
+    py.globals.set("_hub_next_inputs", (answers || []).join("\u0000"));
+    py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
+    py.globals.set("_hub_src", code);
+    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
+    /* Waits are played back by the full editor's console, which this task
+       does not have, so everything the program printed arrives at once. That
+       is what this task always did. */
+    out.textContent = res.out || (res.status === "input" ? "" : "(no output)");
+    out.classList.toggle("has-error", res.status === "done" && !res.ok);
+    return res;
+  }catch(e){
+    out.textContent = "";
+    err.textContent = e.message || "Something went wrong running your code.";
+    return null;
+  }
 }
 
 $("saveBtn").addEventListener("click", manualSave);

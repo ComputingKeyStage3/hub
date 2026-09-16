@@ -308,6 +308,12 @@ textarea.code{
   background:var(--code-bg); border:1px solid #3A4150; border-radius:10px; padding:14px; min-height:48px; color:var(--code-fg);
 }
 .output:empty::before{content:"Output appears here after you press Run."; color:var(--dim)}
+/* input() in the older Python task. That task has no console of its own, so
+   the question sits under the output rather than inside it. Kept here beside
+   .output so the phone rules further down this file still win. */
+.py-ask{display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap}
+.py-ask-prompt{font-family:var(--mono); font-size:14.5px; white-space:pre-wrap}
+.py-ask input[type=text]{flex:1; min-width:150px; font-family:var(--mono)}
 
 /* =====================================================================
    HOME + ADMIN
@@ -885,6 +891,15 @@ body.spectating{padding-top:40px}
 .loadscreen.gone{display:none}
 .load-inner{text-align:center}
 .load-inner p{margin:16px 0 0; color:var(--muted); font-size:16.5px; font-weight:700}
+/* The way off the loading screen, shown only once a wait has gone on too
+   long. Narrow enough to read in one go, and the buttons wrap on a phone. */
+.load-stuck{max-width:420px; margin:22px auto 0; padding:0 16px}
+.load-stuck[hidden]{display:none}
+.load-stuck p{font-size:15px; font-weight:600; line-height:1.5}
+.load-stuck .row{margin-top:16px; justify-content:center; flex-wrap:wrap; gap:10px}
+/* The way back is a real link, so it needs telling not to underline itself
+   next to the two buttons beside it. */
+.load-stuck a.btn-ghost{text-decoration:none; display:inline-flex; align-items:center}
 .load-dots{display:flex; gap:10px; justify-content:center}
 /* display:flex beats the browser's own rule for a hidden element, so a
    page that takes the dots away when the wait ends has to be able to. */

@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"9.1",   text:"Pages no longer freeze when the school network goes quiet, and a Python task that never ends now stops itself instead of locking the tab." },
   { v:"9.0.1", text:"Clicking in the builder's Starter code box now lands where you click, and the line numbers line up on a touch screen." },
   { v:"9.0.0", text:"Lessons in the builder save themselves, 30 seconds after you stop typing and again when you leave them alone." },
   { v:"8.9.3", text:"Progress bar in View Work moves through every page." },
