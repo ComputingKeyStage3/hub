@@ -77,7 +77,6 @@
     <span class="hint" id="workFresh"></span>
   </div>
       <div class="workframe"><iframe id="workFrame" title="Their work"></iframe></div>
-      <div class="tasknav" id="taskNav"></div>
     </div>
     <aside class="workside">
       <h3>Feedback</h3>
@@ -537,15 +536,21 @@ function showStudent(i, step){
     list: [{ name: st.display_name, username: st.username,
              data: row ? row.data : {}, feedback: row ? (row.feedback || "") : "" }]
   }));
+  /* The progress bar in the frame counts the summary as one past the last
+     page, the same as the teacher console does, and posts that number out
+     when it opens. Asking for it again by number would clamp to the last
+     page, so it is asked for by name. */
+  const pages = ((lessonJson && lessonJson.blocks) || []).length;
+  const onSummary = !allPages && step !== undefined && step >= pages;
   $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
     "&view=1&embed=1" + (allPages ? "&all=1" : "") +
-    (step !== undefined && !allPages ? "&step=" + step : "") + "&t=" + Date.now();
+    (onSummary ? "&summary=1" : "") +
+    (step !== undefined && !allPages && !onSummary ? "&step=" + step : "") + "&t=" + Date.now();
   $("fbWho").textContent = st.display_name + (row ? "" : ", nothing saved yet");
   /* a practical assessment is marked by hand, so the boxes appear */
   paintMarking(st.username);
   loadFeedback(row);
   paintFb("idle");
-  paintTaskNav();
 }
 on("prevStu", "click", () => showStudent(idx - 1));
 on("nextStu", "click", () => showStudent(idx + 1));
@@ -559,28 +564,6 @@ on("openPdf", "click", () => {
   showStudent(idx);
   window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&pdf=1", "_blank");
 });
-function paintTaskNav(){
-  const nav = $("taskNav");
-  nav.innerHTML = "";
-  if (allPages) return;
-  const blocks = (lessonJson && lessonJson.blocks) || [];
-  blocks.forEach((b, i) => {
-    const btn = el("button","tasknav-btn", String(i + 1));
-    btn.title = b.title || b.type;
-    btn.addEventListener("click", () => { lastStep = i; showStudent(idx, i); });
-    nav.appendChild(btn);
-  });
-  /* the finished screen, at the end where it belongs */
-  const sum = el("button","tasknav-btn summary","Summary");
-  sum.title = "What they saw when they finished";
-  sum.addEventListener("click", () => {
-    lastStep = blocks.length;
-    $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
-      "&view=1&embed=1&summary=1&t=" + Date.now();
-  });
-  nav.appendChild(sum);
-}
-
 /* ---------------- feedback ---------------- */
 function showing(which){ return !!$("fb" + which).value.trim(); }
 function loadFeedback(row){

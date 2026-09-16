@@ -361,6 +361,13 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
    One line, because the animation itself is kept in --dot-hop where the dots
    are defined. More specific than the * above, so it wins wherever it sits. */
 @media (prefers-reduced-motion:reduce){ .load-dots span{animation:var(--dot-hop) !important} }
+/* ...and the tick that says the password manager has filled the teacher key,
+   which is not an animation anyone sees. It changes nothing on screen and
+   lasts a hundredth of a second: its whole job is to raise an event, because
+   Chromium marks a filled box and then says nothing about it. Its own rule
+   rather than a comma beside the dots above, since a browser that does not
+   know :-webkit-autofill throws away the whole selector it appears in. */
+@media (prefers-reduced-motion:reduce){ #keyIn:-webkit-autofill{animation:var(--fill-tick) !important} }
 
 @media print{
   body.lesson{height:auto; display:block; overflow:visible}
@@ -871,6 +878,9 @@ body.spectating{padding-top:40px}
 .load-inner{text-align:center}
 .load-inner p{margin:16px 0 0; color:var(--muted); font-size:16.5px; font-weight:700}
 .load-dots{display:flex; gap:10px; justify-content:center}
+/* display:flex beats the browser's own rule for a hidden element, so a
+   page that takes the dots away when the wait ends has to be able to. */
+.load-dots[hidden]{display:none}
 /* The whole animation is held in one property and each dot only says how long
    it waits before joining in, so the reduced-motion exception near the top of
    this file can put it back in a single line rather than keeping a copy of the
@@ -1660,10 +1670,6 @@ body.workpage .grow{flex:1}
 .workframe{flex:1; min-height:0; border:1.5px solid var(--line); border-radius:14px;
   overflow:hidden; background:var(--panel)}
 .workframe iframe{width:100%; height:100%; border:none; display:block}
-.tasknav{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; flex:none; justify-content:center}
-.tasknav-btn{min-width:38px; padding:8px 11px; border:1.5px solid var(--line-2); border-radius:10px;
-  background:var(--panel); cursor:pointer; font-weight:800; font-family:var(--body); color:var(--text)}
-.tasknav-btn:hover{border-color:var(--amber); color:var(--amber-dark)}
 .workside{background:var(--panel); border:1.5px solid var(--line); border-radius:14px;
   padding:18px; overflow-y:auto; min-height:0}
 .workside h3{margin:0 0 4px; font-family:var(--display); font-size:19px}
@@ -2473,12 +2479,9 @@ body.workpage .homebar .grow{flex:1}
 /* every page at once: no bars, nothing to press but the work itself */
 body.allmode .homebar,body.allmode .topbar,body.allmode .dock,
 body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:none !important}
-/* the task buttons under the preview, with the summary at the end */
-.tasknav-btn.summary{min-width:auto; padding:8px 14px}
-
 /* while the class is still being fetched */
 .loadpane{align-items:center; justify-content:center}
-.loadmsg{color:var(--muted); font-size:17px}
+.loadmsg{margin:0; color:var(--muted); font-size:17px}
 /* a seat for someone with nothing handed in */
 .seat.nowork{background:var(--panel-2); border-style:dashed; color:var(--muted)}
 .seat.nowork b{color:var(--muted)}
@@ -3713,7 +3716,13 @@ html[data-bg=dark] .seg.now{background:var(--amber)}
    selector is Chromium's own, so other browsers drop this rule and fall back
    to the poll there. */
 @keyframes autofilled{ from{ outline-color:transparent } to{ outline-color:transparent } }
-#keyIn:-webkit-autofill{ animation-name:autofilled; animation-duration:.01s }
+/* Held in a property, and put back by the reduced-motion exception near the
+   top of this file. Without that exception the blanket rule up there stops
+   this animation like any other, and stopping it is not a tidier page: it is
+   the console no longer noticing that the box was filled, so a teacher who
+   had been landing on Home was left looking at a sign-in box with their key
+   already in it, waiting for them to press a button nobody should have to. */
+#keyIn:-webkit-autofill{ --fill-tick:autofilled .01s; animation:var(--fill-tick) }
 
 /* The teacher's name at the top right of the console. It reads exactly like
    the name a student sees on theirs, and presses back to "Who is teaching?",

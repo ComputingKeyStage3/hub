@@ -1223,10 +1223,11 @@ function buildTracker(){
      .seg: paintTracker walks those by index to work out which page each one
      stands for, and one more would be read as a page that is not there.
 
-     An assessment is left out. Its summary is a score with staged animations
-     and its own way back into the questions, so arriving there from here
-     would not be the screen they left. */
-  if (lesson && lesson.assessment) return;
+     An assessment is left out for the student sitting it. Its summary is a
+     score with staged animations and its own way back into the questions, so
+     arriving there from here would not be the screen they left. A teacher
+     looking at the work wants exactly that screen, so for them it stays. */
+  if (lesson && lesson.assessment && !spectate) return;
   const end = el("button","seg-end");
   end.type = "button";
   end.disabled = true;                       // until they have been there
@@ -1236,7 +1237,10 @@ function buildTracker(){
   end.addEventListener("click", () => {
     if (end.disabled) return;
     hideLockTip();
-    showLessonComplete(true);                // a revisit: no confetti, nothing re-sent
+    /* The same two screens the lesson picks between when it opens straight on
+       the summary, or an assessment would be handed the ordinary one. */
+    if (lesson && lesson.assessment) renderAssessmentComplete(false);
+    else showLessonComplete(true);            // a revisit: no confetti, nothing re-sent
   });
   t.appendChild(end);
 }
@@ -1502,6 +1506,19 @@ function hideLockTip(){
 }
 
 function paintTracker(){
+  /* A teacher is not working through the lesson, they are looking at it: the
+     builder's preview, the console's preview and the work viewer all want
+     every page and the summary reachable straight away, forwards as well as
+     back. So the bar is drawn for them as it is for a student who has
+     finished, which is the only state it was ever fully open in. A student's
+     own bar is untouched by this. */
+  const roam = spectate;
+  /* The summary is not one of the pages, so while it is up nothing on the bar
+     is the page being looked at. Asked this way rather than "have they
+     finished", because a teacher roaming has finished nothing and a student
+     who has finished can still be back inside a task. */
+  const doneScreen = $("doneScreen");
+  const onSummary = !!(doneScreen && !doneScreen.hidden);
   Array.from($("tracker").querySelectorAll(".seg")).forEach((seg, n) => {
     // Once finished, every segment is complete, including the last one, which
     // previously stayed amber forever because "n < step" can never include it.
@@ -1511,8 +1528,9 @@ function paintTracker(){
        be clicked into, which is not where the student had been. */
     const why = whyShut(n);
     const shut = !!why;
-    const done = finished ? true : n < step;
-    seg.className = "seg" + (done ? " done" : n === step ? " now" : "")
+    const done = (finished || roam) ? true : n < step;
+    const here = n === step && !onSummary;
+    seg.className = "seg" + (here ? " now" : done ? " done" : "")
                   + (shut ? " locked-seg" : "");
     /* Only pages they have already been through can be jumped to. Going
        forwards is what Continue is for, and a page still shut has not been
@@ -1520,28 +1538,34 @@ function paintTracker(){
 
        Once finished, the last page counts too. step is still sitting on it,
        so excluding "the page you are on" left the final task as the one thing
-       that could not be reached from the summary. */
-    const canGo = done && !shut && (finished || n !== step);
+       that could not be reached from the summary. A teacher roaming counts
+       the same way, so pressing the page they are on is the way back off the
+       summary. */
+    const canGo = done && !shut && (finished || roam || n !== step);
     seg.dataset.shut = shut ? "1" : "";
     seg.dataset.why = why;
     /* A shut page stays pressable so that pressing it can say why. Everything
        else out of reach is switched off as it always was. */
     seg.disabled = !canGo && !shut;
     seg.setAttribute("aria-disabled", canGo ? "false" : "true");
-    seg.title = canGo ? "Back to page " + (n + 1) : shut ? why : "Page " + (n + 1);
+    /* "Back to" only when it really is behind them. From the summary every
+       page is somewhere to go, and for a teacher roaming so is a page ahead. */
+    seg.title = canGo ? ((!onSummary && n < step) ? "Back to page " : "Go to page ") + (n + 1)
+              : shut ? why : "Page " + (n + 1);
     seg.setAttribute("aria-label", seg.title);
   });
   /* The summary pill: there from the moment they have been to the summary,
-     and lit while that is what they are looking at. The bar takes a little
-     more height to hold the flag, the same room hovering it already makes
-     for the page numbers. */
+     and lit while that is what they are looking at. For a teacher it is there
+     from the start, because they have not been anywhere and still need it.
+     The bar takes a little more height to hold the flag, the same room
+     hovering it already makes for the page numbers. */
   const end = $("tracker").querySelector(".seg-end");
   if (end){
-    const done = $("doneScreen");
-    end.disabled = !finished;
-    end.classList.toggle("on", !!finished);
-    end.classList.toggle("here", !!finished && !!done && !done.hidden);
-    $("tracker").classList.toggle("has-end", !!finished);
+    const open = finished || roam;
+    end.disabled = !open;
+    end.classList.toggle("on", open);
+    end.classList.toggle("here", open && onSummary);
+    $("tracker").classList.toggle("has-end", open);
   }
 }
 
@@ -5525,6 +5549,13 @@ function doneShell(title){
   $("briefText").textContent = ""; $("briefText").hidden = true;
   $("dock").classList.add("gone");
   $("stage").scrollTop = 0;
+  /* The page around an embedded view keeps its place when the teacher moves
+     on to the next student, and the summary is a place like any other. It is
+     numbered one past the last page, the same as the teacher console numbers
+     it, so showStep and this agree on what a number means. */
+  if (embedParam !== null){
+    try{ parent.postMessage({ hubWorkStep: summaryIndex() }, "*"); }catch(e){}
+  }
   finished = true; paintTracker();
   return box;
 }
