@@ -751,6 +751,12 @@
     wrap.ticked = function(){
       return items.map(it => it.li.dataset.state === "yes");
     };
+    /* One line of the list, so the page can ask where it is before deciding
+       whether it has to move at all. */
+    wrap.lineAt = function(at){
+      const it = items[at];
+      return it ? it.li : null;
+    };
     /* Point at a line that has just been ticked off. The class is taken off
        and forced to be laid out again before it goes back on, or a second run
        that ticks the same line would add a class that is already there and

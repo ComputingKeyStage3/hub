@@ -2071,9 +2071,31 @@ function goToTask(i){
    Everything about how it moves is the same as goToTask above, including
    going there outright when the slide never starts: a smooth scroll is a
    request, not a promise. */
-function scrollStageTo(target, then){
+/* Is every one of these on the screen already, inside the part of the stage
+   a student can actually see? A few pixels in from each edge, so a line half
+   under the bar at the bottom does not count as showing. */
+function allOnScreen(parts, stage){
+  const list = parts.filter(Boolean);
+  if (!list.length) return false;
+  const view = stage.getBoundingClientRect();
+  const EDGE = 4;
+  return list.every(n => {
+    const r = n.getBoundingClientRect();
+    return r.top >= view.top + EDGE && r.bottom <= view.bottom - EDGE;
+  });
+}
+
+/* Bring something into view in the stage, and say when it has got there.
+
+   `shown` is what actually has to be readable. When all of it is on the screen
+   already the page does not move at all: taking the page out from under
+   somebody who is looking at the very thing is worse than leaving it where
+   they put it. Without `shown` the target itself is what has to be readable. */
+function scrollStageTo(target, then, shown){
   const stage = $("stage");
   if (!stage || !target){ if (then) then(); return; }
+  const parts = shown ? (Array.isArray(shown) ? shown : [shown]) : [target];
+  if (allOnScreen(parts, stage)){ if (then) then(); return; }
   let smooth = true;
   try{ smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
   const from = stage.scrollTop;
@@ -3216,6 +3238,21 @@ function refreshChecklistMode(){
    it printed is read as the program's own doing rather than as part of the
    tick arriving. */
 const CHEER_WAIT = 500, CHEER_SHOWN = 1000;
+
+/* Where to take the page when it does have to move. The whole list, so its
+   heading is there to say what the glowing line is one of, unless the list is
+   too tall for that to bring the line itself into view: a twelve line
+   checklist on a short screen put its heading at the top and the line that
+   had just turned below the bottom. Then the line wins, because putting the
+   thing being pointed at in front of them is the entire point of moving. */
+function cheerAim(holder, lines){
+  const stage = $("stage");
+  const first = lines[0], last = lines[lines.length - 1];
+  if (!stage || !first) return holder;
+  const room = stage.getBoundingClientRect().height;
+  const need = last.getBoundingClientRect().bottom - holder.getBoundingClientRect().top;
+  return need > room ? first : holder;
+}
 function cheerChecklist(over, holder, list, fresh, reveal){
   /* The lines this run turned are shown at the end of all this, not at the
      start of it: the tick over the console, then the page coming back up to
@@ -3223,14 +3260,19 @@ function cheerChecklist(over, holder, list, fresh, reveal){
      that ticks itself off first has already told the student everything, and
      what follows is a tick pointing at old news. */
   const land = () => { if (reveal) reveal(); fresh.forEach(i => list.point(i)); };
-  if (!over){ scrollStageTo(holder, land); return; }
+  /* Whether the page needs to move at all is asked of the lines themselves:
+     they are the thing being pointed at, and a list already on the screen
+     should stay exactly where it is. */
+  const lines = fresh.map(i => list.lineAt(i)).filter(Boolean);
+  const go = () => scrollStageTo(cheerAim(holder, lines), land, lines);
+  if (!over){ go(); return; }
   setTimeout(() => {
     const tick = el("div","ide-cheer");
     tick.appendChild(el("b","","\u2713"));
     over.appendChild(tick);
     setTimeout(() => {
       tick.remove();
-      scrollStageTo(holder, land);
+      go();
     }, CHEER_SHOWN);
   }, CHEER_WAIT);
 }
