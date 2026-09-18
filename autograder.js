@@ -31,6 +31,10 @@
      cssHas       selector,property,value  a rule sets that property
      fileHas      file,value          a named file contains this
 
+   A check can carry further conditions after the first, and those are run
+   through the very same list: an extra condition is a whole check in its own
+   right, joined on with and/or.
+
    Nothing here touches the network, and a broken check never stops the
    student working, it reports itself as needing the teacher's attention.
    ===================================================================== */
@@ -197,57 +201,119 @@
      A check can carry more conditions after the first, joined with and/or, so
      one line of a checklist can ask for something a single rule cannot say.
 
-     Each one can be told where to look. "Everywhere" is the whole program;
-     "in what was just found" is only the lines the condition before it matched,
-     which is what makes "uses an input, and that input mentions food" possible
-     rather than "uses an input somewhere and mentions food somewhere else".
+     A condition is a whole check in its own right: anything that can be the
+     first thing a line looks for can be a condition on it too. That is why
+     there is no list of them here. It was three kinds once, and a teacher who
+     wanted "uses a for loop, and calls draw()" had to write two lines of the
+     checklist, which a student then read as two separate jobs.
 
-     Read strictly left to right with no precedence, so "A and B or C" means
-     "(A and B) or C". Anything cleverer would be a query language, and a
-     teacher writing a checklist should not have to think about brackets. */
-  const EXTRA_KINDS = { codeHas:1, codeLacks:1, outputHas:1 };
+     Each one can be told where to look. "Anywhere" is the whole program;
+     "this line" is only the lines the condition before it matched, which is
+     what makes "uses an input, and that input mentions food" possible rather
+     than "uses an input somewhere and mentions food somewhere else".
+
+     Read left to right with no precedence, so "A and B or C" means
+     "(A and B) or C", unless a condition is bracketed. A bracketed condition
+     goes with the run of bracketed ones before it, and the bracket as a whole
+     joins the line with the word on its first member, which is how
+     "A and (B or C)" gets written. One depth of bracket and no more: past
+     that a teacher would have to count brackets to know what their own
+     checklist asks for. */
 
   /* The lines of some text that contain a phrase, which is what a later
      condition looks inside when it is scoped to what was found. */
-  function linesWith(text, needle, cased){
+  function linesWith(text, needle, cased, soft){
     const n = String(needle || "");
     if (!n) return "";
-    return String(text || "").split("\n").filter(l => has(l, n, cased)).join("\n");
+    return String(text || "").split("\n").filter(l => has(l, n, cased, soft)).join("\n");
   }
 
-  /* One extra condition, against whatever text it has been given. */
-  function extraHolds(cond, text, out, cased){
-    const v = String(cond.value || "");
-    if (!v) return { ok:false, why:"one of the extra conditions has nothing to look for" };
-    const c = cond.caseSensitive === true || cased;
-    if (cond.kind === "codeLacks")
-      return { ok: !has(text, v, c), why:"it still includes “" + v + "”" };
-    if (cond.kind === "outputHas")
-      return { ok: has(out, v, c), why:"the output does not include “" + v + "”" };
-    /* codeHas, and anything unrecognised, reads as "contains" */
-    return { ok: has(text, v, c), why:"it does not include “" + v + "”" };
+  /* A condition worth running. Not every kind needs typed words: "at least 5
+     lines" is a number and "has an h1" is a tag, and dropping everything
+     without a value left those quietly out of the line they belonged to. */
+  function condSaid(m){
+    return !!(m && (String(m.value || "").trim() ||
+                    String(m.count || "").trim() ||
+                    String(m.selector || "").trim()));
   }
 
-  /* Walks the chain and folds the answer of the first condition together with
-     the rest. `found` is what the first condition matched, so a scoped
-     condition has something to look inside. */
+  /* One condition, run through the same machinery as a first check. The case
+     and space settings belong to the line as a whole rather than to each part
+     of it, so they are copied down; the wording and any conditions of its own
+     are not, because only the line has those. */
+  function runCond(m, check, opts, where){
+    const c = Object.assign({}, m, {
+      caseSensitive: check.caseSensitive === true,
+      exactSpace: check.exactSpace === true,
+      label: check.label || "Check"
+    });
+    delete c.more; delete c.hint; delete c.manual;
+    if (opts.web){
+      /* scoped to what was found there are no three files any more, only the
+         lines that matched, so each of them is those lines */
+      const files = (m.scope === "match")
+        ? { html: where, css: where, js: where } : opts.files;
+      return checkWebOne(c, files, opts.runs);
+    }
+    return checkPythonOne(c, where, opts.output, opts.runs);
+  }
+
+  /* Walks the chain and folds the answers together with the first one.
+     `found` is what the last thing to match found, so a condition scoped to
+     "this line" has somewhere to look. */
   function withExtras(check, first, opts){
-    const more = Array.isArray(check.more) ? check.more.filter(m => m && m.value) : [];
+    const more = (Array.isArray(check.more) ? check.more : []).filter(condSaid);
     if (!more.length || !first || first.broken) return first;
     const cased = check.caseSensitive === true;
+    const soft = check.exactSpace !== true;
     const label = check.label || "Check";
     let ok = !!first.ok;
     let found = opts.found || "";
     let why = "";
-    more.forEach(m => {
-      if (!EXTRA_KINDS[m.kind]) m = Object.assign({}, m, { kind:"codeHas" });
+
+    /* Every condition is run, even once the answer can no longer change,
+       because each one narrows where the next may look and because the
+       sentence a student reads should name the first thing missing. */
+    function judge(m){
       const where = (m.scope === "match") ? found : opts.code;
-      const r = extraHolds(m, where, opts.output, cased);
-      if (!r.ok && !why) why = r.why;
-      ok = (m.join === "or") ? (ok || r.ok) : (ok && r.ok);
+      let r;
+      try{ r = runCond(m, check, opts, where); }
+      catch(e){ r = broken(label, "One of the other conditions could not run."); }
+      if (r.broken){
+        if (!why) why = "one of the other conditions is not set up properly";
+        return false;
+      }
+      if (!r.ok){
+        if (!why) why = String(r.note || "one of the other conditions is not met yet")
+                          .replace(/\.$/, "");
+        return false;
+      }
       /* what this condition matched becomes the place the next one can look */
-      if (r.ok && m.kind !== "codeLacks") found = linesWith(where, m.value, cased);
-    });
+      if (m.kind !== "codeLacks" && String(m.value || "").trim())
+        found = linesWith(where, m.value, cased, soft);
+      return true;
+    }
+
+    let i = 0;
+    while (i < more.length){
+      if (!more[i].group){
+        const r = judge(more[i]);
+        ok = (more[i].join === "or") ? (ok || r) : (ok && r);
+        i++;
+        continue;
+      }
+      /* a bracket: this condition and every bracketed one straight after it */
+      const outer = more[i].join;
+      let sub = null;
+      while (i < more.length && more[i].group){
+        const r = judge(more[i]);
+        sub = (sub === null) ? r
+            : (more[i].join === "or") ? (sub || r) : (sub && r);
+        i++;
+      }
+      ok = (outer === "or") ? (ok || sub) : (ok && sub);
+    }
+
     if (ok) return pass(label);
     return fail(label, first.ok
       ? ("Nearly: " + (why || "one of the other conditions is not met yet") + ".")
@@ -260,23 +326,24 @@
     const value = String(check.value || "");
     const out = String(output == null ? "" : output);
     const cased = check.caseSensitive === true;
+    const soft = check.exactSpace !== true;
 
     switch (check.kind){
       case "codeHas":
         if (!value) return broken(label, "This check has nothing to look for.");
-        return has(bare, value, cased) ? pass(label)
+        return has(bare, value, cased, soft) ? pass(label)
           : fail(label, "Your code does not include “" + value + "” yet.");
 
       case "codeLacks":
         if (!value) return broken(label, "This check has nothing to look for.");
-        return !has(bare, value, cased) ? pass(label)
+        return !has(bare, value, cased, soft) ? pass(label)
           : fail(label, "Try doing this without “" + value + "”.");
 
       /* Counting a piece of text the teacher typed: three calls to a function
          they wrote, two print lines, no more than one input. */
       case "codeCount": {
         if (!value) return broken(label, "This check has nothing to count.");
-        const got = countText(bare, value, cased);
+        const got = countText(bare, value, cased, soft);
         return countsUp(label, got, check, "“" + value + "” " + times(got) + ".");
       }
 
@@ -320,13 +387,13 @@
 
       case "outputHas":
         if (!out.trim()) return fail(label, "Run your code first.");
-        return has(out, value, cased) ? pass(label)
+        return has(out, value, cased, soft) ? pass(label)
           : fail(label, "Your output does not include \u201c" + value + "\u201d.");
 
       case "outputIs": {
         if (!out.trim()) return fail(label, "Run your code first.");
         const tidy = (t) => t.replace(/\r/g, "").trim().replace(/[ \t]+$/gm, "");
-        return same(tidy(out), tidy(value), cased) ? pass(label)
+        return same(tidy(out), tidy(value), cased, soft) ? pass(label)
           : fail(label, "Your output is not quite right yet.");
       }
 
@@ -370,11 +437,16 @@
     return (checks || []).map(c => {
       if (c && c.manual === true) return { ok:false, manual:true, label:c.label || "Check" };
       try{
-        const bare = realCode(code);
-        const first = checkPythonOne(c, code, output, runs);
+        const raw = String(code == null ? "" : code);
+        const first = checkPythonOne(c, raw, output, runs);
+        /* The whole program, not the tidied version, because a condition is a
+           check in its own right and one of them asks about comments, which
+           tidying is what removes. */
         const joined = withExtras(c, first, {
-          code: bare, output: String(output == null ? "" : output),
-          found: linesWith(bare, c.value, c.caseSensitive === true)
+          web: false, code: raw, runs: runs,
+          output: String(output == null ? "" : output),
+          found: linesWith(realCode(raw), c.value,
+                           c.caseSensitive === true, c.exactSpace !== true)
         });
         return ownWords(c, joined);
       }
@@ -404,6 +476,7 @@
     const want = parseInt(check.count, 10) || 1;
 
     const cased = check.caseSensitive === true;
+    const soft = check.exactSpace !== true;
 
     switch (check.kind){
       case "runCount": {
@@ -446,7 +519,7 @@
         if (!withAttr.length)
           return fail(label, "No " + selector + " has a " + attr + " yet.");
         if (!value) return pass(label);
-        const matching = withAttr.filter(n => has(n.getAttribute(attr) || "", value, cased));
+        const matching = withAttr.filter(n => has(n.getAttribute(attr) || "", value, cased, soft));
         return matching.length ? pass(label)
           : fail(label, "The " + attr + " is set, but not to “" + value + "”.");
       }
@@ -454,7 +527,7 @@
       case "contentHas": {
         if (!value) return broken(label, "This check has nothing to look for.");
         const text = (doc.body ? doc.body.textContent : "") || "";
-        return has(text, value, cased) ? pass(label)
+        return has(text, value, cased, soft) ? pass(label)
           : fail(label, "The page does not show \u201c" + value + "\u201d yet.");
       }
 
@@ -472,7 +545,7 @@
         const line = new RegExp("(?:^|;)\\s*" + prop.replace(/[^\w-]/g, "") + "\\s*:\\s*([^;]+)").exec(body);
         if (!line) return fail(label, selector + " does not set " + prop + " yet.");
         if (!value) return pass(label);
-        return has(line[1].trim(), value, cased) ? pass(label)
+        return has(line[1].trim(), value, cased, soft) ? pass(label)
           : fail(label, prop + " is set, but not to “" + value + "”.");
       }
 
@@ -480,7 +553,7 @@
         const which = String(check.file || "html").toLowerCase();
         const text = which === "css" ? css : which === "js" ? js : String((files && files.html) || "");
         if (!value) return broken(label, "This check has nothing to look for.");
-        return has(text, value, cased) ? pass(label)
+        return has(text, value, cased, soft) ? pass(label)
           : fail(label, "Your " + which.toUpperCase() + " does not include “" + value + "” yet.");
       }
 
@@ -497,8 +570,9 @@
                       (files && files.js) || "" ].join("\n");
         const first = checkWebOne(c, files, runs);
         const joined = withExtras(c, first, {
-          code: all, output: all,
-          found: linesWith(all, c.value, c.caseSensitive === true)
+          web: true, files: files || {}, code: all, output: all, runs: runs,
+          found: linesWith(all, c.value,
+                           c.caseSensitive === true, c.exactSpace !== true)
         });
         return ownWords(c, joined);
       }
@@ -511,22 +585,35 @@
   /* Case is ignored unless a teacher deliberately asks for it. A student who
      writes Print where the check says print has usually made a different
      mistake from the one the check is about, and marking it wrong teaches
-     nothing. Each check carries its own caseSensitive flag. */
-  function has(hay, needle, cased){
-    const h = String(hay == null ? "" : hay), n = String(needle == null ? "" : needle);
-    return cased ? h.includes(n) : h.toLowerCase().includes(n.toLowerCase());
+     nothing. Each check carries its own caseSensitive flag.
+
+     Spaces are ignored for the same reason, and unless the same sort of
+     deliberate choice is made. A line asking for "x > 17" is asking about the
+     comparison, not about how much room was left either side of the >, and a
+     student who wrote "x>17" has done the thing being asked for. That one is
+     the check's exactSpace flag, and it is off unless a teacher turns it on,
+     so "soft" below means the usual forgiving reading. Tabs go with spaces;
+     line breaks do not, or a check could match halfway through one line and
+     halfway through the next. */
+  function tidyText(text, cased, soft){
+    let s = String(text == null ? "" : text);
+    if (soft) s = s.replace(/[ \t]+/g, "");
+    return cased ? s : s.toLowerCase();
   }
-  function same(a, b, cased){
-    const x = String(a == null ? "" : a), y = String(b == null ? "" : b);
-    return cased ? x === y : x.toLowerCase() === y.toLowerCase();
+  function has(hay, needle, cased, soft){
+    return tidyText(hay, cased, soft).includes(tidyText(needle, cased, soft));
+  }
+  function same(a, b, cased, soft){
+    return tidyText(a, cased, soft) === tidyText(b, cased, soft);
   }
   /* How many times a piece of text appears, counted the way someone reading
      down the page would count it: no overlaps, so "aa" appears once in "aaa". */
-  function countText(hay, needle, cased){
-    const h = String(hay == null ? "" : hay), n = String(needle == null ? "" : needle);
+  function countText(hay, needle, cased, soft){
+    const n = String(needle == null ? "" : needle);
     if (!n) return 0;
-    const inHay = cased ? h : h.toLowerCase();
-    const inNeedle = cased ? n : n.toLowerCase();
+    const inHay = tidyText(hay, cased, soft);
+    const inNeedle = tidyText(needle, cased, soft);
+    if (!inNeedle) return 0;
     let from = 0, found = 0;
     for (;;){
       const at = inHay.indexOf(inNeedle, from);
@@ -548,7 +635,7 @@
     const head = document.createElement("div");
     head.className = "checklist-head";
     const title = document.createElement("b");
-    title.textContent = "What this task needs";
+    title.textContent = "Checklist";
     head.appendChild(title);
     const score = document.createElement("span");
     score.className = "checklist-score";
@@ -593,7 +680,14 @@
       mark.textContent = "○";
       const text = document.createElement("span");
       text.className = "check-text";
-      text.textContent = c.label || "Check";
+      /* A teacher can style the wording of a line, so it arrives as HTML.
+         labelHtml is the styled version and label the same words in plain
+         text; anything written before styling existed has only the latter,
+         and marking, the PDF and the summary screens read label throughout. */
+      if (c.labelHtml){
+        text.innerHTML = window.cleanRichText
+          ? window.cleanRichText(c.labelHtml) : c.labelHtml;
+      } else text.textContent = c.label || "Check";
       const note = document.createElement("span");
       note.className = "check-note";
       li.appendChild(mark); li.appendChild(text); li.appendChild(note);
@@ -646,6 +740,25 @@
       });
       tally();
     };
+    /* Which lines are ticked, by position, so the page can tell what has
+       changed since the last run rather than having to work it out twice. */
+    wrap.ticked = function(){
+      return items.map(it => it.li.dataset.state === "yes");
+    };
+    /* Point at a line that has just been ticked off. The class is taken off
+       and forced to be laid out again before it goes back on, or a second run
+       that ticks the same line would add a class that is already there and
+       nothing would move. */
+    wrap.point = function(at){
+      const it = items[at];
+      if (!it) return null;
+      it.li.classList.remove("justticked");
+      void it.li.offsetWidth;
+      it.li.classList.add("justticked");
+      setTimeout(() => it.li.classList.remove("justticked"), 2400);
+      return it.li;
+    };
+
     /* Which of the teacher-checked lines are ticked, by position in the whole
        list, so they can be saved with the work and put back later. */
     wrap.getManual = function(){

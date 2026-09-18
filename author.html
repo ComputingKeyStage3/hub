@@ -2508,8 +2508,9 @@ const USES_OPTIONS = ["for loop","while loop","if","else","elif","input","print"
                       "list","function","variable","comment","random","turtle"];
 
 /* The checks that compare something a teacher typed against something a
-   student wrote. Only those have any use for a case setting: a dropdown or a
-   number cannot be typed in the wrong case. */
+   student wrote. Only those have any use for a case setting, or for the
+   spaces one beside it: a dropdown or a number cannot be typed in the wrong
+   case, and no amount of room around a number changes it. */
 const CASED_KINDS = ["codeHas","codeCount","codeLacks","defines","calls",
                      "outputHas","outputIs",
                      "attr","contentHas","cssHas","fileHas"];
@@ -2517,9 +2518,171 @@ const CASED_KINDS = ["codeHas","codeCount","codeLacks","defines","calls",
 /* The two that pick from the list of Python things rather than a typed word,
    so both need one filling in when the kind is chosen. */
 function picksFromList(kind){ return kind === "uses" || kind === "usesCount"; }
+/* Where there is nothing in the code to look inside, there is nothing for
+   "this line" to mean either. */
+function readsCode(kind){ return kind !== "outputHas" && kind !== "outputIs" && kind !== "runCount"; }
+
+/* A check's wording is styled now, so it is kept twice: labelHtml is what a
+   student sees and label is the same words with the styling taken off.
+   Everything that cannot show styling reads label, which is marking, the PDF
+   and the summary at the end of a lesson, so it has to stay in step. */
+function plainWords(html){
+  const d = document.createElement("div");
+  d.innerHTML = String(html || "");
+  return (d.textContent || "").replace(/\s+/g, " ").trim();
+}
+/* and the other way about, for a check written before styling existed */
+function asStyled(text){
+  const d = document.createElement("div");
+  d.textContent = String(text || "");
+  return d.innerHTML;
+}
+
+/* ---------- the fields one kind of check needs ----------
+   The line itself and every condition on it are the same sort of thing, so
+   they ask for their settings with the same code. That is what lets a
+   condition be any kind of check rather than one of three. */
+function checkFields(c, row, kinds, repaint){
+  const needs = (name, key, help) => {
+    const f = el("div","bfield checkfield grow");
+    f.appendChild(el("label","", name));
+    const inp = el("input");
+    inp.value = c[key] || "";
+    if (help) inp.placeholder = help;
+    inp.addEventListener("input", () => { c[key] = inp.value; saveDraft(); });
+    f.appendChild(inp);
+    row.appendChild(f);
+  };
+  /* the list of Python things, for the two kinds that pick from it */
+  const whichOne = () => {
+    const f = el("div","bfield checkfield grow");
+    f.appendChild(el("label","","Which one"));
+    const sel = document.createElement("select");
+    USES_OPTIONS.forEach(o2 => {
+      const o = document.createElement("option");
+      o.value = o2; o.textContent = o2;
+      sel.appendChild(o);
+    });
+    sel.value = c.value || USES_OPTIONS[0];
+    sel.addEventListener("change", () => { c.value = sel.value; saveDraft(); });
+    f.appendChild(sel);
+    row.appendChild(f);
+  };
+  /* How many, and whether that is a floor, a ceiling or the exact number.
+     "At least" is what a checklist usually means, so it leads; "exactly" is
+     for when the shape of the answer is the point, three elifs and no more,
+     and "at most" is for pushing them off a habit, such as one input where
+     they wrote five. */
+  const howMany = () => {
+    const f = el("div","bfield checkfield");
+    f.appendChild(el("label","","How many"));
+    const pair = el("div","countpair");
+    const sel = document.createElement("select");
+    [["atLeast","at least"],["exactly","exactly"],["atMost","at most"]].forEach(o2 => {
+      const o = document.createElement("option");
+      o.value = o2[0]; o.textContent = o2[1];
+      sel.appendChild(o);
+    });
+    sel.value = c.compare || "atLeast";
+    sel.addEventListener("change", () => { c.compare = sel.value; saveDraft(); });
+    pair.appendChild(sel);
+    const num = el("input");
+    num.type = "number"; num.min = "0"; num.max = "99";
+    num.value = c.count === undefined || c.count === "" ? "1" : String(c.count);
+    num.addEventListener("input", () => { c.count = num.value; saveDraft(); });
+    pair.appendChild(num);
+    f.appendChild(pair);
+    row.appendChild(f);
+  };
+
+  const kind = c.kind || kinds[0][0];
+  if (kind === "uses") whichOne();
+  else if (kind === "usesCount"){ whichOne(); howMany(); }
+  else if (kind === "codeCount"){
+    needs("Text to count", "value", "elif");
+    howMany();
+  }
+  else if (kind === "lineCount") needs("How many lines", "count", "5");
+  else if (kind === "runCount") needs("How many times", "count", "1");
+  else if (kind === "tag") needs("Tag name", "selector", "h1");
+  else if (kind === "classOrId") needs("Class or id", "selector", ".title or #header");
+  else if (kind === "attr"){
+    needs("Element", "selector", "img");
+    needs("Attribute", "attr", "src");
+    needs("Value (optional)", "value", "cat.png");
+  }
+  else if (kind === "cssHas"){
+    needs("Selector", "selector", ".title");
+    needs("Property", "property", "color");
+    needs("Value (optional)", "value", "red");
+  }
+  else if (kind === "fileHas"){
+    const f = el("div","bfield checkfield");
+    f.appendChild(el("label","","Which file"));
+    const sel = document.createElement("select");
+    [["html","HTML"],["css","CSS"],["js","JavaScript"]].forEach(o2 => {
+      const o = document.createElement("option");
+      o.value = o2[0]; o.textContent = o2[1];
+      sel.appendChild(o);
+    });
+    sel.value = c.file || "html";
+    sel.addEventListener("change", () => { c.file = sel.value; saveDraft(); });
+    f.appendChild(sel);
+    row.appendChild(f);
+    needs("Text to look for", "value", "console.log");
+  }
+  else needs("Text to look for", "value", "");
+}
+
+/* Filling in whatever a newly chosen kind needs, so a check is never left
+   asking for nothing, and a count never reads back as zero and ticks itself
+   off whatever the student wrote. */
+function settleKind(c){
+  if (picksFromList(c.kind) && !c.value) c.value = USES_OPTIONS[0];
+  if ((c.kind === "usesCount" || c.kind === "codeCount" ||
+       c.kind === "lineCount" || c.kind === "runCount") && !String(c.count || "").trim())
+    c.count = "1";
+}
+
+/* ---------- what the conditions add up to ----------
+   Written out in letters rather than in the conditions themselves, which
+   would be a paragraph. A is the line's own check and the rest follow it down
+   the card, each row carrying its letter. */
+function logicSentence(more){
+  const list = more || [];
+  if (!list.length) return "";
+  const letter = (n) => String.fromCharCode(65 + n);
+  const word = (m) => (m.join === "or" ? "or" : "and");
+  let out = "A";
+  let i = 0;
+  while (i < list.length){
+    if (!list[i].group){
+      out += " " + word(list[i]) + " " + letter(i + 1);
+      i++;
+      continue;
+    }
+    const outer = word(list[i]);
+    let inner = "";
+    let howMany = 0;
+    while (i < list.length && list[i].group){
+      inner += (howMany ? " " + word(list[i]) + " " : "") + letter(i + 1);
+      howMany++;
+      i++;
+    }
+    out += " " + outer + " " + (howMany > 1 ? "(" + inner + ")" : inner);
+  }
+  return out;
+}
 
 function checklistPopup(block, isWeb){
   const kinds = isWeb ? WEB_CHECKS : PY_CHECKS;
+  /* Which cards are open. Held against the checks themselves rather than
+     against their positions, so moving one up or down does not open a
+     different line than the one that was being edited. Nothing about it is
+     saved: it is only a way of getting around a long checklist. */
+  const open = new Set();
+  if (block.checks.length === 1) open.add(block.checks[0]);
+
   openModal(box => {
     box.classList.add("narrow", "checkmodal");
     box.appendChild(el("h2","","Checklist"));
@@ -2534,17 +2697,50 @@ function checklistPopup(block, isWeb){
       if (!block.checks.length)
         list.appendChild(el("p","hint","Nothing yet, press \u201c+ New check\u201d."));
       block.checks.forEach((c, i) => {
-        const card = el("div","qsub");
-        const head = el("div","qsub-head");
-        const label = el("input"); label.className = "checkname";
-        label.value = c.label || "";
-        label.placeholder = "What the student sees";
-        label.addEventListener("input", () => { c.label = label.value; saveDraft(); });
-        head.appendChild(label);
+        const shut = !open.has(c);
+        const card = el("div","qsub checkcard");
+        const head = el("div","qsub-head checkhead");
+
+        /* Folded away, a line still has to say enough to pick it out by, so
+           the wording stays on show and only the settings go. */
+        const fold = el("button","btn-ghost bmini foldbtn", shut ? "\u25B8" : "\u25BE");
+        fold.type = "button";
+        fold.title = shut ? "Open this check" : "Fold this check away";
+        fold.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (shut) open.add(c); else open.delete(c);
+          paint();
+        });
+        head.appendChild(fold);
+
+        const said = el("span","checksum");
+        if (c.labelHtml) said.innerHTML = c.labelHtml;
+        else said.textContent = c.label || "";
+        if (!said.textContent.trim()){
+          said.textContent = "New check";
+          said.classList.add("empty");
+        }
+        said.title = shut ? "Open this check" : "Fold this check away";
+        said.addEventListener("click", () => {
+          if (shut) open.add(c); else open.delete(c);
+          paint();
+        });
+        head.appendChild(said);
+
+        /* What it looks for, in the words of the dropdown, so a folded line
+           says what sort of check it is without being opened. */
+        if (shut){
+          const what = c.manual === true ? "Teacher checks this"
+            : ((kinds.find(k => k[0] === (c.kind || kinds[0][0])) || [])[1] || "");
+          const extra = (Array.isArray(c.more) ? c.more.filter(m => m && (m.value || m.count || m.selector)) : []).length;
+          head.appendChild(el("span","checkkind",
+            what + (extra ? "  +" + extra + " more" : "")));
+        }
+
         const tools = el("span","btools");
         [["\u2191","Move up", () => { if (i){ block.checks.splice(i-1,0,block.checks.splice(i,1)[0]); saveDraft(); paint(); } }],
          ["\u2193","Move down", () => { if (i<block.checks.length-1){ block.checks.splice(i+1,0,block.checks.splice(i,1)[0]); saveDraft(); paint(); } }],
-         ["\u2715","Remove", () => { block.checks.splice(i,1); saveDraft(); paint(); }]
+         ["\u2715","Remove", () => { block.checks.splice(i,1); open.delete(c); saveDraft(); paint(); }]
         ].forEach(t => {
           const btn = el("button","btn-ghost bmini", t[0]);
           btn.title = t[1];
@@ -2554,6 +2750,28 @@ function checklistPopup(block, isWeb){
         head.appendChild(tools);
         card.appendChild(head);
 
+        /* A shut card stops here, the way a folded task does. Nothing below
+           this line exists in the page until it is opened. */
+        if (shut){ list.appendChild(card); return; }
+
+        /* The wording a student reads, which can be styled. Both versions are
+           written on every keystroke: the plain one is what marking and the
+           PDF read, and letting it fall behind would show a student one thing
+           and their teacher another. */
+        const nameField = el("div","bfield wide");
+        nameField.appendChild(el("label","","What the student sees"));
+        const ed = window.richText(c.labelHtml || asStyled(c.label),
+          (html) => {
+            c.labelHtml = html;
+            c.label = plainWords(html);
+            saveDraft();
+          },
+          { rows:1, lists:false, code:false, pictures:false,
+            placeholder:"What the student sees" });
+        ed.classList.add("checkname");
+        nameField.appendChild(ed);
+        card.appendChild(nameField);
+
         /* An assessment has to add a coding task up somehow, and the checklist
            is the only thing about it that can be judged automatically. Each
            line is worth however many marks the teacher says. */
@@ -2561,7 +2779,7 @@ function checklistPopup(block, isWeb){
           const mrow = el("div","bfield");
           mrow.appendChild(el("label","","Marks for this"));
           const mstep = el("div","stepper");
-          const mless = el("button","btn-ghost iconbtn","−");
+          const mless = el("button","btn-ghost iconbtn","\u2212");
           const mnum = el("input"); mnum.type = "number"; mnum.className = "stepnum";
           mnum.min = "0"; mnum.max = "20";
           if (c.marks === undefined) c.marks = 1;
@@ -2615,189 +2833,143 @@ function checklistPopup(block, isWeb){
         pick.value = c.kind || kinds[0][0];
         pick.addEventListener("change", () => {
           c.kind = pick.value;
-          /* so a check is never left with nothing to look for */
-          if (picksFromList(c.kind) && !c.value) c.value = USES_OPTIONS[0];
-          /* a count of nothing is a check that cannot be met, so it starts at
-             one rather than empty */
-          if ((c.kind === "usesCount" || c.kind === "codeCount") && !c.count) c.count = "1";
+          settleKind(c);
           saveDraft(); paint();
         });
         row.appendChild(pick);
         topRow.appendChild(row);
 
         /* the fields this kind of check needs, side by side on one row along
-           with the case switch and the button for another condition */
+           with the two matching switches and the button for another condition */
         const mainRow = el("div","checkrow");
         card.appendChild(mainRow);
-        const needs = (name, key, help) => {
-          const f = el("div","bfield checkfield grow");
-          f.appendChild(el("label","", name));
-          const inp = el("input");
-          inp.value = c[key] || "";
-          if (help) inp.placeholder = help;
-          inp.addEventListener("input", () => { c[key] = inp.value; saveDraft(); });
-          f.appendChild(inp);
-          mainRow.appendChild(f);
-        };
-        /* the list of Python things, for the two kinds that pick from it */
-        const whichOne = () => {
-          const f = el("div","bfield checkfield grow");
-          f.appendChild(el("label","","Which one"));
-          const sel = document.createElement("select");
-          USES_OPTIONS.forEach(o2 => {
-            const o = document.createElement("option");
-            o.value = o2; o.textContent = o2;
-            sel.appendChild(o);
-          });
-          sel.value = c.value || USES_OPTIONS[0];
-          sel.addEventListener("change", () => { c.value = sel.value; saveDraft(); });
-          f.appendChild(sel);
-          mainRow.appendChild(f);
-        };
+        checkFields(c, mainRow, kinds, paint);
 
-        /* How many, and whether that is a floor, a ceiling or the exact
-           number. "At least" is what a checklist usually means, so it leads;
-           "exactly" is for when the shape of the answer is the point, three
-           elifs and no more, and "at most" is for pushing them off a habit,
-           such as one input where they wrote five. */
-        const howMany = () => {
-          const f = el("div","bfield checkfield");
-          f.appendChild(el("label","","How many"));
-          const pair = el("div","countpair");
-          const sel = document.createElement("select");
-          [["atLeast","at least"],["exactly","exactly"],["atMost","at most"]].forEach(o2 => {
-            const o = document.createElement("option");
-            o.value = o2[0]; o.textContent = o2[1];
-            sel.appendChild(o);
-          });
-          sel.value = c.compare || "atLeast";
-          sel.addEventListener("change", () => { c.compare = sel.value; saveDraft(); });
-          pair.appendChild(sel);
-          const num = el("input");
-          num.type = "number"; num.min = "0"; num.max = "99";
-          num.value = c.count === undefined || c.count === "" ? "1" : String(c.count);
-          num.addEventListener("input", () => { c.count = num.value; saveDraft(); });
-          pair.appendChild(num);
-          f.appendChild(pair);
-          mainRow.appendChild(f);
-        };
+        /* The two matching switches, the way an editor's search bar shows
+           them: a letter pair for capitals and a space mark for spaces, each
+           struck through while that thing is being ignored. They sit against
+           the boxes they apply to rather than under headings of their own,
+           which is what made these cards taller than they needed to be.
 
+           They belong to the line rather than to one box on it, so they are
+           shown as soon as anything on the line compares typed words, whether
+           that is the check itself or a condition on it. */
         const kind = c.kind || kinds[0][0];
-        if (kind === "uses") whichOne();
-        else if (kind === "usesCount"){ whichOne(); howMany(); }
-        else if (kind === "codeCount"){
-          needs("Text to count", "value", "elif");
-          howMany();
-        }
-        else if (kind === "lineCount") needs("How many lines", "count", "5");
-        else if (kind === "runCount") needs("How many times", "count", "1");
-        else if (kind === "tag") needs("Tag name", "selector", "h1");
-        else if (kind === "classOrId") needs("Class or id", "selector", ".title or #header");
-        else if (kind === "attr"){
-          needs("Element", "selector", "img");
-          needs("Attribute", "attr", "src");
-          needs("Value (optional)", "value", "cat.png");
-        }
-        else if (kind === "cssHas"){
-          needs("Selector", "selector", ".title");
-          needs("Property", "property", "color");
-          needs("Value (optional)", "value", "red");
-        }
-        else if (kind === "fileHas"){
-          const f = el("div","bfield checkfield");
-          f.appendChild(el("label","","Which file"));
-          const sel = document.createElement("select");
-          [["html","HTML"],["css","CSS"],["js","JavaScript"]].forEach(o2 => {
-            const o = document.createElement("option");
-            o.value = o2[0]; o.textContent = o2[1];
-            sel.appendChild(o);
-          });
-          sel.value = c.file || "html";
-          sel.addEventListener("change", () => { c.file = sel.value; saveDraft(); });
-          f.appendChild(sel);
-          mainRow.appendChild(f);
-          needs("Text to look for", "value", "console.log");
-        }
-        else needs("Text to look for", "value", "");
-
-        /* The case switch, the way an editor's search bar shows it: Aa, with a
-           line through it while capitals are being ignored. It sits against the
-           box it applies to rather than under a heading of its own, which is
-           what made these cards taller than they needed to be. */
-        if (CASED_KINDS.indexOf(kind) >= 0){
-          const on = c.caseSensitive === true;
-          const cbtn = el("button","casebtn" + (on ? " on" : ""), "Aa");
+        const anyCased = CASED_KINDS.indexOf(kind) >= 0 ||
+          (Array.isArray(c.more) && c.more.some(m => CASED_KINDS.indexOf(m.kind) >= 0));
+        if (anyCased){
+          const caseOn = c.caseSensitive === true;
+          const cbtn = el("button","casebtn" + (caseOn ? " on" : ""), "Aa");
           cbtn.type = "button";
-          cbtn.title = on ? "Capitals must match what you typed. Click to ignore them."
-                          : "Capitals are ignored, so Print and print both count. Click to match them exactly.";
+          cbtn.title = caseOn ? "Capitals must match what you typed. Click to ignore them."
+                              : "Capitals are ignored, so Print and print both count. Click to match them exactly.";
           cbtn.setAttribute("aria-label", cbtn.title);
-          cbtn.addEventListener("click", () => { c.caseSensitive = !on; saveDraft(); paint(); });
+          cbtn.addEventListener("click", () => { c.caseSensitive = !caseOn; saveDraft(); paint(); });
           mainRow.appendChild(cbtn);
+
+          const spaceOn = c.exactSpace === true;
+          const sbtn = el("button","casebtn spacebtn" + (spaceOn ? " on" : ""), "\u2423");
+          sbtn.type = "button";
+          sbtn.title = spaceOn
+            ? "Match exactly: the spaces have to be where you put them. Click to ignore them."
+            : "Spaces are ignored, so \u201cx > 17\u201d also finds \u201cx>17\u201d. Click to match exactly.";
+          sbtn.setAttribute("aria-label", sbtn.title);
+          sbtn.addEventListener("click", () => { c.exactSpace = !spaceOn; saveDraft(); paint(); });
+          mainRow.appendChild(sbtn);
         }
 
         /* ---------- extra conditions ----------
            One line of a checklist sometimes has to ask for two things at once:
-           "uses an input, and that input mentions food". Each extra condition
-           says how it joins on, what to look for, and where to look. Where is
-           the part that matters: "in what was just found" narrows it to the
-           lines the condition before it matched, so the two halves are about
-           the same piece of code rather than anywhere in the file. */
+           "uses an input, and that input mentions food". A condition is a
+           whole check in its own right, so it can be any of the same kinds.
+           Each one says how it joins on, what to look for, and where to look.
+           Where is the part that matters: "this line" narrows it to the lines
+           the condition before it matched, so the two halves are about the
+           same piece of code rather than anywhere in the file. */
         if (!Array.isArray(c.more)) c.more = [];
         c.more.forEach((m, mi) => {
-          const mr = el("div","morecond");
-          const top = el("div","brow");
-          const joinBtn = el("button","btn-ghost bmini2", (m.join === "or" ? "or" : "and"));
+          const mr = el("div","morecond" + (m.group ? " grouped" : ""));
+          const top = el("div","brow condtop");
+
+          top.appendChild(el("span","condletter", String.fromCharCode(66 + mi)));
+
+          const joinBtn = el("button","btn-ghost bmini2 joinbtn", (m.join === "or" ? "or" : "and"));
           joinBtn.type = "button";
           joinBtn.title = "Both must be true, or either one";
           joinBtn.addEventListener("click", () => { m.join = (m.join === "or") ? "and" : "or"; saveDraft(); paint(); });
           top.appendChild(joinBtn);
 
+          /* Brackets, one deep. A bracketed condition goes with the bracketed
+             ones straight above it, which is the difference between
+             "A and B or C" and "A and (B or C)". Deeper than one and a
+             teacher would have to count brackets to know what their own
+             checklist asks for. */
+          const grpBtn = el("button","casebtn brackbtn" + (m.group ? " on" : ""), "( )");
+          grpBtn.type = "button";
+          grpBtn.title = m.group
+            ? "In brackets with the one above. Click to take it out of them."
+            : "Click to put this in brackets with the one above.";
+          grpBtn.setAttribute("aria-label", grpBtn.title);
+          grpBtn.addEventListener("click", () => { m.group = !m.group; saveDraft(); paint(); });
+          top.appendChild(grpBtn);
+
           const kindSel = document.createElement("select");
-          [["codeHas","the code contains..."],["codeLacks","the code avoids..."],
-           ["outputHas","the output contains..."]].forEach(k => {
+          kinds.forEach(k => {
             const o = document.createElement("option");
             o.value = k[0]; o.textContent = k[1];
             kindSel.appendChild(o);
           });
           kindSel.value = m.kind || "codeHas";
-          kindSel.addEventListener("change", () => { m.kind = kindSel.value; saveDraft(); paint(); });
+          kindSel.addEventListener("change", () => {
+            m.kind = kindSel.value; settleKind(m); saveDraft(); paint();
+          });
           top.appendChild(kindSel);
 
-          const val = el("input");
-          val.placeholder = "What to look for";
-          val.value = m.value || "";
-          val.addEventListener("input", () => { m.value = val.value; saveDraft(); });
-          top.appendChild(val);
-
           const scopeSel = document.createElement("select");
-          [["all","look anywhere"],["match","look in what was just found"]].forEach(k => {
+          [["all","anywhere"],["match","this line"]].forEach(k => {
             const o = document.createElement("option");
             o.value = k[0]; o.textContent = k[1];
             scopeSel.appendChild(o);
           });
           scopeSel.value = m.scope || "all";
           scopeSel.addEventListener("change", () => { m.scope = scopeSel.value; saveDraft(); });
-          /* the output is its own text, so narrowing to code found earlier
-             would be asking it to look in the wrong place */
-          scopeSel.disabled = (m.kind === "outputHas");
+          /* the output and the number of runs are not in the code, so
+             narrowing to lines found earlier would look in the wrong place */
+          scopeSel.disabled = !readsCode(m.kind || "codeHas");
           top.appendChild(scopeSel);
 
-          const del = el("button","btn-ghost bmini","×");
+          const del = el("button","btn-ghost bmini","\u00D7");
           del.title = "Remove this condition";
           del.addEventListener("click", () => { c.more.splice(mi,1); saveDraft(); paint(); });
           top.appendChild(del);
           mr.appendChild(top);
+
+          /* the same fields the line itself gets, because it is the same
+             sort of thing being asked for */
+          const condRow = el("div","checkrow condfields");
+          checkFields(m, condRow, kinds, paint);
+          mr.appendChild(condRow);
           card.appendChild(mr);
         });
         const addMore = el("button","btn-ghost bmini2 addcond","Add another condition");
         addMore.addEventListener("click", () => {
           c.more.push({ join:"and", kind:"codeHas", value:"", scope:"all" });
+          open.add(c);
           saveDraft(); paint();
         });
         /* on the same row as the box it adds a condition to, not under it */
         mainRow.appendChild(addMore);
-        if (c.more.length > 1)
-          mainRow.appendChild(helpDot("Read left to right: “A and B or C” means “(A and B) or C”."));
+        if (c.more.length){
+          const sum = el("div","logicline");
+          sum.appendChild(el("span","logiclead","Ticked when"));
+          sum.appendChild(el("b","logicsum", logicSentence(c.more)));
+          sum.appendChild(helpDot([
+            "A is what the line itself looks for, and the letters after it are the conditions under it.",
+            "Read left to right, so \u201cA and B or C\u201d means \u201c(A and B) or C\u201d.",
+            "The ( ) button puts a condition in brackets with the one above it, which is how you write \u201cA and (B or C)\u201d."
+          ]));
+          card.appendChild(sum);
+        }
 
         /* Last, so it applies whatever kind of check this is. Left empty, the
            built-in wording is used. Teacher-checked lines never reach here:
@@ -2819,7 +2991,12 @@ function checklistPopup(block, isWeb){
     const add = el("button","btn-ghost bmini2","+ New check");
     add.addEventListener("click", () => {
       const first = kinds[0][0];
-      block.checks.push({ label:"", kind: first, value: picksFromList(first) ? USES_OPTIONS[0] : "" });
+      const made = { label:"", labelHtml:"", kind: first,
+                     value: picksFromList(first) ? USES_OPTIONS[0] : "" };
+      block.checks.push(made);
+      /* whatever was just added is the thing being written, so it opens */
+      open.clear();
+      open.add(made);
       saveDraft(); paint();
     });
     box.appendChild(add);
@@ -2827,11 +3004,11 @@ function checklistPopup(block, isWeb){
     done.addEventListener("click", () => {
       block.checks = block.checks.filter(c => (c.label || "").trim());
       block.checks.forEach(c => {
-        if (picksFromList(c.kind) && !c.value) c.value = USES_OPTIONS[0];
-        /* left empty in the box, a count would save as nothing and read back
-           as zero, which passes whatever the student writes */
-        if ((c.kind === "usesCount" || c.kind === "codeCount") && !String(c.count || "").trim())
-          c.count = "1";
+        settleKind(c);
+        /* styling that has been taken back off is not worth saving, and an
+           empty one would beat the plain wording when the line is drawn */
+        if (!plainWords(c.labelHtml)) delete c.labelHtml;
+        (Array.isArray(c.more) ? c.more : []).forEach(settleKind);
       });
       closeModal(); render(); schedulePreview();
     });

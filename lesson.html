@@ -2067,6 +2067,24 @@ function goToTask(i){
   setTimeout(() => t.el.classList.remove("justopened"), 1400);
 }
 
+/* Bring anything else in the stage into view, and say when it has got there.
+   Everything about how it moves is the same as goToTask above, including
+   going there outright when the slide never starts: a smooth scroll is a
+   request, not a promise. */
+function scrollStageTo(target, then){
+  const stage = $("stage");
+  if (!stage || !target){ if (then) then(); return; }
+  let smooth = true;
+  try{ smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
+  const from = stage.scrollTop;
+  const top = Math.max(0, from + target.getBoundingClientRect().top
+                            - stage.getBoundingClientRect().top - 10);
+  stage.scrollTo({ top: top, behavior: smooth ? "smooth" : "auto" });
+  if (smooth && top !== from)
+    setTimeout(() => { if (stage.scrollTop === from) stage.scrollTop = top; }, 250);
+  setTimeout(() => { if (then) then(); }, smooth ? 420 : 0);
+}
+
 let lastSubmittedPayload = "";
 
 /* Warn before leaving with work that has not reached the teacher. The
@@ -3175,6 +3193,28 @@ function refreshChecklistMode(){
   allChecklists.forEach(l => { try{ l.allowManual(!!teacherTools); }catch(e){} });
 }
 
+/* ---------- when a run ticks something off ----------
+   A student presses Run, watches the console, and the list above the editor
+   changes behind their back. Nothing said that anything had happened, let
+   alone which line it was. So: a tick over the console once the program has
+   finished, then the page comes back up to the checklist and points at the
+   line that has just gone green.
+
+   Once the program has finished, not once Run has been pressed. Half way
+   through, sitting on an input, it has not done what it is going to do yet,
+   and ticking something off then teaches a student to stop watching. */
+function cheerChecklist(over, holder, list, fresh){
+  const point = () => fresh.forEach(i => list.point(i));
+  if (!over){ scrollStageTo(holder, point); return; }
+  const tick = el("div","ide-cheer");
+  tick.appendChild(el("b","","\u2713"));
+  over.appendChild(tick);
+  setTimeout(() => {
+    tick.remove();
+    scrollStageTo(holder, point);
+  }, 1000);
+}
+
 function attachChecklist(section, checks, runner, blockId){
   if (!checks || !checks.length || !window.buildChecklist) return null;
   let last = null;                    // what the checks said the last time they ran
@@ -3195,8 +3235,14 @@ function attachChecklist(section, checks, runner, blockId){
   else section.appendChild(holder);
 
   /* The list is ticked off every time they run their code, so there is
-     nothing extra to remember to press. */
-  function refresh(){
+     nothing extra to remember to press.
+
+     `cheerOver` is the box to put the tick over when this run has finished a
+     program off. Left out, the list changes quietly, which is what every
+     other reason for running the checks wants: opening the task, putting
+     saved work back, a run that is still waiting on an input. */
+  function refresh(cheerOver){
+    const before = cheerOver ? list.ticked() : null;
     let results;
     try{ results = runner(); }
     catch(e){
@@ -3206,6 +3252,11 @@ function attachChecklist(section, checks, runner, blockId){
     if (!Array.isArray(results)) return false;
     last = results;
     const all = list.show(results);
+    if (before){
+      const fresh = [];
+      list.ticked().forEach((on, i) => { if (on && !before[i]) fresh.push(i); });
+      if (fresh.length) cheerChecklist(cheerOver, holder, list, fresh);
+    }
     markDirty();
     return all;
   }
@@ -3397,6 +3448,11 @@ function rIDE(b){
      program printing hello, pausing, then asking a question, and the same
      program showing an empty console for two seconds and then all three at
      once with the question already asked. */
+  /* Whether this run was started by a student pressing Run, which is the only
+     kind worth making anything of. Put back down as soon as the program
+     finishes, so answering an input does not cheer a second time. */
+  let cheerNext = false;
+
   let playRun = 0;      // bumped to abandon a playback that is still in flight
   let shownSteps = 0;   // how much of the timeline they have already sat through
   const pause = (secs) => new Promise(go => setTimeout(go, Math.max(0, secs) * 1000));
@@ -3445,7 +3501,8 @@ function rIDE(b){
     askRow.hidden = true;
     if (!lastOut) out.textContent = "(your program printed nothing)";
     ran = true; runs++;
-    if (checklist) checklist.refresh();
+    if (checklist) checklist.refresh(cheerNext ? side : null);
+    cheerNext = false;
     if (b.expect && res.ok){
       const good = lastOut.toLowerCase().includes(String(b.expect).toLowerCase());
       note.hidden = false;
@@ -3460,7 +3517,8 @@ function rIDE(b){
   const checklist = attachChecklist(s, b.checks,
     () => window.runPythonChecks(b.checks, ta.value, lastOut, runs), b.id);
 
-  async function run(){
+  async function run(cheer){
+    cheerNext = !!cheer;
     runBtn.disabled = true;
     const label = runBtn.textContent;
     runBtn.textContent = "Running\u2026";
@@ -3491,7 +3549,7 @@ function rIDE(b){
       await execute();
     }catch(err){ askRow.hidden = true; }
   });
-  runBtn.addEventListener("click", run);
+  runBtn.addEventListener("click", () => run(true));
   clearBtn.addEventListener("click", () => {
     playRun++;          // stops anything still arriving from the run before
     shownSteps = 0;
@@ -4028,26 +4086,43 @@ function rWeb(b){
       logLine(d.kind, d.text);
     });
   }
+  /* The three files as they stand, which is what both the preview and the
+     checklist are built from. Written once rather than twice, because they
+     were not the same: the checklist asked for code.html, code.css and
+     code.js, and the files are kept under their real names, index.html and
+     the rest. All three came back undefined, so every checklist on an HTML
+     task was being run against three empty files and could only ever tick off
+     a line that passes on nothing at all. */
+  function codeNow(){
+    code[current] = ta.value;
+    const mainName = order.find(n => kindOf[n] === "html") || order[0];
+    return {
+      html: code[mainName] || "",
+      css: order.filter(n => kindOf[n] === "css").map(n => code[n]).join("\n"),
+      js:  order.filter(n => kindOf[n] === "js").map(n => code[n]).join("\n;\n")
+    };
+  }
+
   /* the teacher's checklist, run against all three files. Declared before
      run() so it can tick itself off once the page has been built. */
   const checklist = attachChecklist(s, b.checks,
-    () => window.runWebChecks(b.checks, { html: code.html, css: code.css, js: code.js }, runs), b.id);
+    () => window.runWebChecks(b.checks, codeNow(), runs), b.id);
 
-  function run(){
-    code[current] = ta.value;
+  /* `cheer` is true only when a student pressed Run. The page runs this by
+     itself when the task opens and again when saved work is put back, and
+     neither of those is something anyone has just done. */
+  function run(cheer){
+    /* the main page, plus every stylesheet and script the student has */
+    const now = codeNow();
     out.innerHTML = ""; lastOut = "";
     tabConsole.classList.remove("shout");
     showTab("preview");
-    /* the main page, plus every stylesheet and script the student has */
-    const mainName = order.find(n => kindOf[n] === "html") || order[0];
-    const allCss = order.filter(n => kindOf[n] === "css").map(n => code[n]).join("\n");
-    const allJs = order.filter(n => kindOf[n] === "js").map(n => code[n]).join("\n;\n");
     const page = window.webAssemble
-      ? window.webAssemble(code[mainName] || "", allCss, allJs)
-      : (code[mainName] || "");
+      ? window.webAssemble(now.html, now.css, now.js)
+      : now.html;
     frame.srcdoc = page;
     ran = true; runs++;
-    if (checklist) checklist.refresh();
+    if (checklist) checklist.refresh(cheer ? side : null);
     if (b.expect){
       const good = (code.html + code.css + code.js).toLowerCase().includes(String(b.expect).toLowerCase());
       note.hidden = false;
@@ -4056,7 +4131,7 @@ function rWeb(b){
     }
     markDirty();
   }
-  runBtn.addEventListener("click", run);
+  runBtn.addEventListener("click", () => run(true));
   resetBtn.addEventListener("click", () => {
     if (ta.value === (starters[current] || "")) return;
     const back = el("div","modal-back");
@@ -4080,7 +4155,7 @@ function rWeb(b){
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
     document.body.appendChild(back);
   });
-  if (canRun) setTimeout(run, 60);           // show something straight away
+  if (canRun) setTimeout(() => run(), 60);   // show something straight away
 
   fields[b.id] = {
     get:() => {

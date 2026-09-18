@@ -356,36 +356,42 @@
     sizeDown.addEventListener("click", () => stepSize(-2));
     sizeUp.addEventListener("click", () => stepSize(2));
     sizeBox.addEventListener("change", () => applySize(parseInt(sizeBox.value, 10)));
-    tool("&bull;", "Bullet list", () => { cmd("insertUnorderedList"); refreshState(); }, "rt-bullet");
-    /* numbered lists come in two kinds, so this one offers a choice */
-    const numBtn = tool("1.", "Numbered list", () => {}, "rt-numbtn");
-    const numMenu = document.createElement("div");
-    numMenu.className = "rt-palette rt-nummenu";
-    numMenu.hidden = true;
-    [["1. 2. 3.", ""], ["a. b. c.", "lower-alpha"]].forEach(pair => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "rt-auto-btn";
-      b.textContent = pair[0];
-      b.addEventListener("mousedown", (e) => e.preventDefault());
-      b.addEventListener("click", () => {
-        restore(saved);
-        cmd("insertOrderedList");
-        if (pair[1]) markList(pair[1]);
-        numMenu.hidden = true;
-        box.focus(); fire();
+    /* Lists are left out where the box holds one line rather than a passage:
+       a checklist line is a line, and a bullet inside it would draw a second
+       list inside the one it already sits in. refreshState looks these up by
+       class and does nothing when they are not there. */
+    if (o.lists !== false){
+      tool("&bull;", "Bullet list", () => { cmd("insertUnorderedList"); refreshState(); }, "rt-bullet");
+      /* numbered lists come in two kinds, so this one offers a choice */
+      const numBtn = tool("1.", "Numbered list", () => {}, "rt-numbtn");
+      const numMenu = document.createElement("div");
+      numMenu.className = "rt-palette rt-nummenu";
+      numMenu.hidden = true;
+      [["1. 2. 3.", ""], ["a. b. c.", "lower-alpha"]].forEach(pair => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "rt-auto-btn";
+        b.textContent = pair[0];
+        b.addEventListener("mousedown", (e) => e.preventDefault());
+        b.addEventListener("click", () => {
+          restore(saved);
+          cmd("insertOrderedList");
+          if (pair[1]) markList(pair[1]);
+          numMenu.hidden = true;
+          box.focus(); fire();
+        });
+        numMenu.appendChild(b);
       });
-      numMenu.appendChild(b);
-    });
-    document.body.appendChild(numMenu);
-    numBtn.addEventListener("mousedown", () => { saved = save(); });
-    numBtn.addEventListener("click", () => {
-      if (!numMenu.hidden){ numMenu.hidden = true; return; }
-      openMenuAt(numBtn, numMenu);
-    });
-    document.addEventListener("pointerdown", (e) => {
-      if (!numMenu.hidden && !numMenu.contains(e.target) && e.target !== numBtn) numMenu.hidden = true;
-    });
+      document.body.appendChild(numMenu);
+      numBtn.addEventListener("mousedown", () => { saved = save(); });
+      numBtn.addEventListener("click", () => {
+        if (!numMenu.hidden){ numMenu.hidden = true; return; }
+        openMenuAt(numBtn, numMenu);
+      });
+      document.addEventListener("pointerdown", (e) => {
+        if (!numMenu.hidden && !numMenu.contains(e.target) && e.target !== numBtn) numMenu.hidden = true;
+      });
+    }
 
     /* remember which kind of numbering a list uses */
     function markList(style){

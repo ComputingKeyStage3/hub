@@ -2414,6 +2414,68 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 
 .checklist[data-all-done=yes]{border-color:var(--mint)}
 
+/* A teacher can style the wording of a line, and a ticked line still has to
+   read as finished. Strikethrough carries down to the styled words on its
+   own; the colour does not, so a red word stayed red and loud on a job that
+   was already done. Inline styles are what this has to beat. */
+.check[data-state=yes] .check-text *{color:inherit !important}
+
+/* ---------- what a run just ticked off ----------
+   The list sits above the editor and a student watching the console never
+   sees it change. After a program has finished, the page comes back up to the
+   checklist and says which line went green. */
+.check.justticked{
+  --tick-glow:checkglow 2.2s ease-out;
+  animation:var(--tick-glow);
+  border-radius:8px;
+}
+@keyframes checkglow{
+  0%,22%{background:color-mix(in srgb, var(--mint) 32%, transparent)}
+  100%{background:transparent}
+}
+.check.justticked .check-mark{
+  --tick-pop:checkpop .55s cubic-bezier(.2,1.4,.4,1);
+  animation:var(--tick-pop);
+}
+@keyframes checkpop{
+  0%{transform:scale(.3)} 62%{transform:scale(1.32)} 100%{transform:scale(1)}
+}
+
+/* The tick over the console, which is where they are looking when the
+   program stops. It sits over the whole output side rather than over the text
+   in it, so a turtle drawing or a web page gets the same one. */
+.ide-side{position:relative}
+.ide-cheer{
+  position:absolute; inset:0; display:flex; align-items:center;
+  justify-content:center; pointer-events:none; z-index:6;
+  --cheer-in:cheerpop .9s ease-out both;
+  animation:var(--cheer-in);
+}
+.ide-cheer b{
+  display:flex; align-items:center; justify-content:center;
+  width:88px; height:88px; border-radius:50%;
+  background:var(--mint); color:#fff; font-size:46px; line-height:1;
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
+}
+@keyframes cheerpop{
+  0%{opacity:0; transform:scale(.4)}
+  35%{opacity:1; transform:scale(1.06)}
+  55%{transform:scale(1)}
+  100%{opacity:.92; transform:scale(1)}
+}
+/* ...and these run even where Windows has effects turned off. Every machine
+   in the school reports prefers-reduced-motion, and the blanket rule near the
+   top of this file stops every animation on the site. These three carry the
+   only thing that says which line was ticked, so without them a student is
+   looking at a list where one circle has quietly changed and nothing at all
+   points at it. Each animation is kept in a custom property where it is
+   defined, so this line only has to name it again. */
+@media (prefers-reduced-motion:reduce){
+  .check.justticked{animation:var(--tick-glow) !important}
+  .check.justticked .check-mark{animation:var(--tick-pop) !important}
+  .ide-cheer{animation:var(--cheer-in) !important}
+}
+
 /* the pill swaps its wording when pointed at, rather than adding to it */
 .statechip{cursor:pointer; font-family:var(--body); border:1px solid transparent}
 .chip-when{display:none}
@@ -2461,12 +2523,11 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   .modal, .modal.wide, .modal.narrow{ max-height:100vh; border-radius:0 }
 }
 
-/* the name of a check reads like every other field */
-.checkname{width:100%; height:40px; padding:0 12px; margin-right:10px;
-  border:1.5px solid var(--line-2); border-radius:10px; background:var(--panel);
-  color:var(--text); font-family:var(--body); font-size:15px}
-.checkname:focus{border-color:var(--amber); outline:none;
-  box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 15%, transparent)}
+/* The wording of a check is a styled box now rather than a plain one, so it
+   only needs to be kept to one line's worth of room. The border, the radius
+   and the focus ring all come from .rt, which every other styled box on the
+   site uses. */
+.rt.checkname .rt-box{min-height:46px; padding:10px 12px; font-size:15px}
 
 /* the icon inside a bar button */
 .homebar .btn-ghost .ico{ display:inline-block }
@@ -3431,9 +3492,7 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
 
 /* an extra condition on a checklist line */
 .morecond{border-left:2px solid var(--line-2); padding-left:10px; margin-left:2px}
-.morecond .brow{flex-wrap:wrap; gap:6px; align-items:center}
 .morecond select, .morecond input{min-width:0}
-.morecond input{flex:1 1 130px}
 
 /* ---------- a checklist card in the pop-up ----------
    These stack up, so each one uses the width it has rather than making a
@@ -3471,14 +3530,72 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
 }
 .casebtn.on{border-color:var(--amber); background:var(--amber); color:var(--amber-ink)}
 .casebtn.on::after{display:none}
+/* The space mark, drawn rather than typed. U+2423 is the right character for
+   it and the fonts here draw it as a hairline a few pixels tall sitting on the
+   baseline: beside a solid Aa it read as an empty button. This is the same
+   shape, at a size that can be seen, and it looks the same in every font. The
+   character stays in the button for anything reading the page out, which is
+   what the aria-label is for as well. */
+.spacebtn{display:inline-flex; align-items:center; justify-content:center; font-size:0}
+.spacebtn::before{
+  content:""; display:block; width:16px; height:8px;
+  border:2px solid currentColor; border-top:none; border-radius:0 0 2px 2px;
+}
+.brackbtn{width:40px; font-size:14px; letter-spacing:0}
+/* A finger needs the width as well as the height. The blanket 44px minimum
+   further up only sets min-height, which left these as tall lozenges. */
+@media (pointer:coarse){ .casebtn{min-width:44px; min-height:44px; width:auto} }
+
+/* ---------- a folded check ----------
+   A long checklist was a column of open cards that had to be scrolled past to
+   reach the one being written, which is the same problem the tasks on a page
+   have and gets the same answer. Folded, a line keeps its wording and what
+   sort of check it is, which is enough to pick it out by. */
+.checkhead{gap:8px; cursor:default}
+.checksum{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; font-weight:700; font-size:15px; color:var(--text);
+  cursor:pointer}
+.checksum.empty{font-weight:400; color:var(--dim); font-style:italic}
+.checksum b, .checksum i, .checksum u{font-weight:inherit}
+.checkkind{flex:none; font-size:12.5px; color:var(--dim); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; max-width:42%}
+.checkcard .foldbtn{margin:0}
+@media (max-width:560px){ .checkkind{display:none} }
+
+/* ---------- a condition ----------
+   Two rows: what it is and where it looks on the first, then whatever that
+   kind of check needs on the second. It was one row of three boxes when a
+   condition could only be one of three things; now that it can be any kind
+   it has the same fields as the line itself. */
+.condtop{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:8px}
+.condtop select{flex:1 1 130px; min-width:0; height:44px; padding:0 12px;
+  font-size:15px; font-family:var(--body)}
+.condletter{flex:none; width:24px; height:24px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--panel); border:1.5px solid var(--line-2);
+  font-size:12px; font-weight:800; color:var(--dim)}
+.joinbtn{flex:none; min-width:54px; text-align:center}
+.condfields{margin-bottom:0}
+.condfields:empty{display:none}
+/* Bracketed with the one above: the line down the side says which ones are
+   inside the same pair, and the step in says they are not part of the run
+   the line itself is read as. */
+.morecond.grouped{margin-left:16px; border-left-color:var(--amber)}
+
+/* ---------- what the conditions add up to ----------
+   Letters rather than the conditions themselves, which would be a paragraph.
+   A is the line's own check and the rest follow it down the card. */
+.logicline{display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  margin:2px 0 10px; font-size:13px}
+.logiclead{color:var(--dim); font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; font-size:11.5px}
+.logicsum{font-family:var(--mono); font-size:13.5px; color:var(--text)}
 
 /* an extra condition uses the width too */
 .morecond{border-left:2px solid var(--line-2); padding-left:10px; margin:0 0 8px 2px}
-.morecond .brow{display:flex; flex-wrap:nowrap; gap:6px; align-items:center}
-.morecond select{flex:1 1 auto; min-width:110px; height:44px; padding:0 12px;
-  font-size:15px; font-family:var(--body)}
-.morecond input{flex:2 1 120px; min-width:0; font-size:15px; padding:9px 11px}
-@media (max-width:640px){ .morecond .brow{flex-wrap:wrap} }
+/* The fields under the top row are ordinary builder fields, a label above a
+   box, and they size themselves. Only the row of controls is laid out here. */
+.morecond .condfields input, .morecond .condfields select{flex:0 1 auto; height:auto}
 
 /* The bar is three pixels tall, which is far too small a thing to ask anyone
    to hit. This reaches out well above and below it, and half way across the
