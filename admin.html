@@ -2153,7 +2153,7 @@ async function loadResets(){
     if (!mine.length) return;
     const card = el("div","station"); card.style.marginBottom = "18px";
     card.appendChild(el("b","","Password help requested"));
-    card.appendChild(el("p","hint","Approving lets them sign in with an empty password box and choose a new one."));
+    card.appendChild(el("p","hint","Approving lets them sign in with an empty password box and choose a new one. A request only waits 5 minutes, then it goes and they ask again."));
     mine.forEach(x => {
       const line = el("div","who-row");
       line.appendChild(el("span","nm", x.display_name + " (" + x.username + ")"));
@@ -2169,7 +2169,14 @@ async function loadResets(){
 }
 async function resetAction(action, username){
   try{
-    await fetch(API + "/api/teacher/" + action, { method:"POST", headers: HJ(), body: JSON.stringify({ username }) });
+    const r = await fetch(API + "/api/teacher/" + action, { method:"POST", headers: HJ(), body: JSON.stringify({ username }) });
+    if (!r.ok){
+      /* Nearly always the five minutes running out between the request
+         appearing and Approve being pressed. Without this the row simply
+         vanishes and the child in front of you is still locked out. */
+      const d = await r.json().catch(() => ({}));
+      say("That did not go through", d.error || "Please try again.");
+    }
   }catch(e){}
   loadResets(); loadStudents();
 }
@@ -3701,7 +3708,7 @@ async function loadResetQueue(){
     $("pwCount").textContent = list.length;
     $("pwCount").hidden = !list.length;
     const box = $("pwList"); box.innerHTML = "";
-    if (!list.length){ box.appendChild(el("p","hint","Nothing waiting. Requests appear here within a few seconds of a student asking.")); return; }
+    if (!list.length){ box.appendChild(el("p","hint","Nothing waiting. Requests appear here within a few seconds of a student asking, and go again 5 minutes later.")); return; }
     list.forEach(x => {
       const line = el("div","who-row");
       line.appendChild(el("span","nm", x.display_name + " \u00b7 " + x.username + (x.group_name ? " \u00b7 " + x.group_name : "")));

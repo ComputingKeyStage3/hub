@@ -678,7 +678,7 @@ async function pollReset(){
   tickCountdown();
   if (Date.now() > rsDeadline){
     stopReset();
-    say("Time ran out", "Teacher did not approve your password quick enough. Please try reset your password again.");
+    say("Time ran out", "Your teacher did not approve your new password within 5 minutes, so it has gone. Press Forgot password again to have another go.");
     return;
   }
   try{
