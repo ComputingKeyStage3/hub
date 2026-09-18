@@ -2702,6 +2702,12 @@ function checklistPopup(block, isWeb){
     box.appendChild(list);
 
     function paint(){
+      /* Every button in here rebuilds the whole list, which threw the pop-up
+         back to the top: pressing the brackets on the fourth check jumped to
+         the first one. What was pressed is where they are looking, so put them
+         back exactly where they were. */
+      const scroller = list.closest(".modal-scroll");
+      const wasAt = scroller ? scroller.scrollTop : 0;
       list.innerHTML = "";
       if (!block.checks.length)
         list.appendChild(el("p","hint","Nothing yet, press \u201c+ New check\u201d."));
@@ -2892,9 +2898,13 @@ function checklistPopup(block, isWeb){
            "uses an input, and that input mentions food". A condition is a
            whole check in its own right, so it can be any of the same kinds.
            Each one says how it joins on, what to look for, and where to look.
-           Where is the part that matters: "this line" narrows it to the lines
-           the condition before it matched, so the two halves are about the
-           same piece of code rather than anywhere in the file. */
+
+           Where is the part that matters. "This line" narrows it to the lines
+           the thing before it matched, so the two halves are about the same
+           piece of code rather than anywhere in the file. "This block" is what
+           is written inside those lines: pick "uses an if" and a condition
+           inside the block asks about what the if actually does, rather than
+           about the condition on it. */
         if (!Array.isArray(c.more)) c.more = [];
         c.more.forEach((m, mi) => {
           const mr = el("div","morecond" + (m.group ? " grouped" : ""));
@@ -2935,7 +2945,7 @@ function checklistPopup(block, isWeb){
           top.appendChild(kindSel);
 
           const scopeSel = document.createElement("select");
-          [["all","anywhere"],["match","this line"]].forEach(k => {
+          [["all","anywhere"],["match","this line"],["block","this block"]].forEach(k => {
             const o = document.createElement("option");
             o.value = k[0]; o.textContent = k[1];
             scopeSel.appendChild(o);
@@ -2994,6 +3004,7 @@ function checklistPopup(block, isWeb){
 
         list.appendChild(card);
       });
+      if (scroller) scroller.scrollTop = wasAt;
     }
     paint();
 

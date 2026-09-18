@@ -66,14 +66,18 @@
     const rest = cond.replace(/[=!<>]=|<|>/g, "");
     return !/=/.test(rest);
   }
+  /* Is this one line that keyword, written correctly? Asked of a single line
+     rather than of the program, because the lines a check matched are what a
+     condition after it is pointed at. */
+  function soundOne(line, word){
+    const re = new RegExp("^\\s*" + word + "\\b");
+    if (!re.test(line)) return false;
+    if (!/:\s*$/.test(line.trimEnd()) && !/:/.test(line)) return false;
+    return conditionLooksRight(line);
+  }
   /* Looks for a keyword on a line that is actually written correctly. */
   function soundLine(code, word){
-    return code.split("\n").some(line => {
-      const re = new RegExp("^\\s*" + word + "\\b");
-      if (!re.test(line)) return false;
-      if (!/:\s*$/.test(line.trimEnd()) && !/:/.test(line)) return false;
-      return conditionLooksRight(line);
-    });
+    return code.split("\n").some(line => soundOne(line, word));
   }
 
   /* Comments are the one thing that cannot be found in the tidied code,
@@ -208,9 +212,11 @@
      checklist, which a student then read as two separate jobs.
 
      Each one can be told where to look. "Anywhere" is the whole program;
-     "this line" is only the lines the condition before it matched, which is
-     what makes "uses an input, and that input mentions food" possible rather
-     than "uses an input somewhere and mentions food somewhere else".
+     "this line" is only the lines the thing before it matched, which is what
+     makes "uses an input, and that input mentions food" possible rather than
+     "uses an input somewhere and mentions food somewhere else"; "this block"
+     is what is written inside those lines, which is how "uses an if, and
+     inside the if it prints something" gets asked.
 
      Read left to right with no precedence, so "A and B or C" means
      "(A and B) or C", unless a condition is bracketed. A bracketed condition
@@ -220,13 +226,137 @@
      that a teacher would have to count brackets to know what their own
      checklist asks for. */
 
-  /* The lines of some text that contain a phrase, which is what a later
-     condition looks inside when it is scoped to what was found. */
-  function linesWith(text, needle, cased, soft){
-    const n = String(needle || "");
-    if (!n) return "";
-    return String(text || "").split("\n").filter(l => has(l, n, cased, soft)).join("\n");
+  /* ---------- which lines a check matched ----------
+     What "this line" and "this block" are measured from, kept as line numbers
+     so a block can be found under them.
+
+     Text a teacher typed is found by looking for it. The things picked from a
+     list are not: "for loop" is the name of a pattern, not something anybody
+     writes in their code, and looking for those words themselves found no
+     lines at all. That is why "this line" quietly did nothing after "uses
+     a...", and why "this block" would have done nothing either. */
+
+  /* The code on a line with any comment taken off, which is what a check sees.
+     A check never matches inside a comment, so the lines it matched must not
+     be found there either. Only for Python: in the web tasks a hash is an id
+     or a colour, not the start of a comment. */
+  function bareLine(line){ return String(line || "").replace(/#.*$/, ""); }
+
+  /* PY_PATTERNS asked of one line. The ones written as a regex up there are
+     already per line; the rest ask about the whole program, so they are
+     written again here. */
+  const PY_LINE = {
+    "while loop": (l) => soundOne(l, "while"),
+    "if":         (l) => soundOne(l, "if"),
+    "elif":       (l) => soundOne(l, "elif")
+  };
+  function usesLine(line, which){
+    if (PY_LINE[which]) return PY_LINE[which](line);
+    const test = PY_PATTERNS[which];
+    if (!test || typeof test === "function") return false;
+    return test.test(line);
   }
+
+  function matchedLines(check, lines, cased, soft, web){
+    const kind = check.kind || "codeHas";
+    /* the tag or selector where there is no typed text, so "has an h1" points
+       at the line the h1 is on */
+    const value = String(check.value || "").trim() || String(check.selector || "").trim();
+    const readable = (l) => web ? String(l || "") : bareLine(l);
+    const pick = (test) => {
+      const out = [];
+      lines.forEach((l, i) => { if (test(l)) out.push(i); });
+      return out;
+    };
+
+    if (kind === "uses" || kind === "usesCount"){
+      const which = String(check.value || "for loop").toLowerCase();
+      /* the one thing that is only ever found in a comment */
+      if (which === "comment")
+        return pick(l => /#/.test(String(l).replace(/"[^"]*"|'[^']*'/g, "")));
+      return pick(l => usesLine(readable(l), which));
+    }
+    if (kind === "defines" || kind === "calls"){
+      const name = value.replace(/[^\w]/g, "");
+      if (!name) return [];
+      const re = kind === "defines"
+        ? new RegExp("\\bdef\\s+" + name + "\\s*\\(", cased ? "" : "i")
+        : new RegExp("(?<!def\\s)\\b" + name + "\\s*\\(", cased ? "" : "i");
+      return pick(l => re.test(readable(l)));
+    }
+    if (!value) return [];
+    return pick(l => has(readable(l), value, cased, soft));
+  }
+
+  /* ---------- blocks ---------- */
+  function indentOf(line){
+    const m = /^[ \t]*/.exec(String(line || ""));
+    return m ? m[0].length : 0;
+  }
+  /* Does this line open a block? In Python that is a line whose code ends with
+     a colon; in a web task, one ending with an opening brace, which is the
+     same idea for a CSS rule or a JavaScript block. Quoted text and comments
+     come off first, or a colon inside a message a student prints would read as
+     the start of a block. */
+  function opensBlock(line){
+    const code = String(line || "")
+      .replace(/"[^"]*"|'[^']*'/g, "")
+      .replace(/#.*$/, "").replace(/\/\/.*$/, "")
+      .trimEnd();
+    return /[:{]$/.test(code);
+  }
+  /* The lines inside a block: everything under its first line that is indented
+     further than it, up to the first line that comes back out again. A blank
+     line in the middle does not end it. The first line itself is not part of
+     it, because "inside the if" is what the if does; a teacher asking about
+     the condition on the if asks about the line instead. */
+  function bodyLines(lines, at){
+    if (!opensBlock(lines[at])) return [];
+    const open = indentOf(lines[at]);
+    const out = [];
+    for (let i = at + 1; i < lines.length; i++){
+      if (!String(lines[i]).trim()){ out.push(i); continue; }
+      if (indentOf(lines[i]) <= open) break;
+      out.push(i);
+    }
+    return out;
+  }
+  /* every block body under these lines, with nothing counted twice */
+  function bodiesUnder(lines, at){
+    const seen = {}, out = [];
+    (at || []).forEach(i => bodyLines(lines, i).forEach(j => {
+      if (!seen[j]){ seen[j] = true; out.push(j); }
+    }));
+    return out.sort((x, y) => x - y);
+  }
+  const textAt = (lines, at) => (at || []).map(i => lines[i]).join("\n");
+
+  /* A condition that was looking somewhere in particular has to say so. The
+     sentences the checks use are written as though they had seen the whole
+     program, so a student who put their print just outside the if was told
+     their code does not use a print at all, which is both wrong and no help.
+     The few wordings that come up when a condition is scoped are turned round
+     to name the place instead. */
+  const WHERE_WORDS = { match:"on that line", block:"inside it" };
+  function saidWhere(note, scope){
+    const said = String(note || "").trim().replace(/\.$/, "");
+    const where = WHERE_WORDS[scope];
+    if (!where) return said;
+    let m = /^Your code does not include (.+?) yet$/.exec(said);
+    if (m) return m[1] + " is not " + where + " yet";
+    m = /^Your code does not use an? (.+?) yet$/.exec(said);
+    if (m) return "there is no " + m[1] + " " + where + " yet";
+    m = /^Try doing this without (.+)$/.exec(said);
+    if (m) return m[1] + " is still " + where;
+    return where + ", " + said.charAt(0).toLowerCase() + said.slice(1);
+  }
+
+  /* Which conditions leave the next one somewhere narrower to look. A check on
+     the output, on the number of runs or on how many lines there are has no
+     particular line to point at, and one that asks for something to be absent
+     has by definition not found one. */
+  const NARROWS = { codeHas:1, codeCount:1, uses:1, usesCount:1, defines:1, calls:1,
+                    tag:1, classOrId:1, attr:1, contentHas:1, cssHas:1, fileHas:1 };
 
   /* A condition worth running. Not every kind needs typed words: "at least 5
      lines" is a number and "has an h1" is a tag, and dropping everything
@@ -241,7 +371,7 @@
      and space settings belong to the line as a whole rather than to each part
      of it, so they are copied down; the wording and any conditions of its own
      are not, because only the line has those. */
-  function runCond(m, check, opts, where){
+  function runCond(m, check, opts, where, narrowed){
     const c = Object.assign({}, m, {
       caseSensitive: check.caseSensitive === true,
       exactSpace: check.exactSpace === true,
@@ -249,48 +379,55 @@
     });
     delete c.more; delete c.hint; delete c.manual;
     if (opts.web){
-      /* scoped to what was found there are no three files any more, only the
-         lines that matched, so each of them is those lines */
-      const files = (m.scope === "match")
-        ? { html: where, css: where, js: where } : opts.files;
+      /* narrowed down there are no three files any more, only the lines that
+         were picked out, so each of them is those lines */
+      const files = narrowed ? { html: where, css: where, js: where } : opts.files;
       return checkWebOne(c, files, opts.runs);
     }
     return checkPythonOne(c, where, opts.output, opts.runs);
   }
 
   /* Walks the chain and folds the answers together with the first one.
-     `found` is what the last thing to match found, so a condition scoped to
-     "this line" has somewhere to look. */
+     `found` is the lines the last thing to match found, by number, so a
+     condition scoped to "this line" or "this block" has somewhere to look. */
   function withExtras(check, first, opts){
     const more = (Array.isArray(check.more) ? check.more : []).filter(condSaid);
     if (!more.length || !first || first.broken) return first;
     const cased = check.caseSensitive === true;
     const soft = check.exactSpace !== true;
     const label = check.label || "Check";
+    const lines = String(opts.code || "").split("\n");
     let ok = !!first.ok;
-    let found = opts.found || "";
+    let found = matchedLines(check, lines, cased, soft, opts.web);
     let why = "";
 
     /* Every condition is run, even once the answer can no longer change,
        because each one narrows where the next may look and because the
        sentence a student reads should name the first thing missing. */
     function judge(m){
-      const where = (m.scope === "match") ? found : opts.code;
+      const at = m.scope === "match" ? found
+               : m.scope === "block" ? bodiesUnder(lines, found)
+               : null;
+      const where = (at === null) ? opts.code : textAt(lines, at);
       let r;
-      try{ r = runCond(m, check, opts, where); }
+      try{ r = runCond(m, check, opts, where, at !== null); }
       catch(e){ r = broken(label, "One of the other conditions could not run."); }
       if (r.broken){
         if (!why) why = "one of the other conditions is not set up properly";
         return false;
       }
       if (!r.ok){
-        if (!why) why = String(r.note || "one of the other conditions is not met yet")
-                          .replace(/\.$/, "");
+        if (!why) why = saidWhere(r.note || "one of the other conditions is not met yet",
+                                  m.scope);
         return false;
       }
-      /* what this condition matched becomes the place the next one can look */
-      if (m.kind !== "codeLacks" && String(m.value || "").trim())
-        found = linesWith(where, m.value, cased, soft);
+      /* what this condition matched becomes the place the next one can look,
+         inside wherever it was looking rather than anywhere in the program */
+      if (NARROWS[m.kind]){
+        let hit = matchedLines(m, lines, cased, soft, opts.web);
+        if (at !== null) hit = hit.filter(i => at.indexOf(i) >= 0);
+        if (hit.length) found = hit;
+      }
       return true;
     }
 
@@ -444,9 +581,7 @@
            tidying is what removes. */
         const joined = withExtras(c, first, {
           web: false, code: raw, runs: runs,
-          output: String(output == null ? "" : output),
-          found: linesWith(realCode(raw), c.value,
-                           c.caseSensitive === true, c.exactSpace !== true)
+          output: String(output == null ? "" : output)
         });
         return ownWords(c, joined);
       }
@@ -570,9 +705,7 @@
                       (files && files.js) || "" ].join("\n");
         const first = checkWebOne(c, files, runs);
         const joined = withExtras(c, first, {
-          web: true, files: files || {}, code: all, output: all, runs: runs,
-          found: linesWith(all, c.value,
-                           c.caseSensitive === true, c.exactSpace !== true)
+          web: true, files: files || {}, code: all, output: all, runs: runs
         });
         return ownWords(c, joined);
       }
