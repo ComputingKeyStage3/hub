@@ -45,7 +45,6 @@
 </div>
 
 <div class="build-top">
-  <p class="hint" id="ownerNote" hidden></p>
   <div class="build-titles">
     <button class="btn-ghost" id="optionsBtn">Lesson options</button>
     <select id="lYear" title="Year group"></select>
@@ -297,7 +296,13 @@ window.addEventListener("resize", placeHelp);
 window.addEventListener("scroll", placeHelp, true);
 
 /* ---------------- the lesson being built ---------------- */
-let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical:false, homework:false, topics:{}, responses:{}, extensions:[], blocks:[] };
+/* versionOf holds the lesson this one is a version of, and is empty for an
+   original. A version is a whole lesson of its own, with its own id and its
+   own students' work: the three fields beside it are only what the console
+   shows to tell one apart from another. */
+let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical:false, homework:false,
+               versionOf:"", versionName:"", versionNote:"", versionCode:"",
+               topics:{}, responses:{}, extensions:[], blocks:[] };
 
 const BLANK = {
   text:     () => ({ type:"text", heading:"", html:"" }),
@@ -510,6 +515,14 @@ function compile(){
   if (lesson.year) out.year = lesson.year;
   if (lesson.homework) out.homework = true;
   if (lesson.linger) out.linger = true;
+  /* Kept in the lesson itself as well as in the catalogue, so reopening it
+     anywhere still knows what it is a version of. */
+  if (lesson.versionOf){
+    out.versionOf = lesson.versionOf;
+    out.versionName = lesson.versionName || "";
+    out.versionNote = lesson.versionNote || "";
+    out.versionCode = lesson.versionCode || "";
+  }
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
   if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
   if (lesson.practical){
@@ -3267,7 +3280,10 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
 });
 function showTitle(){
   const t = (lesson.title || "").trim();
-  $("titleShow").textContent = t ? " \u2022 " + t : "";
+  /* A tab that has just become a version still shows the title it was made
+     from, so the version's name goes up here too. */
+  const v = lesson.versionOf ? " \u2022 " + (lesson.versionName || "Version") : "";
+  $("titleShow").textContent = t ? " \u2022 " + t + v : v;
   $("optionsBtn").textContent = t ? "Lesson options" : "Set a title";
 }
 /* Everything that belongs to the lesson rather than to a page: what it is
@@ -3329,6 +3345,8 @@ on("optionsBtn", "click", () => {
        + "writing or coding in them."]));
     w4.appendChild(row); box.appendChild(w4);
 
+    box.appendChild(versionField());
+
     const go = el("button","btn-primary modal-cta","Done");
     go.addEventListener("click", closeModal);
     box.appendChild(go);
@@ -3338,13 +3356,225 @@ on("optionsBtn", "click", () => {
   if (titles){
     const back = () => {
       if (!$("mBack").hidden) return;
-      titles.appendChild($("lYear"));
-      titles.appendChild($("lUnit"));
+      homePickers();
       document.removeEventListener("hubModalClosed", back);
     };
     document.addEventListener("hubModalClosed", back);
   }
 });
+
+
+/* ---------------- versions of a lesson ----------------
+   A version is a whole lesson of its own: its own id, its own students'
+   work, its own place in the classes that were given it. What makes it a
+   version is versionOf, which names the lesson it was made from, and that is
+   all the hub needs to fold it under that lesson's Versions button instead
+   of listing it beside everything else.
+
+   It is made from a lesson that has already been saved, because the thing it
+   points at has to exist. Pressing the button leaves the original untouched
+   and turns this tab into the new version, which is why the pop-up says so
+   in so many words. */
+let teacherCodes = null;              // null until asked for, [] when there is nobody
+async function loadTeacherCodes(){
+  if (teacherCodes) return teacherCodes;
+  const API = (window.HUB && window.HUB.API) || "";
+  if (OFFLINE || !API){ teacherCodes = []; return teacherCodes; }
+  try{
+    const r = await fetch(API + "/api/teacher/teachers", { headers: window.teacherAuth.headers(), cache:"no-store" });
+    const d = await r.json();
+    teacherCodes = (d.teachers || []).map(t => String(t.code || "")).filter(Boolean);
+  }catch(e){ teacherCodes = []; }
+  return teacherCodes;
+}
+/* Whoever was last chosen in the teacher console on this machine. The builder
+   has no sign-in picker of its own, and a version is nearly always being made
+   by the person sitting there. */
+function lastTeacher(){
+  try{ return localStorage.getItem("hub_me") || ""; }catch(e){ return ""; }
+}
+function versionField(){
+  const w = el("div","bfield");
+  w.appendChild(el("label","","Versions"));
+
+  if (lesson.versionOf){
+    const line = el("p","vernow");
+    line.appendChild(el("span","statechip open", lesson.versionName || "Version"));
+    line.appendChild(el("span","", "of “" + parentTitle() + "”" +
+                                   (lesson.versionCode ? " · " + lesson.versionCode : "")));
+    w.appendChild(line);
+    if (lesson.versionNote) w.appendChild(el("p","bhelp", lesson.versionNote));
+    const row = el("div","brow");
+    const edit = el("button","btn-ghost bmini2","Change these details");
+    edit.addEventListener("click", () => versionPopup(true));
+    const off = el("button","btn-ghost bmini2","Make it a lesson of its own");
+    off.addEventListener("click", unversionPopup);
+    row.appendChild(edit); row.appendChild(off);
+    w.appendChild(row);
+    return w;
+  }
+
+  if (!lesson.savedAs){
+    w.appendChild(el("p","bhelp",
+      "Save this lesson to the site first. A version is made from a lesson that is already there."));
+    return w;
+  }
+  const row = el("div","brow");
+  const mk = el("button","btn-ghost bmini2","Make this a different version");
+  mk.addEventListener("click", () => versionPopup(false));
+  row.appendChild(mk);
+  row.appendChild(helpDot(
+    ["Everything on this page is saved as a new lesson, and “" + (lesson.title || "this lesson") +
+     "” is left exactly as it is. You choose which version you want when you give the lesson out.",
+     "Use it for a version for a different set, for another teacher, or for a class that needs the "
+     + "work laid out another way."]));
+  w.appendChild(row);
+  w.appendChild(el("p","bhelp","This is the original. It is the one that goes out unless somebody picks another version."));
+  return w;
+}
+
+/* The name, what has changed, and whose it is. Making one saves straight
+   away, so the version is in the hub from the moment it is made rather than
+   only once somebody remembers to press Save. */
+function versionPopup(editing){
+  openModal(box => {
+    const of = editing ? parentTitle() : (lesson.title || "this lesson");
+    box.appendChild(el("h2","", editing ? "This version of “" + of + "”"
+                                        : "Make a different version of “" + of + "”"));
+    if (!editing){
+      /* Offline there are no classes to keep anything: a lesson is handed out
+         by its own link and its own four digit code, and the version is given
+         a pair of its own. */
+      box.appendChild(el("p","modal-text",
+        "Everything on this page is saved as a new lesson. “" + of + "” is left as it is, and " +
+        (OFFLINE ? "the version gets a link and a code of its own."
+                 : "any class that has it keeps it.") +
+        " This tab carries on with the new version."));
+    }
+
+    const w1 = el("div","bfield");
+    w1.appendChild(el("label","","What is this version called?"));
+    const nameIn = el("input");
+    nameIn.value = lesson.versionName || "";
+    nameIn.placeholder = "Lower ability";
+    w1.appendChild(nameIn); box.appendChild(w1);
+
+    const w2 = el("div","bfield");
+    w2.appendChild(el("label","","What has changed?"));
+    const noteIn = document.createElement("textarea");
+    noteIn.rows = 3;
+    noteIn.value = lesson.versionNote || "";
+    noteIn.placeholder = "Shorter reading, the code is started off for them, and the extension is left out.";
+    w2.appendChild(noteIn); box.appendChild(w2);
+
+    const w3 = el("div","bfield");
+    w3.appendChild(el("label","","Which teacher is it for?"));
+    const codeBox = el("div","");
+    w3.appendChild(codeBox); box.appendChild(w3);
+    /* A list where the teachers are known, a box to type in where they are
+       not, which is what offline looks like. Either way it reads the same. */
+    let readCode = () => lesson.versionCode || "";
+    loadTeacherCodes().then(codes => {
+      codeBox.innerHTML = "";
+      if (!codes.length){
+        const inp = el("input");
+        inp.value = lesson.versionCode || lastTeacher();
+        inp.placeholder = "HTS";
+        codeBox.appendChild(inp);
+        readCode = () => inp.value.trim().toUpperCase().slice(0, 20);
+        return;
+      }
+      const sel = document.createElement("select");
+      const none = document.createElement("option");
+      none.value = ""; none.textContent = "Nobody in particular";
+      sel.appendChild(none);
+      codes.forEach(c => {
+        const o = document.createElement("option");
+        o.value = c; o.textContent = c;
+        sel.appendChild(o);
+      });
+      const want = lesson.versionCode || lastTeacher();
+      sel.value = codes.indexOf(want) >= 0 ? want : "";
+      codeBox.appendChild(sel);
+      readCode = () => sel.value;
+    });
+
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta", editing ? "Save these details" : "Make the version");
+    go.addEventListener("click", async () => {
+      const name = nameIn.value.trim().slice(0, 60);
+      if (!name){ msg.textContent = "Give the version a name, so it can be told from the others."; nameIn.focus(); return; }
+      const note = noteIn.value.trim().slice(0, 300);
+      const code = readCode();
+      if (editing){
+        lesson.versionName = name; lesson.versionNote = note; lesson.versionCode = code;
+        saveDraft(); showTitle();
+        closeModal();
+        await saveToSite();
+        return;
+      }
+      /* The lesson it is a version of is the one open in this tab. A version
+         of a version is still a version of the original: two levels would
+         give the hub a tree to draw and a teacher nothing useful. */
+      const from = lesson.savedAs;
+      if (!from){ msg.textContent = "Save this lesson to the site first."; return; }
+      const was = { of: lesson.versionOf, name: lesson.versionName, note: lesson.versionNote,
+                    code: lesson.versionCode, id: lesson.savedAs, share: lesson.code };
+      lesson.versionOf = from; lesson.versionName = name;
+      lesson.versionNote = note; lesson.versionCode = code;
+      lesson.savedAs = null;                 // so it is saved as a new lesson, not over the old one
+      /* And a four digit code of its own. Carrying the original's over would
+         put two lessons on one code, and the front page opens whichever it
+         comes to first. Offline only, but that is where codes are used. */
+      lesson.code = "";
+      /* Offline there is no server to hand an id back: the version comes out
+         as a file to drop into the lessons folder, so the id it will have is
+         settled here instead. */
+      if (OFFLINE) lesson.savedAs = newVersionId();
+      msg.textContent = "Making it…";
+      try{
+        await saveToSite();
+        if (!lesson.savedAs) throw new Error("It was not saved.");
+        closeModal(); showTitle();
+      }catch(e){
+        lesson.versionOf = was.of; lesson.versionName = was.name;
+        lesson.versionNote = was.note; lesson.versionCode = was.code;
+        lesson.savedAs = was.id; lesson.code = was.share;
+        msg.textContent = e.message;
+      }
+    });
+    box.appendChild(go);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+    scrollBody(box);
+    setTimeout(() => { try{ nameIn.focus(); }catch(e){} }, 30);
+  });
+}
+
+/* Cutting a version loose. It keeps its id, its work and the classes that
+   have it, and simply stops being folded under the lesson it came from. */
+function unversionPopup(){
+  const of = parentTitle();
+  openModal(box => {
+    box.appendChild(el("h2","","Make this a lesson of its own?"));
+    box.appendChild(el("p","modal-text",
+      "It stops being a version of “" + of + "” and appears in the hub beside it. " +
+      "Nothing else changes: the work students have done on it is kept, and the classes that " +
+      "have it still have it. It keeps its title as well, so you may want a new one."));
+    const yes = el("button","btn-primary modal-cta","Make it its own lesson");
+    yes.addEventListener("click", async () => {
+      lesson.versionOf = ""; lesson.versionName = ""; lesson.versionNote = ""; lesson.versionCode = "";
+      saveDraft(); showTitle();
+      closeModal();
+      await saveToSite();
+    });
+    box.appendChild(yes);
+    const no = el("button","btn-ghost modal-stay","Leave it as a version");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+  });
+}
 
 /* Without a server a year or unit is nothing but a word written into
    lessons/index.json, so a new one is simply added to what is on offer
@@ -3761,14 +3991,15 @@ on("copyBtn", "click", () => {
     go.addEventListener("click", async () => {
       const name = inp.value.trim();
       if (!name){ msg.textContent = "Give the copy a name."; return; }
-      const was = lesson.title, wasId = lesson.savedAs;
+      const was = lesson.title, wasId = lesson.savedAs, wasCode = lesson.code;
       lesson.title = name; lesson.savedAs = null;
+      lesson.code = "";                      // a copy is a new lesson and needs its own code
       msg.textContent = "Saving\u2026";
       try{
         await saveToSite();
         closeModal(); showTitle();
       }catch(e){
-        lesson.title = was; lesson.savedAs = wasId;
+        lesson.title = was; lesson.savedAs = wasId; lesson.code = wasCode;
         msg.textContent = e.message;
       }
     });
@@ -3796,9 +4027,24 @@ function scrollBody(box){
   middle.forEach(n => scroller.appendChild(n));
 }
 
+/* Lesson options borrows the real year and unit pickers rather than copying
+   them, so that "+ New year group" and everything else hanging off them still
+   works inside the pop-up. They have to be put back before the box they are
+   sitting in is emptied, or they are deleted outright: the next pop-up to ask
+   for one then stops halfway through building itself, leaving a pop-up with
+   no buttons in it and no way out. */
+function homePickers(){
+  const titles = document.querySelector(".build-titles");
+  if (!titles) return;
+  ["lYear", "lUnit"].forEach(id => {
+    const pick = $(id);
+    if (pick && pick.parentNode !== titles) titles.appendChild(pick);
+  });
+}
 function openModal(build){
   closeHelp();                 // whatever it was hanging off is behind this now
   const box = $("mBox");
+  homePickers();               // whatever this pop-up is, it is not that one
   box.innerHTML = "";
   build(box);
   /* a phone pop-up fills the screen, so there must always be a way out */
@@ -3882,7 +4128,28 @@ function lessonId(){
      title, not which lesson it is, otherwise editing would quietly leave a
      copy of the old one behind, still sitting in whichever classes had it. */
   if (lesson.savedAs) return lesson.savedAs;
+  if (lesson.versionOf) return newVersionId();
   return (lesson.title || "lesson").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50);
+}
+/* A version is saved as a lesson of its own, so it needs an id the original
+   is not already using. Built from both names rather than from the title,
+   because a version usually keeps the title it was made from and an id off
+   the title alone would overwrite the very lesson it came from. */
+function newVersionId(){
+  const base = ((lesson.versionOf || "lesson") + "-" + (lesson.versionName || "version"))
+                 .toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,50);
+  const taken = new Set(((cat && cat.lessons) || []).map(l => l.lesson_id || l.id));
+  if (!taken.has(base)) return base;
+  for (let n = 2; n < 60; n++) if (!taken.has(base + "-" + n)) return base + "-" + n;
+  return (base + "-" + Date.now().toString(36).slice(-4)).slice(0, 60);
+}
+/* The title of the lesson this one is a version of, for the pop-ups that
+   name it. Falls back to its id, which is at least something to recognise. */
+function parentTitle(){
+  const id = lesson.versionOf;
+  if (!id) return "";
+  const hit = ((cat && cat.lessons) || []).find(l => (l.lesson_id || l.id) === id);
+  return (hit && hit.title) || id;
 }
 /* Save the lesson as a file for the lessons folder, with what to do next.
    Two things go into GitHub: the lesson file itself, and a line in
@@ -3939,6 +4206,8 @@ async function downloadForFolder(){
     { id: id, title: lesson.title, description: lesson.intro || "" },
     (lesson.assessment || lesson.practical) ? { assessment: true } : {},
     lesson.homework ? { homework: true } : {},
+    lesson.versionOf ? { versionOf: lesson.versionOf, versionName: lesson.versionName || "",
+                         versionNote: lesson.versionNote || "", versionCode: lesson.versionCode || "" } : {},
     { code: code });
   const paste = unitExists ? entry
     : { name: lesson.unit, year: lesson.year, lessons: [entry] };
@@ -4013,17 +4282,22 @@ async function saveToSite(){
       method:"POST",
       headers: window.teacherAuth.json(),
       body: JSON.stringify({ id: lessonId(), title: lesson.title, unit: lesson.unit,
-                             year: lesson.year || "", owner: lesson.ownerGroup || "", data: compile() })
+                             year: lesson.year || "", data: compile() })
     });
     const d = await r.json().catch(() => ({}));
     if (authFailed(r.status, saveToSite)){ btn.disabled = false; btn.textContent = "Save to the site"; return; }
     if (!r.ok) throw new Error(d.error || "Could not save it.");
     lesson.savedAs = d.id;
     dirty = false;                       // saved, and nothing changed since
-    say(d.published ? "Saved, it's live" : "Saved to the site",
-        d.published
-          ? "Students in classes that already have this lesson will see the new version straight away."
-          : "It's in your teacher console under " + lesson.unit + ". Press Publish there when a class should see it.");
+    if (lesson.versionOf){
+      say("Saved as a version", "It is under \u201C" + parentTitle() + "\u201D in the lesson hub, behind the "
+          + "Versions button. Give it to a class from your teacher console.");
+    } else {
+      say(d.published ? "Saved, it's live" : "Saved to the site",
+          d.published
+            ? "Students in classes that already have this lesson will see the new version straight away."
+            : "It's in your teacher console under " + lesson.unit + ". Press Publish there when a class should see it.");
+    }
   }catch(e){ say("Could not save", e.message); }
   finally{ btn.disabled = false; btn.textContent = "Save to the site"; }
 }
@@ -4094,8 +4368,10 @@ async function loadUnitsAndYears(){
       const years = [];
       file.units.forEach(u => { if (u.year && years.indexOf(u.year) < 0) years.push(u.year); });
       file.lessons.forEach(l => { if (l.year && years.indexOf(l.year) < 0) years.push(l.year); });
-      cat = { years: years.map(name => ({ name })), units: file.units.filter(u => u.name) };
-    }catch(e){ cat = { years: [], units: [] }; }
+      cat = { years: years.map(name => ({ name })), units: file.units.filter(u => u.name),
+              lessons: file.lessons.map(l => ({ lesson_id: l.id, title: l.title, unit: l.unit,
+                                                version_of: l.versionOf || "" })) };
+    }catch(e){ cat = { years: [], units: [], lessons: [] }; }
     paintPickers();
     return;
   }
@@ -4139,15 +4415,10 @@ async function loadUnitsAndMaybeLesson(){
   await loadUnitsAndYears();
   const editId = new URLSearchParams(location.search).get("edit");
   const qs2 = new URLSearchParams(location.search);
-  const wantYear = qs2.get("year"), wantUnit = qs2.get("unit"), wantClass = qs2.get("class");
+  const wantYear = qs2.get("year"), wantUnit = qs2.get("unit");
   if (wantYear && !lesson.year) lesson.year = wantYear;
   if (wantUnit && !lesson.unit) lesson.unit = wantUnit;
   if (wantYear || wantUnit) paintPickers();
-  if (wantClass){
-    lesson.ownerGroup = wantClass; saveDraft();
-    $("ownerNote").hidden = false;
-    $("ownerNote").textContent = "This lesson is being made for " + wantClass + " only.";
-  }
   if (!editId) return;
   if (OFFLINE){ await loadLessonFromFolder(editId); return; }
   if (!signedIn()){ askForKey(loadUnitsAndMaybeLesson, "Sign in to open this lesson."); return; }
@@ -4178,6 +4449,8 @@ function fromCompiled(data, meta){
                 assessment: !!data.assessment && !data.practical, practical: !!data.practical,
                 homework: !!data.homework,
                 linger: !!data.linger,
+                versionOf: data.versionOf || "", versionName: data.versionName || "",
+                versionNote: data.versionNote || "", versionCode: data.versionCode || "",
                 marking: data.marking || "score", outOf: data.outOf || 20, rubric: data.rubric || [],
                 topics: data.topics || {}, responses: {}, extensions: [], blocks: [] };
   const back = (b) => {

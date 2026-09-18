@@ -1588,7 +1588,186 @@ const classChoices = (id) => {
   return out;
 };
 const unitsOfYear = (y) => (cat.units || []).filter(u => (u.year || "") === y);
-const lessonsOfUnit = (u) => (cat.lessons || []).filter(l => (l.unit || "") === u);
+const lessonsOfUnit = (u) => (cat.lessons || []).filter(l => (l.unit || "") === u && !l.version_of);
+
+/* ---------- versions of a lesson ----------
+   A version is a lesson of its own, saved from the builder, carrying the id
+   of the lesson it was made from. Everything here works off that one field.
+
+   The hub lists originals only and folds the rest behind a Versions button,
+   because a unit with three lessons in it and two versions of each reads as
+   nine lessons otherwise. A class is given whichever one its teacher chose,
+   and since each version is its own lesson the work, the marks and the task
+   locks belong to the version the class was actually given. */
+const versionsOf = (id) => (cat.lessons || []).filter(l => (l.version_of || "") === id);
+const rootOf = (id) => {
+  const l = (cat.lessons || []).find(x => x.lesson_id === id);
+  return (l && l.version_of) || id;
+};
+/* The original first, then its versions in the order the hub holds them. */
+const familyOf = (id) => {
+  const root = rootOf(id);
+  return (cat.lessons || []).filter(l => l.lesson_id === root).concat(versionsOf(root));
+};
+const versionName = (l) => !l ? "" : (l.version_of ? (l.version_name || "Version") : "Original");
+const versionOfId = (id) => versionName((cat.lessons || []).find(l => l.lesson_id === id));
+/* What a version changed, in the teacher's own words. The original never has
+   one, so it says what it is instead of leaving an empty line. */
+const versionNote = (l) => l.version_of
+  ? (l.version_note || "Nothing written down about what has changed.")
+  : "The lesson as it was written.";
+
+/* How many classes hold one particular version. Counted off the same list the
+   lesson cards use, so the two can never disagree. */
+function classCount(id){
+  const n = classChoices(id).filter(c => c.given).length;
+  return n ? n + " class" + (n === 1 ? "" : "es") : "No classes yet";
+}
+
+/* Everything that exists of one lesson. Versions are made in the builder, so
+   this lists them and says how: a Make button here would open the builder
+   with an empty lesson in it, which is not how anybody wants to start. */
+function versionsPopup(id){
+  const root = rootOf(id);
+  openModal(box => {
+    /* Not a wide pop-up: the versions stack in one column whatever the width,
+       and wide left-aligns the heading, which on a phone runs a two line title
+       underneath the cross in the corner. */
+    const x = el("button","btn-ghost iconbtn modal-x","✕");
+    x.title = "Close";
+    x.addEventListener("click", closeModal);
+    box.appendChild(x);
+    modalTitle(box, "Versions of “" + titleOf(root) + "”");
+    const list = el("div","verlist");
+    familyOf(root).forEach(l => {
+      const card = el("div","vercard");
+      const head = el("div","ver-head");
+      head.appendChild(el("b","", versionName(l)));
+      if (l.version_code) head.appendChild(el("span","statechip shut", l.version_code));
+      card.appendChild(head);
+      card.appendChild(el("p","ver-note", versionNote(l)));
+      if (!OFFLINE) card.appendChild(el("p","ver-who", classCount(l.lesson_id)));
+      const acts = el("div","lp-acts");
+      const give = el("button","btn-ghost", OFFLINE ? "Get link" : "Give to classes");
+      give.addEventListener("click", () => OFFLINE ? shareLink(l.lesson_id) : distribute(l.lesson_id));
+      const edit = el("button","btn-ghost","Edit");
+      edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
+      acts.appendChild(give); acts.appendChild(edit);
+      if (l.version_of){
+        const del = el("button","btn-ghost","Delete");
+        del.addEventListener("click", () => { closeModal(); deleteLesson(l.lesson_id); });
+        acts.appendChild(del);
+      }
+      card.appendChild(acts);
+      list.appendChild(card);
+    });
+    box.appendChild(list);
+    box.appendChild(el("p","hint",
+      "To make another version, open one of these in the builder and press “Make this a different "
+      + "version” under Lesson options."));
+    scrollBody(box);
+  });
+}
+
+/* Choosing a version, used both when a lesson is first given to a class and
+   whenever a teacher swaps that class onto another one afterwards.
+     family   the original and its versions
+     holding  the one this class has now, or "" when it has none yet
+     pick     what to do with the id that was chosen */
+function versionChoice(box, family, holding, pick){
+  const list = el("div","verlist");
+  family.forEach(l => {
+    const row = el("button","ov-row vrow");
+    const words = el("span","pick-lesson");
+    words.appendChild(el("span","t", versionName(l) + (l.version_code ? " · " + l.version_code : "")));
+    words.appendChild(el("span","pick-unit", versionNote(l)));
+    row.appendChild(words);
+    row.appendChild(el("span","edit", l.lesson_id === holding ? "In use" : "Choose →"));
+    if (l.lesson_id === holding) row.classList.add("on");
+    row.addEventListener("click", () => pick(l.lesson_id));
+    list.appendChild(row);
+  });
+  box.appendChild(list);
+}
+
+/* Giving a lesson to this class, asking first where there is a choice to be
+   made. A lesson with no versions goes straight in: a pop-up offering one
+   option is a press for nothing. */
+async function addLessonToClass(id, onDone){
+  const family = familyOf(id);
+  const go = async (chosen) => {
+    if ((catOf(chosen).unit || "") !== unit) await catPost({ op:"set-lesson", id: chosen, unit });
+    await catPost({ op:"assign", id: chosen, groups: [cls] });
+    await loadCatalogue();
+    onDone();
+  };
+  if (family.length < 2) return go(id);
+  openModal(box => {
+    modalTitle(box, "Which version for " + cls + "?");
+    box.appendChild(el("p","modal-text",
+      "Every class gets the original unless you choose otherwise. You can change this later from the lesson."));
+    const msg = el("p","hint","");
+    versionChoice(box, family, "", async (chosen) => {
+      msg.textContent = "Adding…";
+      try{ await go(chosen); closeModal(); }
+      catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(msg);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+    scrollBody(box);
+  });
+}
+
+/* Swapping this class from one version to another. Work is kept per lesson
+   and a version is its own lesson, so what a class has written on the version
+   they were on stays with it: it is out of sight while they are on another
+   one and back the moment they are swapped over again. Said plainly here
+   because a teacher swapping a class mid-unit needs to know it before they
+   press the button, not afterwards. */
+function pickVersionFor(id){
+  const family = familyOf(id);
+  if (family.length < 2) return;
+  openModal(box => {
+    modalTitle(box, "Which version for " + cls + "?");
+    versionChoice(box, family, id, async (chosen) => {
+      if (chosen === id){ closeModal(); return; }
+      closeModal();
+      confirmSwitch(id, chosen);
+    });
+    box.appendChild(el("p","hint",
+      "Swapping keeps when the lesson opens and closes, and which tasks are open."));
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+    scrollBody(box);
+  });
+}
+function confirmSwitch(from, to){
+  openModal(box => {
+    modalTitle(box, "Move " + cls + " to “" + versionOfId(to) + "”?");
+    box.appendChild(el("p","modal-text",
+      "They keep the lesson, when it opens and closes, and which tasks are open. Work they have "
+      + "already done on “" + versionOfId(from) + "” stays where it is and comes back if you "
+      + "move them back, but they will not see it while they are on this version."));
+    const msg = el("p","hint","");
+    const yes = el("button","btn-primary modal-cta","Move them over");
+    yes.addEventListener("click", async () => {
+      msg.textContent = "Moving…";
+      try{
+        await catPost({ op:"switch-version", from: from, to: to, group: cls });
+        await loadCatalogue();
+        closeModal(); await loadClassLocks().catch(() => {}); paintLessonGrid();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(yes);
+    const no = el("button","btn-ghost modal-stay","Leave them where they are");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no); box.appendChild(msg);
+  });
+}
+
 
 on("openHub", "click", async () => {
   show("hubView");
@@ -1741,7 +1920,7 @@ function paintHubUnits(){
       loadCatalogue().then(paintHubUnits).catch(() => {});
     });
   });
-  const unfiled = (cat.lessons || []).filter(l => !l.unit).length;
+  const unfiled = (cat.lessons || []).filter(l => !l.unit && !l.version_of).length;
   if (!hubYear && unfiled){
     const t = el("button","classtile");
     t.appendChild(el("b","","Not in a unit"));
@@ -1771,7 +1950,9 @@ function lessonCards(list, box){
     const card = el("div","lessonpill");
     const head = el("div","lp-head");
     head.appendChild(el("b","", titleOf(l.lesson_id)));
-    if (l.owner_group) head.appendChild(el("span","statechip shut", l.owner_group + " only"));
+    const alts = versionsOf(l.lesson_id);
+    if (alts.length) head.appendChild(el("span","statechip open",
+      alts.length + " version" + (alts.length === 1 ? "" : "s")));
     card.appendChild(head);
     /* With no classes to publish to, what a teacher needs off this card is
        the address to paste into Teams, and the code that opens it if the
@@ -1779,9 +1960,16 @@ function lessonCards(list, box){
     if (OFFLINE){
       card.appendChild(el("p","lp-note", l.code ? "Code " + l.code : "No code yet"));
     } else {
-      const mine = classChoices(l.lesson_id).filter(c => c.given);
-      card.appendChild(el("p","lp-note", mine.length
-        ? mine.length + " class" + (mine.length === 1 ? "" : "es")
+      /* Counted across the versions as well. A class moved onto one of them
+         is still doing this lesson, and a card reading "not given to any
+         class" while three classes are halfway through it is worse than no
+         count at all. */
+      const doing = new Set();
+      familyOf(l.lesson_id).forEach(v => classChoices(v.lesson_id).forEach(c => {
+        if (c.given) doing.add(String(c.name).toLowerCase());
+      }));
+      card.appendChild(el("p","lp-note", doing.size
+        ? doing.size + " class" + (doing.size === 1 ? "" : "es")
         : "Not given to any class yet"));
     }
     const acts = el("div","lp-acts");
@@ -1791,10 +1979,14 @@ function lessonCards(list, box){
     edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
     const del = el("button","btn-ghost","Delete");
     del.addEventListener("click", () => deleteLesson(l.lesson_id));
+    const vers = el("button","btn-ghost","Versions");
+    vers.title = "The versions of this lesson, and what has changed in each";
+    vers.addEventListener("click", () => versionsPopup(l.lesson_id));
     acts.appendChild(give);
-    if (narrow()) acts.appendChild(overflowMenu([["Edit", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
+    if (narrow()) acts.appendChild(overflowMenu([["Versions", () => versionsPopup(l.lesson_id)],
+                                                 ["Edit", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
                                                  ["Delete", () => deleteLesson(l.lesson_id)]]));
-    else { acts.appendChild(edit); acts.appendChild(del); }
+    else { acts.appendChild(vers); acts.appendChild(edit); acts.appendChild(del); }
     card.appendChild(acts);
     grid.appendChild(card);
   });
@@ -1847,9 +2039,12 @@ function shareLink(id){
 function runSearch(termBox, into){
   const term = (termBox.value || "").trim().toLowerCase();
   if (!term){ into.innerHTML = ""; return false; }
+  /* Originals only, as everywhere else in the hub. A version shares its
+     lesson's title, so searching would otherwise turn up the same name three
+     times with no way to tell which was which. */
   const found = (cat.lessons || []).filter(l =>
-    (titleOf(l.lesson_id) || "").toLowerCase().includes(term) ||
-    (l.unit || "").toLowerCase().includes(term));
+    !l.version_of && ((titleOf(l.lesson_id) || "").toLowerCase().includes(term) ||
+                      (l.unit || "").toLowerCase().includes(term)));
   into.innerHTML = "";
   into.appendChild(el("p","unit-head", found.length + " lesson" + (found.length === 1 ? "" : "s") + " matching “" + termBox.value + "”"));
   lessonCards(found, el("div"));
@@ -1990,17 +2185,30 @@ function distribute(id){
     modalTitle(box, "Give “" + titleOf(id) + "” to classes");
     box.appendChild(el("p","hint","Every class you tick gets it as a draft. Publish it to them from the class page when they are ready."));
     const choices = classChoices(id);
+    /* A class may already be doing another version of this same lesson.
+       Ticking it here moves them across rather than handing them a second
+       copy of the lesson they are in the middle of. */
+    const instead = {};
+    familyOf(id).forEach(v => {
+      if (v.lesson_id === id) return;
+      classChoices(v.lesson_id).forEach(c => { if (c.given) instead[c.name] = v.lesson_id; });
+    });
     const picks = {};
     choices.forEach(c => {
       const row = el("label","opt");
       const cb = el("input"); cb.type = "checkbox";
       cb.checked = !!c.given;
-      picks[c.name] = { cb: cb, already: !!c.given };
+      const other = !c.given && instead[c.name] ? instead[c.name] : "";
+      picks[c.name] = { cb: cb, already: !!c.given, other: other };
       row.appendChild(cb);
-      const state = c.given ? (c.given.published ? ", published" : ", draft") : "";
+      const state = c.given ? (c.given.published ? ", published" : ", draft")
+                  : other   ? ", on " + versionOfId(other)
+                  : "";
       row.appendChild(el("span","", c.name + state + (c.note ? " (" + c.note + ")" : "")));
       box.appendChild(row);
     });
+    if (Object.keys(instead).length)
+      box.appendChild(el("p","hint","A class doing another version says so. Ticking it moves that class over to this one."));
     if (choices.some(c => c.note))
       box.appendChild(el("p","hint","A class in brackets is not a class any more. Untick it to take the lesson off it."));
     if (!choices.length) box.appendChild(el("p","modal-text","There are no classes to give this to."));
@@ -2009,9 +2217,12 @@ function distribute(id){
     go.addEventListener("click", async () => {
       msg.textContent = "Saving…";
       try{
-        const add = Object.keys(picks).filter(n => picks[n].cb.checked && !picks[n].already);
+        const chosen = Object.keys(picks).filter(n => picks[n].cb.checked && !picks[n].already);
+        const move = chosen.filter(n => picks[n].other);
+        const add = chosen.filter(n => !picks[n].other);
         const drop = Object.keys(picks).filter(n => !picks[n].cb.checked && picks[n].already);
         if (add.length) await catPost({ op:"assign", id: id, groups: add });
+        for (const n of move) await catPost({ op:"switch-version", from: picks[n].other, to: id, group: n });
         for (const n of drop) await catPost({ op:"unassign", id: id, group: n });
         await loadCatalogue();
         closeModal(); paintHub();
@@ -2021,13 +2232,22 @@ function distribute(id){
   });
 }
 
+/* What to call the thing being deleted. A version carries the same title as
+   the lesson it was made from, so "Delete “How networks work”?" over a
+   pop-up that is only going to remove the Triple science version of it is how
+   somebody deletes the wrong thing. */
+function deleteLabel(id){
+  const v = (cat.lessons || []).find(l => l.lesson_id === id && l.version_of);
+  return v ? "the “" + versionName(v) + "” version of “" + titleOf(v.version_of) + "”"
+           : "“" + titleOf(id) + "”";
+}
 function deleteLesson(id, then){
   /* Offline a lesson is a file in a folder, and this page cannot reach into
      the folder. Saying what to remove is more use than a button that would
      have to fail. */
   if (OFFLINE){
     openModal(box => {
-      modalTitle(box, "Removing “" + titleOf(id) + "”");
+      modalTitle(box, "Removing " + deleteLabel(id));
       box.appendChild(el("p","modal-text","Lessons are files here, so this is done in GitHub:"));
       const list = el("ol","modal-steps");
       [ "Delete lessons/" + id + ".json.",
@@ -2045,10 +2265,19 @@ function deleteLesson(id, then){
   }
   const mine = assignsFor(id);
   openModal(box => {
-    modalTitle(box, "Delete “" + titleOf(id) + "”?");
-    box.appendChild(el("p","modal-text", "This removes the lesson from the hub" +
+    const isVersion = !!catOf(id).version_of;
+    modalTitle(box, "Delete " + deleteLabel(id) + "?");
+    box.appendChild(el("p","modal-text", "This removes " + (isVersion ? "that version" : "the lesson") + " from the hub" +
       (mine.length ? " and from " + mine.length + " class" + (mine.length === 1 ? "" : "es") : "") +
       ", along with every student's work and results for it."));
+    if (isVersion)
+      box.appendChild(el("p","modal-text", "The lesson it was made from is left alone, and so is every other version of it."));
+    const kept = versionsOf(id);
+    if (kept.length)
+      box.appendChild(el("p","modal-text", "Its " + (kept.length === 1 ? "version is" : kept.length + " versions are")
+        + " kept, with the work done on " + (kept.length === 1 ? "it" : "them") + ", and "
+        + (kept.length === 1 ? "appears" : "appear") + " in the hub as " + (kept.length === 1 ? "a lesson" : "lessons") + " of "
+        + (kept.length === 1 ? "its" : "their") + " own."));
     const yes = el("button","btn-primary modal-cta","Continue");
     yes.style.background = "var(--red)";
     yes.addEventListener("click", () => {
@@ -2066,7 +2295,11 @@ function deleteLesson(id, then){
           try{
             const r = await fetch(API + "/api/teacher/delete-lesson", { method:"POST", headers: HJ(), body: JSON.stringify({ id }) });
             if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
-            await loadCatalogue();
+            /* Forced, because this went straight to the server rather than
+               through catPost, and the copy held here still has the lesson in
+               it. Without this the hub redraws from the old list and the
+               lesson that has just been deleted is still sitting there. */
+            await loadCatalogue(true);
             closeModal();
             if (then) then(); else paintHub();
           }catch(e){ msg.textContent = e.message; }
@@ -2562,8 +2795,15 @@ async function fetchCatalogue(){
     cat = {
       years: years.map(name => ({ name })),
       units: file.units.filter(u => u.name),
+      /* Versions are written into lessons/index.json the same way as
+         anything else about a lesson, so the hub folds them away here too. */
       lessons: file.lessons.map(l => ({ lesson_id: l.id, unit: l.unit, year: l.year,
-                                        code: l.code, position: 0, published: 1 }))
+                                        code: l.code, position: 0, published: 1,
+                                        title: l.title,
+                                        version_of: l.versionOf || "",
+                                        version_name: l.versionName || "",
+                                        version_note: l.versionNote || "",
+                                        version_code: l.versionCode || "" }))
     };
     assigns = [];
     return;
@@ -2589,7 +2829,7 @@ async function fetchCatalogue(){
   cat = catalog;
   assigns = cat.assignments || [];
 }
-const catOf = (id) => (cat.lessons || []).find(l => l.lesson_id === id) || { unit: "", published: 0, position: 0 };
+const catOf = (id) => (cat.lessons || []).find(l => l.lesson_id === id) || { unit: "", published: 0, position: 0, version_of: "" };
 const titleOf = (id) => { const l = fileLessons.find(x => x.id === id); return l ? l.title : id; };
 async function catPost(payload){
   catLoaded = false;                 // whatever this changes, the copy we hold is stale
@@ -2642,22 +2882,11 @@ async function openUnit(name){
   loadClassLocks().then(paintLessonGrid).catch(() => {});
 }
 
+/* Every lesson goes in the hub. A lesson meant for one class is a version of
+   one that is already there, made in the builder, which is the same job done
+   somewhere it can be reused. */
 on("newLessonBtn", "click", () => {
-  openModal(box => {
-    modalTitle(box, "Build a new lesson");
-    box.appendChild(el("p","modal-text","Should everyone be able to use this lesson, or is it just for " + cls + "?"));
-    const shared = el("button","btn-primary modal-cta","For any class (goes in the hub)");
-    shared.addEventListener("click", () => {
-      closeModal();
-      window.open("author.html?unit=" + encodeURIComponent(unit || ""), "_blank");
-    });
-    const mineOnly = el("button","btn-ghost modal-stay","Just for " + cls);
-    mineOnly.addEventListener("click", () => {
-      closeModal();
-      window.open("author.html?unit=" + encodeURIComponent(unit || "") + "&class=" + encodeURIComponent(cls), "_blank");
-    });
-    box.appendChild(shared); box.appendChild(mineOnly);
-  });
+  window.open("author.html?unit=" + encodeURIComponent(unit || ""), "_blank");
 });
 
 on("addLessonBtn", "click", () => {
@@ -2677,7 +2906,6 @@ on("addLessonBtn", "click", () => {
     tools.appendChild(searchWrap); tools.appendChild(toggle);
     box.appendChild(tools);
     const holder = el("div"); box.appendChild(holder);
-    const msg = el("p","hint",""); box.appendChild(msg);
 
     /* A lesson "belongs" to this unit if its own file says so, that is what
        the builder writes, even before it has been filed here. */
@@ -2685,7 +2913,14 @@ on("addLessonBtn", "click", () => {
       holder.innerHTML = "";
       const t = term.trim().toLowerCase();
       const rows = fileLessons.filter(l => {
-        if (assignOf(l.id)) return false;                              // this class already has it
+        /* Versions are not offered here in their own right. The lesson they
+           came from is, and which version this class gets is asked once it
+           has been picked. */
+        if (catOf(l.id).version_of) return false;
+        /* Already here, under whichever version they were given. Matching on
+           the lesson alone would offer it again to a class that has one of
+           its versions, and adding it would leave them with both. */
+        if (assignOf(l.id) || familyOf(l.id).some(v => assignOf(v.lesson_id))) return false;
         if (t && !(l.title || l.id).toLowerCase().includes(t)) return false;
         if (showAll) return true;
         return (l.unit || "") === unit;                                // suggested by the lesson itself
@@ -2705,14 +2940,12 @@ on("addLessonBtn", "click", () => {
         words.appendChild(el("span","pick-unit", where || "Not in a unit"));
         row.appendChild(words);
         row.appendChild(el("span","edit","Add \u2192"));
-        row.addEventListener("click", async () => {
-          msg.textContent = "Adding\u2026";
-          try{
-            if ((catOf(l.id).unit || "") !== unit) await catPost({ op:"set-lesson", id: l.id, unit });
-            await catPost({ op:"assign", id: l.id, groups: [cls] });
-            await loadCatalogue();
-            closeModal(); paintLessonGrid();
-          }catch(e){ msg.textContent = e.message; }
+        row.addEventListener("click", () => {
+          /* This pop-up goes, and either the lesson is added or the one
+             asking which version takes its place. */
+          closeModal();
+          addLessonToClass(l.id, paintLessonGrid)
+            .catch(e => say("Could not add that", e.message));
         });
         holder.appendChild(row);
       });
@@ -2762,7 +2995,21 @@ function paintLessonGrid(){
     else if (a && a.close_on && live)
       card.appendChild(el("p","lp-note", (closed ? "Closed " : "Closes ") + niceDate(a.close_on)));
     card.appendChild(head);
-    if (l.owner_group) card.appendChild(el("p","lp-note", "Made for " + l.owner_group + " only"));
+    /* Which version this class is on, and the way to change it. Only where
+       there is more than one: a line reading "Version Original" on every card
+       in a hub that has no versions in it is noise on 27 classes' worth of
+       lessons. */
+    const family = familyOf(l.lesson_id);
+    if (family.length > 1){
+      const vrow = el("p","lp-note verpick");
+      vrow.appendChild(document.createTextNode("Version "));
+      const vchip = el("button","statechip chip-live " + (l.version_of ? "open" : "shut"),
+                       versionName(l));
+      vchip.title = "Choose which version " + cls + " has";
+      vchip.addEventListener("click", (e) => { e.stopPropagation(); pickVersionFor(l.lesson_id); });
+      vrow.appendChild(vchip);
+      card.appendChild(vrow);
+    }
     if (lessonLocks[l.lesson_id]) card.appendChild(el("p","lp-note","\u{1F512} Locked for " + cls));
     const acts = el("div","lp-acts");
     const pub = el("button", live ? "btn-ghost" : "btn-primary", live ? "Unpublish" : "Publish");
@@ -2795,6 +3042,7 @@ function paintLessonGrid(){
     /* View work is its own button, unless the screen is too narrow for four */
     const extras = [["Edit in the builder", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
                     ["Remove from " + cls, () => removeFromClass(l)]];
+    if (family.length > 1) extras.unshift(["Choose the version", () => pickVersionFor(l.lesson_id)]);
     if (isAssessment) extras.unshift(["Markbook", () => workBtn.click()]);
     if (narrow()) extras.unshift(["View work", () => openWorkPage(l.lesson_id)]);
     else {
@@ -2822,24 +3070,12 @@ async function fetchLesson(id){
   return d.lesson;
 }
 
-/* Taking a lesson away from a class leaves it in the hub, unless it was
-   built for this class alone, in which case there would be nothing left. */
+/* Taking a lesson away from a class leaves it in the hub for everyone else. */
 function removeFromClass(l){
   const id = l.lesson_id;
   const others = assigns.filter(a => a.lesson_id === id && a.group_name.toLowerCase() !== cls.toLowerCase());
-  const onlyHere = (l.owner_group && l.owner_group.toLowerCase() === cls.toLowerCase()) && !others.length;
   openModal(box => {
     modalTitle(box, "Remove \u201c" + titleOf(id) + "\u201d from " + cls + "?");
-    if (onlyHere){
-      box.appendChild(el("p","modal-text","This lesson was made for " + cls + " and no other class has it, so removing it here deletes it completely, including the students' work."));
-      const yes = el("button","btn-primary modal-cta","Delete it completely");
-      yes.style.background = "var(--red)";
-      yes.addEventListener("click", () => { closeModal(); deleteLesson(id, async () => { await loadCatalogue(); paintLessonGrid(); }); });
-      const no = el("button","btn-ghost modal-stay","Cancel");
-      no.addEventListener("click", closeModal);
-      box.appendChild(yes); box.appendChild(no);
-      return;
-    }
     box.appendChild(el("p","modal-text","It stays in the lesson hub" +
       (others.length ? " and with " + others.length + " other class" + (others.length === 1 ? "" : "es") : "") +
       ". Work that " + cls + " has already done is kept, and comes back if you add the lesson again."));
@@ -3047,7 +3283,10 @@ on("addUnitBtn", "click", () => {
       shown.forEach(u => {
         const row = el("button","ov-row");
         row.appendChild(el("span","t", u.name));
-        const n = (cat.lessons || []).filter(l => l.unit === u.name).length;
+        /* Versions are not counted. Adding the unit brings the original of
+           each lesson, so a unit of two lessons with two versions between
+           them would otherwise offer itself as four. */
+        const n = (cat.lessons || []).filter(l => l.unit === u.name && !l.version_of).length;
         row.appendChild(el("span","hint", n + " lesson" + (n === 1 ? "" : "s")));
         row.addEventListener("click", () => { closeModal(); addWholeUnit(u.name); });
         list.appendChild(row);
@@ -3069,8 +3308,10 @@ function unitHasLessonFor(name){
   return (cat.lessons || []).some(l => l.unit === name && assignOf(l.lesson_id));
 }
 /* giving a class every lesson in a unit is what "adding" it means */
+/* The original of each lesson, never a version: a class starts on the
+   standard one, and is moved to another from the lesson itself afterwards. */
 async function addWholeUnit(name){
-  const lessons = (cat.lessons || []).filter(l => l.unit === name);
+  const lessons = (cat.lessons || []).filter(l => l.unit === name && !l.version_of);
   if (!lessons.length){ say("Nothing in that unit", "It has no lessons yet."); return; }
   try{
     for (const l of lessons){

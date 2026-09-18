@@ -31,7 +31,13 @@
           year: l.year || u.year || "",
           code: l.code ? String(l.code).trim() : "",
           assessment: !!l.assessment,
-          homework: !!l.homework
+          homework: !!l.homework,
+          /* A version of another lesson. Empty for an original, which is
+             every lesson that was written before versions existed. */
+          versionOf: l.versionOf || "",
+          versionName: l.versionName || "",
+          versionNote: l.versionNote || "",
+          versionCode: l.versionCode || ""
         });
       });
     });

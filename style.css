@@ -1206,7 +1206,6 @@ body.spectating{padding-top:40px}
 #hubList .unit-head{margin-top:26px}
 #hubList .lessongrid{margin-top:10px}
 .lp-acts button{flex:0 0 auto; font-size:12px}
-#ownerNote{margin:8px 24px 0; font-weight:700; color:var(--amber-dark)}
 
 
 /* pictures inside a lesson */
@@ -4130,4 +4129,43 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
     content:""; position:absolute; left:50%; top:50%;
     transform:translate(-50%,-50%); width:44px; height:44px;
   }
+}
+
+/* ---------- versions of a lesson ----------
+   All new names, so nothing above is overridden and the mobile rules in the
+   middle of this file still win where they apply. What these do need is their
+   own answer for a narrow screen, which is at the bottom of this block rather
+   than back up there. */
+.verlist{display:flex; flex-direction:column; gap:10px; margin:6px 0 12px}
+.vercard{
+  background:var(--panel-2); border:1.5px solid var(--line);
+  border-radius:14px; padding:14px 16px;
+  /* A list, not a notice: a pop-up centres its words and a column of version
+     names and notes reads as a poem that way. */
+  text-align:left;
+}
+.ver-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.ver-head b{font-size:16.5px}
+.ver-note{margin:6px 0 0; font-size:14.5px; color:var(--muted); line-height:1.5}
+.ver-who{margin:6px 0 0; font-size:14px; color:var(--amber-dark); font-weight:700}
+.vercard .lp-acts{margin-top:12px}
+
+/* What this lesson is a version of, in the builder's Lesson options. */
+.vernow{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 6px; font-size:14.5px}
+
+/* The version a class is on, on its lesson card. The chip is a button, so the
+   line reads "Version [Original]" with the chip doing the work. */
+.verpick{display:flex; align-items:center; gap:8px; flex-wrap:wrap; color:var(--muted); font-weight:600}
+
+/* The one already in use, in the choosing pop-up. Marked rather than
+   disabled: pressing it is how you say "leave them where they are", and a row
+   that cannot be pressed only leaves a teacher looking for the way out. */
+.ov-row.vrow{align-items:flex-start}
+.ov-row.vrow.on{border-color:var(--mint); background:color-mix(in srgb, var(--mint) 8%, transparent)}
+.ov-row.vrow .pick-unit{white-space:normal; line-height:1.4}
+
+@media (max-width:560px){
+  .vercard{padding:12px 13px}
+  .ver-head b{font-size:15.5px}
+  .ver-note,.ver-who{font-size:13.5px}
 }
