@@ -90,7 +90,7 @@ h1,h2,h3{font-family:var(--display); letter-spacing:-.02em; margin:0}
 /* ---------- buttons ---------- */
 button{
   font-family:var(--body); font-size:16px; font-weight:600; cursor:pointer;
-  border-radius:10px; border:1px solid transparent; padding:11px 18px;
+  border-radius:10px; border:1px solid transparent; padding:9px 16px;
   transition:background .14s, border-color .14s, transform .06s;
 }
 button:active{transform:translateY(1px)}
@@ -102,7 +102,7 @@ button:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
 button:disabled{cursor:not-allowed}
 
 /* ---------- generic surfaces (used by home + admin too) ---------- */
-.station{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:24px}
+.station{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:19px}
 label{display:block; font-weight:600; font-size:16px; margin:0 0 8px; color:var(--text)}
 input[type=text],input[type=password],textarea{
   width:100%; font-family:var(--body); font-size:18px; color:var(--text);
@@ -174,19 +174,19 @@ body.lesson{
 
 /* the brief: instructions, big, always at the top, never scrolls away */
 .brief{
-  width:min(760px, calc(100% - 40px)); margin:10px auto 2px;
-  padding:10px 26px 12px; background:var(--panel-2);
+  width:min(760px, calc(100% - 40px)); margin:6px auto 2px;
+  padding:8px 26px 9px; background:var(--panel-2);
   border:1px solid var(--line); border-radius:12px; text-align:center;
 }
 .brief .eyebrow{
   font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.14em; text-transform:uppercase;
   color:var(--amber); margin:0 0 2px;
 }
-.brief h2{font-family:var(--display); font-size:20px; font-weight:700; line-height:1.25; margin:0 0 3px}
+.brief h2{font-family:var(--display); font-size:18px; font-weight:700; line-height:1.25; margin:0 0 3px}
 .brief p{margin:0; font-size:14.5px; line-height:1.45; color:var(--muted); max-width:88ch}
 
 /* the stage: the activity itself. Only this scrolls, and only if it must. */
-.stage{overflow-y:auto; padding:18px 20px; scrollbar-width:thin; scrollbar-color:var(--line-2) transparent}
+.stage{overflow-y:auto; padding:12px 18px; scrollbar-width:thin; scrollbar-color:var(--line-2) transparent}
 .stage::-webkit-scrollbar{width:10px}
 .stage::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:4px; border:3px solid var(--bg)}
 .stage > section{max-width:840px; margin:0 auto}
@@ -195,10 +195,10 @@ body.lesson{
 /* docked footer */
 .dock{
   display:flex; align-items:center; gap:16px;
-  padding:7px 20px; background:var(--panel); border-top:1px solid var(--line);
+  padding:4px 20px; background:var(--panel); border-top:1px solid var(--line);
 }
 .dock .mid{flex:1; text-align:center; min-width:0}
-.btn-continue{font-size:18px; padding:14px 30px; border-radius:10px}
+.btn-continue{font-size:17px; padding:9px 26px; border-radius:10px}
 .btn-continue:disabled{background:var(--line); border-color:var(--line); color:var(--dim)}
 #backBtn:disabled{opacity:.35}
 
@@ -213,20 +213,20 @@ body.bypassed #bypassDot{color:var(--mint)}
 body.bypassed .btn-continue:disabled{background:var(--amber); color:var(--amber-ink); border-color:var(--amber)}
 
 /* ---------- activity content ---------- */
-.prose{font-size:19px; line-height:1.65; color:var(--text)}
-.prose h2{font-size:26px; margin:0 0 14px; color:var(--text)}
-.prose p{margin:0 0 14px}
-.prose ul{margin:0 0 14px; padding-left:22px}
-.prose li{margin:7px 0}
+.prose{font-size:17px; line-height:1.6; color:var(--text)}
+.prose h2{font-size:22px; margin:0 0 11px; color:var(--text)}
+.prose p{margin:0 0 11px}
+.prose ul{margin:0 0 11px; padding-left:22px}
+.prose li{margin:5px 0}
 .prose b{color:var(--text); font-weight:600}
 
-textarea.answer{min-height:150px; font-size:19px; line-height:1.55}
+textarea.answer{min-height:118px; font-size:17px; line-height:1.5}
 /* A short answer is one line, the way a form asks for one. Held back from
    the full width so it reads as a short answer rather than an essay. */
-input.answer{font-size:19px; line-height:1.55; flex:1 1 260px; max-width:520px}
+input.answer{font-size:17px; line-height:1.5; flex:1 1 260px; max-width:520px}
 .short-row{display:flex; flex-wrap:wrap; align-items:center; gap:12px}
 .short-row .short-check{flex:0 0 auto}
-.counter{font-family:var(--mono); font-size:13px; color:var(--dim); margin:10px 0 0; letter-spacing:.03em}
+.counter{font-family:var(--mono); font-size:13px; color:var(--dim); margin:7px 0 0; letter-spacing:.03em}
 .counter[data-ok=true]{color:var(--mint)}
 
 iframe.embed{
@@ -234,9 +234,9 @@ iframe.embed{
   border:1px solid var(--line); border-radius:var(--r); background:#000;
 }
 .confirm{
-  display:flex; align-items:center; gap:14px; margin:18px 0 0; padding:16px 18px;
+  display:flex; align-items:center; gap:14px; margin:14px 0 0; padding:12px 15px;
   border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel);
-  font-size:17px; font-weight:600; cursor:pointer;
+  font-size:15.5px; font-weight:600; cursor:pointer;
 }
 .confirm:hover{border-color:var(--mint)}
 .confirm input{width:22px; height:22px; flex:none; accent-color:var(--mint)}
@@ -244,15 +244,15 @@ iframe.embed{
 /* quiz — one question at a time */
 .qhead{
   font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase;
-  color:var(--dim); margin:0 0 12px;
+  color:var(--dim); margin:0 0 9px;
 }
-.qtext{font-size:20px; line-height:1.55; margin:0 0 18px; color:var(--text)}
+.qtext{font-size:18px; line-height:1.5; margin:0 0 13px; color:var(--text)}
 .qtext b{color:var(--amber)}
-.opts{display:grid; gap:10px}
+.opts{display:grid; gap:8px}
 .opt{
-  display:flex; align-items:flex-start; gap:13px; margin:0; padding:16px 18px;
+  display:flex; align-items:flex-start; gap:13px; margin:0; padding:12px 15px;
   border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel);
-  font-size:18px; font-weight:400; line-height:1.45; cursor:pointer; transition:border-color .12s, background .12s;
+  font-size:16.5px; font-weight:400; line-height:1.4; cursor:pointer; transition:border-color .12s, background .12s;
 }
 .opt:hover{border-color:var(--muted); background:var(--panel-2)}
 .opt input{width:20px; height:20px; margin-top:1px; flex:none; accent-color:var(--amber)}
@@ -260,9 +260,9 @@ iframe.embed{
 .opt.right{border-color:var(--mint); background:rgba(65,199,164,.08)}
 .opt.wrong{border-color:var(--red); background:rgba(232,97,90,.08)}
 
-.feedback{margin:16px 0; padding:15px 17px; border-radius:12px; font-size:17px; line-height:1.5; border:1px solid var(--line)}
+.feedback{margin:12px 0; padding:11px 14px; border-radius:12px; font-size:15.5px; line-height:1.45; border:1px solid var(--line)}
 .feedback[hidden]{display:none}
-.feedback b{display:block; font-family:var(--display); font-size:17px; margin-bottom:4px}
+.feedback b{display:block; font-family:var(--display); font-size:15.5px; margin-bottom:3px}
 /* Feedback arrives as one sentence per span. Inline, two of them ran into
    each other with no gap: "...try again.The answer we are after..." */
 .feedback span{display:block}
@@ -300,12 +300,12 @@ input[type=range]{flex:1; accent-color:var(--amber); height:6px}
 
 /* python */
 textarea.code{
-  font-family:var(--mono); font-size:15px; line-height:1.55; min-height:190px;
+  font-family:var(--mono); font-size:15px; line-height:1.55; min-height:150px;
   background:var(--code-bg); color:var(--code-fg); border-color:var(--code-bg);
 }
 .output{
-  margin-top:14px; font-family:var(--mono); font-size:14.5px; white-space:pre-wrap; word-break:break-word;
-  background:var(--code-bg); border:1px solid #3A4150; border-radius:10px; padding:14px; min-height:48px; color:var(--code-fg);
+  margin-top:10px; font-family:var(--mono); font-size:14.5px; white-space:pre-wrap; word-break:break-word;
+  background:var(--code-bg); border:1px solid #3A4150; border-radius:10px; padding:11px; min-height:44px; color:var(--code-fg);
 }
 .output:empty::before{content:"Output appears here after you press Run."; color:var(--dim)}
 /* input() in the older Python task. That task has no console of its own, so
@@ -511,7 +511,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 }
 
 /* ---- v2: clearer task, quieter chrome ---- */
-.brief p{font-size:16px; max-width:62ch; margin:0 auto; color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.brief p{font-size:15px; max-width:62ch; margin:0 auto; color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .signin-hint{font-size:12.5px; color:var(--dim); margin:0 0 14px}
 .signin-hint a{color:var(--muted)}
 .handin{font-size:14px; font-weight:600; margin:14px 0 0; min-height:18px}
@@ -529,7 +529,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 #saveBtn.flash-bad{background:transparent; color:var(--amber); border-color:var(--amber-dark)}
 
 /* ---- writing coach (replaces the word count) ---- */
-.counter{font-family:var(--body); font-size:15px; font-weight:700; letter-spacing:0}
+.counter{font-family:var(--body); font-size:14px; font-weight:700; letter-spacing:0}
 .counter[data-stage=more]{color:var(--dim)}
 .counter[data-stage=going]{color:var(--amber)}
 .counter[data-stage=good]{color:var(--mint)}
@@ -641,7 +641,7 @@ b,strong,h1,h2,h3,.done-title,.lessonCard b{font-weight:800}
 .homebar{background:var(--bar) !important; border-color:var(--line) !important}.station, .resp-task, .result-card, .lessonCard{
   box-shadow:0 1px 3px rgba(0,0,0,.07);
 }
-.brief{box-shadow:0 1px 3px rgba(0,0,0,.06); padding:9px 24px 11px}
+.brief{box-shadow:0 1px 3px rgba(0,0,0,.06); padding:7px 22px 8px}
 .brief h2{margin:0}
 .brief p{color:var(--muted)}
 
@@ -984,7 +984,7 @@ body.spectating{padding-top:40px}
 
 /* ================= built-in Python IDE ================= */
 .ide{margin:0; --ed-bg:var(--code-bg); --ed-fg:#E6EAF2; --ed-bar:#2A2F3B; --ed-line:#3A4150;
-     --ed-gut:#5C6779; --ed-size:14px;
+     --ed-gut:#5C6779; --ed-size:16.5px;
      --t-kw:#C792EA; --t-str:#B8E08A; --t-num:#F2B36B; --t-fn:#7FC7F0; --t-call:#E8D48B;
      --t-com:#7A8699; --t-op:#9FB0C8;}
 .ide[data-idetheme=light]{--ed-bg:#FFFFFF; --ed-fg:#2B2B2B; --ed-bar:#F1EDE4; --ed-line:#E0D8C8;
@@ -995,15 +995,15 @@ body.spectating{padding-top:40px}
      --ed-gut:#BBBBBB;
      --t-kw:#FFD400; --t-str:#67FF67; --t-num:#FFA24D; --t-fn:#69D2FF; --t-call:#FFFFFF;
      --t-com:#B0B0B0; --t-op:#FFFFFF;}
-.ide[data-idesize=s]{--ed-size:12.5px}
-.ide[data-idesize=m]{--ed-size:14px}
-.ide[data-idesize=l]{--ed-size:16.5px}
-.ide[data-idesize=xl]{--ed-size:19px}
+.ide[data-idesize=s]{--ed-size:14px}
+.ide[data-idesize=m]{--ed-size:16.5px}
+.ide[data-idesize=l]{--ed-size:19px}
+.ide[data-idesize=xl]{--ed-size:21.5px}
 
 .ide-wrap{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; align-items:start}
 @media (max-width:900px){ .ide-wrap{grid-template-columns:minmax(0,1fr)} }
 .ide-pane,.ide-side{border:1.5px solid var(--ed-line); border-radius:14px; overflow:hidden; background:var(--ed-bg)}
-.ide-bar{display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--ed-bar); border-bottom:1px solid var(--ed-line)}
+.ide-bar{display:flex; align-items:center; gap:8px; padding:5px 10px; background:var(--ed-bar); border-bottom:1px solid var(--ed-line)}
 .ide-file{flex:1; font-family:var(--mono); font-size:13px; color:var(--ed-gut); font-weight:700}
 .ide-run{font-size:15px; padding:7px 18px; border-radius:10px}
 .ide-small{font-size:13.5px; padding:6px 12px; border-radius:8px; background:transparent;
@@ -1028,9 +1028,9 @@ body.spectating{padding-top:40px}
 
    Only the Python task. A web task has a preview beside it rather than a
    console, and that is a different size and a different shape. */
-.ide{ --ed-box:150px; --ed-box-max:300px;
+.ide{ --ed-box:150px; --ed-box-max:260px;
       --ed-row:calc(var(--ed-size) * 1.55); --ed-pad:24px }
-.ide-editor{display:flex; height:300px; overflow:hidden; background:var(--ed-bg)}
+.ide-editor{display:flex; height:260px; overflow:hidden; background:var(--ed-bg)}
 /* The student's own code box, and only that one. The builder's Starter code
    field carries .ide too, for the editor colours, and matching on that alone
    shrank it from 210px to the console height of a console it does not have.
@@ -1084,7 +1084,7 @@ body.spectating{padding-top:40px}
 
 .ide-canvaswrap{padding:10px; background:var(--ed-bar); border-bottom:1px solid var(--ed-line); display:grid; place-items:center}
 .ide-canvas{width:100%; max-width:480px; height:auto; background:#fff; border-radius:8px}
-.ide-console{background:var(--ed-bg); min-height:var(--ed-box); max-height:340px; overflow:auto; padding:12px 14px}
+.ide-console{background:var(--ed-bg); min-height:var(--ed-box); max-height:300px; overflow:auto; padding:10px 12px}
 .ide-out{margin:0; font-family:var(--mono); font-size:var(--ed-size); line-height:1.55;
   color:var(--ed-fg); white-space:pre-wrap; word-break:break-word}
 .ide-out.has-error{color:#F0A6A1}
@@ -1095,7 +1095,7 @@ body.spectating{padding-top:40px}
   background:transparent !important; border:none !important; border-bottom:1.5px solid var(--amber) !important;
   border-radius:0 !important; color:var(--ed-fg) !important; padding:2px 4px !important; caret-color:var(--amber)}
 .ide-askin:focus{outline:none; box-shadow:none !important}
-.ide-note{margin:12px 0 0; font-size:16px; font-weight:700}
+.ide-note{margin:9px 0 0; font-size:15px; font-weight:700}
 .ide-note.ok{color:var(--mint)}
 .ide-note.ok{color:var(--mint)}
 .ide-note.no{color:var(--amber-dark)}
@@ -1178,10 +1178,10 @@ body.spectating{padding-top:40px}
 
 /* a page of tasks on the student side */
 .pagegroup{display:block}
-.pg-item{padding:0 0 22px; margin:0 0 22px; border-bottom:1px solid var(--line)}
+.pg-item{padding:0 0 14px; margin:0 0 14px; border-bottom:1px solid var(--line)}
 .pg-item:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0}
-.pg-h{font-family:var(--display); font-size:20px; font-weight:800; margin:0 0 4px}
-.pg-t{color:var(--muted); font-size:16px; margin:0 0 12px}
+.pg-h{font-family:var(--display); font-size:17.5px; font-weight:800; margin:0 0 4px}
+.pg-t{color:var(--muted); font-size:14.5px; margin:0 0 8px}
 .pg-item section{margin:0}
 /* A quiz can be set to keep the rest of its page shut until the pass mark is
    reached. This line stands where that work will appear. */
@@ -1212,12 +1212,12 @@ body.spectating{padding-top:40px}
 /* pictures inside a lesson */
 .picfig{margin:0}
 .picimg{max-width:100%; height:auto; border-radius:14px; border:1px solid var(--line); display:block}
-.piccap{margin:9px 0 0; color:var(--muted); font-size:15px; text-align:center}
+.piccap{margin:7px 0 0; color:var(--muted); font-size:14px; text-align:center}
 
 /* written answer: background, then the question itself */
-.q-context{font-size:17px; line-height:1.6; color:var(--text); margin:0 0 12px}
-.q-ask{font-family:var(--display); font-size:21px; font-weight:800; line-height:1.35;
-  margin:0 0 14px; padding:12px 16px; background:var(--panel-2);
+.q-context{font-size:15.5px; line-height:1.55; color:var(--text); margin:0 0 9px}
+.q-ask{font-family:var(--display); font-size:17.5px; font-weight:800; line-height:1.35;
+  margin:0 0 10px; padding:9px 14px; background:var(--panel-2);
   border-left:4px solid var(--amber); border-radius:0 12px 12px 0}
 
 /* a link out, and a link a student pastes */
@@ -1318,11 +1318,11 @@ html[data-bg=dark] .rt-cb, html[data-bg=night] .rt-cb{
 .ide-helptext{font-size:14px; line-height:1.45; color:var(--ed-fg); opacity:.92}
 
 /* an embedded page inside a lesson */
-.framed{width:100%; height:520px; border:1.5px solid var(--line-2); border-radius:14px; background:#fff; display:block}
+.framed{width:100%; height:440px; border:1.5px solid var(--line-2); border-radius:14px; background:#fff; display:block}
 
 
 /* web editor: preview, messages, colouring */
-.web-preview{background:#fff; min-height:300px; display:flex; flex-direction:column}
+.web-preview{background:#fff; min-height:260px; display:flex; flex-direction:column}
 
 /* help search */
 .ide-helpsearch{width:100%; margin:0 0 12px; font-family:var(--body) !important; font-size:14px !important;
@@ -1338,7 +1338,7 @@ html[data-bg=dark] .rt-cb, html[data-bg=night] .rt-cb{
 .web-file{font-family:var(--mono); font-size:12.5px; font-weight:700; padding:5px 11px;
   border-radius:8px; border:1px solid transparent; background:transparent; color:var(--ed-gut); cursor:pointer}
 .web-file.on{background:var(--ed-bg); color:var(--ed-fg); border-color:var(--ed-line)}
-.web-preview{width:100%; height:100%; min-height:340px; border:none; background:#fff; display:block; flex:1}
+.web-preview{width:100%; height:100%; min-height:290px; border:none; background:#fff; display:block; flex:1}
 .ide-side:has(.web-preview){display:flex; flex-direction:column}
 .ide-side .web-preview{border-radius:0 0 12px 12px}
 .ide-tab.shout{color:var(--red)}
@@ -1366,8 +1366,8 @@ html[data-bg=dark] .rt-cb, html[data-bg=night] .rt-cb{
 
 
 /* every task heading is the same size */
-.pg-h,.q-ask{font-family:var(--display); font-size:20px; font-weight:800; line-height:1.35}
-.q-ask{margin:0 0 14px; padding:12px 16px; background:var(--panel-2);
+.pg-h,.q-ask{font-family:var(--display); font-size:17.5px; font-weight:800; line-height:1.35}
+.q-ask{margin:0 0 10px; padding:9px 14px; background:var(--panel-2);
   border-left:4px solid var(--amber); border-radius:0 12px 12px 0}
 /* the question is written in a formatting box now, so it can hold paragraphs
    and lists rather than one line of plain text */
@@ -1571,7 +1571,7 @@ pre, code{overflow-wrap:anywhere}
      size alone left the line numbers on their old 14px spacing while the
      code moved to 15px, so each number sat further above its line than the
      one before it. */
-  .ide, .ide[data-idesize=s], .ide[data-idesize=m]{--ed-size:15px}
+  .ide, .ide[data-idesize=s]{--ed-size:16.5px}
 }
 
 /* ---------- small screens: the bars stay put, pop-ups always have a way out ---------- */
@@ -1921,7 +1921,7 @@ textarea,select,.searchbox,.sizer{ border-radius:10px }
 .homebar,.topbar,.crumbbar{ border-bottom:1px solid var(--line) }
 
 /* --- the progress bar, made clearly its own thing --- */
-.tracker{ padding:10px 20px 0; gap:4px }
+.tracker{ padding:7px 20px 0; gap:4px }
 .seg{ height:6px; border-radius:999px; background:var(--line) }
 .seg.done{ background:var(--mint) }
 .seg.now{ background:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 18%, transparent) }
@@ -2024,12 +2024,17 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 }
 
 /* Buttons were carrying too much height for their text. */
-.btn-primary,.btn-ghost{ line-height:2.2; font-size:15px }
+.btn-primary,.btn-ghost{ line-height:1.95; font-size:15px }
+/* Continue and Run are the two buttons a lesson is read around, and both set
+   their size further up the file, so the line-height here beat them and left
+   the bar at the bottom 77px deep. Repeated below it so they keep their own. */
+.btn-continue{ line-height:1.9; font-size:16px; padding:8px 26px }
+.ide-run{ line-height:1.8; font-size:14.5px; padding:5px 16px }
 .tabs button,.subtabs button,.modeswitch button{ line-height:2.1; padding:0 15px }
 .lp-acts button{ line-height:2.1 }
 
 /* which made the top bar deeper than it needed to be */
-.homebar,.topbar{ padding-top:8px; padding-bottom:8px }
+.homebar,.topbar{ padding-top:6px; padding-bottom:6px }
 .homebar .title{ line-height:1.3 }
 
 /* the tab strip should sit flush */
@@ -2406,9 +2411,9 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 
 
 /* the checklist above a coding task */
-.checklist-wrap{margin:0 0 14px}
-.checklist{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:12px 14px}
-.checklist-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px}
+.checklist-wrap{margin:0 0 10px}
+.checklist{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:9px 12px}
+.checklist-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px}
 .checklist-head b{font-size:14px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
 .checklist-score{font-weight:700; font-size:14px; color:var(--muted)}
 .checklist-items{list-style:none; margin:0; padding:0}
@@ -2418,7 +2423,7 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
    a share of the width even when it was empty. That squeezed the label into
    wrapping while there was still room beside it. */
 .check{display:flex; flex-wrap:wrap; align-items:flex-start; gap:9px;
-  padding:5px 0; font-size:15.5px; line-height:1.45}
+  padding:4px 0; font-size:14.5px; line-height:1.4}
 .check-text{flex:1 1 auto; min-width:0}
 /* and with nothing to explain it takes no line at all */
 .check-note:empty{display:none}
@@ -2630,7 +2635,7 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .board-tool.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, var(--panel))}
 .board-colour{flex:0 0 auto; width:26px; min-width:26px; height:26px; border-radius:50%; border:2px solid var(--panel);
   box-shadow:0 0 0 1.5px var(--line-2); cursor:pointer; align-self:center}
-.board-stage{height:420px; border:1px solid var(--line); border-radius:0 0 12px 12px;
+.board-stage{height:350px; border:1px solid var(--line); border-radius:0 0 12px 12px;
   overflow:hidden; background:#FFFFFF}
 .board-canvas{display:block; touch-action:none; cursor:crosshair}
 
@@ -2655,7 +2660,7 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
   background:color-mix(in srgb, var(--amber) 14%, transparent); pointer-events:none}
 
 /* notes */
-.notes-box{min-height:190px}
+.notes-box{min-height:150px}
 .notes-count{margin:6px 0 0; font-size:13px; color:var(--muted)}
 
 
@@ -2797,7 +2802,7 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 /* a whiteboard or notes box does not need the whole width */
 @media (max-width:900px){ .board, .notestask{max-width:100%} }
 /* notes: eight lines, then it scrolls rather than growing forever */
-.notes-box{min-height:190px; max-height:calc(8 * 1.6em + 60px); overflow-y:auto}
+.notes-box{min-height:150px; max-height:calc(7 * 1.6em + 48px); overflow-y:auto}
 /* a labelled picture, centred and readable */
 
 /* a picture pasted into writing */
@@ -3028,7 +3033,7 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 
 /* --- the bar along the bottom of a lesson --- */
 .dock{
-  padding-bottom:calc(6px + env(safe-area-inset-bottom, 0px));
+  padding-bottom:calc(4px + env(safe-area-inset-bottom, 0px));
 }
 
 /* --- anything else measured against the screen --- */
