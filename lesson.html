@@ -2735,7 +2735,16 @@ function rExtension(b){
     if (inner.hidden === open) inner.hidden = !open;
     s.classList.toggle("open", open);
   }
-  cb.addEventListener("change", () => { paint(); markDirty(); });
+  /* Opening these is the moment a coding task inside them should pick up the
+     code it carries on from. The page was shown, and these built with it, long
+     before anyone had written that code: "add this to what you wrote above"
+     only works if "what you wrote above" is fetched when they open it, not
+     when the page was drawn. Nothing already written inside is touched. */
+  cb.addEventListener("change", () => {
+    paint();
+    if (cb.checked) kids.forEach(k => { if (k.onShow) k.onShow(); });
+    markDirty();
+  });
   /* remembered, so ticking it and coming back later does not shut it again */
   fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; paint(); } };
   paint();
@@ -3207,16 +3216,21 @@ function refreshChecklistMode(){
    it printed is read as the program's own doing rather than as part of the
    tick arriving. */
 const CHEER_WAIT = 500, CHEER_SHOWN = 1000;
-function cheerChecklist(over, holder, list, fresh){
-  const point = () => fresh.forEach(i => list.point(i));
-  if (!over){ scrollStageTo(holder, point); return; }
+function cheerChecklist(over, holder, list, fresh, reveal){
+  /* The lines this run turned are shown at the end of all this, not at the
+     start of it: the tick over the console, then the page coming back up to
+     the checklist, and only then the lines going green under the glow. A line
+     that ticks itself off first has already told the student everything, and
+     what follows is a tick pointing at old news. */
+  const land = () => { if (reveal) reveal(); fresh.forEach(i => list.point(i)); };
+  if (!over){ scrollStageTo(holder, land); return; }
   setTimeout(() => {
     const tick = el("div","ide-cheer");
     tick.appendChild(el("b","","\u2713"));
     over.appendChild(tick);
     setTimeout(() => {
       tick.remove();
-      scrollStageTo(holder, point);
+      scrollStageTo(holder, land);
     }, CHEER_SHOWN);
   }, CHEER_WAIT);
 }
@@ -3231,6 +3245,10 @@ function attachChecklist(section, checks, runner, blockId){
      the moment before the last refresh is what makes a program with an input
      in it cheer at all. */
   let sinceRun = null;
+  /* Which run's results the list is showing. A second run started while the
+     first is still working through its tick must not have the older results
+     painted back over it when that tick lands. */
+  let showing = 0;
   const list = window.buildChecklist(checks);
   allChecklists.push(list);
   /* Lines a teacher has to judge by eye can only be ticked by a teacher, and
@@ -3265,13 +3283,22 @@ function attachChecklist(section, checks, runner, blockId){
     }
     if (!Array.isArray(results)) return false;
     last = results;
-    const all = list.show(results);
+    const mine = ++showing;
+    /* Worked out from the results rather than from the list, because the list
+       is about to be drawn without these lines on it. A line a teacher has to
+       judge is never one of them: nothing a run does can turn it. */
+    const fresh = [];
     if (before){
       sinceRun = null;
-      const fresh = [];
-      list.ticked().forEach((on, i) => { if (on && !before[i]) fresh.push(i); });
-      if (fresh.length) cheerChecklist(cheerOver, holder, list, fresh);
+      results.forEach((r, i) => {
+        if (!r || r.manual) return;
+        if (r.ok && !r.broken && !before[i]) fresh.push(i);
+      });
     }
+    const all = list.show(results, fresh.length ? fresh : null);
+    if (fresh.length)
+      cheerChecklist(cheerOver, holder, list, fresh,
+                     () => { if (mine === showing) list.show(results); });
     markDirty();
     return all;
   }
@@ -3348,6 +3375,12 @@ function rIDE(b){
      follows the text size a student picks in the cog and the shorter boxes a
      phone uses. A height the teacher set by hand still wins: they were looking
      at the task when they chose it. */
+  /* The box holds code carried in from an earlier task for as long as it
+     still reads exactly as it was handed over. Declared here because the
+     editor built just below reads it the moment anyone types; what it is for
+     is under "starting from an earlier task" further down. */
+  let lastCarried = null;
+
   const starterRows = String(b.starter || "").split("\n").length;
   const ed = window.pyEdit.attach({
     value: b.starter || "",
@@ -3355,7 +3388,9 @@ function rIDE(b){
     height: b.height || 0,
     help: PY_HELP,
     tips: wantTips,
-    onInput: () => markDirty()
+    /* Once they have typed here it is their work, and nothing carries into it
+       again. See carryIn below. */
+    onInput: () => { lastCarried = null; markDirty(); }
   });
   const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
         probs = ed.probs, repaint = ed.repaint;
@@ -3568,11 +3603,18 @@ function rIDE(b){
       out.textContent = "";
       note.hidden = false; note.className = "ide-note no";
       note.textContent = "Python could not start here: " + (e.message || "unknown problem") + ".";
+      /* Python never started, so execute() never reached the point where it
+         ticks the list off. Quietly: nothing ran, so there is nothing to make
+         anything of. */
+      if (checklist) checklist.refresh();
     }finally{
       runBtn.disabled = false; runBtn.textContent = label;
-      /* the checklist keeps up on its own */
-      if (checklist) checklist.refresh();
     }
+    /* Nothing else ticks the list off here. execute() does it itself the
+       moment the program stops, and only then: a program sitting on an input
+       has not finished, and a second pass from out here both ticked its lines
+       off early and undid the holding back that lets the tick over the console
+       speak first. */
   }
   askIn.addEventListener("keydown", async (e) => {
     if (e.key !== "Enter") return;
@@ -3590,7 +3632,8 @@ function rIDE(b){
     out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
   });
   resetBtn.addEventListener("click", () => {
-    if (ta.value === (b.starter || "")) return;
+    const start = startingPoint();
+    if (ta.value === start.text) return;
     const back = el("div","modal-back");
     const box = el("div","modal");
     const xBtn = el("button","btn-ghost iconbtn modal-x","\u2715");
@@ -3598,9 +3641,17 @@ function rIDE(b){
     xBtn.addEventListener("click", () => back.remove());
     box.appendChild(xBtn);
     box.appendChild(el("h2","","Start this code again?"));
-    box.appendChild(el("p","modal-text","Your changes to this program will be lost."));
+    box.appendChild(el("p","modal-text", start.carried
+      ? "This goes back to your code from the task it carries on from. Anything you have added here will be lost."
+      : "Your changes to this program will be lost."));
     const yes = el("button","btn-primary modal-cta","Start again");
-    yes.addEventListener("click", () => { ta.value = b.starter || ""; repaint(); markDirty(); back.remove(); });
+    yes.addEventListener("click", () => {
+      ta.value = start.text;
+      /* back to carried code and untouched again, so the next time this task
+         is opened it still picks up anything new from the task before */
+      lastCarried = start.carried ? start.text : null;
+      repaint(); markDirty(); back.remove();
+    });
     const no = el("button","btn-ghost modal-stay","Keep my code");
     no.addEventListener("click", () => back.remove());
     box.appendChild(yes); box.appendChild(no);
@@ -3610,32 +3661,74 @@ function rIDE(b){
     document.body.appendChild(back);
   });
 
-  /* Starting from an earlier task, so a lesson can build one program up across
-     several steps. Only ever into an untouched box: once a student has written
-     anything of their own here, their work is what matters and overwriting it
-     with an earlier version would be the worst thing this could do. It happens
-     when the task is first opened rather than when the page is built, so it
-     picks up whatever they had written by the time they reached it. */
-  let carried = false;
-  function carryIn(){
-    if (carried || !b.startFrom) return;
-    const from = fields[codeKeys[b.startFrom]];
-    if (!from || typeof from.get !== "function") return;
-    const was = ta.value;
-    if (was.trim() && was !== (b.starter || "")) { carried = true; return; }
+  /* ---------- starting from an earlier task ----------
+     A lesson can build one program up across several steps, and an extension
+     task can pick up the very code a student has just finished writing further
+     up the page.
+
+     Carrying happens whenever this task is shown, not once, because the code
+     it comes from goes on changing. An extension task is the case that needs
+     it: the page is shown, and its tasks with it, long before anyone has
+     written the program the extension is meant to carry on from. Carrying once
+     meant the extension started from an empty box, or from the state of the
+     program twenty minutes before it was finished.
+
+     Never over anything the student has written here. That is the whole of the
+     rule, and `lastCarried` is how it is known: the box holds carried code
+     while it still reads exactly as it was handed over, and the moment anyone
+     types in it, it is theirs and nothing touches it again. It is declared
+     further up, beside the editor, because that is what reads it first. */
+
+  /* Whatever another coding task holds at this moment, or null if there is
+     nothing in it yet. */
+  function codeFrom(key){
+    if (!key) return null;
+    const from = fields[codeKeys[key]];
+    if (!from || typeof from.get !== "function") return null;
     let v = null;
-    try{ v = from.get(); }catch(e){ return; }
+    try{ v = from.get(); }catch(e){ return null; }
     const code = (v && typeof v === "object") ? v.code : (typeof v === "string" ? v : "");
-    if (!code || !code.trim()) return;      // nothing written there yet, try again later
-    carried = true;
+    return (code && code.trim()) ? code : null;
+  }
+
+  /* Has this box got anything of the student's own in it? */
+  function untouched(){
+    const mine = ta.value;
+    return !mine.trim() || mine === (b.starter || "") || mine === lastCarried;
+  }
+
+  function carryIn(){
+    if (!b.startFrom || !untouched()) return;
+    const code = codeFrom(b.startFrom);
+    if (code === null) return;        // nothing written there yet, try again later
+    lastCarried = code;
+    if (ta.value === code) return;    // already the same, so nothing to redraw
     ta.value = code;
     repaint(); markDirty();
   }
 
+  /* What Reset goes back to. A task that starts from an earlier one goes back
+     to that task as it stands now, not to the blank box this one was built
+     with: the point of starting from an earlier task is that this is the next
+     step, and sending a student back past the step before is not starting this
+     task again, it is taking their work away. */
+  function startingPoint(){
+    const code = b.startFrom ? codeFrom(b.startFrom) : null;
+    return code === null ? { text: b.starter || "", carried: false }
+                         : { text: code, carried: true };
+  }
+
   fields[b.id] = {
-    get:() => ({ code: ta.value, out: lastOut.slice(0, 4000), ran: ran, runs: runs,
-                 checks: checklist ? checkFlags(checklist) : undefined,
-                 manual: checklist ? checklist.list.getManual() : undefined }),
+    get:() => {
+      const v = { code: ta.value, out: lastOut.slice(0, 4000), ran: ran, runs: runs,
+                  checks: checklist ? checkFlags(checklist) : undefined,
+                  manual: checklist ? checklist.list.getManual() : undefined };
+      /* One flag rather than a second copy of the code: it says the box still
+         holds what was carried in, so a reload knows the work is not yet the
+         student's own and the next carry may still update it. */
+      if (lastCarried !== null && ta.value === lastCarried) v.carried = true;
+      return v;
+    },
     set:(v) => {
       if (!v) return;
       if (typeof v === "string"){ ta.value = v; repaint(); return; }
@@ -3644,6 +3737,7 @@ function rIDE(b){
       ran = !!v.ran;
       /* older work has no count, so a run it remembers counts as one */
       runs = Number(v.runs) || (ran ? 1 : 0);
+      lastCarried = v.carried ? ta.value : null;
       if (checklist && v.manual) checklist.list.setManual(v.manual);
       repaint();
     }

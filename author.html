@@ -362,9 +362,14 @@ function newCodeKey(){
   return "c" + Date.now().toString(36) + codeKeyCount.toString(36);
 }
 
-/* Every coding task before this one, in the order a student meets them, each
+/* Every Python task before this one, in the order a student meets them, each
    with the page it is on so it can be named by where a teacher will look for
-   it rather than by a number in a list. */
+   it rather than by a number in a list.
+
+   Python only. A web task keeps three files and a Python box holds one, so
+   there is nothing sensible to carry across, and the lesson page only ever
+   registered Python tasks as somewhere to carry from. They were offered here
+   all the same, and picking one did nothing at all. */
 function earlierCodeTasks(target){
   const out = [];
   let stop = false;
@@ -374,7 +379,7 @@ function earlierCodeTasks(target){
       if (stop) return;
       if (x === target){ stop = true; return; }
       if (x.type === "page"){ pageNo++; pageTitle = String(x.title || "").trim(); }
-      if (x.type === "ide" || x.type === "web"){
+      if (x.type === "ide"){
         if (!x.key) x.key = newCodeKey();
         out.push({ task:x, pageNo:pageNo, pageTitle:pageTitle });
       }
@@ -1675,11 +1680,15 @@ function card(b, i, arr){
         b.startFrom = sel.value || undefined;
         saveDraft(); render(); schedulePreview();
       });
-      const startHelp = ["Pick an earlier coding task and their code from it is put in "
-                         + "here the first time they open this one, so they can keep "
-                         + "building on it. Anything they have already written here is "
-                         + "left alone."];
-      if (!earlier.length) startHelp.unshift("Nothing to start from yet: this is the first coding task.");
+      const startHelp = ["Pick an earlier Python task and their code from it is put in "
+                         + "here when they open this one, so they can keep building on "
+                         + "it. It is fetched again each time they come back, and when "
+                         + "they tick to open an extension, so it is their newest code "
+                         + "rather than whatever was there when the page was drawn.",
+                         "Anything they have written here themselves is left alone, and "
+                         + "Reset takes them back to the earlier task rather than to an "
+                         + "empty box."];
+      if (!earlier.length) startHelp.unshift("Nothing to start from yet: this is the first Python task.");
       w.appendChild(withHelp(sel, startHelp));
       body.appendChild(w);
       /* Nothing to write when the code comes from somewhere else: a starter box

@@ -720,11 +720,17 @@
       return done === counted;
     }
 
-    /* called with the results of running the checks */
-    wrap.show = function(results){
+    /* Called with the results of running the checks. `hold` is the lines to
+       leave exactly as they are, which is how a line a run has just turned
+       waits for the tick over the console to point at it rather than quietly
+       going green first. They are drawn by a second call with nothing held
+       back, once that tick has had its say. */
+    wrap.show = function(results, hold){
+      const held = (hold && hold.length) ? hold : null;
       (results || []).forEach((r, i) => {
         const it = items[i];
         if (!it || it.manual) return;         // a teacher's tick is not overwritten
+        if (held && held.indexOf(i) >= 0) return;
         it.li.dataset.state = r.broken ? "broken" : r.ok ? "yes" : "no";
         it.mark.textContent = r.broken ? "!" : r.ok ? "✓" : "○";
         it.note.textContent = r.note || "";
