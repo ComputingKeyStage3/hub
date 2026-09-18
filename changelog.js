@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"9.2.1", text:"The tick now appears on programs that stop to ask a question, and waits half a second after the program finishes. The Python code box starts the same height as the console, growing with the starter code." },
   { v:"9.2",   text:"Checklists: styled wording, lines that fold away in the builder, spaces ignored when looking for text, conditions of any kind with brackets, and a tick over the console that takes you to whatever a run just ticked off." },
   { v:"9.1",   text:"Pages no longer freeze when the school network goes quiet, and a Python task that never ends now stops itself instead of locking the tab." },
   { v:"9.0.1", text:"Clicking in the builder's Starter code box now lands where you click, and the line numbers line up on a touch screen." },

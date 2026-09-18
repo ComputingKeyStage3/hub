@@ -3203,21 +3203,34 @@ function refreshChecklistMode(){
    Once the program has finished, not once Run has been pressed. Half way
    through, sitting on an input, it has not done what it is going to do yet,
    and ticking something off then teaches a student to stop watching. */
+/* Half a second between the program stopping and the tick, so the last line
+   it printed is read as the program's own doing rather than as part of the
+   tick arriving. */
+const CHEER_WAIT = 500, CHEER_SHOWN = 1000;
 function cheerChecklist(over, holder, list, fresh){
   const point = () => fresh.forEach(i => list.point(i));
   if (!over){ scrollStageTo(holder, point); return; }
-  const tick = el("div","ide-cheer");
-  tick.appendChild(el("b","","\u2713"));
-  over.appendChild(tick);
   setTimeout(() => {
-    tick.remove();
-    scrollStageTo(holder, point);
-  }, 1000);
+    const tick = el("div","ide-cheer");
+    tick.appendChild(el("b","","\u2713"));
+    over.appendChild(tick);
+    setTimeout(() => {
+      tick.remove();
+      scrollStageTo(holder, point);
+    }, CHEER_SHOWN);
+  }, CHEER_WAIT);
 }
 
 function attachChecklist(section, checks, runner, blockId){
   if (!checks || !checks.length || !window.buildChecklist) return null;
   let last = null;                    // what the checks said the last time they ran
+  /* What was ticked when Run was last pressed. A program that stops to ask a
+     question runs the checks again while it waits, so by the time it finishes
+     everything its code alone can show is already ticked and nothing is left
+     to point at. Comparing against the start of the run rather than against
+     the moment before the last refresh is what makes a program with an input
+     in it cheer at all. */
+  let sinceRun = null;
   const list = window.buildChecklist(checks);
   allChecklists.push(list);
   /* Lines a teacher has to judge by eye can only be ticked by a teacher, and
@@ -3241,8 +3254,9 @@ function attachChecklist(section, checks, runner, blockId){
      program off. Left out, the list changes quietly, which is what every
      other reason for running the checks wants: opening the task, putting
      saved work back, a run that is still waiting on an input. */
+  function mark(){ sinceRun = list.ticked(); }
   function refresh(cheerOver){
-    const before = cheerOver ? list.ticked() : null;
+    const before = cheerOver ? (sinceRun || list.ticked()) : null;
     let results;
     try{ results = runner(); }
     catch(e){
@@ -3253,6 +3267,7 @@ function attachChecklist(section, checks, runner, blockId){
     last = results;
     const all = list.show(results);
     if (before){
+      sinceRun = null;
       const fresh = [];
       list.ticked().forEach((on, i) => { if (on && !before[i]) fresh.push(i); });
       if (fresh.length) cheerChecklist(cheerOver, holder, list, fresh);
@@ -3262,7 +3277,7 @@ function attachChecklist(section, checks, runner, blockId){
   }
   /* An assessment adds a coding task up from these, so the result of the last
      run has to be readable rather than only drawn on the page. */
-  return { list, refresh, results: () => last };
+  return { list, refresh, mark, results: () => last };
 }
 
 function rIDE(b){
@@ -3323,6 +3338,17 @@ function rIDE(b){
      typing behaviour all come from pyedit.js, so the builder's Starter code
      box is the same editor rather than a plain box that looks nothing like
      what the student will open. */
+  /* How tall the code box starts. Up to five lines it is the same height as
+     the console beside it, which is what makes the pair read as a pair: a two
+     line program in a box built for twenty is mostly empty. Past five lines it
+     grows with the starter, keeping two lines of room under the last one so
+     there is somewhere to carry on, and stops at the height it has always had.
+
+     The sums are left to CSS rather than worked out in pixels here, so the box
+     follows the text size a student picks in the cog and the shorter boxes a
+     phone uses. A height the teacher set by hand still wins: they were looking
+     at the task when they chose it. */
+  const starterRows = String(b.starter || "").split("\n").length;
   const ed = window.pyEdit.attach({
     value: b.starter || "",
     readOnly: !!(b.readOnly || !canEdit),
@@ -3333,6 +3359,13 @@ function rIDE(b){
   });
   const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
         probs = ed.probs, repaint = ed.repaint;
+  /* Ten lines and over is the height it has always had, said outright
+     rather than left to the sum, which reaches it a line later. */
+  if (!b.height && starterRows > 5)
+    editor.style.setProperty("--ed-rows", starterRows >= 10
+      ? "var(--ed-box-max)"
+      : "clamp(var(--ed-box), calc(" + (starterRows + 2) +
+        " * var(--ed-row) + var(--ed-pad)), var(--ed-box-max))");
   if (b.key) codeKeys[b.key] = b.id;
   pane.appendChild(editor);
   pane.appendChild(probs);
@@ -3519,6 +3552,7 @@ function rIDE(b){
 
   async function run(cheer){
     cheerNext = !!cheer;
+    if (cheer && checklist) checklist.mark();
     runBtn.disabled = true;
     const label = runBtn.textContent;
     runBtn.textContent = "Running\u2026";
@@ -4112,6 +4146,7 @@ function rWeb(b){
      itself when the task opens and again when saved work is put back, and
      neither of those is something anyone has just done. */
   function run(cheer){
+    if (cheer && checklist) checklist.mark();
     /* the main page, plus every stylesheet and script the student has */
     const now = codeNow();
     out.innerHTML = ""; lastOut = "";

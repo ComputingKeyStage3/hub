@@ -1018,7 +1018,25 @@ body.spectating{padding-top:40px}
 .ide-chip.on{border-color:var(--amber); color:var(--amber); opacity:1}
 .ide-chip:hover{opacity:1}
 
+/* ---------- how tall the two boxes are ----------
+   The code box and the console are a pair, side by side, and they start the
+   same height: --ed-box is that height, and it is the console's own smallest.
+   A Python task whose starter runs past five lines sets --ed-rows on its
+   editor to grow it with the code, up to --ed-box-max, which is the height
+   every code box used to have. The line and the padding are the editor's own,
+   repeated here as numbers a sum can use.
+
+   Only the Python task. A web task has a preview beside it rather than a
+   console, and that is a different size and a different shape. */
+.ide{ --ed-box:150px; --ed-box-max:300px;
+      --ed-row:calc(var(--ed-size) * 1.55); --ed-pad:24px }
 .ide-editor{display:flex; height:300px; overflow:hidden; background:var(--ed-bg)}
+/* The student's own code box, and only that one. The builder's Starter code
+   field carries .ide too, for the editor colours, and matching on that alone
+   shrank it from 210px to the console height of a console it does not have.
+   Specific enough to beat the plain .ide-editor heights in the breakpoints
+   further down, so it keeps its own sizing on a phone. */
+.ide:not(.web) .ide-pane > .ide-editor{height:var(--ed-rows, var(--ed-box))}
 .ide-gutter{flex:none; width:46px; padding:12px 8px 12px 0; text-align:right; overflow:hidden;
   font-family:var(--mono); font-size:var(--ed-size); line-height:1.55; color:var(--ed-gut);
   background:var(--ed-bg); user-select:none}
@@ -1066,7 +1084,7 @@ body.spectating{padding-top:40px}
 
 .ide-canvaswrap{padding:10px; background:var(--ed-bar); border-bottom:1px solid var(--ed-line); display:grid; place-items:center}
 .ide-canvas{width:100%; max-width:480px; height:auto; background:#fff; border-radius:8px}
-.ide-console{background:var(--ed-bg); min-height:150px; max-height:340px; overflow:auto; padding:12px 14px}
+.ide-console{background:var(--ed-bg); min-height:var(--ed-box); max-height:340px; overflow:auto; padding:12px 14px}
 .ide-out{margin:0; font-family:var(--mono); font-size:var(--ed-size); line-height:1.55;
   color:var(--ed-fg); white-space:pre-wrap; word-break:break-word}
 .ide-out.has-error{color:#F0A6A1}
@@ -1491,6 +1509,7 @@ pre, code{overflow-wrap:anywhere}
   /* the code editor stacks: code above, output below */
   .ide-wrap{grid-template-columns:minmax(0,1fr)}
   .ide-editor{height:260px}
+  .ide{--ed-box-max:260px}
   .web-preview{height:300px}
 
   /* a page of tasks keeps its shape but tightens up */
@@ -1531,6 +1550,7 @@ pre, code{overflow-wrap:anywhere}
   /* editors: bigger touch targets, smaller chrome */
   .ide-bar{flex-wrap:wrap; gap:6px}
   .ide-editor{height:220px}
+  .ide{--ed-box-max:220px}
   .ide-gutter{width:34px}
   .web-preview{height:260px}
   .ide-small, .ide-tab, .web-file{padding:7px 10px}
