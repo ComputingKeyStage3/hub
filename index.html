@@ -417,15 +417,54 @@ async function fetchLessons(){
   return loadedOk;
 }
 
+/* Closing dates seen so far, lesson id to date. The tab a lesson belongs in
+   is worked out from whatever the catalogue sent this time, and an answer
+   that came back with no dates on it at all (a database a column behind, so
+   the query fell back to one that does not ask for them) put every closed
+   lesson back on the home page and left it there. Once a lesson has been seen
+   to have a closing date, that date is remembered, so closed stays closed.
+   A date the catalogue does send always wins, which is what lets a teacher
+   push a closing date back and have the lesson return to Active. */
+const CLOSE_KEY = "hub_close";
+let closeDates = {};
+try{ closeDates = JSON.parse(localStorage.getItem(CLOSE_KEY) || "{}") || {}; }catch(e){ closeDates = {}; }
+function rememberCloses(cat, trustThis){
+  const fresh = {};
+  cat.forEach(c => {
+    /* An answer with dates in it is the whole truth: a lesson without one has
+       had its closing date taken off, so the old one is forgotten too.
+       An answer with no dates anywhere tells us nothing, so nothing is lost. */
+    const shut = trustThis ? (c.close_on || "") : (c.close_on || closeDates[c.lesson_id] || "");
+    if (shut) fresh[c.lesson_id] = shut;         // lessons no longer listed drop out
+  });
+  closeDates = fresh;
+  try{ localStorage.setItem(CLOSE_KEY, JSON.stringify(fresh)); }catch(e){}
+}
+
+/* The school's own day, not UTC. A closing date is a date on a timetable, and
+   through the summer the UTC day is still yesterday's until one in the
+   morning, which is the same day the console works out. */
+function todayHere(){
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
 function paintLessons(byId){
   const box = $("lessonList"); box.innerHTML = "";
   const cat = (catalogue && catalogue.lessons) || [];
   // published, not locked for this class, and known in the lesson files
   let visible = cat.filter(c => byId[c.lesson_id] && !lockedLessons.has(c.lesson_id));   // the server already filtered by class
   /* A lesson is in the past once its closing date has gone by, or once the
-     student has finished it. Closed lessons can still be opened and edited. */
-  const today = new Date().toISOString().slice(0, 10);
-  const isPast = (c) => (c.close_on && c.close_on < today) || doneLessons.has(c.lesson_id);
+     student has finished it. Closed lessons can still be opened and edited.
+     Half finished work does not hold one back: the date closes it either way. */
+  const today = todayHere();
+  /* A remembered date is only used when this answer carried no dates at all.
+     Where the catalogue does have them, a lesson without one is a lesson
+     published without a closing date, and it stays where it is. */
+  const anyDates = cat.some(c => c.close_on);
+  const closeOf = (c) => c.close_on || (anyDates ? "" : (closeDates[c.lesson_id] || ""));
+  const isPast = (c) => { const shut = closeOf(c); return (shut && shut < today) || doneLessons.has(c.lesson_id); };
+  rememberCloses(cat, anyDates);
   visible = visible.filter(c => showing === "done" ? isPast(c) : !isPast(c));
 
   if (!visible.length){
@@ -577,7 +616,8 @@ function clearStudentCache(){
     const doomed = [];
     for (let i = 0; i < localStorage.length; i++){
       const k = localStorage.key(i);
-      if (k && (k.startsWith("hub_work_") || k.startsWith("hub_rel_") || k === "hub_inspect")) doomed.push(k);
+      if (k && (k.startsWith("hub_work_") || k.startsWith("hub_rel_") ||
+                k === "hub_close" || k === "hub_inspect")) doomed.push(k);
     }
     doomed.forEach(k => localStorage.removeItem(k));   // display settings are kept
   }catch(e){}

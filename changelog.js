@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"9.4.1", text:"A lesson that has closed always moves to a student's Past tab the day after its closing date, whether they finished it, started it or never opened it." },
   { v:"9.4",   text:"Lessons can have other versions of themselves, for a different set or another teacher, each saying what has changed in it. There is a Versions button on every lesson in the hub, adding a lesson to a class asks which version to give them, and a class can be moved between versions at any time. Building a lesson for one class only has gone: make a version instead." },
   { v:"9.3.1", text:"A password change a student asks for now only waits 5 minutes. After that it goes and they ask again, so nothing is left sitting to be approved the next morning." },
   { v:"9.3", text:"Tasks take up less room on the screen, so a coding task and the question under it can be seen at once, and the bar along the bottom is shallower. Code in a coding task is a size bigger: what read Large now reads Medium." },
