@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="practice.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -42,6 +43,7 @@
   <div class="tabs" id="tabs" hidden>
     <button class="on" id="tabLessons">Lessons</button>
     <button id="tabResults">Assessments &amp; STAR Feedback</button>
+    <button id="tabPractice">Practice</button>
     <button class="btn-ghost iconbtn refresh" id="refTab" title="Check for anything new">&#8635;</button>
   </div>
   <div id="view-lessons" hidden>
@@ -53,6 +55,13 @@
   </div>
   <div id="view-results" hidden>
     <div id="resultList"><p class="hint"></p></div>
+  </div>
+  <!-- Extra things to have a go at, set by nobody and marked by nobody.
+       What is on offer is listed in practice.js. -->
+  <div id="view-practice" hidden>
+    <p class="hint" style="margin:0 0 18px">Extra activities to practise on your own.
+      Nothing here is marked or handed in.</p>
+    <div id="practiceList"></div>
   </div>
 
 </div>
@@ -157,16 +166,30 @@ function on(id, ev, fn){
   e.addEventListener(ev, fn);
 }
 
-/* Nothing about lessons is shown until a student has signed in. */
+/* Which tab is open. Declared up here because signing in shows that tab and
+   hides the rest, and renderAuth runs before the rest of this script has been
+   read: a `let` further down is not there yet when it is asked for. */
+let openTab = "lessons";
+/* The sandbox sends a student back here with ?tab=practice on the address, so
+   they land on the list they came from rather than on their lessons. */
+try{
+  if (new URLSearchParams(location.search).get("tab") === "practice") openTab = "practice";
+}catch(e){}
+
+/* Nothing about lessons is shown until a student has signed in.
+   One view at a time, rather than every view unhidden at once: they were all
+   empty until something was loaded into them, so nothing showed, and the
+   moment a tab had a word of its own on it that stopped being true. */
 function signedInView(inYet){
-  ["tabs","view-lessons","view-results"].forEach(id => {
+  const tabs = $("tabs");
+  if (tabs) tabs.hidden = !inYet;
+  ["view-lessons","view-results","view-practice"].forEach(id => {
     const e = $(id);
-    if (e) e.hidden = !inYet;
+    if (e) e.hidden = true;
   });
-  if (!inYet){
-    const box = $("lessonList");
-    if (box) box.innerHTML = "";
-  }
+  if (inYet){ switchTab(openTab); return; }
+  const box = $("lessonList");
+  if (box) box.innerHTML = "";
 }
 
 /* ---------- home without a server ----------
@@ -176,7 +199,7 @@ function signedInView(inYet){
    browse, no sign in, and nothing here knows their name — the lesson page
    asks for that, because that is where the work happens. */
 function offlineHome(){
-  ["tabs","view-lessons","view-results"].forEach(id => { const e = $(id); if (e) e.hidden = true; });
+  ["tabs","view-lessons","view-results","view-practice"].forEach(id => { const e = $(id); if (e) e.hidden = true; });
   $("auth").innerHTML = "";
   $("headline").textContent = "Open a lesson";
   const card = $("loginCard");
@@ -583,8 +606,8 @@ on("refTab", "click", async () => {
 });
 on("tabLessons", "click", () => switchTab("lessons"));
 on("tabResults", "click", () => switchTab("results"));
+on("tabPractice", "click", () => switchTab("practice"));
 let resultsLoaded = false;
-let openTab = "lessons";
 
 /* Signing out has to forget everything held in memory as well as the token.
    Leaving these behind showed the next student the last one's marks. */
@@ -607,9 +630,46 @@ function switchTab(which){
   openTab = which;
   $("tabLessons").classList.toggle("on", which === "lessons");
   $("tabResults").classList.toggle("on", which === "results");
+  $("tabPractice").classList.toggle("on", which === "practice");
   $("view-lessons").hidden = which !== "lessons";
   $("view-results").hidden = which !== "results";
+  $("view-practice").hidden = which !== "practice";
+  /* Nothing on the Practice tab comes from the server, so there is nothing
+     to check for and no button to press. */
+  $("refTab").hidden = which === "practice";
   if (which === "results" && !resultsLoaded) loadResults();
+  if (which === "practice") paintPractice();
+}
+
+/* What a student can practise, from practice.js. Everything that will ever
+   be here is listed there; only the ones with a page behind them are drawn,
+   so the quiz and the written answers appear the day they are written and
+   nothing on this page has to change. */
+function paintPractice(){
+  const box = $("practiceList");
+  if (!box) return;
+  box.innerHTML = "";
+  const acts = (window.practice && window.practice.live()) || [];
+  if (!acts.length){
+    box.innerHTML = '<p class="hint">Nothing to practise just yet.</p>';
+    return;
+  }
+  const wrap = el("div","lessons");
+  acts.forEach(a => {
+    const card = document.createElement("a");
+    card.className = "lessonCard";
+    card.href = a.href;
+    const icon = el("span","num pracIcon", a.icon || "");
+    icon.setAttribute("aria-hidden","true");
+    card.appendChild(icon);
+    const body = el("span","body");
+    body.appendChild(el("b","", a.title));
+    body.appendChild(el("span","", a.blurb));
+    card.appendChild(body);
+    card.appendChild(el("span","go","→"));
+    wrap.appendChild(card);
+  });
+  box.appendChild(wrap);
 }
 function clearStudentCache(){
   try{
@@ -617,7 +677,8 @@ function clearStudentCache(){
     for (let i = 0; i < localStorage.length; i++){
       const k = localStorage.key(i);
       if (k && (k.startsWith("hub_work_") || k.startsWith("hub_rel_") ||
-                k === "hub_close" || k === "hub_inspect")) doomed.push(k);
+                k === "hub_close" || k === "hub_inspect" ||
+                k === "hub_sandbox")) doomed.push(k);
     }
     doomed.forEach(k => localStorage.removeItem(k));   // display settings are kept
   }catch(e){}

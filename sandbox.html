@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sandbox &middot; Computing KS3</title>
+<link rel="stylesheet" href="style.css">
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<script src="config.js"></script>
+<script src="pyhub.js"></script>
+<script src="pyedit.js"></script>
+<script src="practice.js"></script>
+<script src="settings.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="home" href="index.html?tab=practice">&larr; Practice</a>
+  <span class="sep">/</span>
+  <div class="title">Sandbox</div>
+  <span class="savetime" id="saveState"></span>
+  <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
+</div>
+
+<div class="sb-page">
+
+  <!-- Nobody is signed in. The sandbox belongs to an account, so there is
+       nothing to show and, more to the point, nothing of the last student's
+       to show either. -->
+  <section class="station" id="needIn" hidden>
+    <h2 style="margin-top:0">Sign in first</h2>
+    <p class="modal-text">Your programs are saved to your account, so they are
+      there on any computer you sign in on. Sign in and come back.</p>
+    <button class="btn-primary" id="goSignIn">Go to sign in</button>
+  </section>
+
+  <div id="sandbox" hidden>
+    <div class="sb-strip" id="strip"></div>
+    <p class="sb-note" id="stripNote" hidden></p>
+    <div id="holder"></div>
+    <p class="sb-note">Nothing here is marked or handed in. It is yours to play with.</p>
+  </div>
+
+</div>
+
+<div class="modal-back" id="delModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 style="margin-top:0">Delete this program?</h2>
+    <p class="modal-text" id="delWhat"></p>
+    <p class="subnote">This cannot be undone.</p>
+    <button class="btn-primary modal-cta" id="delYes">Delete it</button>
+    <button class="btn-ghost modal-stay" id="delNo">Keep it</button>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
+const store = window.practice.sandbox;
+const MAX = store.MAX_PROGRAMS;
+
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+/* wiring a button that isn't there should not stop the rest of the page */
+function on(id, ev, fn){
+  const e = document.getElementById(id);
+  if (!e){ console.warn("Nothing on the page with id:", id); return; }
+  e.addEventListener(ev, fn);
+}
+
+/* Something to press Run on straight away. A child who opens the sandbox and
+   sees an empty box has been given a blank page to fill; one line that works
+   is something to change. */
+const STARTER = '# Change this and press Run.\nprint("Hello")\n';
+
+let programs = [];
+let openId = "";
+
+/* ---------- saying whether it is saved ---------- */
+function paintSave(){
+  const box = $("saveState");
+  if (!box) return;
+  if (OFFLINE){ box.textContent = "Kept on this computer"; return; }
+  box.textContent = store.waiting()
+    ? (store.stuck() ? "Not saved yet, still trying" : "Saving…")
+    : "Saved ✓";
+}
+store.onState = paintSave;
+
+/* Anything changed on the page. `now` for the changes worth not losing to a
+   closed tab: a new program, a rename, a delete. Typing waits for the pause
+   the store leaves, so a lesson is not hundreds of writes. */
+function changed(p, now){
+  if (p) p.updated = Date.now();
+  store.keep(programs, now);
+  paintSave();
+}
+
+/* ---------- the row of programs ---------- */
+function paintStrip(){
+  const strip = $("strip");
+  strip.innerHTML = "";
+  programs.forEach(p => {
+    const b = el("button", "sb-prog" + (p.id === openId ? " on" : ""), p.name || "Program");
+    b.type = "button";
+    b.title = p.name || "Program";
+    b.addEventListener("click", () => openProgram(p.id));
+    strip.appendChild(b);
+  });
+  const add = el("button", "sb-new", "+ New program");
+  add.type = "button";
+  add.disabled = programs.length >= MAX;
+  add.addEventListener("click", newProgram);
+  strip.appendChild(add);
+
+  const note = $("stripNote");
+  note.hidden = programs.length < MAX;
+  note.textContent = programs.length >= MAX
+    ? "That is all " + MAX + ". Delete one you have finished with to start another."
+    : "";
+}
+
+/* "Program 3" being the first number nobody is using, rather than the count
+   plus one: with two programs called 1 and 3, the count would make a second
+   Program 3. */
+function nextName(){
+  for (let n = 1; n <= MAX + 1; n++){
+    const name = "Program " + n;
+    if (!programs.some(p => p.name === name)) return name;
+  }
+  return "Program";
+}
+
+function newProgram(){
+  if (programs.length >= MAX) return;
+  const p = { id: store.newId(), name: nextName(), kind:"python", code: STARTER, updated: Date.now() };
+  programs.push(p);
+  openId = p.id;
+  paintStrip();
+  drawEditor(p);
+  changed(p, true);
+}
+
+/* There is always one open. A sandbox with nothing in it is a page asking to
+   be understood before anything can be typed. */
+function ensureOne(){
+  if (!programs.length){
+    /* Not saved yet on purpose: a student who opens the sandbox, looks and
+       leaves has not written a program, and should not find an empty one
+       waiting for them next time. The first keystroke saves it. */
+    programs.push({ id: store.newId(), name: "Program 1", kind:"python",
+                    code: STARTER, updated: 0 });
+  }
+  if (!programs.some(p => p.id === openId)) openId = programs[0].id;
+}
+
+function openProgram(id){
+  const p = programs.find(x => x.id === id);
+  if (!p) return;
+  openId = id;
+  paintStrip();
+  drawEditor(p);
+}
+
+/* ---------- deleting ---------- */
+let pendingDelete = "";
+function askDelete(p){
+  pendingDelete = p.id;
+  $("delWhat").textContent = "“" + (p.name || "Program") + "” and everything in it will be gone.";
+  $("delModal").hidden = false;
+  $("delYes").focus();
+}
+/* A button rather than a link dressed as one: the padding that makes a
+   button a button comes from the rule for <button>, so a link wearing the
+   same class comes out as a word with a colour behind it. */
+on("goSignIn", "click", () => { location.href = "index.html"; });
+
+on("delNo", "click", () => { $("delModal").hidden = true; pendingDelete = ""; });
+on("delModal", "mousedown", (e) => {
+  if (e.target === $("delModal")){ $("delModal").hidden = true; pendingDelete = ""; }
+});
+on("delYes", "click", () => {
+  const gone = programs.findIndex(p => p.id === pendingDelete);
+  $("delModal").hidden = true;
+  pendingDelete = "";
+  if (gone < 0) return;
+  programs.splice(gone, 1);
+  /* Saved here, before the empty one below is put in its place, or deleting
+     the last program would save a fresh empty one in its place. */
+  changed(null, true);
+  /* The one that took its place, or the one before it if the end was
+     deleted, so nobody is dropped onto a page with nothing on it. */
+  ensureOne();
+  const next = programs[Math.min(gone, programs.length - 1)];
+  openId = next ? next.id : "";
+  paintStrip();
+  const now = programs.find(p => p.id === openId);
+  if (now) drawEditor(now);
+});
+
+/* ---------- the editor ----------
+   Built again from scratch each time a different program is opened. The
+   alternative, swapping the text in a single editor, means every piece of
+   state around it (what is in the console, what the program was waiting for,
+   which run is still playing) has to be remembered per program, and getting
+   one of those wrong shows one program's output under another's code. */
+function drawEditor(p){
+  const holder = $("holder");
+  holder.innerHTML = "";
+
+  const s = el("section","ide sb-ide");
+  const wrap = el("div","ide-wrap");
+
+  /* --- the code side --- */
+  const pane = el("div","ide-pane");
+  const bar = el("div","ide-bar");
+  const name = document.createElement("input");
+  name.type = "text";
+  name.className = "sb-name";
+  name.value = p.name || "";
+  name.maxLength = store.MAX_NAME;
+  name.setAttribute("aria-label", "What this program is called");
+  bar.appendChild(name);
+  const gearBtn = el("button","ide-small","⚙"); gearBtn.title = "Editor settings";
+  const delBtn = el("button","ide-small","Delete");
+  const runBtn = el("button","btn-primary ide-run","▶ Run");
+  bar.appendChild(gearBtn);
+  bar.appendChild(delBtn);
+  bar.appendChild(runBtn);
+  pane.appendChild(bar);
+
+  /* Colours and text size, the same cog as a lesson's coding task, and the
+     same choice remembered: set the code large in a lesson and it is large
+     here too. */
+  const ideSet = window.pyEdit.idePanel(s);
+  pane.appendChild(ideSet.panel);
+  gearBtn.addEventListener("click", ideSet.toggle);
+
+  const ed = window.pyEdit.attach({
+    value: p.code || "",
+    help: window.pyEdit.PY_HELP,
+    /* The click-a-word explanations belong to the lesson page, which has the
+       bubble that shows them. Underlining words here with nothing behind
+       them would be a promise the page cannot keep, so the Help tab beside
+       the console does that job instead. */
+    tips: false,
+    onInput: () => {
+      p.code = ed.ta.value;
+      changed(p);
+      paintRoom();
+    }
+  });
+  /* A hard stop rather than a message after the event: the browser simply
+     stops taking more, so nothing a student typed is ever thrown away for
+     being too long. */
+  ed.ta.maxLength = store.MAX_CODE;
+  pane.appendChild(ed.editor);
+  pane.appendChild(ed.probs);
+  const room = el("p","sb-room");
+  room.hidden = true;
+  pane.appendChild(room);
+  function paintRoom(){
+    const left = store.MAX_CODE - ed.ta.value.length;
+    room.hidden = left > 800;
+    room.textContent = left > 0
+      ? "Room for about " + left + " more characters in this program."
+      : "This program is full. Start another one to carry on.";
+  }
+  paintRoom();
+  wrap.appendChild(pane);
+
+  /* --- the output side --- */
+  const side = el("div","ide-side");
+  const cwrap = el("div","ide-canvaswrap");
+  const canvas = el("canvas","ide-canvas");
+  canvas.width = 480; canvas.height = 360;
+  cwrap.appendChild(canvas);
+  cwrap.hidden = true;            // only once a program actually draws
+  side.appendChild(cwrap);
+
+  const outBar = el("div","ide-bar ide-outbar");
+  const tabConsole = el("button","ide-tab on","Console");
+  const tabHelp = el("button","ide-tab","Help");
+  outBar.appendChild(tabConsole);
+  outBar.appendChild(tabHelp);
+  outBar.appendChild(el("span","ide-file",""));      // pushes Clear to the right
+  const clearBtn = el("button","ide-small","Clear");
+  outBar.appendChild(clearBtn);
+  side.appendChild(outBar);
+
+  const consoleBox = el("div","ide-console");
+  const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
+  const askRow = el("div","ide-ask"); askRow.hidden = true;
+  const askText = el("span","ide-askprompt");
+  const askIn = document.createElement("input");
+  askIn.type = "text"; askIn.className = "ide-askin";
+  askIn.autocomplete = "off"; askIn.spellcheck = false;
+  askRow.appendChild(askText); askRow.appendChild(askIn);
+  consoleBox.appendChild(out); consoleBox.appendChild(askRow);
+  side.appendChild(consoleBox);
+
+  const helpBox = el("div","ide-help"); helpBox.hidden = true;
+  const helpSearch = document.createElement("input");
+  helpSearch.type = "search"; helpSearch.className = "ide-helpsearch";
+  helpSearch.placeholder = "Search for a word or what it does…";
+  helpBox.appendChild(helpSearch);
+  const helpList = el("div","ide-helplist");
+  helpBox.appendChild(helpList);
+  const HELP = window.pyEdit.PY_HELP;
+  function paintHelp(){
+    const term = (helpSearch.value || "").trim().toLowerCase();
+    helpList.innerHTML = "";
+    const words = Object.keys(HELP).sort().filter(w =>
+      !term || w.toLowerCase().includes(term) || HELP[w].toLowerCase().includes(term));
+    if (!words.length){ helpList.appendChild(el("p","ide-helplead","Nothing matches that word.")); return; }
+    words.forEach(word => {
+      const row = el("div","ide-helprow");
+      row.appendChild(el("code","ide-helpword", word + (window.pyEdit.PY_FN.has(word) ? "()" : "")));
+      row.appendChild(el("span","ide-helptext", HELP[word]));
+      helpList.appendChild(row);
+    });
+  }
+  helpSearch.addEventListener("input", paintHelp);
+  paintHelp();
+  side.appendChild(helpBox);
+  function showTab(which){
+    const help = which === "help";
+    consoleBox.hidden = help;
+    helpBox.hidden = !help;
+    tabConsole.classList.toggle("on", !help);
+    tabHelp.classList.toggle("on", help);
+  }
+  tabConsole.addEventListener("click", () => showTab("console"));
+  tabHelp.addEventListener("click", () => showTab("help"));
+
+  wrap.appendChild(side);
+  s.appendChild(wrap);
+  const note = el("p","ide-note"); note.hidden = true;
+  s.appendChild(note);
+  holder.appendChild(s);
+
+  /* --- the name --- */
+  name.addEventListener("input", () => { p.name = name.value; paintStrip(); changed(p); });
+  name.addEventListener("blur", () => {
+    /* A program with no name at all cannot be told apart in the row above,
+       so an empty box goes back to what it was called. */
+    if (!name.value.trim()){ name.value = p.name = nextName(); paintStrip(); }
+    changed(p, true);
+  });
+  name.addEventListener("keydown", (e) => { if (e.key === "Enter") name.blur(); });
+
+  delBtn.addEventListener("click", () => askDelete(p));
+
+  /* --- running ---
+     The same playback the lesson's coding task uses. Python runs at full
+     speed and hands back a list of what happened in order, because nothing
+     can appear on the page while Python is using the only thread there is.
+     The waiting is done out here, between the pieces, where the browser is
+     free to paint. */
+  let answers = [], shownSteps = 0, playRun = 0;
+  const pause = (secs) => new Promise(go => setTimeout(go, Math.max(0, secs) * 1000));
+
+  /* Whether this program draws. A turtle needs somewhere to draw and an
+     empty white rectangle beside a program that only prints is a puzzle, so
+     the canvas appears when the code asks for one. */
+  function drawsThings(){ return /^\s*(import\s+turtle|from\s+turtle\s+import)/m.test(ed.ta.value); }
+
+  async function playback(events){
+    const mine = ++playRun;
+    const list = events || [];
+    out.textContent = "";
+    for (let i = 0; i < list.length; i++){
+      const ev = list[i];
+      if (ev[0] === "out"){
+        out.textContent += ev[1];
+        out.scrollTop = out.scrollHeight;
+      } else if (ev[0] === "wait"){
+        /* Answering a question runs the whole program again from the top, so
+           the part already sat through must not be waited out a second
+           time. */
+        if (i >= shownSteps) await pause(ev[1]);
+      } else if (ev[0] === "draw"){
+        if (window.hubDraw) window.hubDraw.apply(null, [ev[1]].concat(ev[2] || []));
+      } else if (ev[0] === "clear"){
+        if (window.hubTurtleClear) window.hubTurtleClear();
+      }
+      if (playRun !== mine) return false;    // Run or Clear was pressed meanwhile
+    }
+    shownSteps = list.length;
+    return true;
+  }
+
+  async function execute(){
+    const py = await window.hubPython.start(out);
+    await window.hubPython.loadImports(py, ed.ta.value, out);
+    py.globals.set("_hub_next_inputs", answers.join(" "));
+    py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
+    py.globals.set("_hub_src", ed.ta.value);
+    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
+    if (!await playback(res.events)) return true;    // something newer is running now
+    out.classList.toggle("has-error", res.status === "done" && !res.ok);
+    if (res.status === "input"){
+      askText.textContent = res.prompt || ">";
+      askRow.hidden = false; askIn.value = ""; askIn.focus();
+      return false;
+    }
+    askRow.hidden = true;
+    if (!res.out) out.textContent = "(your program printed nothing)";
+    return true;
+  }
+
+  async function run(){
+    runBtn.disabled = true;
+    const label = runBtn.textContent;
+    runBtn.textContent = "Running…";
+    note.hidden = true;
+    answers = [];
+    shownSteps = 0;
+    out.textContent = "";
+    showTab("console");
+    const wantsCanvas = drawsThings();
+    cwrap.hidden = !wantsCanvas;
+    try{
+      if (window.hubTurtleAttach) window.hubTurtleAttach(wantsCanvas ? canvas : null);
+      await execute();
+    }catch(e){
+      out.textContent = "";
+      note.hidden = false; note.className = "ide-note no";
+      note.textContent = "Python could not start here: " + (e.message || "unknown problem") + ".";
+    }finally{
+      runBtn.disabled = false; runBtn.textContent = label;
+    }
+  }
+  runBtn.addEventListener("click", run);
+  askIn.addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    answers.push(askIn.value);
+    askRow.hidden = true;
+    try{
+      if (window.hubTurtleAttach) window.hubTurtleAttach(cwrap.hidden ? null : canvas);
+      await execute();
+    }catch(err){ askRow.hidden = true; }
+  });
+  clearBtn.addEventListener("click", () => {
+    playRun++;              // stops anything still arriving from the run before
+    shownSteps = 0;
+    out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
+  });
+}
+
+/* ---------- starting up ---------- */
+async function start(){
+  const signedIn = OFFLINE || !!localStorage.getItem("hub_token");
+  $("needIn").hidden = signedIn;
+  $("sandbox").hidden = !signedIn;
+  if (!signedIn) return;
+
+  /* What this browser already has goes on the screen at once, so a student
+     is typing rather than watching dots. The real list arrives underneath. */
+  programs = store.localCopy();
+  ensureOne();
+  paintStrip();
+  drawEditor(programs.find(p => p.id === openId));
+  paintSave();
+
+  try{
+    const up = await store.load();
+    /* Only worth redrawing if the server knew something this browser did
+       not. Redrawing regardless throws away whatever has been typed in the
+       second or two it took to answer. */
+    const same = up.length === programs.length &&
+                 up.every((p, i) => p.id === programs[i].id && p.code === programs[i].code &&
+                                    p.name === programs[i].name);
+    if (!same){
+      programs = up;
+      ensureOne();
+      paintStrip();
+      drawEditor(programs.find(p => p.id === openId));
+    }
+  }catch(e){
+    /* The browser's copy is already on the screen, which is the whole point
+       of putting it there first. Nothing to say. */
+    console.warn("Could not load saved programs:", e);
+  }
+  paintSave();
+}
+
+/* Leaving the page, or even flicking to another tab, is the moment to make
+   sure the server has everything. On a phone, hidden is often the last thing
+   that happens before the tab is thrown away, so it matters more than
+   pagehide does. */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") store.flush(true);
+});
+window.addEventListener("pagehide", () => { store.flush(true); });
+
+if (window.initSettings) initSettings($("setBtn"));
+start();
+</script>
+</body>
+</html>

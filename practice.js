@@ -1,0 +1,247 @@
+/* ===================================================================
+   practice.js — the Practice section: what is on offer, and where a
+   student's sandbox programs are kept.
+
+   Practice is work nobody set and nobody marks. It is not a lesson, so
+   none of it goes near the lesson list, the catalogue or the markbook.
+
+   Two things live here because two pages want them: the home page paints
+   the list of activities, and sandbox.html keeps the programs.
+   =================================================================== */
+(function(){
+  "use strict";
+
+  const API = (window.HUB && window.HUB.API) || "";
+  const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
+
+  /* ---------- what a student can practise ----------
+     Everything that will ever be here is listed now, with `ready` saying
+     whether it has a page behind it yet. The quiz and the written answers
+     are being written next; turning one on is this one word, and the card
+     appears on the home page with no other change anywhere. */
+  const ACTIVITIES = [
+    { id:"sandbox", ready:true,  href:"sandbox.html", icon:"▶",
+      title:"Sandbox",
+      blurb:"Write and run your own Python programs. Keep up to five of them." },
+    { id:"quiz", ready:false, href:"practice-quiz.html", icon:"⚡",
+      title:"Quickfire quiz",
+      blurb:"Short rounds of questions on what you have been learning." },
+    { id:"written", ready:false, href:"practice-written.html", icon:"✎",
+      title:"Written answers",
+      blurb:"Practise writing longer answers, with help as you go." }
+  ];
+
+  const MAX_PROGRAMS = 5;
+  /* About 300 lines. Plenty for practice, and it is what keeps the sums
+     below honest: five of these is 50KB a student, so a whole year group
+     is 40MB against a database of 5GB even if every child fills every
+     program to the brim. Nothing here is ever stored as a picture. */
+  const MAX_CODE = 10000;
+  const MAX_NAME = 40;
+
+  /* One row in the work table per student, under a lesson id no lesson can
+     have. That is deliberate: it needs no new serverless function (there
+     are eight and eight are allowed), no new table, and a student who
+     leaves takes their sandbox with them, because deleting a student
+     already deletes their work. */
+  const SLOT = "__practice_sandbox";
+  const KEY = "hub_sandbox";
+
+  const token = () => localStorage.getItem("hub_token") || "";
+  const whoami = () => (localStorage.getItem("hub_user") || "").toLowerCase();
+
+  function blank(){ return { user: whoami(), programs: [], pending: false, saved: 0 }; }
+
+  /* What is in this browser. Whose it is, is written down beside it: a
+     shared computer hands the next child the same localStorage, and marks
+     belonging to somebody else have appeared on a screen here before. */
+  function readLocal(){
+    let d = null;
+    try{ d = JSON.parse(localStorage.getItem(KEY) || "null"); }catch(e){ d = null; }
+    if (!d || !Array.isArray(d.programs)) return blank();
+    if (!OFFLINE && String(d.user || "") !== whoami()) return blank();
+    return { user: d.user || "", programs: d.programs.map(tidy).filter(Boolean),
+             pending: !!d.pending, saved: d.saved || 0 };
+  }
+  function writeLocal(d){
+    try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){ /* a full browser: the server still has it */ }
+  }
+
+  /* Anything read back, from either side, is checked rather than trusted:
+     a blob that has been edited by hand must not put an object where the
+     editor expects a string. */
+  function tidy(p){
+    if (!p || typeof p !== "object") return null;
+    return {
+      id: String(p.id || "").slice(0, 40) || newId(),
+      name: String(p.name || "Program").slice(0, MAX_NAME),
+      /* Python is the only kind so far. It is written down anyway, so the
+         day there is an HTML one beside it nothing already saved has to be
+         changed to say what it is. */
+      kind: "python",
+      code: String(p.code == null ? "" : p.code).slice(0, MAX_CODE),
+      updated: Number(p.updated) || 0
+    };
+  }
+  function newId(){
+    return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  /* Never more than five, however the list arrived. Only reached by a
+     student working in two places at once, which is rare, but it must not
+     end in six. The order they are in is theirs and is left alone: the
+     newest are the ones kept, not the ones moved to the front, or a list
+     would shuffle itself every time a program was opened. */
+  function capped(list){
+    if (list.length <= MAX_PROGRAMS) return list.slice();
+    const newest = new Set(list.slice()
+      .sort((a, b) => (b.updated || 0) - (a.updated || 0))
+      .slice(0, MAX_PROGRAMS)
+      .map(p => p.id));
+    return list.filter(p => newest.has(p.id));
+  }
+
+  /* `leaving` is for the save made as the tab goes away. A normal fetch is
+     cancelled when the page is thrown out; keepalive asks the browser to
+     finish sending it anyway, which is exactly the save nobody can watch.
+     It is not used for ordinary saves: keepalive bodies are capped at 64KB
+     by the browser, and five full programs is not far off it. */
+  async function pushUp(programs, leaving){
+    if (OFFLINE || !API || !token()) return false;
+    const opts = {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
+      body: JSON.stringify({ lesson: SLOT, data: { practice: "sandbox", programs: programs } })
+    };
+    if (leaving) opts.keepalive = true;
+    const r = await fetch(API + "/api/submit", opts);
+    if (!r.ok) throw new Error("Could not save just now.");
+    return true;
+  }
+
+  async function pullDown(){
+    if (OFFLINE || !API || !token()) return null;
+    const r = await fetch(API + "/api/work?lesson=" + encodeURIComponent(SLOT), {
+      headers: { Authorization: "Bearer " + token() }, cache: "no-store"
+    });
+    if (!r.ok) throw new Error("Could not load your programs.");
+    const d = await r.json();
+    const got = (d && d.data && Array.isArray(d.data.programs)) ? d.data.programs : [];
+    return capped(got.map(tidy).filter(Boolean));
+  }
+
+  /* ---------- the store the sandbox page talks to ----------
+     Saving is in two halves. The browser's copy is written the moment
+     anything changes, so nothing is ever lost to a refresh; the server is
+     told when the typing stops, when the page is left, and whenever a
+     program is made, renamed or deleted. Sending every keystroke up would
+     be hundreds of writes a lesson for work nobody marks. */
+  let state = blank();
+  let timer = null;
+  let sending = null;
+  let stuck = false;          // a save that did not get through
+
+  const sandbox = {
+    MAX_PROGRAMS, MAX_CODE, MAX_NAME,
+
+    /* Called whenever there is something new to say about saving, so the
+       page can show it without asking over and over. Set by whoever is
+       showing it. */
+    onState: null,
+
+    /* What this browser already has, straight away, so the editor can be
+       drawn without waiting for the network. */
+    localCopy(){ state = readLocal(); return state.programs.slice(); },
+
+    /* The real list. Anything typed here that never reached the server goes
+       up first: it is newer than whatever is up there, and letting the
+       server's copy win would throw away the work that failed to send.
+       Otherwise the server is the truth, which is what makes a program
+       deleted on one computer stay deleted on the next. */
+    async load(){
+      state = readLocal();
+      if (OFFLINE || !API || !token()) return state.programs.slice();
+      if (state.pending){
+        await sandbox.flush();
+        return state.programs.slice();
+      }
+      const up = await pullDown();
+      if (up){
+        state = { user: whoami(), programs: up, pending: false, saved: Date.now() };
+        writeLocal(state);
+      }
+      return state.programs.slice();
+    },
+
+    /* Changed on the page: written down here and now, sent up shortly.
+       `now` is for the changes worth not losing to a closed tab, which is
+       every one that is not simply typing. */
+    keep(programs, now){
+      state.programs = capped(programs.map(tidy).filter(Boolean));
+      state.user = whoami();
+      state.pending = true;
+      writeLocal(state);
+      clearTimeout(timer);
+      if (now) return sandbox.flush();
+      timer = setTimeout(() => { sandbox.flush(); }, 10000);
+      return Promise.resolve(false);
+    },
+
+    /* Everything not yet sent, sent. Comes back true when the server has it
+       and false otherwise, and never throws: there is nothing useful for a
+       page to do about a save that did not get through except say so and
+       let the next one carry it, which is what happens here. */
+    async flush(leaving){
+      clearTimeout(timer);
+      if (!state.pending) return false;
+      if (OFFLINE || !API || !token()) return false;
+      if (sending) return sending;
+      const going = state.programs.slice();
+      sending = (async () => {
+        try{
+          await pushUp(going, leaving);
+          /* Only what actually went up is settled. Anything typed while it
+             was in the air is still waiting, so the flag stays up. */
+          if (same(state.programs, going)){
+            state.pending = false;
+            state.saved = Date.now();
+            writeLocal(state);
+          }
+          stuck = false;
+          return true;
+        }catch(e){
+          /* The school's network drops for a moment far more often than it
+             goes away for good, so this tries again rather than giving up
+             on work that is safe in the browser either way. */
+          stuck = true;
+          clearTimeout(timer);
+          timer = setTimeout(() => { sandbox.flush(); }, 30000);
+          return false;
+        }finally{
+          sending = null;
+          if (typeof sandbox.onState === "function"){ try{ sandbox.onState(); }catch(e){} }
+        }
+      })();
+      return sending;
+    },
+
+    /* Is there anything the server has not been told about, and has a go at
+       telling it already failed? The page turns these into words. */
+    waiting(){ return !!state.pending; },
+    stuck(){ return stuck; },
+    newId
+  };
+
+  function same(a, b){
+    return a.length === b.length &&
+           a.every((p, i) => p.id === b[i].id && p.code === b[i].code && p.name === b[i].name);
+  }
+
+  window.practice = {
+    ACTIVITIES,
+    /* The ones with a page behind them. Everything else waits here until
+       it is written. */
+    live(){ return ACTIVITIES.filter(a => a.ready); },
+    sandbox
+  };
+})();

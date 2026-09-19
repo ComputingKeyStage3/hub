@@ -260,23 +260,166 @@ function themeFromSite(){
 /* Keep an editor's colours in step with the site's. The lesson page has its
    own version of this, because a student may choose editor colours of their
    own and those have to win; nowhere else does, so nowhere else needs it. */
-const followers = [];
-function follow(shell){
-  shell.dataset.idetheme = themeFromSite();
-  shell.dataset.idesize = "m";
-  followers.push(shell);
-  if (followers.length === 1 && window.MutationObserver){
+/* Anything that wants to know when the site's colours change. One watcher
+   for the page however many editors are on it. */
+const watchers = [];
+function watchSite(fn){
+  watchers.push(fn);
+  if (watchers.length === 1 && window.MutationObserver){
     try{
       new MutationObserver(() => {
         const t = themeFromSite();
-        followers.forEach(x => { x.dataset.idetheme = t; });
+        watchers.forEach(f => { try{ f(t); }catch(e){} });
       }).observe(document.documentElement, { attributes:true, attributeFilter:["data-bg"] });
     }catch(e){}
   }
+  fn(themeFromSite());
+}
+function follow(shell){
+  shell.dataset.idesize = "m";
+  watchSite((t) => { shell.dataset.idetheme = t; });
   return shell;
 }
 
+/* ---------- the cog: editor colours and text size ----------
+   Kept per browser under hub_ide and shared by every editor on the site, so
+   a student who sets the code large in a lesson finds it large in the
+   practice sandbox as well.
+
+   `shell` is the element the .ide styles hang off, which is what carries
+   data-idetheme and data-idesize. Comes back with the panel to drop into the
+   editor's bar area; it starts hidden and the cog shows it. */
+function idePrefs(){ try{ return JSON.parse(localStorage.getItem("hub_ide") || "{}"); }catch(e){ return {}; } }
+function saveIdePrefs(p){ try{ localStorage.setItem("hub_ide", JSON.stringify(p)); }catch(e){} }
+/* An older version stored a theme every time an editor was drawn, so nearly
+   every browser has one saved and stopped following the page. Clear those once. */
+(function(){
+  try{
+    const p = idePrefs();
+    if (p.theme && !p.chosen){ delete p.theme; saveIdePrefs(p); }
+  }catch(e){}
+})();
+
+function idePanel(shell){
+  const panel = el("div","ide-settings");
+  panel.hidden = true;
+  panel.appendChild(tel("span","ide-setlabel","Colours"));
+  const themes = el("div","ide-setrow");
+  /* "Match the page" first, and it is where everyone starts. Without it,
+     picking a colour scheme once meant the editor never followed the site
+     again: turning the whole site dark left a white editor sitting in the
+     middle of it with no way back short of clearing the browser's storage. */
+  [["","Match the page"],["dark","Dark"],["light","Light"],["contrast","High contrast"]].forEach(pair => {
+    const chip = tel("button","ide-chip", pair[1]);
+    chip.type = "button";
+    chip.dataset.theme = pair[0];
+    chip.addEventListener("click", () => {
+      if (!pair[0]){
+        const p = idePrefs();
+        delete p.theme; delete p.chosen;
+        saveIdePrefs(p);
+        setTheme(themeFromSite());
+      } else setTheme(pair[0], true);
+    });
+    themes.appendChild(chip);
+  });
+  panel.appendChild(themes);
+  panel.appendChild(tel("span","ide-setlabel","Text size"));
+  const sizes = el("div","ide-setrow");
+  [["s","Small"],["m","Medium"],["l","Large"],["xl","Extra large"]].forEach(pair => {
+    const chip = tel("button","ide-chip", pair[1]);
+    chip.type = "button";
+    chip.dataset.size = pair[0];
+    chip.addEventListener("click", () => setSize(pair[0]));
+    sizes.appendChild(chip);
+  });
+  panel.appendChild(sizes);
+
+  function setTheme(k, chosen){
+    shell.dataset.idetheme = k;
+    /* Only remembered when the student picked it, otherwise the editor would
+       stop following the site's colours after the first paint. */
+    if (chosen){ const p = idePrefs(); p.theme = k; p.chosen = true; saveIdePrefs(p); }
+    /* Following the site is a mode of its own, so that is the chip to mark
+       rather than whichever colour it happens to be showing. */
+    const auto = !idePrefs().theme;
+    Array.from(themes.children).forEach(c =>
+      c.classList.toggle("on", auto ? c.dataset.theme === "" : c.dataset.theme === k));
+  }
+  function setSize(k){
+    shell.dataset.idesize = k;
+    Array.from(sizes.children).forEach(c => c.classList.toggle("on", c.dataset.size === k));
+    const p = idePrefs(); p.size = k; saveIdePrefs(p);
+  }
+  /* Always watching, even when a colour scheme has been chosen. The watcher
+     asks about the preference each time it fires, so pressing "Match the page"
+     starts following the site again straight away. Registering it only when
+     none had been chosen meant that, once one was, nothing was left listening:
+     choosing to follow the site again worked once and then stopped until the
+     page was reloaded. */
+  watchSite((t) => { if (!idePrefs().theme) setTheme(t); });
+  const pref = idePrefs();
+  if (pref.theme) setTheme(pref.theme, false);
+  setSize(pref.size || "m");
+
+  return { panel, toggle(){ panel.hidden = !panel.hidden; }, setTheme, setSize };
+}
+
+/* ---------- a word explained ----------
+   A one-line explanation for the words a beginner meets. Clicking a coloured
+   word in the editor shows the matching note.
+
+   Here beside the colouring rather than in lesson.html, because the practice
+   sandbox offers the same Help tab and a list of words kept in two places
+   grows apart. */
+const PY_HELP = {
+  print:"Shows something on the screen.",
+  input:"Stops and waits for the person to type, then hands the typing back as text. Store it in a variable to keep it.",
+  int:"Makes a whole number out of something, like \"7\" into 7. Anything with a decimal point loses it.",
+  str:"Makes text out of something, so a number can be joined onto words.",
+  float:"Makes a decimal number out of something, like \"2.5\" into 2.5.",
+  len:"Gives the number of items in a list, or the number of characters in some text.",
+  range:"Counts from 0 up to but not including the number, so range(5) gives 0, 1, 2, 3, 4.",
+  list:"Makes a list, which holds several things in order and can be changed.",
+  dict:"Makes a dictionary, which stores pairs so you can look a value up by its name.",
+  round:"Rounds to the nearest whole number. Exact halves go to the nearest even one, so round(2.5) is 2.",
+  abs:"Gives how far a number is from zero, so the minus sign is dropped.",
+  min:"Gives the smallest of the numbers.",
+  max:"Gives the biggest of the numbers.",
+  sum:"Adds up all the numbers in a list.",
+  sorted:"Gives back a new list in order. The original list is left as it was.",
+  random:"A toolbox for picking things by chance. Needs import random at the top first.",
+  if:"Does something only when a condition is true.",
+  elif:"Another condition to try when the ones above were false.",
+  else:"What to do when none of the conditions above were true.",
+  for:"Repeats something once for each item, like every number in a range.",
+  while:"Keeps repeating for as long as a condition stays true.",
+  break:"Leaves the loop straight away, without finishing the rest of it.",
+  continue:"Skips the rest of this time round the loop and starts the next one.",
+  def:"Makes your own command that you can use again later.",
+  return:"Sends a value back out of your own command.",
+  import:"Brings in extra tools, like turtle or random.",
+  from:"Brings in just part of a toolbox.",
+  in:"Checks whether something is inside a list or some text.",
+  not:"Flips true into false, and false into true.",
+  and:"True only when both things are true.",
+  or:"True when at least one of the things is true.",
+  True:"The value for yes.",
+  False:"The value for no.",
+  None:"Means nothing at all, no value yet.",
+  try:"Attempts something that might go wrong.",
+  except:"What to do if the code in try went wrong.",
+  class:"A blueprint for making things that each carry their own information.",
+  pass:"Does nothing, a placeholder to keep the code valid.",
+  global:"Lets a command change a variable that was made outside it, instead of making its own.",
+  lambda:"A very short command written on one line, with no name of its own.",
+  with:"Opens something, such as a file, and closes it again when the block ends.",
+  type:"Tells you what kind of value something is, such as a number or some text.",
+  enumerate:"Goes through a list giving both the position, counting from 0, and the item.",
+  zip:"Goes through two lists side by side, stopping when the shorter one runs out."
+};
+
 window.pyEdit = { attach, checkPython, hlLine, strip, escHtml, themeFromSite, follow,
-                  PY_KW, PY_FN };
+                  idePanel, idePrefs, saveIdePrefs, PY_KW, PY_FN, PY_HELP };
 
 })();

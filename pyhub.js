@@ -521,4 +521,60 @@ def _hub_run(source, seconds=10.0):
     return json.dumps({"status": "done", "out": _hub_text(),
                        "events": _events, "ok": ok})
 `;
+
+  /* ---------- starting Python ----------
+     Lived in lesson.html until the practice sandbox wanted the same thing.
+     One Pyodide per page however many editors are on it: it is tens of
+     megabytes off a CDN and a second copy would be a second download.
+
+     `status` is somewhere to say that Python is coming, usually the console
+     the student is looking at. The first run is the slow one. */
+  let py = null, coming = null, booted = false;
+  const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+
+  function startPyodide(status){
+    if (py) return Promise.resolve(py);
+    if (!coming){
+      if (status) status.textContent = "Loading Python… (first run only)";
+      coming = new Promise((done, stop) => {
+        const sc = document.createElement("script");
+        sc.src = PYODIDE + "pyodide.js";
+        sc.onload = done;
+        sc.onerror = () => stop(new Error("Could not load Python."));
+        document.head.appendChild(sc);
+      }).then(() => loadPyodide({ indexURL: PYODIDE }))
+        .then((p) => { py = p; return p; });
+    }
+    return coming;
+  }
+
+  /* Pyodide plus the turtle, the input() and the endless-loop guard above,
+     which are what make a student's program behave like Python rather than
+     like a web page. Run once per page. */
+  window.hubPython = {
+    async start(status){
+      const p = await startPyodide(status);
+      if (!booted){ p.runPython(window.HUB_PY_BOOT); booted = true; }
+      return p;
+    },
+    /* Pyodide only starts with part of Python. sqlite3, ssl and lzma sit
+       beside it as separate downloads, as does everything past the standard
+       library such as numpy, matplotlib and pandas. Without this, "import
+       sqlite3" came back as "No module named sqlite3" even though the module
+       was on the CDN waiting to be asked for. Reading the imports out of the
+       student's own code and fetching whatever they named is what makes those
+       work.
+       Quiet on failure on purpose: if the download is blocked the run carries
+       on and the missing module message above explains it in words a child can
+       read, which beats stopping the editor. */
+    async loadImports(p, code, status){
+      if (!p || typeof p.loadPackagesFromImports !== "function") return;
+      try{
+        await p.loadPackagesFromImports(code, {
+          messageCallback: () => { if (status) status.textContent = "Getting the module you asked for…"; },
+          errorCallback: () => {}
+        });
+      }catch(e){ /* a typo in their code lands here too; the run reports it properly */ }
+    }
+  };
 })();
