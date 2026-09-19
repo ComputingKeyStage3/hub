@@ -18,7 +18,20 @@
 <body>
 
 <div class="homebar">
-  <div class="title">Lesson builder<span id="titleShow"></span></div>
+  <!-- Which of the two things this page is. They were a strip of their own
+       under the title, which put two rows of switching above the work; the
+       title was already a word saying where you are, so it became the
+       button that says it instead. Task builder is hidden for a KS3 year
+       group, and then this reads as the plain title it always was. -->
+  <div class="buildswitch">
+    <button class="buildtab on" id="tabBuild" type="button">
+      <span class="bt-long">Lesson builder</span><span class="bt-short">Lesson</span>
+    </button>
+    <button class="buildtab" id="tabBank" type="button" hidden>
+      <span class="bt-long">Task builder</span><span class="bt-short">Tasks</span>
+    </button>
+  </div>
+  <div class="title"><span id="titleShow"></span></div>
   <!-- which kind of work this is, on a narrow screen where the tab strip
        below has been folded away -->
   <button class="modechip" id="modeChip" hidden>
@@ -35,14 +48,6 @@
 <div class="buildbar" id="buildBar" hidden>
   <div class="buildbar-scroll" id="buildBarScroll"></div>
   <button class="btn-ghost bmini2 prevtoggle" id="prevToggle">Preview</button>
-</div>
-
-<!-- Lesson or task bank. Shown only when the year group is working towards
-     GCSE or A Level, so a KS3 lesson is built on exactly the page it always
-     was, with nothing extra on it. -->
-<div class="subtabs buildtabs" id="buildTabs" hidden>
-  <button class="on" id="tabBuild">Lesson</button>
-  <button id="tabBank">Task bank</button>
 </div>
 
 <div class="modeswitch">
@@ -80,6 +85,19 @@
 <div class="build">
   <aside class="build-palette">
     <div id="palLesson">
+      <!-- A lesson built under a point of the specification is built out of
+           the tasks written for that point, so those are what the column
+           offers and nothing else is in the way. Everything the builder can
+           make is still one button away. -->
+      <div id="palPoint" hidden>
+        <div class="pal-pointhead">
+          <b id="palPointName"></b>
+          <span id="palPointNote"></span>
+        </div>
+        <div id="palPointList"></div>
+      </div>
+      <button class="pal pal-more" id="palMoreBtn" hidden><b>+ Add extra tasks</b><span>Everything else the builder can make</span></button>
+      <div id="palStandard">
       <button class="pal strong" data-add="page"><b>+ New page</b><span>Students see one page at a time</span></button>
       <!-- Both of these are hidden for a KS3 year group. The bank button is
            not a task: it opens the picker, and what comes back is a copy. -->
@@ -158,6 +176,7 @@
           <button class="pal" data-add="image"><b>Screenshot</b><span>They paste a picture</span></button>
           <button class="pal" data-add="pastelink"><b>Paste a link</b><span>They hand in a link</span></button>
         </div>
+      </div>
       </div>
     </div>
     <div id="palAssess" hidden>
@@ -346,7 +365,7 @@ window.addEventListener("scroll", placeHelp, true);
    original. A version is a whole lesson of its own, with its own id and its
    own students' work: the three fields beside it are only what the console
    shows to tell one apart from another. */
-let lesson = { title:"", intro:"", unit:"", year:"", assessment:false, practical:false, homework:false,
+let lesson = { title:"", intro:"", unit:"", year:"", point:"", assessment:false, practical:false, homework:false,
                versionOf:"", versionName:"", versionNote:"", versionCode:"",
                topics:{}, responses:{}, extensions:[], blocks:[] };
 
@@ -584,6 +603,10 @@ function compile(){
   if (lesson.intro) out.intro = lesson.intro;
   if (lesson.unit) out.unit = lesson.unit;
   if (lesson.year) out.year = lesson.year;
+  /* Where it sits on the specification. Saved with the lesson so reopening
+     it knows, and copied out to the catalogue when it is saved, which is
+     what the GCSE and A Level hub files it by. */
+  if (lesson.point) out.point = lesson.point;
   if (lesson.homework) out.homework = true;
   if (lesson.linger) out.linger = true;
   /* Kept in the lesson itself as well as in the catalogue, so reopening it
@@ -976,9 +999,10 @@ function tellPreview(page){
    how the column crept back to being forty screens of editors, and the pages
    themselves fold instead. */
 function isShut(b){
-  /* The task bank has one task on screen at a time, so there is nothing to
-     get past by folding it away and every rule below belongs to a lesson. */
-  if (bankEditing) return false;
+  /* The task builder has one task on screen, so that one is always open.
+     A page of tasks has tasks inside it, and those fold the way they do
+     anywhere else; viewAll belongs to the lesson and says nothing here. */
+  if (bankRoot) return b !== bankRoot && b.folded === true;
   if (b.type === "page") return viewAll && b.collapsed === true;
   return viewAll || b.folded === true;
 }
@@ -1191,8 +1215,24 @@ function renderNow(){
   const pages = pageList();
   if (!pages.length){
     openPageRef = null;                  // whatever it pointed at has gone
-    list.appendChild(el("p","hint",
-      "No pages yet. Add one above, or pick a task on the left and a page is made for it."));
+    /* An empty lesson has no page to drop a task onto, and a lesson is
+       built by dragging tasks over from the left. So the empty space takes
+       the drop and makes the first page for it, which is what clicking a
+       task has always done. */
+    const empty = el("p","hint dropzone",
+      "No pages yet. Drag a task here, or click one on the left, and a page is made for it.");
+    empty.addEventListener("dragover", (e) => {
+      if (!newTask && !newBank) return;
+      e.preventDefault(); empty.classList.add("over");
+    });
+    empty.addEventListener("dragleave", () => empty.classList.remove("over"));
+    empty.addEventListener("drop", (e) => {
+      e.preventDefault(); empty.classList.remove("over");
+      const made = newBank ? bankCopy(newBank) : (newTask ? BLANK[newTask]() : null);
+      newTask = null; newBank = null;
+      addBlock(made);
+    });
+    list.appendChild(empty);
     saveDraft();
     return;
   }
@@ -1237,7 +1277,7 @@ function pageStrip(){
     chip.addEventListener("click", () => { viewAll = false; tellPreview(p); render(); });
     chip.draggable = true;
     chip.addEventListener("dragstart", (e) => {
-      pageDrag = p; newTask = null; dragFrom = null;
+      pageDrag = p; newTask = null; newBank = null; dragFrom = null;
       chip.classList.add("dragging");
       if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain","page"); }
     });
@@ -1334,6 +1374,7 @@ function movePagePicker(b, arr){
   });
 }
 let newTask = null;          // a task being dragged in from the palette
+let newBank = null;          // a task being dragged in from the task bank
 
 /* pages only live at the top; everything else only lives on a page */
 /* the list of tasks currently on screen */
@@ -1342,7 +1383,11 @@ function openArray(){
   return respEditing === "__ext" ? lesson.extensions : (lesson.responses[respEditing] || []);
 }
 function canDropOn(arr){
-  const kind = newTask || (dragFrom && dragFrom.type);
+  /* Three things can be dropped: a kind off the palette, a task out of the
+     bank, and a task already in the lesson being moved. What a bank task
+     may land on depends on what it is, the same as anything else. */
+  const kind = newTask || (newBank && newBank.block && newBank.block.type)
+                       || (dragFrom && dragFrom.type);
   if (!kind) return false;
   /* a page only makes sense at the top of a lesson */
   if (kind === "page") return arr === lesson.blocks && !respEditing;
@@ -1361,9 +1406,10 @@ function dropInto(arr, at){
   /* Refusing must leave the drag alone: another list may still be about to
      accept it, and clearing here would take the task away from it. */
   if (!canDropOn(arr)) return;
-  if (newTask){
-    const made = BLANK[newTask]();
-    newTask = null;
+  if (newTask || newBank){
+    const made = newBank ? bankCopy(newBank) : BLANK[newTask]();
+    newTask = null; newBank = null;
+    if (!made) return;
     arr.splice(at < 0 ? arr.length : at, 0, made);
     if (made.type === "page"){ viewAll = false; tellPreview(made); }
     else { openOnly(arr, made); viewAll = false; }
@@ -1461,7 +1507,7 @@ function card(b, i, arr){
       paintStrip();
     });
   }
-  if (!bankEditing){
+  if (b !== bankRoot){
     const grip = el("span","bgrip","\u2630"); grip.title = "Drag to move";
     grip.addEventListener("mousedown", () => { c.draggable = true; });
     grip.addEventListener("mouseup", () => { c.draggable = false; });
@@ -1475,7 +1521,7 @@ function card(b, i, arr){
      Which things fold depends on the view, and it is never both at once.
      Editing one page, the page is the workbench and its tasks fold; looking at
      all of them, the tasks are already shut and the pages fold instead. */
-  const canFold = bankEditing ? false : (b.type === "page" ? viewAll : !viewAll);
+  const canFold = (b === bankRoot) ? false : (b.type === "page" ? viewAll : !viewAll);
   if (canFold){
     const fold = el("button","btn-ghost bmini foldbtn", shut ? "▸" : "▾");
     fold.title = b.type === "page"
@@ -1490,7 +1536,7 @@ function card(b, i, arr){
   }
   /* Numbered by where it sits in a lesson. A bank task sits nowhere, so it
      says what it is and nothing else. */
-  const btype = el("b","btype", bankEditing ? (LABEL[b.type] || b.type) : headLabel(b, i));
+  const btype = el("b","btype", (b === bankRoot) ? (LABEL[b.type] || b.type) : headLabel(b, i));
   head.appendChild(btype);
   /* Shut, the line has to say enough to pick the task out by, so it carries
      the first thing the task itself says and not only what kind it is. */
@@ -1513,7 +1559,10 @@ function card(b, i, arr){
   }
   const paintHead = () => { btype.textContent = headLabel(b, i); };
   const tools = el("span","btools");
-  if (b.type === "page"){
+  /* A page in the task builder is a shape to fill in, not a page of a
+     lesson: there is nothing for it to be locked against and no class to
+     release it to. Those buttons appear when it is put into a lesson. */
+  if (b.type === "page" && b !== bankRoot){
     const isFirst = lesson.blocks.indexOf(b) === 0;
     if (isFirst) b.startLocked = false;     // students must be able to begin
     const locked = b.startLocked !== false;
@@ -1560,7 +1609,7 @@ function card(b, i, arr){
   }
   /* Moving, copying and deleting are about a task's place in a lesson. The
      bank has one task on screen and its own bin beside it in the list. */
-  const acts = bankEditing ? [] :
+  const acts = (b === bankRoot) ? [] :
                [["\u2191","Move up", () => move(arr, i, -1)],
                 ["\u2193","Move down", () => move(arr, i, 1)],
                 ["\u29C9","Duplicate", () => { arr.splice(i + 1, 0, JSON.parse(JSON.stringify(b))); render(); schedulePreview(); }],
@@ -1575,18 +1624,18 @@ function card(b, i, arr){
 
   /* Dragging is how a task is moved about a lesson. There is nowhere to move
      one to in the bank, so none of it is wired up there. */
-  const draggable = !bankEditing;
+  const draggable = b !== bankRoot;
   if (draggable) c.addEventListener("dragstart", (e) => {
     e.stopPropagation();                     // a task inside a page is not the page
     dragFrom = { arr: arr, i: i, type: b.type };
-    newTask = null;
+    newTask = null; newBank = null;
     c.classList.add("dragging");
     if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "task"); }
   });
   if (draggable){
     c.addEventListener("dragend", () => { c.classList.remove("dragging"); c.draggable = false; dragFrom = null; });
     c.addEventListener("dragover", (e) => {
-      if (!dragFrom && !newTask) return;
+      if (!dragFrom && !newTask && !newBank) return;
       if (!canDropOn(arr)) return;
       e.preventDefault(); e.stopPropagation();
       c.classList.add("over");
@@ -4018,7 +4067,11 @@ function taskGroups(){
   const from = (lesson.assessment && !openArray()) ? "palAssess" : "palLesson";
   const box = $(from);
   if (!box) return [];
-  return Array.from(box.querySelectorAll(".palgroup")).map(group => ({
+  /* A whole group hidden from the palette is hidden from this row too. The
+     buttons inside it are not themselves marked hidden, so asking only
+     about those offered Exam question on a KS3 page, where the palette had
+     quite correctly left the group out. */
+  return Array.from(box.querySelectorAll(".palgroup")).filter(group => !group.hidden).map(group => ({
     name: (group.querySelector(".pal-head") || {}).textContent || "",
     /* a task hidden from the palette is hidden from this row too, or the two
        lists say different things about what a teacher may add */
@@ -4275,14 +4328,108 @@ function paintPickers(){
    rather than once at start-up. */
 function paintSpecUI(){
   const on = !!specLevel();
-  const tabs = $("buildTabs");
-  if (tabs) tabs.hidden = !on;
+  const tab = $("tabBank");
+  if (tab) tab.hidden = !on;
   ["palSpec", "palSpecAssess"].forEach(id => { const e = $(id); if (e) e.hidden = !on; });
-  /* Moving to a KS3 year group with the bank open would leave a teacher on a
-     screen with no way back to their lesson. */
+  /* Moving to a KS3 year group with the task builder open would leave a
+     teacher on a screen with no way back to their lesson. */
   if (!on && bankOpen) showBank(false);
+  paintPointPalette();
   if (typeof paintBuildBar === "function") paintBuildBar();
 }
+
+/* ---------------- the tasks for this lesson's point ----------------
+   A lesson started from a point of the specification is built out of the
+   tasks written for that point. They are what the left column offers, and
+   the rest of the builder is behind "Add extra tasks", because a column of
+   nine containers to open is not what somebody planning 1.1.1 is looking
+   for.
+
+   The whole task comes down with the list here, not just its name: one
+   dragged onto a page has to be ready when it lands, and fetching it at
+   that moment is a round trip in the middle of a drag. */
+let pointTasks = [];
+let pointTasksFor = null;          // which point the list in hand belongs to
+let showEverything = false;        // "Add extra tasks" has been pressed
+
+function paintPointPalette(){
+  const list = $("palPointList");
+  if (!list) return;
+  const point = lesson.point || "";
+  const wanted = !!point && !!specLevel() && !lesson.assessment;
+  $("palPoint").hidden = !wanted;
+  $("palMoreBtn").hidden = !wanted;
+  /* Without a point there is nothing to narrow the column down to, so it is
+     the full palette exactly as it has always been. */
+  $("palStandard").hidden = wanted && !showEverything;
+  if (!wanted) return;
+  const p = specPointOf(point);
+  $("palPointName").textContent = p ? p.code + " " + p.title : "This lesson";
+  list.innerHTML = "";
+  if (pointTasksFor !== point){
+    $("palPointNote").textContent = "Loading…";
+    loadPointTasks(point);
+    return;
+  }
+  $("palPointNote").textContent = pointTasks.length
+    ? "Drag one onto the page, or click it."
+    : "No tasks written for this point yet.";
+  if (!pointTasks.length){
+    const make = el("button","btn-ghost bmini2","Write one in the Task builder");
+    make.addEventListener("click", () => showBank(true));
+    list.appendChild(make);
+    return;
+  }
+  pointTasks.forEach(t => {
+    const btn = el("button","pal pal-bank");
+    btn.appendChild(el("b","", t.title || "Untitled task"));
+    const meta = [LABEL[t.kind] || t.kind,
+                  t.marks ? t.marks + (t.marks === 1 ? " mark" : " marks") : ""].filter(Boolean);
+    btn.appendChild(el("span","", meta.join("  ·  ")));
+    btn.draggable = true;
+    btn.addEventListener("dragstart", (e) => {
+      newBank = t; newTask = null; dragFrom = null;
+      btn.classList.add("dragging");
+      if (e.dataTransfer){ e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", t.id); }
+    });
+    btn.addEventListener("dragend", () => { btn.classList.remove("dragging"); newBank = null; });
+    btn.addEventListener("click", () => { const made = bankCopy(t); if (made) addBlock(made); });
+    list.appendChild(btn);
+  });
+}
+async function loadPointTasks(point){
+  if (OFFLINE || !point){ pointTasks = []; pointTasksFor = point; paintPointPalette(); return; }
+  const API = (window.HUB && window.HUB.API) || "";
+  const level = specLevel();
+  try{
+    const r = await fetch(API + "/api/teacher/tasks?full=1&level=" + encodeURIComponent(level)
+                          + "&point=" + encodeURIComponent(point),
+                          { headers: window.teacherAuth.headers(), cache:"no-store" });
+    if (authFailed(r.status, () => loadPointTasks(point))) return;
+    const d = await r.json();
+    pointTasks = (d.tasks || []).map(t => {
+      let block = null;
+      try{ block = JSON.parse(t.data || "null"); }catch(e){ block = null; }
+      return { id:t.id, title:t.title, kind:t.kind, marks:t.marks, block: block };
+    }).filter(t => t.block && t.block.type);
+  }catch(e){ pointTasks = []; }
+  pointTasksFor = point;
+  paintPointPalette();
+}
+/* A copy to put in the lesson, remembering which bank task it came from. */
+function bankCopy(t){
+  if (!t || !t.block) return null;
+  const made = JSON.parse(JSON.stringify(t.block));
+  delete made.folded;
+  made.fromTask = t.id;
+  return made;
+}
+on("palMoreBtn", "click", () => {
+  showEverything = !showEverything;
+  $("palMoreBtn").querySelector("b").textContent =
+    showEverything ? "− Hide the extra tasks" : "+ Add extra tasks";
+  paintPointPalette();
+});
 
 /* ====================================================================
    THE TASK BANK
@@ -4304,6 +4451,11 @@ function paintSpecUI(){
    left out on purpose: they are KS3 tasks and none of them belongs in a
    bank of GCSE and A Level work. */
 const BANK_TYPES = [
+  /* A whole page rather than one task: a bit of theory, the question on it
+     and the code they write, kept together and dropped into a lesson as one
+     thing. It is the same page a lesson is made of, so it arrives in the
+     lesson as a page and not as a task inside one. */
+  ["page","Page of tasks","Several tasks a student sees together"],
   ["exam","Exam question","Worth marks, with a mark scheme"],
   ["question","Written answer","They type a response"],
   ["short","Short answer","Matched to the answers you set"],
@@ -4322,7 +4474,7 @@ const BANK_TYPES = [
 ];
 
 let bankOpen = false;        // the Task bank tab is the one on screen
-let bankEditing = false;     // card() is drawing the bank's task, not a lesson's
+let bankRoot = null;         // the one task card() is drawing for the task builder
 let bankList = [];           // the filtered list, without the tasks themselves
 let bankTask = null;         // { id, title, point, component, block } being edited
 let bankDirtyAt = 0;         // when it was last typed in, for the autosave
@@ -4354,7 +4506,16 @@ function showBank(on){
   $("tabBank").classList.toggle("on", bankOpen);
   document.documentElement.dataset.bank = bankOpen ? "yes" : "";
   if (bankOpen){
-    bankFind.component = bankFind.component || 0;
+    /* Opened from a lesson that belongs to a point of the specification,
+       the builder starts on that point. Coming in from the hub through
+       1.1.1 and then having to find 1.1.1 again in three dropdowns is the
+       thing this is meant to save. */
+    const p = specPointOf(lesson.point || "");
+    if (p && bankFind.point !== p.id && !bankTask){
+      bankFind.component = Number(p.component) || 0;
+      bankFind.strand = p.parent || p.id;
+      bankFind.point = p.id;
+    }
     bankLoad();
   }
   if (typeof paintBuildBar === "function") paintBuildBar();
@@ -4531,6 +4692,7 @@ async function bankDelete(id){
     if (authFailed(r.status, () => bankDelete(id))) return;
     if (!r.ok) throw new Error((await r.json()).error || "Could not delete that.");
     if (bankTask && bankTask.id === id) bankTask = null;
+    pointTasksFor = null;               // the lesson's column has it too
     /* Lessons already holding a copy keep it, which is worth saying once
        rather than leaving a teacher to wonder. */
     bankSay("Deleted. Lessons using it keep their copy.");
@@ -4598,11 +4760,17 @@ function paintBankEditor(){
     });
   }
 
-  bankEditing = true;
+  /* viewAll is the lesson's "show me every page at once", which folds every
+     task away. A page of tasks in the builder is the only thing on screen,
+     so it is drawn open whatever the lesson behind it is set to. */
+  const wasAll = viewAll;
+  bankRoot = bankTask.block;
+  viewAll = false;
   try{
     pane.appendChild(card(bankTask.block, 0, [bankTask.block]));
   } finally {
-    bankEditing = false;
+    bankRoot = null;
+    viewAll = wasAll;
   }
 }
 
@@ -4655,6 +4823,10 @@ async function bankSaveNow(quiet){
     bankTask.fresh = false;
     bankSay("Saved ✓");
     bankBusy = false;
+    /* The lesson's left column holds its own copy of the tasks for its
+       point. A task just written is one of those, so it is thrown away
+       here and fetched again rather than turning up only after a reload. */
+    pointTasksFor = null;
     await bankLoad();
   }catch(e){
     bankBusy = false;
@@ -5295,10 +5467,14 @@ async function loadUnitsAndMaybeLesson(){
   await loadUnitsAndYears();
   const editId = new URLSearchParams(location.search).get("edit");
   const qs2 = new URLSearchParams(location.search);
-  const wantYear = qs2.get("year"), wantUnit = qs2.get("unit");
+  const wantYear = qs2.get("year"), wantUnit = qs2.get("unit"), wantPoint = qs2.get("point");
   if (wantYear && !lesson.year) lesson.year = wantYear;
   if (wantUnit && !lesson.unit) lesson.unit = wantUnit;
-  if (wantYear || wantUnit) paintPickers();
+  /* Started from a point of the specification in the hub. It decides what
+     the left column offers and where the task builder opens, so it is the
+     whole reason for coming in that way. */
+  if (wantPoint && !lesson.point) lesson.point = wantPoint;
+  if (wantYear || wantUnit || wantPoint) paintPickers();
   if (!editId) return;
   /* The console offers "a new version" beside Edit, and sends the builder here
      with the lesson to start from and this on the address. Asked for once the
@@ -5473,10 +5649,6 @@ function isRoomy(){ return roomyQ().matches; }
 /* The pieces that move, remembered where they started so they can go back. */
 const homeSlot = document.querySelector(".homebar");
 const topSlot = document.querySelector(".build-top");
-/* Where the Lesson / Task bank strip lives on a wide screen: just above the
-   kind-of-work buttons. Held so it can be put back after a spell in the
-   narrow screen's one row of controls. */
-const modeSlot = document.querySelector(".modeswitch");
 
 function applyBuildLayout(){
   const compact = isCompact();
@@ -5503,13 +5675,6 @@ function applyBuildLayout(){
     if (options) titles.insertBefore(options, titles.firstChild);
     topSlot.appendChild(titles);
     topSlot.appendChild(actions);
-    /* Back above the kind-of-work buttons where it started. Left in the bar
-       it would be inside a row that is hidden on a wide screen, and the one
-       way to the task bank would have gone. */
-    const build = $("buildTabs");
-    const modesHome = modeSlot && modeSlot.parentNode;
-    if (build && modesHome && build.parentNode !== modesHome) modesHome.insertBefore(build, modeSlot);
-    if (build) build.hidden = !specLevel();
     $("buildBar").hidden = true;
     $("modeChip").hidden = true;
     $("saveSite").textContent = "Save to the site";
@@ -5527,15 +5692,6 @@ function paintBuildBar(){
   if (!scroll || !$("assessTabs") || !$("modeChipName")) return;
   const assess = !!lesson.assessment;
   const practical = !!lesson.practical;
-  /* Lesson or task bank comes first on the row, because it decides what the
-     rest of the row is even about. Moved in rather than copied, like the
-     assessment tabs below it, so there is one of each on the page. */
-  const build = $("buildTabs");
-  if (build){
-    const wanted = !!specLevel();
-    build.hidden = !wanted;
-    if (wanted && build.parentNode !== scroll) scroll.insertBefore(build, scroll.firstChild);
-  }
   /* The tab strip is moved in beside New page rather than copied, so the
      three buttons keep working exactly as they do on a desktop. */
   const tabs = $("assessTabs");

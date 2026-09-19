@@ -1863,10 +1863,12 @@ body.workpage .grow{flex:1}
 .bigselect:focus{border-color:var(--amber); outline:none}
 
 
-/* the teacher picker inside a pop-up */
-.bfield select{width:100%; height:44px; padding:0 12px; font-size:15px; font-family:var(--body);
+/* the teacher picker inside a pop-up, and every dropdown in the builder:
+   one rule, so the task builder's filters are the same boxes as the ones
+   in a task's own editor rather than something that looks nearly right */
+.bfield select, .bank-filter select{width:100%; height:44px; padding:0 12px; font-size:15px; font-family:var(--body);
   color:var(--text); background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px}
-.bfield select:focus{border-color:var(--amber); outline:none}
+.bfield select:focus, .bank-filter select:focus{border-color:var(--amber); outline:none}
 .bfield .brow select{flex:1}
 #whoView .station{text-align:center}
 #whoView .bigselect{text-align:center; text-align-last:center}
@@ -4517,4 +4519,51 @@ html[data-bank=yes] .build-preview{display:none}
   .specrow.in{padding-left:18px}
   .specadd{margin-left:18px}
   .speccode{min-width:46px}
+}
+
+/* ---------- the two buttons at the top of the builder ----------
+   Lesson builder and Task builder, where the title used to be. The one you
+   are on is filled in, the other reads as a link, so the pair says where
+   you are as well as the title did. */
+.buildswitch{display:flex; align-items:center; gap:4px; padding:3px; border-radius:999px;
+  background:var(--panel-2); border:1px solid var(--line)}
+.buildtab{font-family:var(--display); font-weight:700; font-size:16px; color:var(--muted);
+  background:transparent; border:none; border-radius:999px; padding:7px 15px; cursor:pointer;
+  min-height:36px; white-space:nowrap}
+.buildtab:hover{color:var(--text)}
+.buildtab.on{background:var(--panel); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.10)}
+.buildtab[hidden]{display:none}
+.bt-short{display:none}
+/* The lesson's name now sits beside the two buttons rather than being the
+   title itself, so it shares their line and gives way when there is not
+   room, instead of taking a row of the bar to itself and making the bar a
+   row taller than it was.
+
+   Written against the compact selector as well, and not only appended.
+   `html[data-build=compact] .homebar .title` is longer than `.homebar
+   .title`, so being last in the file does not beat it: order only settles
+   a tie. Measured, not assumed. */
+.homebar .title{flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
+
+/* ---------- the left column of a lesson built on one point ---------- */
+.pal-pointhead{margin:0 0 10px}
+.pal-pointhead b{display:block; font-family:var(--display); font-size:14.5px; line-height:1.3}
+.pal-pointhead span{display:block; font-size:12.5px; color:var(--muted); margin-top:3px}
+.pal-bank{border-color:var(--line-2)}
+.pal-bank:active{cursor:grabbing}
+.pal-more{margin:14px 0 4px; border-style:dashed}
+#palPointList{display:flex; flex-direction:column; gap:8px}
+
+@media (max-width:1100px){
+  /* The bar is the only row of controls on a narrow screen and it must not
+     wrap, so the two buttons give up the word they share. */
+  .bt-long{display:none}
+  .bt-short{display:inline}
+  .buildtab{font-size:14.5px; padding:6px 12px; min-height:32px}
+}
+@media (max-width:640px){
+  .buildswitch{gap:2px; padding:2px}
+  .buildtab{font-size:13.5px; padding:5px 10px}
+  .homebar .title{font-size:13.5px}
 }

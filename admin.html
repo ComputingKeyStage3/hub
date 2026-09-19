@@ -185,6 +185,47 @@ setTimeout(function(){
     <div id="unitSearchResults"></div>
   </div>
 
+  <!-- ============ GCSE and A Level: component, strand, point ============
+       A KS3 year group is divided into units. A GCSE or A Level one is
+       divided by the specification instead, because that is how the course
+       is planned and how a teacher looks for a lesson. Two more screens,
+       between the year group and its lessons. -->
+  <div id="hubCompView" hidden>
+    <button class="crumb" id="backCompYear">&larr; <span id="backCompYearName"></span></button>
+    <div class="classhead">
+      <h2 id="compName"></h2>
+    </div>
+    <p class="hint" id="compNote"></p>
+    <div class="toolrow">
+      <button class="btn-ghost iconbtn refresh" id="refComp" title="Refresh">&#8635;</button>
+      <button class="btn-ghost" id="compSpecBtn">Specification</button>
+    </div>
+    <div class="classgrid" id="hubStrands"></div>
+  </div>
+
+  <div id="hubPointView" hidden>
+    <button class="crumb" id="backStrandComp">&larr; <span id="backStrandName"></span></button>
+    <div class="classhead">
+      <h2 id="strandName"></h2>
+    </div>
+    <div class="toolrow">
+      <button class="btn-ghost iconbtn refresh" id="refStrand" title="Refresh">&#8635;</button>
+    </div>
+    <div class="classgrid" id="hubPoints"></div>
+  </div>
+
+  <div id="hubPointLessonsView" hidden>
+    <button class="crumb" id="backPointStrand">&larr; <span id="backPointStrandName"></span></button>
+    <div class="classhead">
+      <h2 id="pointName"></h2>
+    </div>
+    <div class="toolrow">
+      <button class="btn-ghost iconbtn refresh" id="refPoint" title="Refresh">&#8635;</button>
+      <button class="btn-primary" id="hubNewLesson4">+ Build a new lesson</button>
+    </div>
+    <div id="hubPointList"></div>
+  </div>
+
   <div id="hubLessonsView" hidden>
     <button class="crumb" id="backHubUnits">&larr; <span id="backUnitYear"></span></button>
     <div class="classhead">
@@ -436,6 +477,14 @@ function paintCrumbs(){
   if (v === "homeView") return crumbs([top]);
   if (v === "hubView") return crumbs(OFFLINE ? [top] : [top, { name:"Lesson hub" }]);
   if (v === "hubUnitsView") return crumbs(hub.concat([{ name: hubYear || "Not in a year group" }]));
+  if (v === "hubCompView") return crumbs(hub.concat([{ name: hubYear }]));
+  if (v === "hubPointView") return crumbs(hub.concat([
+                                            { name: hubYear, go: () => openComponents() },
+                                            { name: hubStrand ? crumbName(hubStrand) : "Component " + hubComp }]));
+  if (v === "hubPointLessonsView") return crumbs(hub.concat([
+                                            { name: hubYear, go: () => openComponents() },
+                                            { name: crumbName(hubStrand), go: () => openStrand(hubStrand) },
+                                            { name: crumbName(hubPoint) }]));
   if (v === "hubLessonsView") return crumbs(hub.concat([
                                              { name: hubYear || "Not in a year group", go: toHubYear },
                                              { name: hubUnit || "Not in a unit" }]));
@@ -451,8 +500,15 @@ function paintCrumbs(){
   crumbs([top]);
 }
 
+/* A point's number and name for the crumbs. Defined here because the crumbs
+   are drawn before the specification screens further down the file. */
+function crumbName(id){
+  const p = (cat.points || []).find(x => x.id === id);
+  return p ? p.code + " " + p.title : "Specification";
+}
+
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","lessonsView","keepView","pwView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","lessonsView","keepView","pwView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
@@ -473,15 +529,18 @@ function show(view, quiet){
   if (view !== "keyView" && view !== "whoView"){
     try{
       sessionStorage.setItem("hub_spot", JSON.stringify(
-        { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit }));
+        { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit,
+          hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint }));
     }catch(e){}
   }
   if (!quiet && !goingBack && view !== "keyView"){
     try{
-      const state = { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit };
+      const state = { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit,
+                      hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint };
       if (!history.state || history.state.view !== view ||
           history.state.cls !== cls || history.state.unit !== unit ||
-          history.state.hubYear !== hubYear || history.state.hubUnit !== hubUnit){
+          history.state.hubYear !== hubYear || history.state.hubUnit !== hubUnit ||
+          history.state.hubStrand !== hubStrand || history.state.hubPoint !== hubPoint){
         history.pushState(state, "", location.pathname + location.search);
       }
     }catch(e){}
@@ -516,10 +575,14 @@ try{
     try{
       cls = st.cls || cls; unit = st.unit || "";
       hubYear = st.hubYear || ""; hubUnit = st.hubUnit || "";
+      hubComp = st.hubComp || 0; hubStrand = st.hubStrand || ""; hubPoint = st.hubPoint || "";
       show(st.view, true);
       if (st.view === "classesView") paintClasses();
       else if (st.view === "hubView") paintYears();
       else if (st.view === "hubUnitsView") paintHubUnits();
+      else if (st.view === "hubCompView") paintComponents();
+      else if (st.view === "hubPointView"){ if (hubStrand) paintPoints(); else paintStrands(); }
+      else if (st.view === "hubPointLessonsView") paintPointLessons();
       else if (st.view === "hubLessonsView") paintHub();
       else if (st.view === "unitsView") paintClassUnits();
       else if (st.view === "lessonsView") paintLessonGrid();
@@ -862,6 +925,7 @@ async function restoreSpot(spot){
   if (!spot || !spot.view || spot.view === "homeView"){ show("homeView"); return; }
   cls = spot.cls || ""; unit = spot.unit || "";
   hubYear = spot.hubYear || ""; hubUnit = spot.hubUnit || "";
+  hubComp = spot.hubComp || 0; hubStrand = spot.hubStrand || ""; hubPoint = spot.hubPoint || "";
   /* A class renamed or deleted from another machine is not there to go back
      to. openClass asks nothing and would put its name over an empty page, so
      the note is held against the classes that actually exist and anything
@@ -887,6 +951,22 @@ async function restoreSpot(spot){
     if (spot.view === "hubView"){ await loadCatalogue(); show("hubView"); paintYears(); return; }
     if (spot.view === "hubUnitsView"){ await loadCatalogue(); openYear(hubYear); return; }
     if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit); return; }
+    /* openYear sends a GCSE or A Level year group to its components on its
+       own, so these only have to carry on from there. */
+    if (spot.view === "hubCompView"){ await loadCatalogue(); openYear(hubYear); return; }
+    if (spot.view === "hubPointView"){
+      await loadCatalogue(); openYear(hubYear);
+      if (hubComp) openComponent(hubComp);
+      if (hubStrand) openStrand(hubStrand);
+      return;
+    }
+    if (spot.view === "hubPointLessonsView"){
+      await loadCatalogue(); openYear(hubYear);
+      if (hubComp) openComponent(hubComp);
+      if (hubStrand) openStrand(hubStrand);
+      if (hubPoint) openPoint(hubPoint);
+      return;
+    }
     show("homeView");          // a note pointing at nothing we can open
   }catch(e){
     console.warn("could not go back to where you were:", e);
@@ -2061,8 +2141,18 @@ function openYear(y){
   showIf("renameYearBtn", y);
   showIf("deleteYearBtn", y);
   paintYearLevel();
+  /* A GCSE or A Level year group is divided by its specification rather than
+     into units, so the screen under it is the two components. */
+  if (hubLevel()){ openComponents(); return; }
   show("hubUnitsView");
   paintHubUnits();
+}
+/* The level of the year group being looked at, or "" for KS3 and for the
+   lessons that are not in a year group at all. */
+function hubLevel(){
+  if (!hubYear) return "";
+  const l = levelOf(hubYear);
+  return (l === "GCSE" || l === "A Level") ? l : "";
 }
 
 /* ---------------- what a year group is working towards ----------------
@@ -2336,6 +2426,147 @@ on("hubNewUnit", "click", () => newUnitPrompt(hubYear));
   });
 });
 
+/* ================== GCSE and A Level: the hub by specification ==========
+   Component, then strand, then point, then the lessons filed under it. A
+   unit is not in the way anywhere here: the same lesson still carries one,
+   written when it is saved, because that is what a student's lesson list
+   and the offline catalogue group by.
+   ======================================================================= */
+let hubComp = 0, hubStrand = "", hubPoint = "";
+const lessonsOfPoint = (id) => (cat.lessons || []).filter(l => (l.point || "") === id && !l.version_of);
+/* Everything filed anywhere under a strand, so the number on a strand tile
+   counts the lessons in its points as well as any filed against the strand
+   itself. */
+function lessonsUnderStrand(id){
+  const kids = childrenOf(id).map(p => p.id).concat([id]);
+  return (cat.lessons || []).filter(l => kids.indexOf(l.point || "") >= 0 && !l.version_of);
+}
+function countWord(n, one, many){ return n + " " + (n === 1 ? one : many); }
+
+function openComponents(){
+  hubComp = 0; hubStrand = ""; hubPoint = "";
+  const level = hubLevel();
+  $("compName").textContent = hubYear;
+  $("backCompYearName").textContent = "Lesson hub";
+  $("compNote").textContent = level === "GCSE"
+    ? "OCR J277. Pick the paper, then the part of the specification."
+    : "OCR H446. Pick the paper, then the part of the specification.";
+  show("hubCompView");
+  paintComponents();
+}
+function paintComponents(){
+  const g = $("hubStrands"); g.innerHTML = "";
+  const level = hubLevel();
+  const comps = componentsOf(level);
+  if (!(cat.points || []).length){
+    g.appendChild(el("p","hint",
+      "No specification loaded yet. Run the v9.9 database update, or add the points "
+      + "by hand from the Specification button."));
+    return;
+  }
+  comps.forEach(n => {
+    const strands = strandsOf(level, n);
+    const lessons = strands.reduce((t, s) => t + lessonsUnderStrand(s.id).length, 0);
+    const t = el("button","classtile");
+    t.appendChild(el("b","","Component " + n));
+    t.appendChild(el("span","", countWord(strands.length, "part", "parts")
+                                + " · " + countWord(lessons, "lesson", "lessons")));
+    t.addEventListener("click", () => openComponent(n));
+    g.appendChild(t);
+  });
+}
+on("refComp", "click", async () => { await loadCatalogue(true); paintComponents(); });
+on("compSpecBtn", "click", () => openSpec());
+on("backCompYear", "click", () => { show("hubView"); paintYears(); });
+
+function openComponent(n){
+  hubComp = n; hubStrand = ""; hubPoint = "";
+  $("strandName").textContent = "Component " + n;
+  $("backStrandName").textContent = hubYear;
+  show("hubPointView");
+  paintStrands();
+}
+function paintStrands(){
+  const g = $("hubPoints"); g.innerHTML = "";
+  const strands = strandsOf(hubLevel(), hubComp);
+  if (!strands.length){
+    g.appendChild(el("p","hint","Nothing in this component yet."));
+    return;
+  }
+  strands.forEach(s => {
+    const t = el("button","classtile");
+    t.appendChild(el("b","", s.code + " " + s.title));
+    const n = lessonsUnderStrand(s.id).length;
+    t.appendChild(el("span","", countWord(childrenOf(s.id).length, "point", "points")
+                                + " · " + countWord(n, "lesson", "lessons")));
+    t.addEventListener("click", () => openStrand(s.id));
+    g.appendChild(t);
+  });
+}
+/* One screen holds two lists: the parts of a component, and the points
+   inside one of those parts. Which it is showing decides what Refresh
+   redraws and where Back goes. */
+on("refStrand", "click", async () => {
+  await loadCatalogue(true);
+  if (hubStrand) paintPoints(); else paintStrands();
+});
+on("backStrandComp", "click", () => {
+  if (hubStrand) openComponent(hubComp); else openComponents();
+});
+
+function openStrand(id){
+  hubStrand = id; hubPoint = "";
+  const s = pointById(id);
+  $("strandName").textContent = s ? s.code + " " + s.title : "Strand";
+  $("backStrandName").textContent = "Component " + hubComp;
+  show("hubPointView");
+  paintPoints();
+}
+/* The points inside a strand, and the strand itself at the top: a lesson
+   covering the whole of 1.1 has to have somewhere to live too. */
+function paintPoints(){
+  const g = $("hubPoints"); g.innerHTML = "";
+  const strand = pointById(hubStrand);
+  const whole = el("button","classtile");
+  whole.appendChild(el("b","", "All of " + (strand ? strand.code : "")));
+  whole.appendChild(el("span","", countWord(lessonsOfPoint(hubStrand).length, "lesson", "lessons")));
+  whole.addEventListener("click", () => openPoint(hubStrand));
+  g.appendChild(whole);
+  childrenOf(hubStrand).forEach(p => {
+    const t = el("button","classtile");
+    t.appendChild(el("b","", p.code + " " + p.title));
+    t.appendChild(el("span","", countWord(lessonsOfPoint(p.id).length, "lesson", "lessons")));
+    t.addEventListener("click", () => openPoint(p.id));
+    g.appendChild(t);
+  });
+}
+
+function openPoint(id){
+  hubPoint = id;
+  const p = pointById(id);
+  const strand = pointById(hubStrand);
+  $("pointName").textContent = p ? (p.code + " " + p.title) : "Lessons";
+  $("backPointStrandName").textContent = strand ? strand.code + " " + strand.title : "Back";
+  show("hubPointLessonsView");
+  paintPointLessons();
+}
+function paintPointLessons(){ lessonCards(lessonsOfPoint(hubPoint), $("hubPointList")); }
+on("refPoint", "click", async () => { await loadCatalogue(true); paintPointLessons(); });
+on("backPointStrand", "click", () => { if (hubStrand) openStrand(hubStrand); else openComponent(hubComp); });
+/* The builder opens knowing where it is: the year group, the point, and the
+   strand's name for the unit the lesson is also filed under. Its task bank
+   opens on the same point, which is the whole reason for coming in this
+   way rather than from the top. */
+on("hubNewLesson4", "click", () => {
+  const p = pointById(hubPoint);
+  const strand = pointById(hubStrand) || p;
+  const bits = ["year=" + encodeURIComponent(hubYear)];
+  if (hubPoint) bits.push("point=" + encodeURIComponent(hubPoint));
+  if (strand) bits.push("unit=" + encodeURIComponent(strand.code + " " + strand.title));
+  window.open("author.html?" + bits.join("&"), "_blank");
+});
+const pointById = (id) => (cat.points || []).find(p => p.id === id) || null;
+
 /* ---------------- the specification ----------------
    OCR J277 and H446 are typed into the database by DATABASE-SETUP.sql, so
    this screen is for putting a wording right, adding a point a board has
@@ -2388,7 +2619,7 @@ function openSpec(){
       });
       if (!(cat.points || []).length)
         holder.appendChild(el("p","hint",
-          "Nothing here yet. Run the v9.8 database update to load OCR J277 and H446."));
+          "Nothing here yet. Run the v9.9 database update to load OCR J277 and H446."));
     };
     draw();
     box.appendChild(holder);
