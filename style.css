@@ -1251,12 +1251,9 @@ body.spectating{padding-top:40px}
   overflow-y:auto; overflow-x:hidden; padding:4px; border-radius:10px;
   background:var(--panel); border:1.5px solid var(--line-2);
   box-shadow:0 8px 22px rgba(0,0,0,.20)}
-.ac-row{display:flex; align-items:baseline; gap:8px; padding:5px 8px; border-radius:7px;
+.ac-row{display:flex; align-items:baseline; gap:10px; padding:5px 9px; border-radius:7px;
   cursor:pointer; white-space:nowrap}
 .ac-row.on{background:var(--amber); color:#fff}
-.ac-kind{flex:none; width:16px; text-align:center; font-family:var(--mono); font-size:11px;
-  font-weight:800; color:var(--muted); opacity:.9}
-.ac-row.on .ac-kind{color:#fff}
 .ac-word{font-family:var(--mono); font-size:14px; font-weight:700; color:var(--text)}
 .ac-row.on .ac-word{color:#fff}
 .ac-detail{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;

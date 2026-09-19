@@ -471,8 +471,8 @@
     return out;
   }
 
-  const items = (list, kind, dict, decorate) => list.map(w => ({
-    label: w, kind: kind,
+  const items = (list, dict, decorate) => list.map(w => ({
+    label: w,
     detail: (dict && dict[w]) || "",
     insert: decorate ? decorate(w) : undefined
   }));
@@ -495,15 +495,15 @@
     if ((m = /([A-Za-z-]+)\s*=\s*"([^"]*)$/.exec(tagPart))){
       const vals = ATTR_VALUES[m[1].toLowerCase()];
       if (!vals) return null;
-      return { from: ctx.pos - m[2].length, items: items(vals, "value") };
+      return { from: ctx.pos - m[2].length, items: items(vals) };
     }
     if ((m = /^<\/?([A-Za-z][\w-]*)?$/.exec(tagPart)))
       return { from: ctx.pos - (m[1] || "").length,
-               items: items(HTML_TAGS, "tag", window.WEB_HELP.html) };
+               items: items(HTML_TAGS, window.WEB_HELP.html) };
     if (/^<[A-Za-z][\w-]*\s/.test(tagPart)){
       const word = (/([A-Za-z-]*)$/.exec(tagPart) || ["",""])[1];
       return { from: ctx.pos - word.length,
-               items: items(HTML_ATTRS, "attribute", window.WEB_HELP.html) };
+               items: items(HTML_ATTRS, window.WEB_HELP.html) };
     }
     return null;
   }
@@ -515,7 +515,7 @@
       const vals = CSS_VALUES[m[1]];
       if (!vals) return null;
       const word = (/([A-Za-z-]*)$/.exec(m[2]) || ["",""])[1];
-      return { from: ctx.pos - word.length, items: items(vals, "value") };
+      return { from: ctx.pos - word.length, items: items(vals) };
     }
     /* Inside a rule it is a property they are after, outside one a selector.
        Counted rather than parsed: a stray brace in a comment would throw this
@@ -524,9 +524,9 @@
     const word = (/([A-Za-z-]*)$/.exec(ctx.lineBefore) || ["",""])[1];
     if (depth > 0)
       return { from: ctx.pos - word.length,
-               items: items(CSS_PROPS, "property", window.WEB_HELP.css, w => w + ": ") };
+               items: items(CSS_PROPS, window.WEB_HELP.css, w => w + ": ") };
     if (!word) return null;
-    return { from: ctx.pos - word.length, items: items(HTML_TAGS, "tag", window.WEB_HELP.html) };
+    return { from: ctx.pos - word.length, items: items(HTML_TAGS, window.WEB_HELP.html) };
   }
 
   function suggestJs(ctx){
@@ -536,7 +536,7 @@
       const names = pageNames(wantClass ? "class" : "id");
       if (!names.length) return null;
       const typed = wantClass ? m[3].slice(1) : m[3];
-      return { from: ctx.pos - typed.length, items: items(names, "value") };
+      return { from: ctx.pos - typed.length, items: items(names) };
     }
     /* As in Python: a dot after one of the named objects opens its list
        there and then, because document. can only be asking one thing. A dot
@@ -544,14 +544,14 @@
     if ((m = /([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$]*)$/.exec(ctx.lineBefore))){
       const own = JS_MEMBERS[m[1]];
       return { from: ctx.pos - m[2].length, now: !!own,
-               items: items(own || JS_ANY, "method", window.WEB_HELP.js) };
+               items: items(own || JS_ANY, window.WEB_HELP.js) };
     }
     const word = (/([A-Za-z_$][\w$]*)$/.exec(ctx.lineBefore) || ["",""])[1] || "";
     const mine = jsNames(ctx.text).filter(w => w !== word);
     return { from: ctx.pos - word.length,
-             items: items(mine, "variable")
-               .concat(items(JS_KEYWORDS, "keyword", window.WEB_HELP.js))
-               .concat(items(JS_GLOBALS, "function", window.WEB_HELP.js)) };
+             items: items(mine)
+               .concat(items(JS_KEYWORDS, window.WEB_HELP.js))
+               .concat(items(JS_GLOBALS, window.WEB_HELP.js)) };
   }
 
   window.webSuggest = function(lang, ctx){

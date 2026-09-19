@@ -247,8 +247,8 @@ function pyNames(code){
   return found;
 }
 
-function pyItems(list, kind, dict){
-  return list.map(w => ({ label:w, kind:kind, detail:(dict && dict[w]) || "" }));
+function pyItems(list, dict){
+  return list.map(w => ({ label:w, detail:(dict && dict[w]) || "" }));
 }
 
 /* Has the line run into a comment or a piece of text by the time it reaches
@@ -282,7 +282,7 @@ function suggestPython(ctx){
   /* the name of a toolbox, right after import or from */
   if ((m = /^\s*(?:import|from)\s+([A-Za-z_]\w*)?$/.exec(line)))
     return { from: ctx.pos - (m[1] || "").length,
-             items: pyItems(Object.keys(PY_MODULES), "module") };
+             items: pyItems(Object.keys(PY_MODULES)) };
 
   /* After a dot. A toolbox opens on the dot itself, because the dot after
      random says exactly what is wanted next and there are only a handful of
@@ -293,17 +293,17 @@ function suggestPython(ctx){
     const typed = m[2] || "";
     const own = PY_MODULES[m[1]];
     return { from: ctx.pos - typed.length, now: !!own,
-             items: own ? pyItems(Object.keys(own), "method", own)
-                        : pyItems(Object.keys(PY_METHODS), "method", PY_METHODS) };
+             items: own ? pyItems(Object.keys(own), own)
+                        : pyItems(Object.keys(PY_METHODS), PY_METHODS) };
   }
 
   const word = (/([A-Za-z_]\w*)$/.exec(line) || ["",""])[1] || "";
   const mine = pyNames(ctx.text).filter(w => w !== word);
   return { from: ctx.pos - word.length,
-           items: pyItems(mine, "variable")
-             .concat(pyItems(Array.from(PY_KW), "keyword", PY_HELP))
-             .concat(pyItems(Array.from(PY_FN), "function", PY_HELP))
-             .concat(pyItems(Object.keys(PY_MODULES), "module")) };
+           items: pyItems(mine)
+             .concat(pyItems(Array.from(PY_KW), PY_HELP))
+             .concat(pyItems(Array.from(PY_FN), PY_HELP))
+             .concat(pyItems(Object.keys(PY_MODULES))) };
 }
 
 
@@ -362,11 +362,6 @@ function caretPoint(ta){
   };
 }
 
-/* One letter in front of each suggestion, so the kinds can be told apart
-   without reading the word. */
-const KIND_MARK = { keyword:"K", function:"f", variable:"x", module:"m", method:".",
-                    tag:"<", attribute:"=", property:"p", value:"v" };
-
 /* Ranks the matches. Something starting with what was typed beats something
    merely containing it, and a shorter word beats a longer one, so typing
    "pr" offers print before property. Case is ignored, so "PRI" still finds
@@ -409,7 +404,6 @@ function suggestBox(){
     shown.forEach((it, n) => {
       const row = el("div","ac-row" + (n === at ? " on" : ""));
       row.setAttribute("role","option");
-      row.appendChild(tel("span","ac-kind", KIND_MARK[it.kind] || "•"));
       row.appendChild(tel("span","ac-word", it.label));
       if (it.detail) row.appendChild(tel("span","ac-detail", it.detail));
       row.addEventListener("mouseenter", () => { at = n; paintOn(); });
