@@ -1651,20 +1651,90 @@ function versionsPopup(id){
       const give = el("button","btn-ghost", OFFLINE ? "Get link" : "Give to classes");
       give.addEventListener("click", () => OFFLINE ? shareLink(l.lesson_id) : distribute(l.lesson_id));
       const edit = el("button","btn-ghost","Edit");
+      edit.title = "Open this one in the builder";
       edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
       acts.appendChild(give); acts.appendChild(edit);
-      if (l.version_of){
-        const del = el("button","btn-ghost","Delete");
-        del.addEventListener("click", () => { closeModal(); deleteLesson(l.lesson_id); });
-        acts.appendChild(del);
-      }
+      /* The same shape as a lesson card in the hub: what is done often out
+         where it can be pressed, the rest behind the dots. A fourth button
+         abreast wraps onto a second row at every width this pop-up has, and
+         Delete is not a thing to leave sitting under somebody's thumb.
+         Deleting the original is done from its own card in the hub, so it is
+         not offered here. */
+      const more = [["Make a new version from this one", () => window.open(
+        "author.html?edit=" + encodeURIComponent(l.lesson_id) + "&version=new", "_blank")]];
+      if (l.version_of) more.push(["Delete this version",
+        () => { closeModal(); deleteLesson(l.lesson_id); }]);
+      acts.appendChild(overflowMenu(more));
       card.appendChild(acts);
       list.appendChild(card);
     });
     box.appendChild(list);
     box.appendChild(el("p","hint",
-      "To make another version, open one of these in the builder and press “Make this a different "
-      + "version” under Lesson options."));
+      "Under the dots beside any of these is “make a new version from this one”. Whichever you "
+      + "start from, what you save is a version of “" + titleOf(root) + "”."));
+    scrollBody(box);
+  });
+}
+
+
+/* Edit is a decision now rather than a default. Opening the original when a
+   version was meant, or the other way round, changes the lesson a class is
+   actually doing, and Save writes over it with nothing to undo it with. So
+   the choice is put in front of whoever is making it, worded by what each one
+   changes rather than by which file it opens.
+
+   A new version opens the builder with version=new on the address, which is
+   what makes it offer the name, what has changed and whose it is as soon as
+   the lesson is on the screen. */
+function editLesson(id){
+  const version = catOf(id).version_of ? (cat.lessons || []).find(l => l.lesson_id === id) : null;
+  const root = rootOf(id);
+  const others = versionsOf(root);
+  /* Offline there are no classes, so what changes is what anybody opening
+     the link sees. */
+  const sees = (what) => OFFLINE ? "Anyone opening " + what + " sees the change."
+                                 : "Every class on " + what + " sees the change.";
+  const open = (which, makeVersion) => {
+    closeModal();
+    window.open("author.html?edit=" + encodeURIComponent(which) +
+                (makeVersion ? "&version=new" : ""), "_blank");
+  };
+  openModal(box => {
+    modalTitle(box, "Edit “" + titleOf(root) + "”");
+    const list = el("div","verlist");
+    const choice = (title, note, go) => {
+      const row = el("button","ov-row vrow");
+      const words = el("span","pick-lesson");
+      words.appendChild(el("span","t", title));
+      words.appendChild(el("span","pick-unit", note));
+      row.appendChild(words);
+      row.appendChild(el("span","edit","Open →"));
+      row.addEventListener("click", go);
+      list.appendChild(row);
+    };
+    if (version){
+      choice("This version · " + versionName(version),
+             sees("it") + " The original is left as it is.",
+             () => open(id, false));
+      choice("The original",
+             sees("the original") + " No version is touched.",
+             () => open(root, false));
+      choice("A new version",
+             "Starts from this version and is saved as another version of “" +
+             titleOf(root) + "”. Nothing that exists is changed.",
+             () => open(id, true));
+    } else {
+      choice("This lesson",
+             sees("it") + (others.length ? " Its versions are not touched." : ""),
+             () => open(id, false));
+      choice("A new version",
+             "Starts from this lesson and is saved as a version of its own. This lesson is left as it is.",
+             () => open(id, true));
+    }
+    box.appendChild(list);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
     scrollBody(box);
   });
 }
@@ -1976,7 +2046,7 @@ function lessonCards(list, box){
     const give = el("button","btn-primary", OFFLINE ? "Get link" : "Give to classes");
     give.addEventListener("click", () => OFFLINE ? shareLink(l.lesson_id) : distribute(l.lesson_id));
     const edit = el("button","btn-ghost","Edit");
-    edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
+    edit.addEventListener("click", () => editLesson(l.lesson_id));
     const del = el("button","btn-ghost","Delete");
     del.addEventListener("click", () => deleteLesson(l.lesson_id));
     const vers = el("button","btn-ghost","Versions");
@@ -1984,7 +2054,7 @@ function lessonCards(list, box){
     vers.addEventListener("click", () => versionsPopup(l.lesson_id));
     acts.appendChild(give);
     if (narrow()) acts.appendChild(overflowMenu([["Versions", () => versionsPopup(l.lesson_id)],
-                                                 ["Edit", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
+                                                 ["Edit", () => editLesson(l.lesson_id)],
                                                  ["Delete", () => deleteLesson(l.lesson_id)]]));
     else { acts.appendChild(vers); acts.appendChild(edit); acts.appendChild(del); }
     card.appendChild(acts);
@@ -3033,14 +3103,14 @@ function paintLessonGrid(){
     man.addEventListener("click", () => manageLesson(l.lesson_id));
     const edit = el("button","btn-ghost","Edit");
     edit.title = "Open in the lesson builder";
-    edit.addEventListener("click", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank"));
+    edit.addEventListener("click", () => editLesson(l.lesson_id));
     const rem = el("button","btn-ghost","Remove");
     rem.title = "Take it away from " + cls;
     rem.addEventListener("click", () => removeFromClass(l));
     acts.appendChild(pub);
     acts.appendChild(man);
     /* View work is its own button, unless the screen is too narrow for four */
-    const extras = [["Edit in the builder", () => window.open("author.html?edit=" + encodeURIComponent(l.lesson_id), "_blank")],
+    const extras = [["Edit in the builder", () => editLesson(l.lesson_id)],
                     ["Remove from " + cls, () => removeFromClass(l)]];
     if (family.length > 1) extras.unshift(["Choose the version", () => pickVersionFor(l.lesson_id)]);
     if (isAssessment) extras.unshift(["Markbook", () => workBtn.click()]);

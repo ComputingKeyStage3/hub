@@ -3415,7 +3415,10 @@ function versionField(){
     edit.addEventListener("click", () => versionPopup(true));
     const off = el("button","btn-ghost bmini2","Make it a lesson of its own");
     off.addEventListener("click", unversionPopup);
-    row.appendChild(edit); row.appendChild(off);
+    const another = el("button","btn-ghost bmini2","Make another version");
+    another.title = "Start from this one and save it as another version of “" + parentTitle() + "”";
+    another.addEventListener("click", () => versionPopup(false));
+    row.appendChild(edit); row.appendChild(another); row.appendChild(off);
     w.appendChild(row);
     return w;
   }
@@ -3444,7 +3447,9 @@ function versionField(){
    only once somebody remembers to press Save. */
 function versionPopup(editing){
   openModal(box => {
-    const of = editing ? parentTitle() : (lesson.title || "this lesson");
+    /* Always the lesson the new one will be a version of, which for a tab
+       that already holds a version is the one it came from. */
+    const of = (editing || lesson.versionOf) ? parentTitle() : (lesson.title || "this lesson");
     box.appendChild(el("h2","", editing ? "This version of “" + of + "”"
                                         : "Make a different version of “" + of + "”"));
     if (!editing){
@@ -3461,7 +3466,7 @@ function versionPopup(editing){
     const w1 = el("div","bfield");
     w1.appendChild(el("label","","What is this version called?"));
     const nameIn = el("input");
-    nameIn.value = lesson.versionName || "";
+    nameIn.value = editing ? (lesson.versionName || "") : "";
     nameIn.placeholder = "Lower ability";
     w1.appendChild(nameIn); box.appendChild(w1);
 
@@ -3469,7 +3474,7 @@ function versionPopup(editing){
     w2.appendChild(el("label","","What has changed?"));
     const noteIn = document.createElement("textarea");
     noteIn.rows = 3;
-    noteIn.value = lesson.versionNote || "";
+    noteIn.value = editing ? (lesson.versionNote || "") : "";
     noteIn.placeholder = "Shorter reading, the code is started off for them, and the extension is left out.";
     w2.appendChild(noteIn); box.appendChild(w2);
 
@@ -3479,12 +3484,16 @@ function versionPopup(editing){
     w3.appendChild(codeBox); box.appendChild(w3);
     /* A list where the teachers are known, a box to type in where they are
        not, which is what offline looks like. Either way it reads the same. */
-    let readCode = () => lesson.versionCode || "";
+    /* Until the teachers have come back. Pressing the button in that first
+       moment should not hand a new version the code of the one it was copied
+       from. */
+    let readCode = () => editing ? (lesson.versionCode || "") : "";
     loadTeacherCodes().then(codes => {
       codeBox.innerHTML = "";
+      const mine = editing ? (lesson.versionCode || lastTeacher()) : lastTeacher();
       if (!codes.length){
         const inp = el("input");
-        inp.value = lesson.versionCode || lastTeacher();
+        inp.value = mine;
         inp.placeholder = "HTS";
         codeBox.appendChild(inp);
         readCode = () => inp.value.trim().toUpperCase().slice(0, 20);
@@ -3499,8 +3508,7 @@ function versionPopup(editing){
         o.value = c; o.textContent = c;
         sel.appendChild(o);
       });
-      const want = lesson.versionCode || lastTeacher();
-      sel.value = codes.indexOf(want) >= 0 ? want : "";
+      sel.value = codes.indexOf(mine) >= 0 ? mine : "";
       codeBox.appendChild(sel);
       readCode = () => sel.value;
     });
@@ -3522,7 +3530,10 @@ function versionPopup(editing){
       /* The lesson it is a version of is the one open in this tab. A version
          of a version is still a version of the original: two levels would
          give the hub a tree to draw and a teacher nothing useful. */
-      const from = lesson.savedAs;
+      /* Flattened: starting from a version makes another version of the
+         lesson that one came from, never a version of the version. Two levels
+         would give the hub a tree to draw and a teacher nothing useful. */
+      const from = lesson.versionOf || lesson.savedAs;
       if (!from){ msg.textContent = "Save this lesson to the site first."; return; }
       const was = { of: lesson.versionOf, name: lesson.versionName, note: lesson.versionNote,
                     code: lesson.versionCode, id: lesson.savedAs, share: lesson.code };
@@ -4426,7 +4437,16 @@ async function loadUnitsAndMaybeLesson(){
   if (wantUnit && !lesson.unit) lesson.unit = wantUnit;
   if (wantYear || wantUnit) paintPickers();
   if (!editId) return;
-  if (OFFLINE){ await loadLessonFromFolder(editId); return; }
+  /* The console offers "a new version" beside Edit, and sends the builder here
+     with the lesson to start from and this on the address. Asked for once the
+     lesson is on the screen, not before, so what is about to be copied is
+     there to look at while the name and what has changed are being written. */
+  const askVersion = qs2.get("version") === "new";
+  if (OFFLINE){
+    await loadLessonFromFolder(editId);
+    if (askVersion && lesson.savedAs) versionPopup(false);
+    return;
+  }
   if (!signedIn()){ askForKey(loadUnitsAndMaybeLesson, "Sign in to open this lesson."); return; }
   try{
     const r = await fetch(API + "/api/teacher/get-lesson?id=" + encodeURIComponent(editId),
@@ -4445,6 +4465,7 @@ async function loadUnitsAndMaybeLesson(){
     paintPickers();
     setMode(!!lesson.assessment && !lesson.practical, !!lesson.practical);
     render(); refreshPreview();
+    if (askVersion) versionPopup(false);
   }catch(e){ say("Could not open that lesson", e.message); }
 }
 
