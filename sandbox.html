@@ -924,6 +924,9 @@ function webEditor(p){
   ed.ta.maxLength = store.MAX_CODE;
   pane.appendChild(ed.editor);
   pane.appendChild(ed.probs);
+  /* What the suggestions in script.js look in for ids and classes: the HTML
+     file, which is not the one being typed in at the time. */
+  window.webPageCode = () => (current === "html" ? ed.ta.value : (p.html || ""));
 
   const room = el("p","sb-room");
   room.hidden = true;

@@ -311,12 +311,13 @@ const BLANK = {
   pastelink:() => ({ type:"pastelink", heading:"Paste your link", task:"", note:"" }),
   code:     () => ({ type:"code", lang:"" }),        // they pick Python or web next
   ide:      () => ({ type:"ide", title:"Python", task:"Write your code, then press Run.",
-                     starter:'print("Hello World!")', turtle:false, expect:"", run:true, edit:true }),
+                     starter:'print("Hello World!")', turtle:false, expect:"", run:true, edit:true,
+                     autocomplete:true }),
   web:      () => ({ type:"web", title:"Build a web page", task:"Edit the files, then press Run.",
                      html:'<h1>My page</h1>\n<p>Hello!</p>',
                      css:'h1 {\n  color: navy;\n}',
                      js:'console.log("Ready");',
-                     run:true, edit:true, help:true, tooltips:true, expect:"" }),
+                     run:true, edit:true, help:true, tooltips:true, autocomplete:true, expect:"" }),
   question: () => ({ type:"question", heading:"", context:"", prompt:"", minWords:20 }),
   quiz:     () => ({ type:"quiz", title:"Check your understanding", pass:{ mode:"percent", value:70 },
                      questions:[{ q:"", options:["",""], answers:[0], hint:"", why:"" }] }),
@@ -648,6 +649,7 @@ function compileOne(b, id, target){
       if (b.edit === false) blk.edit = false;      // read-only code
       if (b.help === false) blk.help = false;      // no Help tab
       if (b.tooltips === false) blk.tooltips = false;
+      if (b.autocomplete === false) blk.autocomplete = false;
       push(blk);
     }
     else if (b.type === "question")
@@ -695,6 +697,7 @@ function compileOne(b, id, target){
       if (b.edit === false) blk.edit = false;
       if (b.help === false) blk.help = false;
       if (b.tooltips === false) blk.tooltips = false;
+      if (b.autocomplete === false) blk.autocomplete = false;
       push(blk);
     }
     else if (b.type === "code"){ /* not chosen yet, nothing to build */ }
@@ -1666,7 +1669,13 @@ function card(b, i, arr){
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
     toggleRow([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true],
-               ["addFiles","Students can add files", false]]);
+               ["autocomplete","Autocomplete", true],
+               ["addFiles","Students can add files", false]],
+              null,
+              "With Autocomplete on, a little list of tag names, properties and words they have "
+              + "already used appears as they type. Arrow keys or a tap to choose, Enter or Tab to "
+              + "take it. The rest of the typing help stays either way: closing tags written for "
+              + "them, brackets and quotes in pairs, and Backspace taking a whole indent.");
     F("Code must contain (optional)", "expect");
   }
   if (b.type === "ide"){
@@ -1711,7 +1720,14 @@ function card(b, i, arr){
     }
     toggleRow([["turtle","Turtle canvas", false],
                ["run","Running", true],
-               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true]]);
+               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true],
+               ["autocomplete","Autocomplete", true]],
+              null,
+              "With Autocomplete on, a little list of words appears as they type: keywords, "
+              + "built-in functions, what is in random or turtle, and the variables they have "
+              + "made themselves. Arrow keys or a tap to choose, Enter or Tab to take it. The "
+              + "rest of the typing help stays either way: brackets and quotes in pairs, and "
+              + "Backspace taking a whole indent.");
     F("Output must contain (optional)", "expect", { help:"Leave empty unless you want Continue to wait for the right output." });
   }
   if (b.type === "question"){
@@ -1906,16 +1922,6 @@ function card(b, i, arr){
       pw.appendChild(holdRow);
     }
     body.appendChild(pw);
-  }
-  if (b.type === "web"){
-    F("Heading (optional)", "title");
-    R("Subheading (optional)", "task", { rows:2 });
-    F("index.html", "html", { area:true, rows:7, mono:true });
-    F("style.css", "css", { area:true, rows:6, mono:true });
-    F("script.js", "js", { area:true, rows:5, mono:true });
-    toggleRow([["run","Running", true], ["edit","Editing", true],
-               ["help","Help", true], ["tooltips","Tooltips", true]]);
-    F("Their code must contain (optional)", "expect");
   }
   if (b.type === "page"){
     /* All pages is for reading the shape of a lesson and shifting things

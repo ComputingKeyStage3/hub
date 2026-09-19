@@ -353,6 +353,248 @@
     return issues;
   }
 
+  /* ---------------- what to offer while they type ----------------
+     The lists the suggestions box draws from. Kept here beside the
+     explanations rather than in pyedit.js, because pyedit.js is the editor
+     and knows nothing about HTML: it asks the language what fits where and
+     draws whatever comes back.
+
+     VOID_TAGS above already says which tags close themselves, so the same set
+     decides both "this is never closed" in the mistake list and "do not write
+     a closing tag for this one" when a student types the > . */
+  const HTML_TAGS = ["a","article","aside","audio","b","blockquote","body","br","button","canvas",
+    "code","div","em","footer","form","h1","h2","h3","h4","h5","h6","head","header","hr","html",
+    "i","iframe","img","input","label","li","link","main","meta","nav","ol","option","p","pre",
+    "script","section","select","small","source","span","strong","style","sub","sup","table",
+    "tbody","td","textarea","th","thead","title","tr","ul","video"];
+
+  const HTML_ATTRS = ["alt","checked","class","cols","disabled","for","height","href","id","lang",
+    "max","maxlength","method","min","name","placeholder","rel","required","rows","selected","src",
+    "step","style","target","title","type","value","width"];
+
+  const ATTR_VALUES = {
+    type:["text","number","password","checkbox","radio","submit","button","email","range","color","date"],
+    target:["_blank","_self"],
+    rel:["stylesheet","icon","noopener"],
+    method:["get","post"],
+    lang:["en"]
+  };
+
+  /* Only the ones a KS3 page actually uses. The full property list is about
+     five hundred long and buries the twenty they need. */
+  const CSS_PROPS = ["align-items","background","background-color","background-image","border",
+    "border-bottom","border-color","border-radius","border-style","border-width","bottom","box-shadow",
+    "color","cursor","display","flex","flex-direction","flex-wrap","font-family","font-size",
+    "font-style","font-weight","gap","grid-template-columns","height","justify-content","left",
+    "letter-spacing","line-height","list-style","margin","margin-bottom","margin-left","margin-right",
+    "margin-top","max-width","min-height","opacity","overflow","padding","padding-bottom","padding-left",
+    "padding-right","padding-top","position","right","text-align","text-decoration","text-shadow",
+    "text-transform","top","transform","transition","visibility","width","z-index"];
+
+  const COLOURS = ["black","white","red","orange","yellow","green","blue","navy","purple","pink",
+    "brown","grey","gray","gold","teal","crimson","tomato","lime","cyan","magenta","silver",
+    "lightblue","lightgreen","darkblue","darkgreen","transparent"];
+
+  const CSS_VALUES = {
+    "align-items":["center","flex-start","flex-end","stretch","baseline"],
+    "background":COLOURS,
+    "background-color":COLOURS,
+    "border-color":COLOURS,
+    "border-style":["solid","dashed","dotted","none"],
+    "color":COLOURS,
+    "cursor":["pointer","default","text","not-allowed","grab"],
+    "display":["block","inline","inline-block","flex","grid","none"],
+    "flex-direction":["row","column"],
+    "flex-wrap":["wrap","nowrap"],
+    "font-family":["sans-serif","serif","monospace","Arial, sans-serif","Georgia, serif"],
+    "font-style":["normal","italic"],
+    "font-weight":["normal","bold","600","800"],
+    "justify-content":["center","flex-start","flex-end","space-between","space-around"],
+    "list-style":["none","disc","decimal"],
+    "overflow":["hidden","auto","scroll","visible"],
+    "position":["static","relative","absolute","fixed","sticky"],
+    "text-align":["left","center","right","justify"],
+    "text-decoration":["none","underline","line-through"],
+    "text-transform":["none","uppercase","lowercase","capitalize"],
+    "visibility":["visible","hidden"]
+  };
+
+  /* After a dot. The ones on the left are the objects a beginner meets first,
+     so they get a list of their own; anything else falls back to the things
+     any value might have. */
+  const JS_MEMBERS = {
+    document:["getElementById","querySelector","querySelectorAll","createElement","body","title"],
+    console:["log","error","warn","table","clear"],
+    Math:["random","floor","ceil","round","abs","max","min","sqrt","pow","PI"],
+    window:["alert","prompt","confirm","setTimeout","setInterval","location","innerWidth","innerHeight"],
+    JSON:["stringify","parse"]
+  };
+  const JS_ANY = ["length","value","textContent","innerHTML","style","classList","addEventListener",
+    "push","pop","shift","join","split","slice","indexOf","includes","toUpperCase","toLowerCase",
+    "trim","replace","forEach","map","filter","sort","reverse","charAt","toFixed","appendChild",
+    "remove","setAttribute","getAttribute","focus","src","href","checked","id","className"];
+  const JS_GLOBALS = ["alert","prompt","confirm","console","document","window","Math","JSON","Number",
+    "String","Array","Boolean","parseInt","parseFloat","isNaN","setTimeout","setInterval",
+    "clearInterval","Date"];
+  const JS_KEYWORDS = ["let","const","var","function","return","if","else","for","while","do","break",
+    "continue","new","typeof","class","extends","try","catch","finally","throw","switch","case",
+    "default","of","in","await","async","true","false","null","undefined","this"];
+
+  /* Names the student made themselves, read straight out of what they have
+     written. Offering only the built-in words would mean the one thing they
+     are most likely to want, the variable they named two lines up, is the one
+     thing never suggested. */
+  function jsNames(code){
+    const found = [];
+    const keep = (w) => { if (w && found.indexOf(w) < 0) found.push(w); };
+    let m;
+    const re = /\b(?:let|const|var|function|class)\s+([A-Za-z_$][\w$]*)/g;
+    while ((m = re.exec(code)) !== null) keep(m[1]);
+    const fn = /\bfunction\s*[A-Za-z_$]*\s*\(([^)]*)\)/g;
+    while ((m = fn.exec(code)) !== null)
+      m[1].split(",").forEach(p => { const w = p.trim(); if (/^[A-Za-z_$][\w$]*$/.test(w)) keep(w); });
+    return found;
+  }
+
+  /* The ids and classes that are actually on the page, so the brackets of
+     getElementById can offer the names the student wrote in their HTML
+     rather than making them go and look. Only asked for from inside those
+     brackets. `webPageCode` is set by whichever editor is open, because the
+     HTML lives in a different file from the JavaScript asking about it. */
+  function pageNames(which){
+    const html = (typeof window.webPageCode === "function" && window.webPageCode()) || "";
+    const out = [];
+    const re = which === "id" ? /\bid\s*=\s*["']([^"']+)["']/g : /\bclass\s*=\s*["']([^"']+)["']/g;
+    let m;
+    while ((m = re.exec(html)) !== null)
+      m[1].split(/\s+/).forEach(w => { if (w && out.indexOf(w) < 0) out.push(w); });
+    return out;
+  }
+
+  const items = (list, kind, dict, decorate) => list.map(w => ({
+    label: w, kind: kind,
+    detail: (dict && dict[w]) || "",
+    insert: decorate ? decorate(w) : undefined
+  }));
+
+  /* ---------------- where the cursor is, and so what fits there ----------------
+     Each branch works out two things: the point a suggestion replaces from,
+     and the list to choose out of. Handing back the start position rather
+     than the typed letters is what lets "fo" be replaced by "font-size", and
+     a half-typed colour by a whole one. */
+  function suggestHtml(ctx){
+    const line = ctx.lineBefore;
+    /* The last < with no > after it means the cursor is still inside the tag
+       being written. Between tags they are writing prose, and a box of tag
+       names popping up over a sentence is in the way, so nothing is offered
+       there. */
+    const open = line.lastIndexOf("<"), shut = line.lastIndexOf(">");
+    if (open <= shut) return null;
+    const tagPart = line.slice(open);
+    let m;
+    if ((m = /([A-Za-z-]+)\s*=\s*"([^"]*)$/.exec(tagPart))){
+      const vals = ATTR_VALUES[m[1].toLowerCase()];
+      if (!vals) return null;
+      return { from: ctx.pos - m[2].length, items: items(vals, "value") };
+    }
+    if ((m = /^<\/?([A-Za-z][\w-]*)?$/.exec(tagPart)))
+      return { from: ctx.pos - (m[1] || "").length,
+               items: items(HTML_TAGS, "tag", window.WEB_HELP.html) };
+    if (/^<[A-Za-z][\w-]*\s/.test(tagPart)){
+      const word = (/([A-Za-z-]*)$/.exec(tagPart) || ["",""])[1];
+      return { from: ctx.pos - word.length,
+               items: items(HTML_ATTRS, "attribute", window.WEB_HELP.html) };
+    }
+    return null;
+  }
+
+  function suggestCss(ctx){
+    let m;
+    /* a value, once the property has been named and the colon typed */
+    if ((m = /([a-z-]+)\s*:\s*([^;{}]*)$/.exec(ctx.lineBefore))){
+      const vals = CSS_VALUES[m[1]];
+      if (!vals) return null;
+      const word = (/([A-Za-z-]*)$/.exec(m[2]) || ["",""])[1];
+      return { from: ctx.pos - word.length, items: items(vals, "value") };
+    }
+    /* Inside a rule it is a property they are after, outside one a selector.
+       Counted rather than parsed: a stray brace in a comment would throw this
+       off, and getting the wrong list for one line costs nothing. */
+    const depth = (ctx.before.match(/\{/g) || []).length - (ctx.before.match(/\}/g) || []).length;
+    const word = (/([A-Za-z-]*)$/.exec(ctx.lineBefore) || ["",""])[1];
+    if (depth > 0)
+      return { from: ctx.pos - word.length,
+               items: items(CSS_PROPS, "property", window.WEB_HELP.css, w => w + ": ") };
+    if (!word) return null;
+    return { from: ctx.pos - word.length, items: items(HTML_TAGS, "tag", window.WEB_HELP.html) };
+  }
+
+  function suggestJs(ctx){
+    let m;
+    if ((m = /(getElementById|querySelector)\s*\(\s*(["'])([^"']*)$/.exec(ctx.lineBefore))){
+      const wantClass = m[1] === "querySelector" && m[3].charAt(0) === ".";
+      const names = pageNames(wantClass ? "class" : "id");
+      if (!names.length) return null;
+      const typed = wantClass ? m[3].slice(1) : m[3];
+      return { from: ctx.pos - typed.length, items: items(names, "value") };
+    }
+    /* As in Python: a dot after one of the named objects opens its list
+       there and then, because document. can only be asking one thing. A dot
+       after anything else waits for a letter. */
+    if ((m = /([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$]*)$/.exec(ctx.lineBefore))){
+      const own = JS_MEMBERS[m[1]];
+      return { from: ctx.pos - m[2].length, now: !!own,
+               items: items(own || JS_ANY, "method", window.WEB_HELP.js) };
+    }
+    const word = (/([A-Za-z_$][\w$]*)$/.exec(ctx.lineBefore) || ["",""])[1] || "";
+    const mine = jsNames(ctx.text).filter(w => w !== word);
+    return { from: ctx.pos - word.length,
+             items: items(mine, "variable")
+               .concat(items(JS_KEYWORDS, "keyword", window.WEB_HELP.js))
+               .concat(items(JS_GLOBALS, "function", window.WEB_HELP.js)) };
+  }
+
+  window.webSuggest = function(lang, ctx){
+    try{
+      if (lang === "css") return suggestCss(ctx);
+      if (lang === "js") return suggestJs(ctx);
+      return suggestHtml(ctx);
+    }catch(e){ return null; }
+  };
+
+  /* Which tags write their own closing tag when the > is typed, and which
+     close themselves and must not. */
+  window.webVoidTag = function(tag){ return VOID_TAGS.has(String(tag || "").toLowerCase()); };
+
+  /* ---------------- does this line leave something open? ----------------
+     What the editor asks before deciding whether Enter should indent the
+     next line under this one.
+
+     All three languages used to share one rule, "ends with { or >", and for
+     HTML that counted the > on the end of </h1>. Pressing Enter after a tag
+     that had just been closed indented the next line under it, so every line
+     after the first crept two spaces further right. The tags on the line are
+     counted instead: only a tag still open at the end of it earns an indent,
+     and a tag that closes itself, like <br>, never does. */
+  function htmlOpens(line){
+    if (!/>\s*$/.test(line)) return false;
+    const re = /<(\/?)\s*([A-Za-z][\w-]*)((?:[^<>"]|"[^"]*")*?)(\/?)>/g;
+    let depth = 0, m;
+    while ((m = re.exec(line)) !== null){
+      if (m[1] === "/") depth--;
+      else if (!m[4] && !VOID_TAGS.has(m[2].toLowerCase())) depth++;
+    }
+    return depth > 0;
+  }
+
+  window.webOpens = function(lang, line){
+    if (lang === "css") return /\{\s*$/.test(line);
+    /* JavaScript: a bracket of any kind left open, or an arrow function
+       whose body is going on the next line. */
+    if (lang === "js") return /[{(\[]\s*$/.test(line) || /=>\s*$/.test(line);
+    return htmlOpens(line);
+  };
+
   window.webCheck = function(lang, code){
     try{
       if (lang === "css") return checkCss(code || "");

@@ -3318,6 +3318,7 @@ function rIDE(b){
     height: b.height || 0,
     help: PY_HELP,
     tips: wantTips,
+    autocomplete: b.autocomplete !== false,
     /* Once they have typed here it is their work, and nothing carries into it
        again. See carryIn below. */
     onInput: () => { lastCarried = null; markDirty(); }
@@ -3660,7 +3661,9 @@ function rIDE(b){
     return { word: text.slice(a, b2), start: a };
   }
   function showTip(){
-    if (!wantTips){ tip.hidden = true; return; }
+    /* Not on top of the suggestions box: one bubble at a time, and the one
+       they are steering with the arrow keys wins. */
+    if (!wantTips || (window.pyEdit.suggesting && window.pyEdit.suggesting())){ tip.hidden = true; return; }
     const text = ta.value;
     const found = wordAt(text, ta.selectionStart);
     if (!found || !Object.prototype.hasOwnProperty.call(PY_HELP, found.word)){ tip.hidden = true; return; }
@@ -3736,19 +3739,25 @@ function rWeb(b){
   pane.appendChild(ideSet.panel);
   gearBtn.addEventListener("click", ideSet.toggle);
 
-  const editor = el("div","ide-editor");
-  const gutter = el("div","ide-gutter");
-  const codeWrap = el("div","ide-codewrap");
-  const hl = el("div","ide-hl"); hl.setAttribute("aria-hidden","true");
-  const ta = el("textarea","ide-code");
-  ta.spellcheck = false; ta.autocapitalize = "off"; ta.autocomplete = "off"; ta.wrap = "off";
-  if (!canEdit) ta.readOnly = true;
-  if (b.height) editor.style.height = b.height + "px";
-  codeWrap.appendChild(hl); codeWrap.appendChild(ta);
-  editor.appendChild(gutter); editor.appendChild(codeWrap);
+  /* The editor from pyedit.js, the same one the Python task above and the
+     practice sandbox use. This was a second copy of it written out here, and
+     it had drifted: it had lost the Fix it buttons, and every bit of typing
+     help added since would have had to be written twice and kept in step. */
+  const ed = window.pyEdit.attach({
+    value: "",
+    readOnly: !canEdit,
+    height: b.height || 0,
+    tips: wantTips,
+    lang: window.pyEdit.webLang(files[0]),
+    autocomplete: b.autocomplete !== false,
+    onInput: () => { code[current] = ta.value; markDirty(); }
+  });
+  const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
+        probs = ed.probs, repaint = ed.repaint;
+  /* Which language is being coloured and suggested from follows whichever
+     file is open. */
+  const useLang = (name) => ed.setLang(window.pyEdit.webLang(kindOf[name] || "html"));
   pane.appendChild(editor);
-
-  const probs = el("div","ide-probs"); probs.hidden = true;
   pane.appendChild(probs);
   wrap.appendChild(pane);
 
@@ -3850,6 +3859,7 @@ function rWeb(b){
         code[current] = ta.value;
         current = name;
         ta.value = code[name];
+        useLang(name);
         paintFiles(); repaint();
       });
       if (canAddFiles && !starters.hasOwnProperty(name)){
@@ -3899,6 +3909,7 @@ function rWeb(b){
         code[current] = ta.value;
         current = name;
         ta.value = code[name];
+        useLang(name);
         paintFiles(); repaint(); markDirty();
         back.remove();
       });
@@ -3928,7 +3939,7 @@ function rWeb(b){
     yes.addEventListener("click", () => {
       delete code[name]; delete kindOf[name];
       order.splice(order.indexOf(name), 1);
-      if (current === name){ current = order[0]; ta.value = code[current]; }
+      if (current === name){ current = order[0]; ta.value = code[current]; useLang(current); }
       paintFiles(); repaint(); markDirty();
       back.remove();
     });
@@ -3942,72 +3953,17 @@ function rWeb(b){
   }
   paintFiles();
   ta.value = code[current];
-
-  /* ---------- painting ---------- */
-  let issues = [];
-  function repaint(){
-    const lines = ta.value.split("\n");
-    issues = window.webCheck ? window.webCheck(kindOf[current] || "html", ta.value) : [];
-    const bad = new Set(issues.map(i => i.line));
-    const state = { block: false };
-    hl.innerHTML = lines.map((l, n) => {
-      const painted = window.webHighlight ? window.webHighlight(kindOf[current] || "html", l, state) : l;
-      return '<div class="hl-line' + (bad.has(n) ? " bad" : "") + '">' +
-             (wantTips ? painted : painted.replace(/ t-help/g, "")) + "</div>";
-    }).join("");
-    gutter.innerHTML = lines.map((_, n) =>
-      '<div class="gl' + (bad.has(n) ? " bad" : "") + '">' + (n + 1) + "</div>").join("");
-    probs.innerHTML = "";
-    if (issues.length){
-      probs.hidden = false;
-      issues.slice(0, 4).forEach(iss => {
-        const row = el("div","ide-prob");
-        row.appendChild(el("span","ide-probline","Line " + (iss.line + 1)));
-        row.appendChild(tel("span","ide-probmsg", iss.msg));
-        if (iss.fix){
-          const fixBtn = el("button","ide-chip","Fix it");
-          fixBtn.addEventListener("click", () => {
-            const ls = ta.value.split("\n");
-            const fixed = iss.fix();
-            if (fixed !== null && fixed !== undefined){
-              ls[iss.line] = fixed;
-              ta.value = ls.join("\n");
-              code[current] = ta.value;
-              repaint(); markDirty();
-            }
-          });
-          row.appendChild(fixBtn);
-        }
-        probs.appendChild(row);
-      });
-    } else { probs.hidden = true; }
-  }
-  ta.addEventListener("input", () => { code[current] = ta.value; repaint(); markDirty(); });
-  ta.addEventListener("scroll", () => {
-    hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop;
-  });
-  ta.addEventListener("keydown", (e) => {
-    if (e.key === "Tab"){
-      e.preventDefault();
-      const st = ta.selectionStart, en = ta.selectionEnd;
-      ta.value = ta.value.slice(0, st) + "  " + ta.value.slice(en);
-      ta.selectionStart = ta.selectionEnd = st + 2;
-      code[current] = ta.value; repaint(); markDirty();
-    } else if (e.key === "Enter"){
-      const st = ta.selectionStart;
-      const line = ta.value.slice(0, st).split("\n").pop();
-      const indent = (line.match(/^[ \t]*/) || [""])[0];
-      const extra = /[{>]\s*$/.test(line) ? "  " : "";
-      if (indent || extra){
-        e.preventDefault();
-        const ins = "\n" + indent + extra;
-        ta.value = ta.value.slice(0, st) + ins + ta.value.slice(ta.selectionEnd);
-        ta.selectionStart = ta.selectionEnd = st + ins.length;
-        code[current] = ta.value; repaint(); markDirty();
-      }
-    }
-  });
   repaint();
+
+  /* The suggestions in script.js offer the ids and classes that are really on
+     the page, and the page is in a different file from the JavaScript asking
+     about it. Pointed at this task's HTML whenever this editor is the one
+     being typed in, because a lesson can hold more than one web task. */
+  const htmlNow = () => {
+    const main = order.find(n => kindOf[n] === "html") || order[0];
+    return ((current === main ? ta.value : code[main]) || "");
+  };
+  ta.addEventListener("focus", () => { window.webPageCode = htmlNow; });
 
   /* ---------- word explanations ---------- */
   const tip = el("div","ide-tip"); tip.hidden = true;
@@ -4022,7 +3978,9 @@ function rWeb(b){
     return { word: text.slice(a, z), start: a };
   }
   function showTip(){
-    if (!wantTips){ tip.hidden = true; return; }
+    /* Not on top of the suggestions box: one bubble at a time, and the one
+       they are steering with the arrow keys wins. */
+    if (!wantTips || (window.pyEdit.suggesting && window.pyEdit.suggesting())){ tip.hidden = true; return; }
     const found = wordAt(ta.value, ta.selectionStart);
     const dict = (window.WEB_HELP && window.WEB_HELP[kindOf[current] || "html"]) || {};
     if (!found || !Object.prototype.hasOwnProperty.call(dict, found.word)){ tip.hidden = true; return; }
@@ -4167,6 +4125,7 @@ function rWeb(b){
       }
       if (!code.hasOwnProperty(current)) current = order[0];
       ta.value = code[current];
+      useLang(current);
       paintFiles(); repaint();
       if (canRun) run();
     }
