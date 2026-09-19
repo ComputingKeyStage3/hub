@@ -4159,6 +4159,33 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
   }
 }
 
+/* A pop-up that is a list of things to read and choose between, rather than a
+   question with two answers under it. The usual 440px turns every line of a
+   version's notes into three.
+
+   min() rather than a flat width, because the mobile rules in the middle of
+   this file set .modal to 100% and a plain 720px down here would beat them and
+   make the pop-up 720px wide on a phone. */
+.modal.roomy{max-width:min(720px, 100%)}
+
+/* fieldRow only ever made a text box, so a dropdown put in one of these rows
+   has nothing telling it how big to be and comes out half the width of the
+   boxes above it. Matched to them rather than to the builder's smaller
+   fields, since that is what it is standing next to. */
+.modal .field select{
+  width:100%; height:48px; padding:0 14px;
+  font-family:var(--body); font-size:18px; color:var(--text);
+}
+
+/* A menu is absolutely positioned inside a wrap no wider than the icon button
+   it hangs off, so shrink-to-fit gives it nothing and it falls back to
+   min-width, breaking "Make a new version from this one" over three lines.
+   placeMenu already measures it at max-content to decide where it goes, so
+   this only gives it the width it was measured at. The cap keeps a long item
+   from filling the screen; menus.js turns it into a pop-up when even that
+   will not fit. */
+.menu{width:max-content; max-width:min(360px, calc(100vw - 24px))}
+
 /* ---------- versions of a lesson ----------
    All new names, so nothing above is overridden and the mobile rules in the
    middle of this file still win where they apply. What these do need is their

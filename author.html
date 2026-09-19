@@ -3442,6 +3442,57 @@ function versionField(){
   return w;
 }
 
+/* Everything that turns this tab into a new version of the lesson it is
+   holding: pointed at the right lesson, given an id of its own, and saved.
+   Shared by the pop-up that asks for the details and by the address the
+   console sends when it has already asked.
+
+   Nothing is changed for good until the save has worked. A failure puts every
+   field back as it was, so a tab that could not reach the server is still the
+   lesson it was opened with rather than a half made version of it. */
+async function makeVersion(name, note, code){
+  /* Flattened: starting from a version makes another version of the lesson
+     that one came from, never a version of the version. Two levels would give
+     the hub a tree to draw and a teacher nothing useful. */
+  const from = lesson.versionOf || lesson.savedAs;
+  if (!from) throw new Error("Save this lesson to the site first.");
+  const was = { of: lesson.versionOf, name: lesson.versionName, note: lesson.versionNote,
+                code: lesson.versionCode, id: lesson.savedAs, share: lesson.code };
+  lesson.versionOf = from;
+  lesson.versionName = String(name || "").trim().slice(0, 60);
+  lesson.versionNote = String(note || "").trim().slice(0, 300);
+  lesson.versionCode = String(code || "").trim().toUpperCase().slice(0, 20);
+  lesson.savedAs = null;                 // so it is saved as a new lesson, not over the old one
+  /* And a four digit code of its own. Carrying the original's over would put
+     two lessons on one code, and the front page opens whichever it comes to
+     first. Offline only, but that is where codes are used. */
+  lesson.code = "";
+  /* Offline there is no server to hand an id back: the version comes out as a
+     file to drop into the lessons folder, so the id it will have is settled
+     here instead. */
+  if (OFFLINE) lesson.savedAs = newVersionId();
+  try{
+    await saveToSite();
+    if (!lesson.savedAs) throw new Error("It was not saved.");
+    showTitle();
+  }catch(e){
+    lesson.versionOf = was.of; lesson.versionName = was.name;
+    lesson.versionNote = was.note; lesson.versionCode = was.code;
+    lesson.savedAs = was.id; lesson.code = was.share;
+    throw e;
+  }
+}
+
+/* Opened from the console with the details already filled in there, or
+   without them when somebody typed the address themselves. Either it is made
+   straight away or the pop-up asks, which is the same two ways round the
+   builder's own buttons work. */
+function startVersion(given){
+  if (!given || !given.name){ versionPopup(false); return; }
+  makeVersion(given.name, given.note, given.code)
+    .catch(e => say("Could not make the version", e.message));
+}
+
 /* The name, what has changed, and whose it is. Making one saves straight
    away, so the version is in the hub from the moment it is made rather than
    only once somebody remembers to press Save. */
@@ -3527,38 +3578,9 @@ function versionPopup(editing){
         await saveToSite();
         return;
       }
-      /* The lesson it is a version of is the one open in this tab. A version
-         of a version is still a version of the original: two levels would
-         give the hub a tree to draw and a teacher nothing useful. */
-      /* Flattened: starting from a version makes another version of the
-         lesson that one came from, never a version of the version. Two levels
-         would give the hub a tree to draw and a teacher nothing useful. */
-      const from = lesson.versionOf || lesson.savedAs;
-      if (!from){ msg.textContent = "Save this lesson to the site first."; return; }
-      const was = { of: lesson.versionOf, name: lesson.versionName, note: lesson.versionNote,
-                    code: lesson.versionCode, id: lesson.savedAs, share: lesson.code };
-      lesson.versionOf = from; lesson.versionName = name;
-      lesson.versionNote = note; lesson.versionCode = code;
-      lesson.savedAs = null;                 // so it is saved as a new lesson, not over the old one
-      /* And a four digit code of its own. Carrying the original's over would
-         put two lessons on one code, and the front page opens whichever it
-         comes to first. Offline only, but that is where codes are used. */
-      lesson.code = "";
-      /* Offline there is no server to hand an id back: the version comes out
-         as a file to drop into the lessons folder, so the id it will have is
-         settled here instead. */
-      if (OFFLINE) lesson.savedAs = newVersionId();
       msg.textContent = "Making it…";
-      try{
-        await saveToSite();
-        if (!lesson.savedAs) throw new Error("It was not saved.");
-        closeModal(); showTitle();
-      }catch(e){
-        lesson.versionOf = was.of; lesson.versionName = was.name;
-        lesson.versionNote = was.note; lesson.versionCode = was.code;
-        lesson.savedAs = was.id; lesson.code = was.share;
-        msg.textContent = e.message;
-      }
+      try{ await makeVersion(name, note, code); closeModal(); }
+      catch(e){ msg.textContent = e.message; }
     });
     box.appendChild(go);
     const no = el("button","btn-ghost modal-stay","Cancel");
@@ -4442,9 +4464,12 @@ async function loadUnitsAndMaybeLesson(){
      lesson is on the screen, not before, so what is about to be copied is
      there to look at while the name and what has changed are being written. */
   const askVersion = qs2.get("version") === "new";
+  const given = { name: (qs2.get("vname") || "").trim(),
+                  note: (qs2.get("vnote") || "").trim(),
+                  code: (qs2.get("vcode") || "").trim() };
   if (OFFLINE){
     await loadLessonFromFolder(editId);
-    if (askVersion && lesson.savedAs) versionPopup(false);
+    if (askVersion && lesson.savedAs) startVersion(given);
     return;
   }
   if (!signedIn()){ askForKey(loadUnitsAndMaybeLesson, "Sign in to open this lesson."); return; }
@@ -4465,7 +4490,7 @@ async function loadUnitsAndMaybeLesson(){
     paintPickers();
     setMode(!!lesson.assessment && !lesson.practical, !!lesson.practical);
     render(); refreshPreview();
-    if (askVersion) versionPopup(false);
+    if (askVersion) startVersion(given);
   }catch(e){ say("Could not open that lesson", e.message); }
 }
 
