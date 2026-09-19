@@ -4176,56 +4176,73 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
    middle of this file still win where they apply. What these need for a
    narrow screen is at the bottom of this block rather than back up there. */
 
-/* The icon on a practice card, in the slot a lesson number uses. A glyph at
-   the lesson number's 13px is a speck, and it is not a number, so it does not
-   want the number's spacing either. */
+/* The icon on a practice card, and on a program in the sandbox, in the slot a
+   lesson number uses. A glyph at the lesson number's 13px is a speck, and it
+   is not a number, so it does not want the number's spacing either. */
 .lessonCard .num.pracIcon{font-family:var(--body); font-size:17px; letter-spacing:0}
 
-/* The sandbox page scrolls normally: it is one editor with a row of programs
-   over it, not the lesson's fixed shell. */
+/* The sandbox page scrolls normally: it is a list, or one editor, rather than
+   the lesson's fixed shell. */
 .sb-page{max-width:1180px; margin:0 auto; padding:22px 24px 80px}
 
-/* The row of saved programs. Each one is a tab, and the last item makes
-   another. Wraps rather than scrolling sideways: five names and a button fit
-   on two lines on a phone, and a row that scrolls hides the New button. */
-.sb-strip{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 14px}
-.sb-prog{
-  background:var(--panel); border:1px solid var(--line-2); color:var(--muted);
-  border-radius:10px; padding:9px 15px; font-size:15px; font-weight:700;
-  max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+/* ---- is it saved? ----
+   A pill in the top bar rather than a line of text, because while it is grey
+   it is also the button that saves. Green means the server has it. */
+.sb-save{
+  font-size:13px; font-weight:700; padding:6px 14px; border-radius:999px;
+  background:transparent; border:1.5px solid var(--line-2); color:var(--muted);
+  white-space:nowrap; flex:0 0 auto; margin-left:auto;
 }
-.sb-prog:hover{border-color:var(--amber); color:var(--text)}
-.sb-prog.on{background:var(--panel-2); color:var(--text); border-color:var(--amber)}
-.sb-new{
-  background:transparent; border:1px dashed var(--line-2); color:var(--muted);
-  border-radius:10px; padding:9px 15px; font-size:15px; font-weight:700;
+.sb-save[data-state=saved]{border-color:var(--mint); color:var(--mint)}
+.sb-save[data-state=stuck]{border-color:var(--amber-dark); color:var(--amber-dark)}
+.sb-save:hover:not(:disabled){border-color:var(--amber); color:var(--amber)}
+/* Saved is not a button any more, only a word, so it must not look faded or
+   pressable the way a turned-off button does. */
+.sb-save:disabled{cursor:default; opacity:1}
+
+/* ---- the list of programs ---- */
+.sb-top{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:0 0 18px}
+.sb-note{margin:0; font-size:13.5px; color:var(--muted)}
+.sb-foot{margin-top:22px}
+
+/* A program sits in the same card as a lesson, with the two icons on the end.
+   It does not slide sideways when pointed at the way a lesson does: half of
+   it is buttons, and a target that moves as the pointer nears it is harder to
+   hit, which matters most for the one that deletes. */
+.lessonCard.sb-card{gap:10px; padding:14px 16px}
+.lessonCard.sb-card:hover{transform:none}
+.sb-open{
+  flex:1; min-width:0; display:flex; align-items:center; gap:20px;
+  background:transparent; border:none; padding:6px 8px; text-align:left; color:inherit;
 }
-.sb-new:hover:not(:disabled){border-color:var(--amber); color:var(--amber); border-style:solid}
-.sb-new:disabled{opacity:.45}
-
-/* The quiet lines: how many programs are left, and that none of this is
-   marked. */
-.sb-note{margin:10px 0 0; font-size:13.5px; color:var(--muted)}
-.sb-strip + .sb-note{margin:0 0 14px}
-
-/* What a program is called, typed straight into the editor's own bar where a
-   lesson shows a filename. It has to look like the filename it replaces
-   until it is clicked, or the bar reads as a form. */
-.sb-name{
-  flex:1; min-width:0; background:transparent !important; border:1px solid transparent !important;
-  border-radius:8px; padding:4px 8px !important; color:var(--ed-fg) !important;
-  font-family:var(--mono) !important; font-size:14px !important; font-weight:700;
-  box-shadow:none !important;
+.sb-open:hover b{color:var(--amber-dark)}
+.sb-icon{
+  flex:none; width:40px; height:40px; display:grid; place-items:center;
+  font-size:17px; line-height:1; background:transparent;
+  border:1px solid var(--line-2); border-radius:10px; color:var(--muted);
 }
-.sb-name:hover{border-color:var(--ed-line) !important}
-.sb-name:focus{border-color:var(--amber) !important; outline:none}
+.sb-icon:hover{border-color:var(--amber); color:var(--amber)}
+.sb-icon.sb-bin:hover{border-color:var(--red); color:var(--red)}
 
-/* A code box to write in rather than to read. The lesson's is the height of
+/* ---- which kind of program to start ---- */
+.sb-kinds{display:grid; gap:12px; margin:6px 0 4px}
+.sb-kind{
+  display:grid; grid-template-columns:auto 1fr; gap:4px 16px; align-items:start;
+  text-align:left; padding:16px 18px; border-radius:14px;
+  background:var(--panel-2); border:1.5px solid var(--line-2); color:var(--text);
+}
+.sb-kind:hover{border-color:var(--amber)}
+.sb-kind-ico{grid-row:1 / 3; align-self:center; font-size:22px; color:var(--amber-dark)}
+.sb-kind b{font-family:var(--display); font-size:17px}
+.sb-kind span:not(.sb-kind-ico){font-size:14px; color:var(--muted); line-height:1.5; font-weight:500}
+
+/* ---- the editor ----
+   A code box to write in rather than to read. The lesson's is the height of
    the task it belongs to; this one is as tall as the screen sensibly allows,
    with the console beside it deeper to match.
 
    dvh, not vh: on a phone vh is the viewport with the browser bars hidden, so
-   a box measured that way runs underneath them. The vh line above is for
+   a box measured that way runs underneath them. The vh line above it is for
    browsers too old to know what dvh means. */
 .sb-ide{--ed-box:210px}
 /* Written out this long because the lesson's own rule for a code box is
@@ -4233,28 +4250,67 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
    it however far down the file it sits. This one matches it and wins on
    order. */
 .ide.sb-ide .ide-pane > .ide-editor{height:60vh; height:min(60dvh, 520px)}
-/* The console fills whatever the code box leaves, so the two sides of the
-   sandbox are the same height. On the lesson page they already are, both
-   being about the height of one task; here the code box is as tall as the
-   screen allows and a short console beside it left the row looking broken. */
+.ide.sb-ide.web .ide-pane > .ide-editor{height:60vh; height:min(60dvh, 520px)}
+/* The console, or the preview, fills whatever the code box leaves, so the two
+   sides of the sandbox are the same height. On the lesson page they already
+   are, both being about the height of one task; here the code box is as tall
+   as the screen allows and a short console beside it left the row broken. */
 .sb-ide .ide-wrap{align-items:stretch}
 .sb-ide .ide-side{display:flex; flex-direction:column}
 .sb-ide .ide-console{flex:1; min-height:0; max-height:none}
+.sb-ide .web-preview{flex:1; min-height:0; height:auto}
+.sb-ide .ide-help{flex:1; min-height:0; max-height:none}
 
-/* How much room is left in this program, which only appears when it is
-   nearly gone. */
+/* How much room is left in this program, which only appears when it is nearly
+   gone. */
 .sb-room{margin:0; padding:8px 12px; font-size:13px; font-weight:700;
   color:var(--amber-dark); background:var(--ed-bar); border-top:1px solid var(--ed-line)}
 
+/* ---- adding a file beside main.py ----
+   The two endings are chosen the same way the two kinds of program are, one
+   step smaller, with the upload half underneath. */
+.sb-kinds-row{grid-template-columns:1fr 1fr}
+.sb-kind-small{grid-template-columns:1fr; padding:12px 14px; gap:2px}
+.sb-kind-small b{font-family:var(--mono); font-size:16px; color:var(--amber-dark)}
+.sb-kind.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 8%, transparent)}
+
+.sb-drop{
+  display:grid; justify-items:center; gap:6px; text-align:center;
+  margin-top:18px; padding:18px 16px;
+  border:1.5px dashed var(--line-2); border-radius:14px; background:var(--panel-2);
+}
+.sb-drop b{font-size:15px}
+.sb-drop span{font-size:13.5px; color:var(--muted)}
+.sb-drop.over{border-color:var(--amber); border-style:solid;
+  background:color-mix(in srgb, var(--amber) 10%, transparent)}
+/* The browser's own file button is never shown: Browse my computer stands in
+   for it, so the pop-up reads in the site's own words rather than "No file
+   chosen". */
+.sb-picker{display:none}
+
 @media (max-width:640px){
   .sb-page{padding:16px 12px 64px}
-  .sb-prog{max-width:140px; font-size:14px}
-  .sb-new{font-size:14px}
+  .lessonCard.sb-card{padding:10px 12px; gap:6px}
+  .sb-open{gap:12px; padding:4px}
+  .sb-icon{width:38px; height:38px}
   /* On one column the editor and the console sit one above the other, so
      neither may take most of the screen on its own. */
-  .ide.sb-ide .ide-pane > .ide-editor{height:44vh; height:min(44dvh, 360px)}
-  /* One column on a phone, so the console is no longer beside anything and
-     goes back to a height of its own. */
-  .sb-ide .ide-console{flex:none; max-height:34vh; max-height:min(34dvh, 280px)}
-  .sb-name{font-size:13px !important}
+  .ide.sb-ide .ide-pane > .ide-editor,
+  .ide.sb-ide.web .ide-pane > .ide-editor{height:44vh; height:min(44dvh, 360px)}
+  /* Back to a height of its own, and a minimum with it: the rule above
+     takes the minimum away so the console can stretch beside the code
+     box, and in one column there is nothing to stretch into, so without
+     this it collapsed to the one line it had in it. */
+  .sb-ide .ide-console{flex:none; min-height:var(--ed-box);
+    max-height:34vh; max-height:min(34dvh, 280px)}
+  .sb-ide .web-preview{flex:none; height:34vh; height:min(34dvh, 280px)}
+  .sb-ide .ide-help{flex:none; max-height:34vh; max-height:min(34dvh, 280px)}
+  /* It says whether the work is saved, which is worth the room; the crumb
+     beside it is what gives way, as it already does. */
+  .sb-save{font-size:12px; padding:5px 11px}
+  .sb-kind{padding:13px 14px; gap:4px 12px}
+  .sb-kind b{font-size:15.5px}
+  /* Side by side, .py and .txt are two narrow columns of words on a phone. */
+  .sb-kinds-row{grid-template-columns:1fr}
+  .sb-drop{padding:14px 12px}
 }

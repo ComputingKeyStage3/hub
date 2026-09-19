@@ -503,6 +503,15 @@ def _hub_run(source, seconds=10.0):
             print(_NO_MODULE[name])
         else:
             print("Check the spelling. Nearly all of Python works here, apart from a few things a web page cannot do.")
+    except FileNotFoundError as miss:
+        # Without this the traceback filter below leaves only "File your
+        # program, line 1", because the line that says what went wrong is the
+        # one it drops. A child reading that has nothing at all to go on, and
+        # in the practice sandbox, where they upload the file themselves, the
+        # answer is nearly always a capital letter in the name.
+        ok = False
+        print("There is no file called " + str(getattr(miss, "filename", "") or "that") + " here.")
+        print("Check the name matches exactly, including capital letters.")
     except SyntaxError as err:
         ok = False
         print("There is a typo in your code on line " + str(err.lineno) + ":")

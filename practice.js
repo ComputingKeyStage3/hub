@@ -32,12 +32,24 @@
   ];
 
   const MAX_PROGRAMS = 5;
-  /* About 300 lines. Plenty for practice, and it is what keeps the sums
-     below honest: five of these is 50KB a student, so a whole year group
-     is 40MB against a database of 5GB even if every child fills every
-     program to the brim. Nothing here is ever stored as a picture. */
+  /* About 300 lines of code. Plenty for practice, and it is what keeps the
+     arithmetic honest. Worst case, every child filling every slot to the
+     brim: a Python program is main.py plus two files, so 10KB and at most
+     40KB more, and five of those is 250KB; a web program is three code files,
+     so 30KB, and five of those is 150KB. Call it 250KB a student, 200MB
+     across a year group, against a database of 5GB. Nothing here is ever
+     stored as a picture. */
   const MAX_CODE = 10000;
   const MAX_NAME = 40;
+  /* The files a Python program has beside main.py: another .py to import, or
+     a .txt to read with open(). Two of them, because that is what the storage
+     was worked out for. A picture renamed .txt would sail through any check
+     of the name, so the size cap is what actually holds the line: 20,000
+     characters is about 3,000 words, more than any KS3 exercise needs.
+     Python beside it is held to the same 10,000 as main.py. */
+  const MAX_FILES = 2;
+  const MAX_FILE_CHARS = 20000;
+  const MAIN = "main.py";
 
   /* One row in the work table per student, under a lesson id no lesson can
      have. That is deliberate: it needs no new serverless function (there
@@ -67,21 +79,63 @@
     try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){ /* a full browser: the server still has it */ }
   }
 
-  /* Anything read back, from either side, is checked rather than trusted:
-     a blob that has been edited by hand must not put an object where the
-     editor expects a string. */
+  /* Anything read back, from either side, is checked rather than trusted: a
+     blob that has been edited by hand must not put an object where the editor
+     expects a string. It is also where every cap is actually applied, so
+     there is one place that decides how big a program may be rather than one
+     per screen that can write one. */
   function tidy(p){
     if (!p || typeof p !== "object") return null;
-    return {
+    const kind = p.kind === "web" ? "web" : "python";
+    const out = {
       id: String(p.id || "").slice(0, 40) || newId(),
       name: String(p.name || "Program").slice(0, MAX_NAME),
-      /* Python is the only kind so far. It is written down anyway, so the
-         day there is an HTML one beside it nothing already saved has to be
-         changed to say what it is. */
-      kind: "python",
-      code: String(p.code == null ? "" : p.code).slice(0, MAX_CODE),
+      kind: kind,
       updated: Number(p.updated) || 0
     };
+    if (kind === "web"){
+      out.html = text(p.html, MAX_CODE);
+      out.css = text(p.css, MAX_CODE);
+      out.js = text(p.js, MAX_CODE);
+    } else {
+      out.code = text(p.code, MAX_CODE);
+      const seen = { "main.py": true };
+      out.files = (Array.isArray(p.files) ? p.files : [])
+        .slice(0, MAX_FILES)
+        .map(f => {
+          if (!f) return null;
+          const name = fileName(f.name);
+          /* Two files with one name would hide one of them from Python, and
+             one called main.py would shadow the program itself. */
+          if (!name || seen[name.toLowerCase()]) return null;
+          seen[name.toLowerCase()] = true;
+          return { name: name, text: text(f.text, isCode(name) ? MAX_CODE : MAX_FILE_CHARS) };
+        })
+        .filter(Boolean);
+    }
+    return out;
+  }
+  function text(v, cap){ return String(v == null ? "" : v).slice(0, cap); }
+  const isCode = (name) => /\.py$/i.test(String(name || ""));
+
+  /* What a file may be called, before it is written into Python's own little
+     filesystem: no folders, nothing but letters, numbers and the quiet
+     punctuation, and one of the two endings. The name a browser hands over
+     comes from the child's own computer and is not to be trusted with a path.
+
+     `want` forces the ending where the student has chosen one. Left out, a
+     name ending .py stays Python and everything else becomes text, which is
+     what uploading a file off their computer should do.
+
+     The ending is always put back in lower case. Python cares about the
+     difference between DATA.TXT and data.txt, and a child typing the name
+     into their code will not have noticed which they were given. */
+  function fileName(raw, want){
+    let name = String(raw || "").split(/[\\/]/).pop().trim();
+    name = name.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^[._-]+/, "").slice(0, 40);
+    if (!name) return "";
+    const ending = want ? (want === "py" ? ".py" : ".txt") : (isCode(name) ? ".py" : ".txt");
+    return name.replace(/\.[^.]*$/, "") + ending;
   }
   function newId(){
     return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -142,7 +196,7 @@
   let stuck = false;          // a save that did not get through
 
   const sandbox = {
-    MAX_PROGRAMS, MAX_CODE, MAX_NAME,
+    MAX_PROGRAMS, MAX_CODE, MAX_NAME, MAX_FILES, MAX_FILE_CHARS,
 
     /* Called whenever there is something new to say about saving, so the
        page can show it without asking over and over. Set by whoever is
@@ -229,12 +283,16 @@
        telling it already failed? The page turns these into words. */
     waiting(){ return !!state.pending; },
     stuck(){ return stuck; },
-    newId
+    newId, fileName, isCode, MAIN
   };
 
+  /* Compared whole rather than field by field. The field list was written
+     when a program was a name and some Python; a web program's three files
+     and a Python program's uploaded text were both invisible to it, so a
+     save that landed between one keystroke and the next was marked settled
+     while the newer work sat there unsent. */
   function same(a, b){
-    return a.length === b.length &&
-           a.every((p, i) => p.id === b[i].id && p.code === b[i].code && p.name === b[i].name);
+    try{ return JSON.stringify(a) === JSON.stringify(b); }catch(e){ return false; }
   }
 
   window.practice = {

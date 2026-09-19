@@ -152,6 +152,48 @@ function checkPython(code){
   return issues;
 }
 
+/* ---------- what language the editor is painting ----------
+   Everything that differs between Python and the three web languages, in one
+   object, so there is one editor rather than one per language. The web one
+   came from the lesson page's HTML task, where it was a second copy of all of
+   this that had quietly drifted: it indented by two spaces and Python's by
+   four, which was right, and it had lost the Fix it buttons, which was not.
+
+     paint(line, state)  the line as coloured HTML
+     find(code)          the mistakes, as {line, msg, fix?}
+     state()             whatever has to carry from one line to the next
+     indent              what Tab puts in
+     opens(line)         does this line start a block, so the next is indented */
+const pythonLang = {
+  paint: (line, state, opts) => hlLine(line, state, opts).html,
+  find: checkPython,
+  state: () => ({ triple: null }),
+  indent: "    ",
+  opens: (line) => /:\s*$/.test(line)
+};
+/* Words, not code. A .txt file a Python program reads opens in the same box
+   as the code does, and colouring an ordinary sentence as if it were Python
+   turns the word "for" in the middle of it a different colour. */
+const plainLang = {
+  paint: (line) => escHtml(line) || "&nbsp;",
+  find: () => [],
+  state: () => ({}),
+  indent: "  ",
+  opens: () => false
+};
+
+/* HTML, CSS and JavaScript, from webhub.js. Asked for by name because a page
+   with no web editor on it does not load that file. */
+function webLang(which){
+  return {
+    paint: (line, state) => window.webHighlight ? window.webHighlight(which, line, state) : escHtml(line),
+    find: (code) => window.webCheck ? window.webCheck(which, code) : [],
+    state: () => ({ block: false }),
+    indent: "  ",
+    opens: (line) => /[{>]\s*$/.test(line)
+  };
+}
+
 /* ---------- the editor itself ----------
    Line numbers down the side, the colours painted on a layer behind a
    see-through textarea, and the list of mistakes underneath. Options:
@@ -166,6 +208,7 @@ function checkPython(code){
    Comes back with the pieces, so anything wanting more can build on them. */
 function attach(opts){
   opts = opts || {};
+  let lang = opts.lang || pythonLang;
   const editor = el("div","ide-editor");
   const gutter = el("div","ide-gutter");
   const codeWrap = el("div","ide-codewrap");
@@ -185,12 +228,12 @@ function attach(opts){
 
   function repaint(){
     const lines = ta.value.split("\n");
-    issues = checkPython(ta.value);
+    issues = lang.find(ta.value) || [];
     const bad = new Set(issues.map(x => x.line));
-    const state = { triple: null };
+    const state = lang.state();
     hl.innerHTML = lines.map((l, n) =>
       '<div class="hl-line' + (bad.has(n) ? " bad" : "") + '">' +
-      hlLine(l, state, { help: opts.help, tips: opts.tips !== false }).html + "</div>").join("");
+      lang.paint(l, state, { help: opts.help, tips: opts.tips !== false }) + "</div>").join("");
     gutter.innerHTML = lines.map((_, n) =>
       '<div class="gl' + (bad.has(n) ? " bad" : "") + '">' + (n + 1) + "</div>").join("");
     if (!showProbs){ probs.hidden = true; return; }
@@ -224,14 +267,14 @@ function attach(opts){
     if (e.key === "Tab"){
       e.preventDefault();
       const st = ta.selectionStart, en = ta.selectionEnd;
-      ta.value = ta.value.slice(0, st) + "    " + ta.value.slice(en);
-      ta.selectionStart = ta.selectionEnd = st + 4;
+      ta.value = ta.value.slice(0, st) + lang.indent + ta.value.slice(en);
+      ta.selectionStart = ta.selectionEnd = st + lang.indent.length;
       repaint(); if (opts.onInput) opts.onInput();
     } else if (e.key === "Enter"){
       const st = ta.selectionStart;
       const line = ta.value.slice(0, st).split("\n").pop();
       const indent = (line.match(/^[ \t]*/) || [""])[0];
-      const extra = /:\s*$/.test(line) ? "    " : "";
+      const extra = lang.opens(line) ? lang.indent : "";
       if (indent || extra){
         e.preventDefault();
         const ins = "\n" + indent + extra;
@@ -243,7 +286,11 @@ function attach(opts){
   });
   repaint();
 
-  return { editor, gutter, codeWrap, hl, ta, probs, repaint,
+  /* Switching language without building the editor again, which is what the
+     sandbox's web editor does when it moves between its three files. */
+  function setLang(next){ lang = next || pythonLang; repaint(); }
+
+  return { editor, gutter, codeWrap, hl, ta, probs, repaint, setLang,
            issues: () => issues };
 }
 
@@ -420,6 +467,7 @@ const PY_HELP = {
 };
 
 window.pyEdit = { attach, checkPython, hlLine, strip, escHtml, themeFromSite, follow,
-                  idePanel, idePrefs, saveIdePrefs, PY_KW, PY_FN, PY_HELP };
+                  idePanel, idePrefs, saveIdePrefs, pythonLang, webLang, plainLang,
+                  PY_KW, PY_FN, PY_HELP };
 
 })();

@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"9.6",   text:"The Sandbox opens on a list of the programs a student has made, with a pencil and a bin on each one to rename or delete it. New programs can now be HTML, CSS and JavaScript as well as Python, and a Python program can have two more files beside main.py, another .py to import or a .txt to read, either typed there or dragged over from their computer. The top bar says whether their work is saved and saves it when pressed." },
   { v:"9.5",   text:"Students have a Practice tab on their home page. The first thing in it is a Sandbox: they write and run their own Python, keep up to five programs, and delete the ones they have finished with. It is saved to their account, so it is there on any computer they sign in on, and none of it is marked or handed in." },
   { v:"9.4.1", text:"A lesson that has closed always moves to a student's Past tab the day after its closing date, whether they finished it, started it or never opened it." },
   { v:"9.4",   text:"Lessons can have other versions of themselves, for a different set or another teacher, each saying what has changed in it. There is a Versions button on every lesson in the hub, adding a lesson to a class asks which version to give them, and a class can be moved between versions at any time. Building a lesson for one class only has gone: make a version instead." },
