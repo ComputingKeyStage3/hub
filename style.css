@@ -4369,3 +4369,152 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
   .sb-kinds-row{grid-template-columns:1fr}
   .sb-drop{padding:14px 12px}
 }
+
+
+/* =====================================================================
+   EXAM QUESTIONS AND THE TASK BANK
+
+   Appended, so these rules beat anything earlier that would otherwise
+   reach them. Nothing here shares a selector with an existing component:
+   every class starts .examq- or .bank-, so there is no earlier rule
+   being quietly overridden and no mobile breakpoint being undone. The
+   phone rules for both are at the bottom of this block.
+   ===================================================================== */
+
+/* ---------- a question, as a student sees it ---------- */
+.examq-top{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 10px}
+.examq-cmd{font-family:var(--display); font-weight:800; font-size:12.5px;
+  text-transform:uppercase; letter-spacing:.06em; color:var(--amber-ink);
+  background:var(--amber); border-radius:999px; padding:4px 11px}
+.examq-point{font-size:12.5px; color:var(--muted); background:var(--panel-2);
+  border:1px solid var(--line); border-radius:999px; padding:4px 11px}
+.examq-marks{font-size:12.5px; font-weight:700; color:var(--text);
+  background:var(--panel-2); border:1px solid var(--line-2); border-radius:999px;
+  padding:4px 11px; margin-left:auto}
+.examq-ask{font-size:16.5px; line-height:1.5; margin:0 0 12px}
+.examq-ask p{margin:0 0 8px}
+.examq-ask p:last-child{margin-bottom:0}
+.examq-line{width:100%}
+.examq-box{width:100%; resize:vertical}
+.examq-actions{display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:12px 0 0}
+.examq-tally{margin:0; font-size:14.5px; font-weight:700; color:var(--muted)}
+.examq-tally[data-stage=all]{color:var(--mint)}
+.examq-tally[data-stage=some]{color:var(--text)}
+.examq-scheme{margin:14px 0 0; padding:14px 16px; border:1.5px solid var(--line);
+  border-radius:14px; background:var(--panel-2)}
+.examq-scheme[hidden]{display:none}
+.examq-schemehead{margin:0 0 10px; font-family:var(--display); font-weight:700; font-size:15px}
+.examq-none{margin:0; font-size:15px; color:var(--muted)}
+/* The whole line is the target, not the little box at the front of it. */
+.examq-row{display:flex; align-items:flex-start; gap:10px; padding:9px 10px;
+  border-radius:10px; cursor:pointer; min-height:44px; box-sizing:border-box}
+.examq-row:hover{background:var(--panel)}
+.examq-row input{margin:3px 0 0; width:20px; height:20px; flex:none; accent-color:var(--mint)}
+.examq-row-text{flex:1; font-size:15.5px; line-height:1.45}
+.examq-row-worth{flex:none; font-size:12.5px; color:var(--muted); white-space:nowrap}
+.examq-model{margin:12px 0 0; padding:12px 0 0; border-top:1px solid var(--line)}
+.examq-model b{display:block; font-family:var(--display); font-size:13px;
+  text-transform:uppercase; letter-spacing:.05em; color:var(--dim); margin-bottom:5px}
+.examq-model span{display:block; font-size:15.5px; line-height:1.5}
+
+/* ---------- the task bank, in the builder ---------- */
+html[data-bank=yes] .build-preview{display:none}
+.bank{padding:0 20px 40px}
+.bank[hidden]{display:none}
+.bank-filter{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 16px}
+.bank-filter select{max-width:100%}
+.bank-spacer{flex:1}
+.bank-said{font-size:13.5px; color:var(--muted)}
+.bank-said[data-bad=yes]{color:var(--red)}
+/* The list and the one being edited, side by side. The list keeps a fixed
+   share so a long title cannot squeeze the editor out of the way. */
+.bank-cols{display:grid; grid-template-columns:minmax(0,320px) minmax(0,1fr); gap:18px;
+  align-items:start}
+.bank-list{display:flex; flex-direction:column; gap:8px; max-height:70vh;
+  max-height:min(70dvh, 760px); overflow-y:auto; padding-right:4px}
+.bank-row{display:flex; align-items:center; gap:6px; background:var(--panel);
+  border:1.5px solid var(--line); border-radius:14px; padding:4px 8px 4px 4px}
+.bank-row.on{border-color:var(--amber); box-shadow:0 0 0 3px rgba(47,107,174,.14)}
+.bank-open{flex:1; min-width:0; text-align:left; background:transparent; border:none;
+  padding:9px 10px; cursor:pointer; color:var(--text); min-height:44px}
+.bank-open b{display:block; font-size:15px; line-height:1.3}
+.bank-meta{display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:3px}
+.bank-meta span{font-size:12px; color:var(--muted)}
+.bank-kind{font-weight:700}
+.bank-marks{color:var(--text)}
+.bank-edit{min-width:0}
+.bank-headrow{display:flex; align-items:flex-end; gap:12px; margin:0 0 14px}
+.bank-headrow .grow{flex:1; min-width:0; margin:0}
+.bank-types{display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:10px}
+.bank-head{margin:0 0 12px; font-family:var(--display); font-size:17px}
+/* Choosing one out of the bank, from the palette. */
+.bankpick{display:flex; flex-direction:column; gap:8px; margin:12px 0 0}
+.bankpick-find{width:100%}
+.bankpick-row{text-align:left; background:var(--panel); border:1.5px solid var(--line);
+  border-radius:12px; padding:10px 12px; cursor:pointer; min-height:44px}
+.bankpick-row:hover{border-color:var(--amber)}
+.bankpick-row b{display:block; font-size:15px}
+.bankpick-row span{display:block; font-size:12.5px; color:var(--muted); margin-top:2px}
+/* A number beside a box, for marks. Wide enough for two digits and the
+   browser's own spinner, and no wider. */
+.smallnum{width:78px; flex:none}
+.brow-inline{font-size:13px; color:var(--muted); align-self:center}
+
+@media (max-width:900px){
+  /* One column: the list above the task being written, which is the order
+     they are used in. The list gives up its height so the editor is not
+     pushed off the bottom of a phone. */
+  .bank-cols{grid-template-columns:minmax(0,1fr)}
+  .bank-list{max-height:34vh; max-height:min(34dvh, 320px)}
+}
+@media (max-width:640px){
+  .bank{padding:0 12px 40px}
+  .bank-filter{gap:8px}
+  .bank-filter select, .bank-filter .searchbox{width:100%}
+  .bank-spacer{display:none}
+  .bank-filter .btn-primary{width:100%}
+  .bank-headrow{flex-direction:column; align-items:stretch}
+  .bank-types{grid-template-columns:1fr}
+  .examq-marks{margin-left:0}
+  .examq-scheme{padding:12px}
+  .examq-actions{gap:8px}
+  .examq-check{width:100%}
+}
+
+/* ---------- the console: levels, the specification, coverage ---------- */
+.levelchip{background:var(--panel-2); border:1.5px solid var(--line-2); color:var(--muted);
+  border-radius:999px; padding:5px 13px; font-size:12.5px; font-weight:700; cursor:pointer;
+  min-height:32px}
+.levelchip:hover{border-color:var(--amber)}
+.levelchip[data-level=GCSE], .levelchip[data-level="A Level"]{
+  background:var(--amber); border-color:var(--amber); color:var(--amber-ink)}
+.speclist{margin:12px 0 18px}
+.specrow{display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:10px;
+  min-height:44px; box-sizing:border-box}
+.specrow:hover{background:var(--panel-2)}
+.specrow.in{padding-left:28px}
+.speccode{flex:none; min-width:52px; font-size:13.5px; color:var(--muted)}
+.spectitle{flex:1; min-width:0; font-size:15px}
+.specadd{margin:2px 0 14px 28px}
+.coverrow{display:grid; grid-template-columns:minmax(0,1fr) minmax(90px,200px) auto;
+  align-items:center; gap:14px; padding:10px 12px; border-bottom:1px solid var(--line)}
+.covername{min-width:0}
+.covername b{display:block; font-size:14px; color:var(--muted)}
+.covername span{display:block; font-size:15px}
+.coverbar{height:10px; border-radius:999px; background:var(--panel-2);
+  border:1px solid var(--line); overflow:hidden}
+.coverfill{height:100%; border-radius:999px; background:var(--line-2)}
+.coverfill[data-band=good]{background:var(--mint)}
+.coverfill[data-band=mid]{background:var(--brand)}
+.coverfill[data-band=low]{background:var(--red)}
+.covernum{font-size:13.5px; color:var(--muted); white-space:nowrap}
+
+@media (max-width:640px){
+  /* Three columns will not fit a phone, so the bar and the number go under
+     the name of the point rather than being squeezed beside it. */
+  .coverrow{grid-template-columns:minmax(0,1fr); gap:8px}
+  .covernum{white-space:normal}
+  .specrow.in{padding-left:18px}
+  .specadd{margin-left:18px}
+  .speccode{min-width:46px}
+}

@@ -945,4 +945,240 @@
       done: () => nodes.filter(n => n.parent !== null && String(n.text).trim()).length > 0
     };
   };
+
+  /* ===================================================================
+     EXAM QUESTION
+     { type:"exam", prompt, marks, command, answer:"short"|"lines",
+       lines, answers:[...], scheme:[{text,marks}], model,
+       point, code, strand }
+
+     A question off a past paper, worth marks, filed against a point of
+     the specification.
+
+     There are two ways of marking one, and which a question gets is
+     decided by how it is answered rather than by a switch:
+
+       "short"  one line, and the whole line is the answer. Marked here
+                and now by shortmatch, the same comparison the Short
+                answer task uses, so a recall question tells a student
+                straight away.
+
+       "lines"  a written answer. The mark scheme appears once they have
+                had a go and they tick off the points they made. Their
+                teacher can change the mark afterwards.
+
+     Nothing longer than a line is marked automatically. Marking a six
+     marker by looking for words in it is the keyword marking that was
+     taken out of Short answers on purpose: it passes an answer naming
+     the right things in the wrong order and fails one that is right in
+     its own words. A wrong mark on a GCSE answer costs more than no
+     mark at all.
+
+     Nothing here stands in the way. The mark scheme is not shown until
+     it is asked for, and Continue never waits for any of it.
+     =================================================================== */
+  window.rExam = function(b, ctx){
+    const s = make("section", "examq");
+    const marks = Math.max(0, parseInt(b.marks, 10) || 0);
+    const short = b.answer === "short";
+    const scheme = Array.isArray(b.scheme) ? b.scheme.filter(x => x && String(x.text || "").trim()) : [];
+
+    /* The line above the question: what it is asking them to do, where it
+       sits in the specification, and what it is worth. */
+    const top = make("div", "examq-top");
+    if (b.command) top.appendChild(make("span", "examq-cmd", b.command));
+    if (b.code) top.appendChild(make("span", "examq-point", b.code + (b.strand ? " " + b.strand : "")));
+    if (marks) top.appendChild(make("span", "examq-marks", marks + (marks === 1 ? " mark" : " marks")));
+    if (top.childNodes.length) s.appendChild(top);
+
+    if (b.prompt){
+      const ask = make("div", "examq-ask");
+      ask.innerHTML = b.prompt;            // written with the formatting buttons
+      s.appendChild(ask);
+    }
+
+    let box;
+    if (short){
+      box = make("input", "answer examq-line");
+      box.type = "text";
+      box.autocomplete = "off"; box.autocapitalize = "off"; box.spellcheck = false;
+      box.placeholder = "Your answer…";
+    } else {
+      box = make("textarea", "answer examq-box");
+      /* A four marker wants more room than a one marker. Two lines a mark is
+         about what the paper gives them, and a teacher can say otherwise. */
+      box.rows = Math.max(2, Math.min(14, parseInt(b.lines, 10) || (marks ? marks * 2 : 4)));
+      box.placeholder = "Write your answer here…";
+    }
+    s.appendChild(box);
+
+    const fb = make("div", "feedback examq-fb");
+    fb.hidden = true;
+    const schemeBox = make("div", "examq-scheme");
+    schemeBox.hidden = true;
+    const btn = make("button", "btn-primary examq-check", short ? "Check answer" : "Mark your answer");
+    /* In a test nothing is marked on screen, the same rule the Short answer
+       task follows. The builder keeps exam questions out of an assessment,
+       so this is only reached by a lesson that has been turned into one
+       afterwards, and the answer then waits for the markbook. */
+    const inTest = !!(ctx && ctx.assessment);
+    if (inTest) btn.hidden = true;
+    const tally = make("p", "examq-tally");
+    tally.hidden = true;
+
+    const row = make("div", "examq-actions");
+    row.appendChild(btn);
+    row.appendChild(tally);
+    s.appendChild(row);
+    s.appendChild(fb);
+    s.appendChild(schemeBox);
+
+    /* ---------- a written answer, marked against the scheme ---------- */
+    const ticks = [];
+    let shown = false;                     // the scheme is on screen
+    function buildScheme(){
+      if (!scheme.length){
+        schemeBox.appendChild(make("p", "examq-none",
+          "There is no mark scheme on this one, so your teacher will read it."));
+        return;
+      }
+      schemeBox.appendChild(make("p", "examq-schemehead", "Tick each point you made."));
+      scheme.forEach((point) => {
+        const worth = Math.max(1, parseInt(point.marks, 10) || 1);
+        const line = make("label", "examq-row");
+        const cb = make("input");
+        cb.type = "checkbox";
+        cb.addEventListener("change", () => { paintTally(); ctx.changed(); });
+        line.appendChild(cb);
+        line.appendChild(make("span", "examq-row-text", point.text));
+        if (worth > 1) line.appendChild(make("span", "examq-row-worth", worth + " marks"));
+        schemeBox.appendChild(line);
+        ticks.push({ cb: cb, worth: worth });
+      });
+      if (b.model){
+        const m = make("div", "examq-model");
+        m.appendChild(make("b", "", "A full answer"));
+        m.appendChild(make("span", "", b.model));
+        schemeBox.appendChild(m);
+      }
+    }
+    const selfMark = () => ticks.reduce((n, t) => n + (t.cb.checked ? t.worth : 0), 0);
+    function outOf(){
+      if (marks) return marks;
+      return ticks.reduce((n, t) => n + t.worth, 0) || scheme.length || 1;
+    }
+    function paintTally(){
+      if (!shown){ tally.hidden = true; return; }
+      const got = selfMark(), of = outOf();
+      tally.hidden = false;
+      tally.textContent = got + " out of " + of + (of === 1 ? " mark" : " marks");
+      tally.dataset.stage = got >= of ? "all" : got > 0 ? "some" : "none";
+    }
+    function showScheme(on){
+      shown = !!on;
+      schemeBox.hidden = !shown;
+      btn.textContent = shown ? "Hide the mark scheme" : "Mark your answer";
+      paintTally();
+    }
+
+    /* ---------- a one line answer, marked here ---------- */
+    let autoRight = null;                  // null until they have checked
+    function checkShort(){
+      const given = box.value.trim();
+      fb.hidden = false;
+      fb.innerHTML = "";
+      if (!given){
+        fb.dataset.verdict = "incorrect";
+        fb.appendChild(make("b", "", "Write something first"));
+        return;
+      }
+      const r = window.shortAnswer.mark({ answers: b.answers || [] }, given);
+      if (r.mode === "none"){
+        /* Nothing to mark it against. Telling a student they are wrong for
+           that would be unfair: it is a gap in the question, not in them. */
+        autoRight = null;
+        fb.dataset.verdict = "correct";
+        fb.appendChild(make("b", "", "Answer saved"));
+        fb.appendChild(make("span", "", "Your teacher will read this one."));
+        return;
+      }
+      autoRight = r.ok;
+      fb.dataset.verdict = r.ok ? "correct" : "incorrect";
+      fb.appendChild(make("b", "", r.ok ? "That is right" : "Not quite yet"));
+      if (r.ok) fb.appendChild(make("span", "", marks === 1 ? "One mark." : marks + " marks."));
+      else {
+        fb.appendChild(make("span", "", "Check your spelling and have another go."));
+        if (b.model) fb.appendChild(make("span", "", "The answer we are after: " + b.model));
+      }
+    }
+
+    if (short){
+      btn.addEventListener("click", checkShort);
+      box.addEventListener("keydown", (e) => {
+        if (e.key === "Enter"){ e.preventDefault(); checkShort(); }
+      });
+      box.addEventListener("input", () => { fb.hidden = true; autoRight = null; ctx.changed(); });
+    } else {
+      buildScheme();
+      btn.addEventListener("click", () => {
+        /* Pressing it again puts the scheme away, so a student adding to
+           their answer is not reading the answers while they write. */
+        if (shown){ showScheme(false); return; }
+        if (!box.value.trim()){
+          fb.hidden = false;
+          fb.dataset.verdict = "incorrect";
+          fb.innerHTML = "";
+          fb.appendChild(make("b", "", "Have a go first"));
+          fb.appendChild(make("span", "", "Write what you can, then mark it against the scheme."));
+          return;
+        }
+        fb.hidden = true;
+        showScheme(true);
+        ctx.changed();
+      });
+      box.addEventListener("input", () => ctx.changed());
+    }
+
+    return {
+      section: s,
+      get: () => {
+        const out = { text: box.value };
+        if (short){
+          if (autoRight !== null){
+            out.marks = autoRight ? (marks || 1) : 0;
+            out.outOf = marks || 1;
+            out.auto = true;
+          }
+        } else if (shown){
+          out.ticks = ticks.map(t => !!t.cb.checked);
+          out.marks = selfMark();
+          out.outOf = outOf();
+          out.auto = false;
+        }
+        return out;
+      },
+      set: (v) => {
+        if (!v) return;
+        if (typeof v === "string"){ box.value = v; return; }     // an older save
+        box.value = v.text == null ? "" : String(v.text);
+        if (!short && Array.isArray(v.ticks) && v.ticks.length){
+          v.ticks.forEach((on, i) => { if (ticks[i]) ticks[i].cb.checked = !!on; });
+          showScheme(true);
+        }
+        if (short && v.auto && v.outOf) autoRight = Number(v.marks) >= Number(v.outOf);
+      },
+      done: () => box.value.trim().length > 0,
+      /* What this one scored and what it was worth, for the markbook and the
+         specification coverage screen. Out here rather than inside get() so
+         the lesson page can ask without having to know the saved shape. */
+      result: () => ({
+        point: b.point || "",
+        code: b.code || "",
+        outOf: marks || outOf(),
+        marks: short ? (autoRight === null ? null : (autoRight ? (marks || 1) : 0))
+                     : (shown ? selfMark() : null),
+        auto: !!short
+      })
+    };
+  };
 })();

@@ -170,6 +170,7 @@ setTimeout(function(){
     <button class="crumb" id="backYears">&larr; Lesson hub</button>
     <div class="classhead">
       <h2 id="yearName"></h2>
+      <button class="levelchip" id="yearLevel" title="What this year group is working towards"></button>
       <button class="btn-ghost iconbtn" id="renameYearBtn" title="Rename year group">&#9998;</button>
       <button class="btn-ghost iconbtn" id="deleteYearBtn" title="Delete year group">&#128465;</button>
     </div>
@@ -177,6 +178,7 @@ setTimeout(function(){
       <span class="searchbox"><span class="searchicon">&#128269;</span><input id="unitSearch" placeholder="Search lessons"></span>
       <button class="btn-ghost iconbtn refresh" id="refYear" title="Refresh">&#8635;</button>
       <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
+      <button class="btn-ghost" id="specBtn" hidden>Specification</button>
       <button class="btn-primary" id="hubNewLesson2">+ Build a new lesson</button>
     </div>
     <div class="classgrid" id="hubUnits"></div>
@@ -214,7 +216,18 @@ setTimeout(function(){
     <div class="bigcards">
       <button class="classtile" id="openLessons"><b>&#128218; Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
       <button class="classtile" id="openStudents"><b>&#128101; Students</b><span>Add, edit and reset logins</span></button>
+      <button class="classtile" id="openCover" hidden><b>&#128202; Specification coverage</b><span>How the class is doing, point by point</span></button>
     </div>
+  </div>
+
+  <!-- ============ specification coverage ============ -->
+  <div id="coverView" hidden>
+    <button class="crumb" id="backClass3">&larr; <span class="bk"></span></button>
+    <button class="btn-ghost iconbtn refresh" id="refCover" title="Refresh">&#8635;</button>
+    <h2 style="margin:14px 0 6px">Specification coverage</h2>
+    <p class="hint" id="coverNote"></p>
+    <div class="loading mid" id="coverWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Adding up the marks</span></div>
+    <div id="coverList"></div>
   </div>
 
   <!-- ============ students ============ -->
@@ -430,6 +443,7 @@ function paintCrumbs(){
   if (v === "pwView") return crumbs([top, { name:"Password updates" }]);
   if (v === "classView") return crumbs([top, home, { name: cls }]);
   if (v === "studentsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Students" }]);
+  if (v === "coverView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Specification coverage" }]);
   if (v === "unitsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units" }]);
   if (v === "keepView") return crumbs([top, home, { name:"Backups and devices" }]);
   if (v === "lessonsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
@@ -438,7 +452,7 @@ function paintCrumbs(){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","unitsView","lessonsView","keepView","pwView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","lessonsView","keepView","pwView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
@@ -2006,6 +2020,10 @@ function paintYears(){
   years.forEach(y => {
     const t = el("button","classtile");
     t.appendChild(el("b","", y));
+    /* Which qualification, where it is not the usual one, so the hub says
+       at a glance which year groups have a task bank behind them. */
+    const level = levelOf(y);
+    if (level && level !== "KS3") t.appendChild(el("span","", level));
     t.addEventListener("click", () => openYear(y));
     g.appendChild(t);
   });
@@ -2042,9 +2060,59 @@ function openYear(y){
   $("yearName").textContent = y || "Not in a year group";
   showIf("renameYearBtn", y);
   showIf("deleteYearBtn", y);
+  paintYearLevel();
   show("hubUnitsView");
   paintHubUnits();
 }
+
+/* ---------------- what a year group is working towards ----------------
+   KS3, GCSE or A Level. It decides one thing: whether the lesson builder
+   offers the task bank and exam questions for lessons filed under this
+   year group. Nothing a student sees changes. */
+function levelOf(name){
+  const y = (cat.years || []).find(x => x.name === name);
+  return y ? String(y.level || "KS3") : "KS3";
+}
+function paintYearLevel(){
+  const chip = $("yearLevel");
+  if (!chip) return;
+  const spec = $("specBtn");
+  if (!hubYear){
+    chip.hidden = true;
+    if (spec) spec.hidden = true;
+    return;
+  }
+  const level = levelOf(hubYear);
+  chip.hidden = OFFLINE;                 // nothing to save it to without a server
+  chip.textContent = level;
+  chip.dataset.level = level;
+  if (spec) spec.hidden = OFFLINE || level === "KS3";
+}
+on("yearLevel", "click", () => {
+  openModal(box => {
+    modalTitle(box, "What is " + hubYear + " working towards?");
+    box.appendChild(el("p","modal-text",
+      "This decides whether the lesson builder offers the task bank and exam questions "
+      + "for lessons in this year group. Students see no difference."));
+    const now = levelOf(hubYear);
+    const list = el("div","modepick");
+    [["KS3","Key Stage 3"],["GCSE","GCSE, OCR J277"],["A Level","A Level, OCR H446"]].forEach(pair => {
+      const b = el("button","modepick-item" + (pair[0] === now ? " on" : ""), pair[1]);
+      b.addEventListener("click", async () => {
+        closeModal();
+        try{
+          await catPost({ op:"set-year-level", name: hubYear, level: pair[0] });
+          paintYearLevel();
+        }catch(e){ say("Could not change that", e.message); }
+      });
+      list.appendChild(b);
+    });
+    box.appendChild(list);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+  });
+});
 function paintHubUnits(){
   const g = $("hubUnits"); g.innerHTML = "";
   $("unitSearchResults").innerHTML = "";
@@ -2268,6 +2336,143 @@ on("hubNewUnit", "click", () => newUnitPrompt(hubYear));
   });
 });
 
+/* ---------------- the specification ----------------
+   OCR J277 and H446 are typed into the database by DATABASE-SETUP.sql, so
+   this screen is for putting a wording right, adding a point a board has
+   added, or typing in a different specification from scratch.
+
+   A point that goes leaves any tasks filed under it behind, unfiled. Taking
+   the questions with the label would make a bin next to a number delete a
+   term of question writing. */
+const BOARD_OF = { "GCSE":"j277", "A Level":"h446" };
+function pointsOf(level){ return (cat.points || []).filter(p => p.level === level); }
+function strandsOf(level, component){
+  return pointsOf(level).filter(p => !p.parent && Number(p.component) === Number(component));
+}
+function childrenOf(id){ return (cat.points || []).filter(p => p.parent === id); }
+function componentsOf(level){
+  const seen = [];
+  pointsOf(level).forEach(p => {
+    const n = parseInt(p.component, 10) || 0;
+    if (n && seen.indexOf(n) < 0) seen.push(n);
+  });
+  if (!seen.length) return [1, 2];
+  return seen.sort((a, b) => a - b);
+}
+on("specBtn", "click", () => openSpec());
+function openSpec(){
+  const level = levelOf(hubYear);
+  openModal(box => {
+    modalTitle(box, level + " specification");
+    box.appendChild(el("p","modal-text",
+      "What every exam question and bank task can be filed under. "
+      + (level === "GCSE" ? "OCR J277." : "OCR H446.")
+      + " Changing the wording here changes it everywhere it is shown."));
+    const holder = el("div","speclist");
+    const draw = () => {
+      holder.innerHTML = "";
+      componentsOf(level).forEach(n => {
+        holder.appendChild(el("p","unit-head","Component " + n));
+        const strands = strandsOf(level, n);
+        if (!strands.length) holder.appendChild(el("p","hint","Nothing in this component yet."));
+        strands.forEach(s => {
+          holder.appendChild(specRow(s, false, draw));
+          childrenOf(s.id).forEach(p => holder.appendChild(specRow(p, true, draw)));
+          const add = el("button","btn-ghost bmini2 specadd","+ Add a point under " + s.code);
+          add.addEventListener("click", () => addPoint(level, n, s.id, draw));
+          holder.appendChild(add);
+        });
+        const addS = el("button","btn-ghost bmini2 specadd","+ Add a strand to component " + n);
+        addS.addEventListener("click", () => addPoint(level, n, "", draw));
+        holder.appendChild(addS);
+      });
+      if (!(cat.points || []).length)
+        holder.appendChild(el("p","hint",
+          "Nothing here yet. Run the v9.8 database update to load OCR J277 and H446."));
+    };
+    draw();
+    box.appendChild(holder);
+    const shut = el("button","btn-ghost modal-stay","Close");
+    shut.addEventListener("click", closeModal);
+    box.appendChild(shut);
+    scrollBody(box);
+  });
+}
+function specRow(p, indented, redraw){
+  const row = el("div","specrow" + (indented ? " in" : ""));
+  row.appendChild(el("b","speccode", p.code));
+  row.appendChild(el("span","spectitle", p.title || ""));
+  const pen = el("button","btn-ghost bmini","✎"); pen.title = "Change the wording";
+  pen.addEventListener("click", () => renamePoint(p, redraw));
+  row.appendChild(pen);
+  const bin = el("button","btn-ghost bmini","✕"); bin.title = "Remove it";
+  bin.addEventListener("click", () => {
+    const kids = childrenOf(p.id).length;
+    openModal(box2 => {
+      modalTitle(box2, "Remove " + p.code + "?");
+      box2.appendChild(el("p","modal-text",
+        (kids ? "The " + kids + " points under it go too. " : "")
+        + "Tasks filed under it are kept: they stop being filed anywhere, and can be "
+        + "filed again from the task bank."));
+      const yes = el("button","btn-primary modal-cta","Remove");
+      yes.style.background = "var(--red)";
+      yes.addEventListener("click", async () => {
+        closeModal();
+        try{ await catPost({ op:"delete-point", id: p.id }); await loadCatalogue(true); openSpec(); }
+        catch(e){ say("Could not remove that", e.message); }
+      });
+      const no = el("button","btn-ghost modal-stay","Keep it");
+      no.addEventListener("click", closeModal);
+      box2.appendChild(yes); box2.appendChild(no);
+    });
+  });
+  row.appendChild(bin);
+  return row;
+}
+function renamePoint(p, redraw){
+  openModal(box => {
+    modalTitle(box, "Change " + p.code);
+    const code = fieldRow(box, "Number", "text", p.code);
+    const title = fieldRow(box, "What it is called", "text", p.title || "");
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Save");
+    go.addEventListener("click", async () => {
+      msg.textContent = "Saving…";
+      try{
+        await catPost({ op:"rename-point", id: p.id, code: code.value.trim(), title: title.value.trim() });
+        await loadCatalogue(true);
+        closeModal();
+        openSpec();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+}
+function addPoint(level, component, parent, redraw){
+  openModal(box => {
+    modalTitle(box, parent ? "New point" : "New strand");
+    const code = fieldRow(box, "Number", "text", "");
+    code.placeholder = parent ? "1.1.4" : "1.7";
+    const title = fieldRow(box, "What it is called", "text", "");
+    title.placeholder = parent ? "Cache memory" : "Something new the board has added";
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Add it");
+    go.addEventListener("click", async () => {
+      if (!code.value.trim()){ msg.textContent = "Give it a number."; return; }
+      msg.textContent = "Adding…";
+      try{
+        await catPost({ op:"add-point", level: level, board: BOARD_OF[level] || "",
+                        component: component, parent: parent,
+                        code: code.value.trim(), title: title.value.trim() });
+        await loadCatalogue(true);
+        closeModal();
+        openSpec();
+      }catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+  });
+}
+
 on("renameYearBtn", "click", () => {
   openModal(box => {
     modalTitle(box, "Rename year group");
@@ -2478,7 +2683,114 @@ function nameClass(name){
   $("clsName").textContent = cls;
   document.querySelectorAll(".bk").forEach(b => b.textContent = cls);
 }
-async function openClass(name){ nameClass(name); show("classView"); }
+async function openClass(name){
+  nameClass(name);
+  show("classView");
+  /* Coverage is only worth offering where there is a specification behind
+     it. Nothing here knows which year group a class belongs to, so the
+     test is whether any qualification has been set up at all, and that
+     means the catalogue has to have arrived: a class opened straight from
+     the home screen has not been through the hub, and the tile appeared
+     over an empty specification and then said everything was unfiled. */
+  const cover = $("openCover");
+  if (cover) cover.hidden = true;
+  if (OFFLINE) return;
+  try{ await loadCatalogue(); }catch(e){ return; }
+  if (cover) cover.hidden = !(cat.points || []).length;
+}
+on("openCover", "click", () => { show("coverView"); loadCoverage(); });
+on("backClass3", "click", () => openClass(cls));
+on("refCover", "click", () => loadCoverage(true));
+
+/* ---------------- specification coverage ----------------
+   Every exam question a class has answered, added up by the point it was
+   filed under. The marks come from the results rows a lesson writes when it
+   holds exam questions, and the breakdown in each row says which point each
+   question belonged to.
+
+   Versions are added together on purpose. A version of a lesson is a lesson
+   of its own with its own results, so a class moved between versions would
+   otherwise show a gap where there is none. A bank task keeps the same key
+   in every version it appears in, which is what makes that possible. */
+let coverRows = null;
+async function loadCoverage(force){
+  if (coverRows && !force){ paintCoverage(); return; }
+  const API = (window.HUB && window.HUB.API) || "";
+  $("coverWait").hidden = false;
+  $("coverList").innerHTML = "";
+  /* The specification is what turns a point's id into its number and its
+     wording, so it has to be here before anything is drawn. */
+  try{ await loadCatalogue(); }catch(e){}
+  try{
+    const r = await fetch(API + "/api/teacher/results?all=1&group=" + encodeURIComponent(cls),
+                          { headers: window.teacherAuth.headers(), cache:"no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not read the marks.");
+    coverRows = d.rows || [];
+  }catch(e){
+    $("coverWait").hidden = true;
+    $("coverList").appendChild(el("p","hint", e.message));
+    return;
+  }
+  $("coverWait").hidden = true;
+  paintCoverage();
+}
+function paintCoverage(){
+  const box = $("coverList");
+  box.innerHTML = "";
+  /* point id -> { got, of, asked, students } */
+  const byPoint = new Map();
+  let anyMarks = false;
+  (coverRows || []).forEach(row => {
+    let parts = null;
+    try{ parts = JSON.parse(row.breakdown || "{}"); }catch(e){ parts = null; }
+    if (!parts || Array.isArray(parts)) return;
+    Object.keys(parts).forEach(key => {
+      const cell = parts[key];
+      /* Only the shape an exam question writes: [marks, outOf, point]. An
+         assessment's breakdown is a different shape and is left alone. */
+      if (!Array.isArray(cell) || cell.length < 3) return;
+      const got = Number(cell[0]), of = Number(cell[1]), point = String(cell[2] || "");
+      if (!of) return;
+      const at = byPoint.get(point) || { got:0, of:0, asked:0, marked:0 };
+      at.asked++;
+      if (got >= 0){ at.got += got; at.of += of; at.marked++; anyMarks = true; }
+      byPoint.set(point, at);
+    });
+  });
+  if (!byPoint.size){
+    box.appendChild(el("p","hint",
+      "No exam questions marked yet for this class. They appear here once a lesson "
+      + "with exam questions in it has been done."));
+    return;
+  }
+  $("coverNote").textContent = anyMarks
+    ? "Out of the exam questions this class has marked. A question nobody has marked yet is counted as asked but not scored."
+    : "These questions have been set but none has been marked yet.";
+  /* Filed under the specification, so it reads in the order it is taught. */
+  const order = (cat.points || []).map(p => p.id).concat([""]);
+  const seen = Array.from(byPoint.keys()).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  seen.forEach(id => {
+    const at = byPoint.get(id);
+    const p = (cat.points || []).find(x => x.id === id);
+    const row = el("div","coverrow");
+    const name = el("div","covername");
+    name.appendChild(el("b","", p ? p.code : "Not filed"));
+    name.appendChild(el("span","", p ? p.title : "Questions with no specification point on them"));
+    row.appendChild(name);
+    const pct = at.of ? Math.round(100 * at.got / at.of) : null;
+    const bar = el("div","coverbar");
+    const fill = el("div","coverfill");
+    fill.style.width = (pct === null ? 0 : pct) + "%";
+    fill.dataset.band = pct === null ? "none" : pct >= 70 ? "good" : pct >= 40 ? "mid" : "low";
+    bar.appendChild(fill);
+    row.appendChild(bar);
+    row.appendChild(el("span","covernum",
+      pct === null ? at.asked + " asked, none marked"
+                   : at.got + " / " + at.of + "  ·  " + pct + "%"));
+    box.appendChild(row);
+  });
+}
 on("backClasses", "click", () => { refreshGroups(); show("classesView"); });
 on("openClasses", "click", toClasses);
 on("backHome", "click", toHome);

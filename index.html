@@ -815,10 +815,22 @@ async function loadResults(force){
 
 function paintResults(box, d){
 box.innerHTML = "";
-  /* how each assessment went */
-  if (!d.results.length) box.appendChild(el("p","hint","No assessment results yet."));
-  else box.appendChild(el("p","unit-head","Assessments"));
-  d.results.forEach(res => {
+  /* Two lists, because they are two different things. An assessment is a
+     test somebody sat; exam practice is a lesson of past paper questions
+     that happened to add up to a mark. A row saved before there was a
+     difference has no kind on it and is an assessment, which is what it
+     was. */
+  const all = d.results || [];
+  const assessments = all.filter(r => String(r.kind || "") !== "exam");
+  const practice = all.filter(r => String(r.kind || "") === "exam");
+  if (!all.length) box.appendChild(el("p","hint","No assessment results yet."));
+  if (assessments.length) box.appendChild(el("p","unit-head","Assessments"));
+  paintResultRows(box, assessments);
+  if (practice.length) box.appendChild(el("p","unit-head","Exam questions"));
+  paintResultRows(box, practice);
+}
+function paintResultRows(box, rows){
+  rows.forEach(res => {
     const card = document.createElement("a"); card.className = "result-card";
     card.href = "lesson.html?id=" + encodeURIComponent(res.lesson_id);
     card.innerHTML = '<span class="sc"></span><span class="body"><b></b><span></span></span><span class="st"></span>';

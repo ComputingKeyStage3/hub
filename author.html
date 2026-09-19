@@ -37,6 +37,14 @@
   <button class="btn-ghost bmini2 prevtoggle" id="prevToggle">Preview</button>
 </div>
 
+<!-- Lesson or task bank. Shown only when the year group is working towards
+     GCSE or A Level, so a KS3 lesson is built on exactly the page it always
+     was, with nothing extra on it. -->
+<div class="subtabs buildtabs" id="buildTabs" hidden>
+  <button class="on" id="tabBuild">Lesson</button>
+  <button id="tabBank">Task bank</button>
+</div>
+
 <div class="modeswitch">
   <button class="on" id="modeLesson">Lesson</button>
   <button id="modeAssess">Assessment</button>
@@ -73,6 +81,15 @@
   <aside class="build-palette">
     <div id="palLesson">
       <button class="pal strong" data-add="page"><b>+ New page</b><span>Students see one page at a time</span></button>
+      <!-- Both of these are hidden for a KS3 year group. The bank button is
+           not a task: it opens the picker, and what comes back is a copy. -->
+      <div class="palgroup" data-group="spec" id="palSpec" hidden>
+        <button class="pal-head" type="button">Exam</button>
+        <div class="palbody" hidden>
+          <button class="pal" id="palFromBank"><b>From the task bank</b><span>A task you have already built</span></button>
+          <button class="pal" data-add="exam"><b>Exam question</b><span>Worth marks, with a mark scheme</span></button>
+        </div>
+      </div>
       <div class="palgroup" data-group="writing">
         <button class="pal-head" type="button">Reading and writing</button>
         <div class="palbody" hidden>
@@ -144,6 +161,17 @@
       </div>
     </div>
     <div id="palAssess" hidden>
+      <!-- No Exam question here. A mark scheme a student ticks off themselves
+           belongs in a lesson, where marking your own work is the point of
+           it; in a test it would be the answers on screen during the test.
+           An assessment is still built from the questions below, which mark
+           themselves properly. -->
+      <div class="palgroup" data-group="aspec" id="palSpecAssess" hidden>
+        <button class="pal-head" type="button">Exam</button>
+        <div class="palbody" hidden>
+          <button class="pal" id="palFromBankAssess"><b>From the task bank</b><span>A task you have already built</span></button>
+        </div>
+      </div>
       <div class="palgroup" data-group="aq">
         <button class="pal-head" type="button">Questions</button>
         <div class="palbody" hidden>
@@ -184,6 +212,24 @@
     <div class="prev-hold"><iframe id="prev" title="Lesson preview"></iframe></div>
   </section>
 </div>
+
+<!-- The task bank. Only a GCSE or A Level year group has one, so this stays
+     hidden entirely for KS3 and the builder is what it always was. -->
+<section class="bank" id="bankView" hidden>
+  <div class="bank-filter">
+    <select id="bankComponent" title="Component"></select>
+    <select id="bankStrand" title="Strand"></select>
+    <select id="bankPoint" title="Specification point"></select>
+    <span class="searchbox"><span class="searchicon">&#128269;</span><input id="bankSearch" placeholder="Search tasks"></span>
+    <span class="bank-spacer"></span>
+    <span class="bank-said" id="bankSaid"></span>
+    <button class="btn-primary" id="bankNew">+ New task</button>
+  </div>
+  <div class="bank-cols">
+    <div class="bank-list" id="bankList"></div>
+    <div class="bank-edit" id="bankEdit"></div>
+  </div>
+</section>
 
 <div class="modal-back no-print" id="mBack" hidden>
   <div class="modal wide" id="mBox"></div>
@@ -349,6 +395,13 @@ const BLANK = {
   binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
                      showPlace:true, showCarry:true, pairs:"" }),
   short:    () => ({ type:"short", prompt:"", answers:[""], model:"", why:"", topic:"" }),
+  /* A question off a past paper. "lines" is the usual one: they write, then
+     mark themselves against the scheme. "short" is a one line recall answer
+     and is the only shape marked on its own, because the whole line is the
+     answer and shortmatch can say whether it is right. */
+  exam:     () => ({ type:"exam", prompt:"", command:"State", marks:1, answer:"lines",
+                     lines:"", answers:[""], scheme:[{ text:"", marks:1 }], model:"",
+                     point:"", code:"", strand:"" }),
   password: () => ({ type:"password", title:"Password strength challenge",
                      task:"Invent a made-up password that turns all five checks green." }),
   /* The teacher writes the real message and picks a shift; the coded text and
@@ -410,7 +463,7 @@ function codeTaskLabel(entry){
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
                 short:"Short answer", page:"Page", extension:"Extension tasks", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
-                password:"Password checker", caesar:"Caesar cipher" };
+                password:"Password checker", caesar:"Caesar cipher", exam:"Exam question" };
 
 /* The lesson page hashes what a student types and compares it with this, so
    the answer is never sitting in the lesson file for anyone to read. Same
@@ -448,11 +501,24 @@ function joinWords(list){
    or with the lesson you asked to edit. Instead, the tab warns before it is
    closed with work that has not been saved to the site. */
 let dirty = false;
-function saveDraft(){ dirty = true; }
+/* Typing in an editor. On the lesson side it only has to mark the tab as
+   holding unsaved work; on the task bank it starts that task's own save,
+   since the bank is not part of the lesson and Save to the site would not
+   write it. */
+function saveDraft(){
+  /* Only when there is a bank task open to save. Switching what kind of
+     work a lesson is calls this too, and with the bank on screen and
+     nothing being edited that put "Saving..." up over an empty pane. */
+  if (bankOpen && bankTask && bankTask.block){ bankTouch(); return; }
+  dirty = true;
+}
 function loadDraft(){ /* deliberately empty, see the note above */ }
 try{
   window.addEventListener("beforeunload", (e) => {
-    if (!dirty) return;
+    /* A task typed into the bank in the last couple of seconds has not
+       reached its save yet, and it is not part of the lesson, so `dirty`
+       says nothing about it. */
+    if (!dirty && !bankDirtyAt) return;
     e.preventDefault();
     e.returnValue = "";        // browsers show their own wording
     return "";
@@ -510,6 +576,10 @@ function keepArrays(o){
   return o;
 }
 function compile(){
+  /* Started here rather than at the blocks loop: response tasks and the
+     extension list are compiled first, and a bank task in one of those has
+     to be counted alongside the rest. */
+  idsUsed = new Set();
   const out = { title: lesson.title || "Untitled lesson", blocks: [] };
   if (lesson.intro) out.intro = lesson.intro;
   if (lesson.unit) out.unit = lesson.unit;
@@ -556,12 +626,45 @@ function compile(){
   }
   firstPageOpen();
   lesson.blocks.forEach((b, i) => compileOne(b, b.type + (i + 1), out.blocks));
+  idsUsed = null;
   return out;
 }
+/* Which ids have already been handed out in this compile, so the same bank
+   task used twice in one lesson does not save both answers over each other. */
+let idsUsed = null;
+/* A task that came out of the bank is given an id made from the bank's id
+   rather than from where it happens to sit.
+
+   Positions are what every other task has always used, and it works until
+   something is inserted above one: every id below shifts by one and the work
+   saved against them is orphaned. It matters more here than anywhere. A
+   question used in a lesson and in three versions of that lesson has to
+   produce the same key in all four, or the specification coverage screen is
+   comparing four different things.
+
+   Only blocks carrying fromTask get this. Everything else keeps the id it
+   has always had, so no lesson already out with a class changes. */
+function blockId(b, positional){
+  if (!b || !b.fromTask) return positional;
+  let id = "t_" + String(b.fromTask).replace(/[^A-Za-z0-9_-]/g, "");
+  if (idsUsed){
+    let n = 1, want = id;
+    while (idsUsed.has(want)) want = id + "__" + (++n);
+    id = want;
+    idsUsed.add(id);
+  }
+  return id;
+}
 function compileOne(b, id, target){
+  id = blockId(b, id);
   /* "can be skipped" is remembered on whatever the task compiles to */
   const push = (x) => {
     if (x && b && b.required === false) x.required = false;
+    /* Which bank task this copy came from. It has to survive compiling: the
+       builder reopens a lesson from exactly this JSON, so a link dropped
+       here is a link gone, and the next save would give the task a
+       positional id again and lose every answer saved against the old one. */
+    if (x && b && b.fromTask) x.fromTask = b.fromTask;
     target.push(x);
   };
   if (b.type === "page"){
@@ -797,6 +900,29 @@ function compileOne(b, id, target){
       push(keepArrays({ type:"short", id, prompt: b.prompt || "",
         answers: (b.answers || []).map(x => String(x).trim()).filter(Boolean),
         model: b.model || "", topic: lesson.assessment ? b.topic : "" }));
+    /* An exam question carries its specification point and the wording of
+       that point with it. The lesson page has no way of reaching the
+       specification table, and a lesson opened offline has no server at
+       all, so what a student needs to see has to travel with the task. */
+    else if (b.type === "exam"){
+      const short = b.answer === "short";
+      const out = { type:"exam", id,
+        prompt: b.prompt ? (window.cleanRichText ? window.cleanRichText(b.prompt) : b.prompt) : "",
+        command: b.command || "",
+        marks: Math.max(0, parseInt(b.marks, 10) || 0),
+        answer: short ? "short" : "lines",
+        model: b.model || "",
+        point: b.point || "", code: b.code || "", strand: b.strand || "" };
+      if (short) out.answers = (b.answers || []).map(x => String(x).trim()).filter(Boolean);
+      else {
+        out.scheme = (b.scheme || [])
+          .filter(p => p && String(p.text || "").trim())
+          .map(p => ({ text: String(p.text).trim(), marks: Math.max(1, parseInt(p.marks, 10) || 1) }));
+        const lines = parseInt(b.lines, 10) || 0;
+        if (lines > 0) out.lines = lines;
+      }
+      push(keepArrays(out));
+    }
   }
 }
 
@@ -850,6 +976,9 @@ function tellPreview(page){
    how the column crept back to being forty screens of editors, and the pages
    themselves fold instead. */
 function isShut(b){
+  /* The task bank has one task on screen at a time, so there is nothing to
+     get past by folding it away and every rule below belongs to a lesson. */
+  if (bankEditing) return false;
   if (b.type === "page") return viewAll && b.collapsed === true;
   return viewAll || b.folded === true;
 }
@@ -956,6 +1085,10 @@ function firstPageOpen(){
    new card is scrolled to instead. */
 let scrollToBlock = null;
 function render(){
+  /* Every editor calls render() when a button on it is pressed. On the task
+     bank that has to redraw the bank: rebuilding the lesson list instead
+     would throw away the card being typed into and leave the pane blank. */
+  if (bankOpen){ renderBank(); return; }
   const list = $("list");
   const keepList = list ? list.scrollTop : 0;
   const keepPage = window.scrollY;
@@ -1328,10 +1461,12 @@ function card(b, i, arr){
       paintStrip();
     });
   }
-  const grip = el("span","bgrip","\u2630"); grip.title = "Drag to move";
-  grip.addEventListener("mousedown", () => { c.draggable = true; });
-  grip.addEventListener("mouseup", () => { c.draggable = false; });
-  head.appendChild(grip);
+  if (!bankEditing){
+    const grip = el("span","bgrip","\u2630"); grip.title = "Drag to move";
+    grip.addEventListener("mousedown", () => { c.draggable = true; });
+    grip.addEventListener("mouseup", () => { c.draggable = false; });
+    head.appendChild(grip);
+  }
   /* Folding leaves this line and the buttons on it, which is all that is
      needed to find, move or reorder something. It is a way of getting about a
      long lesson, so it is kept out of the saved lesson: it says nothing about
@@ -1340,7 +1475,7 @@ function card(b, i, arr){
      Which things fold depends on the view, and it is never both at once.
      Editing one page, the page is the workbench and its tasks fold; looking at
      all of them, the tasks are already shut and the pages fold instead. */
-  const canFold = b.type === "page" ? viewAll : !viewAll;
+  const canFold = bankEditing ? false : (b.type === "page" ? viewAll : !viewAll);
   if (canFold){
     const fold = el("button","btn-ghost bmini foldbtn", shut ? "▸" : "▾");
     fold.title = b.type === "page"
@@ -1353,7 +1488,9 @@ function card(b, i, arr){
     });
     head.appendChild(fold);
   }
-  const btype = el("b","btype", headLabel(b, i));
+  /* Numbered by where it sits in a lesson. A bank task sits nowhere, so it
+     says what it is and nothing else. */
+  const btype = el("b","btype", bankEditing ? (LABEL[b.type] || b.type) : headLabel(b, i));
   head.appendChild(btype);
   /* Shut, the line has to say enough to pick the task out by, so it carries
      the first thing the task itself says and not only what kind it is. */
@@ -1421,7 +1558,10 @@ function card(b, i, arr){
     mv.addEventListener("click", (e) => { e.stopPropagation(); movePagePicker(b, arr); });
     tools.appendChild(mv);
   }
-  const acts = [["\u2191","Move up", () => move(arr, i, -1)],
+  /* Moving, copying and deleting are about a task's place in a lesson. The
+     bank has one task on screen and its own bin beside it in the list. */
+  const acts = bankEditing ? [] :
+               [["\u2191","Move up", () => move(arr, i, -1)],
                 ["\u2193","Move down", () => move(arr, i, 1)],
                 ["\u29C9","Duplicate", () => { arr.splice(i + 1, 0, JSON.parse(JSON.stringify(b))); render(); schedulePreview(); }],
                 ["\u2715","Delete", () => askDelete(LABEL[b.type], () => { arr.splice(i, 1); render(); schedulePreview(); })]];
@@ -1433,26 +1573,31 @@ function card(b, i, arr){
   head.appendChild(tools);
   c.appendChild(head);
 
-  c.addEventListener("dragstart", (e) => {
+  /* Dragging is how a task is moved about a lesson. There is nowhere to move
+     one to in the bank, so none of it is wired up there. */
+  const draggable = !bankEditing;
+  if (draggable) c.addEventListener("dragstart", (e) => {
     e.stopPropagation();                     // a task inside a page is not the page
     dragFrom = { arr: arr, i: i, type: b.type };
     newTask = null;
     c.classList.add("dragging");
     if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "task"); }
   });
-  c.addEventListener("dragend", () => { c.classList.remove("dragging"); c.draggable = false; dragFrom = null; });
-  c.addEventListener("dragover", (e) => {
-    if (!dragFrom && !newTask) return;
-    if (!canDropOn(arr)) return;
-    e.preventDefault(); e.stopPropagation();
-    c.classList.add("over");
-  });
-  c.addEventListener("dragleave", () => c.classList.remove("over"));
-  c.addEventListener("drop", (e) => {
-    e.preventDefault(); e.stopPropagation();
-    c.classList.remove("over");
-    dropInto(arr, i);
-  });
+  if (draggable){
+    c.addEventListener("dragend", () => { c.classList.remove("dragging"); c.draggable = false; dragFrom = null; });
+    c.addEventListener("dragover", (e) => {
+      if (!dragFrom && !newTask) return;
+      if (!canDropOn(arr)) return;
+      e.preventDefault(); e.stopPropagation();
+      c.classList.add("over");
+    });
+    c.addEventListener("dragleave", () => c.classList.remove("over"));
+    c.addEventListener("drop", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      c.classList.remove("over");
+      dropInto(arr, i);
+    });
+  }
 
   /* A shut card is its head and nothing else: the body is not built at all.
      Hiding it after the fact, which is what folding a page used to do, cost
@@ -2345,8 +2490,169 @@ function card(b, i, arr){
       help:"Shown to a student who gets it wrong, and printed beside their work." });
     if (lesson.assessment) F("Topic tag", "topic");
   }
+  if (b.type === "exam"){
+    R("The question", "prompt", { rows:3,
+      placeholder:"Describe how the CPU fetches an instruction from memory." });
+    const cmds = ["State", "Identify", "Describe", "Explain", "Compare", "Discuss", "Evaluate", "Complete", "Calculate"];
+    const cw = el("div","bfield");
+    cw.appendChild(el("label","","Command word"));
+    const crow = el("div","brow");
+    const csel = document.createElement("select");
+    [""].concat(cmds).forEach(w => {
+      const o = document.createElement("option");
+      o.value = w; o.textContent = w || "None";
+      if ((b.command || "") === w) o.selected = true;
+      csel.appendChild(o);
+    });
+    csel.addEventListener("change", () => { b.command = csel.value; saveDraft(); schedulePreview(); });
+    crow.appendChild(csel);
+    const mlab = el("label","brow-inline","Worth");
+    const mnum = el("input"); mnum.type = "number"; mnum.min = "0"; mnum.max = "30";
+    mnum.className = "smallnum";
+    mnum.value = String(Math.max(0, parseInt(b.marks, 10) || 0));
+    mnum.addEventListener("input", () => {
+      b.marks = Math.max(0, Math.min(30, Math.round(Number(mnum.value) || 0)));
+      saveDraft(); schedulePreview();
+    });
+    crow.appendChild(mlab); crow.appendChild(mnum);
+    crow.appendChild(helpDot("The number of marks on the paper. It sets how much room the answer box gets."));
+    cw.appendChild(crow);
+    body.appendChild(cw);
+
+    pickRow("How do they answer?", "answer",
+      [["lines","In their own words"],["short","One line"]],
+      "One line is the only one marked on its own, because the whole line is the answer. " +
+      "Anything longer shows the mark scheme once they have had a go and they tick off what they wrote.");
+
+    if (b.answer === "short"){
+      if (!Array.isArray(b.answers) || !b.answers.length) b.answers = [""];
+      listField("Accepted answers", "answers",
+        "Capitals, spacing and stray punctuation are ignored, so add a line only for " +
+        "answers that are really different, such as CPU and central processing unit.");
+      shortAnswerNotes(body, b);
+      F("Model answer", "model", { area:true, rows:2,
+        help:"Shown to a student who gets it wrong, and printed beside their work." });
+    } else {
+      /* The mark scheme, a point at a time. A student sees these only after
+         they have written something, and ticks off the ones they made. */
+      if (!Array.isArray(b.scheme) || !b.scheme.length) b.scheme = [{ text:"", marks:1 }];
+      const sw = el("div","bfield");
+      sw.appendChild(el("label","","Mark scheme"));
+      b.scheme.forEach((point, k) => {
+        const row = el("div","brow");
+        const inp = el("input");
+        inp.placeholder = "One point worth a mark";
+        inp.value = point.text || "";
+        inp.addEventListener("input", () => { point.text = inp.value; saveDraft(); schedulePreview(); });
+        row.appendChild(inp);
+        const worth = el("input"); worth.type = "number"; worth.min = "1"; worth.max = "10";
+        worth.className = "smallnum";
+        worth.title = "How many marks this point is worth";
+        worth.value = String(Math.max(1, parseInt(point.marks, 10) || 1));
+        worth.addEventListener("input", () => {
+          point.marks = Math.max(1, Math.min(10, Math.round(Number(worth.value) || 1)));
+          saveDraft(); schedulePreview();
+        });
+        row.appendChild(worth);
+        const del = el("button","btn-ghost bmini","✕"); del.title = "Remove";
+        del.addEventListener("click", () => { b.scheme.splice(k, 1); render(); schedulePreview(); });
+        row.appendChild(del);
+        sw.appendChild(row);
+      });
+      const addRow = el("div","brow");
+      const add = el("button","btn-ghost bmini2","+ Add a point");
+      add.addEventListener("click", () => { b.scheme.push({ text:"", marks:1 }); render(); });
+      addRow.appendChild(add);
+      /* The two numbers drifting apart is the mistake worth catching: a four
+         marker whose scheme adds up to three cannot be got full marks on. */
+      const worthAll = b.scheme.reduce((n, p) => n + Math.max(1, parseInt(p.marks, 10) || 1), 0);
+      const want = Math.max(0, parseInt(b.marks, 10) || 0);
+      if (want && b.scheme.some(p => String(p.text || "").trim()) && worthAll !== want)
+        addRow.appendChild(el("span","bhelp warn",
+          "The scheme adds up to " + worthAll + " but the question is worth " + want + "."));
+      sw.appendChild(addRow);
+      body.appendChild(sw);
+      F("A full answer (optional)", "model", { area:true, rows:2,
+        help:"Shown under the mark scheme, so they can see what a complete answer reads like." });
+      F("Lines for the answer (optional)", "lines", { num:true,
+        help:"Left empty, the box is two lines a mark." });
+    }
+    specPicker(body, b);
+  }
   c.appendChild(body);
   return c;
+}
+
+/* Where a task sits in the specification: component, then strand, then
+   point. Shown on an exam question in a lesson and on everything in the task
+   bank, so both file their work the same way.
+
+   The code and the strand's wording are copied onto the block beside the id.
+   The lesson page cannot reach the specification table, and offline there is
+   no server at all, so what a student is shown has to travel with the task
+   rather than be looked up when it is opened. */
+function specPicker(into, b, onChange){
+  const level = specLevel();
+  const w = el("div","bfield");
+  w.appendChild(el("label","","Where it is on the specification"));
+  const row = el("div","brow");
+  if (!level){
+    w.appendChild(el("p","bhelp","Pick a GCSE or A Level year group first."));
+    into.appendChild(w);
+    return;
+  }
+  const strands = specStrands(level, b.component || 0);
+  const sel = (title, value, options, then) => {
+    const s = document.createElement("select");
+    const none = document.createElement("option");
+    none.value = ""; none.textContent = title;
+    s.appendChild(none);
+    options.forEach(o => {
+      const opt = document.createElement("option");
+      opt.value = o[0]; opt.textContent = o[1];
+      if (String(value) === String(o[0])) opt.selected = true;
+      s.appendChild(opt);
+    });
+    s.addEventListener("change", () => then(s.value));
+    row.appendChild(s);
+    return s;
+  };
+  sel("Component…", b.component || "", specComponents(level).map(n => [n, "Component " + n]), (v) => {
+    b.component = parseInt(v, 10) || 0;
+    b.point = ""; b.code = ""; b.strand = "";
+    if (onChange) onChange();
+    render();
+  });
+  const mine = specPointOf(b.point);
+  const strandId = mine ? (mine.parent || mine.id) : "";
+  sel("Strand…", strandId, strands.map(s => [s.id, s.code + " " + s.title]), (v) => {
+    b.point = ""; b.code = ""; b.strand = "";
+    if (v){
+      const s = specPointOf(v);
+      /* Filed against the strand until a point is picked, which is better
+         than nothing for a question that spans the whole of it. */
+      b.point = v; b.code = s ? s.code : ""; b.strand = s ? s.title : "";
+    }
+    if (onChange) onChange();
+    render();
+  });
+  if (strandId){
+    const kids = specPoints(strandId);
+    if (kids.length) sel("Whole strand", b.point === strandId ? "" : b.point,
+      kids.map(p => [p.id, p.code + " " + p.title]), (v) => {
+        const strand = specPointOf(strandId);
+        if (!v){ b.point = strandId; b.code = strand ? strand.code : ""; b.strand = strand ? strand.title : ""; }
+        else {
+          const p = specPointOf(v);
+          b.point = v; b.code = p ? p.code : "";
+          b.strand = p ? (strand ? strand.title : "") : "";
+        }
+        if (onChange) onChange();
+        render();
+      });
+  }
+  w.appendChild(row);
+  into.appendChild(w);
 }
 
 /* our own confirmation, rather than the browser's grey box */
@@ -3241,49 +3547,50 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
     if (e.dataTransfer){ e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", newTask); }
   });
   btn.addEventListener("dragend", () => { btn.classList.remove("dragging"); newTask = null; });
-  btn.addEventListener("click", () => {
-    const kind = btn.dataset.add;
-    if (respEditing){                     // a response or extension set is open
-      const arr = respEditing === "__ext" ? lesson.extensions : lesson.responses[respEditing];
-      const one = BLANK[kind]();
-      arr.push(one);
-      openOnly(arr, one);
-      lastAddedAt = arr.length - 1;
-      scrollToBlock = one;
-      render(); schedulePreview();
-      return;
-    }
-    let made = null;
-    if (kind === "page" || lesson.assessment){
-      made = BLANK[kind]();
-      lesson.blocks.push(made);
-      lastAddedAt = lesson.blocks.length - 1;
-      if (made.type === "page"){ viewAll = false; tellPreview(made); }
-    } else {
-      /* Lessons are made of pages, so a task always goes on one. It joins the
-         page on screen, or a new page if the lesson has none yet. */
-      let page = targetPage();
-      if (!page){
-        page = BLANK.page();
-        page.title = "New page";
-        lesson.blocks.push(page);
-        openPageRef = page;
-      }
-      made = BLANK[kind]();
-      page.blocks.push(made);
-      /* it is the one about to be written, so the rest of the page shuts, and
-         All pages is left because nothing can be edited from there */
-      openOnly(page.blocks, made);
-      viewAll = false;
-      lastAddedAt = -1;                  // it is inside a page, so the page is the target
-    }
-    /* Named rather than counted. Picking it out of the cards by number went
-       wrong as soon as tasks sat inside pages, because every nested card is a
-       .bcard too and the last one is rarely the new one. */
+  btn.addEventListener("click", () => addBlock(BLANK[btn.dataset.add]()));
+});
+
+/* Put a task into the lesson wherever a task should go. Takes the block
+   rather than the kind, because the task bank hands over a copy of one it
+   already has rather than a blank. */
+function addBlock(made){
+  if (!made) return;
+  if (respEditing){                       // a response or extension set is open
+    const arr = respEditing === "__ext" ? lesson.extensions : lesson.responses[respEditing];
+    arr.push(made);
+    openOnly(arr, made);
+    lastAddedAt = arr.length - 1;
     scrollToBlock = made;
     render(); schedulePreview();
-  });
-});
+    return;
+  }
+  if (made.type === "page" || lesson.assessment){
+    lesson.blocks.push(made);
+    lastAddedAt = lesson.blocks.length - 1;
+    if (made.type === "page"){ viewAll = false; tellPreview(made); }
+  } else {
+    /* Lessons are made of pages, so a task always goes on one. It joins the
+       page on screen, or a new page if the lesson has none yet. */
+    let page = targetPage();
+    if (!page){
+      page = BLANK.page();
+      page.title = "New page";
+      lesson.blocks.push(page);
+      openPageRef = page;
+    }
+    page.blocks.push(made);
+    /* it is the one about to be written, so the rest of the page shuts, and
+       All pages is left because nothing can be edited from there */
+    openOnly(page.blocks, made);
+    viewAll = false;
+    lastAddedAt = -1;                    // it is inside a page, so the page is the target
+  }
+  /* Named rather than counted. Picking it out of the cards by number went
+     wrong as soon as tasks sat inside pages, because every nested card is a
+     .bcard too and the last one is rarely the new one. */
+  scrollToBlock = made;
+  render(); schedulePreview();
+}
 function showTitle(){
   const t = (lesson.title || "").trim();
   /* A tab that has just become a version still shows the title it was made
@@ -3881,7 +4188,49 @@ async function catPost(payload){
   if (!r.ok) throw new Error((await r.json()).error || "Could not save.");
 }
 
-let cat = { units: [], years: [] };
+let cat = { units: [], years: [], points: [] };
+
+/* ---------------- the specification ----------------
+   cat.points is the whole tree for every qualification, as it came from the
+   catalogue: strands have no parent, points name the strand they are under.
+   Empty until the database has the table, which is what keeps the task bank
+   and exam questions out of the way until then. */
+/* What the year group now chosen is working towards, or "" for KS3 and for
+   a lesson with no year group picked yet. */
+function specLevel(){
+  const y = (cat.years || []).find(x => x.name === lesson.year);
+  const level = y ? String(y.level || "KS3") : "";
+  return (level === "GCSE" || level === "A Level") ? level : "";
+}
+function specPointOf(id){
+  if (!id) return null;
+  return (cat.points || []).find(p => p.id === id) || null;
+}
+function specComponents(level){
+  const seen = [];
+  (cat.points || []).forEach(p => {
+    if (p.level !== level) return;
+    const n = parseInt(p.component, 10) || 0;
+    if (n && seen.indexOf(n) < 0) seen.push(n);
+  });
+  return seen.sort((a, b) => a - b);
+}
+/* A component of 0 means one has not been picked, and then every strand of
+   the level is offered rather than none: a teacher who knows the number of
+   the point but not which paper it is on can still find it. */
+function specStrands(level, component){
+  return (cat.points || []).filter(p =>
+    p.level === level && !p.parent && (!component || Number(p.component) === Number(component)));
+}
+function specPoints(strandId){
+  return (cat.points || []).filter(p => p.parent === strandId);
+}
+/* "1.1.1 Architecture of the CPU", for a list. */
+function specLabel(id){
+  const p = specPointOf(id);
+  if (!p) return "";
+  return p.code + " " + p.title;
+}
 function paintPickers(){
   const ys = $("lYear"), us = $("lUnit");
   const years = (cat.years || []).map(y => y.name);
@@ -3917,12 +4266,504 @@ function paintPickers(){
   }
   if (!lesson.year && lesson.unit) lesson.unit = "";
   us.value = lesson.unit && lesson.year ? lesson.unit : "";
+  paintSpecUI();
 }
+
+/* The task bank and the exam questions appear and disappear with the year
+   group, which is chosen here and can be changed at any point. A new lesson
+   has no year group at all until one is picked, so this runs on every change
+   rather than once at start-up. */
+function paintSpecUI(){
+  const on = !!specLevel();
+  const tabs = $("buildTabs");
+  if (tabs) tabs.hidden = !on;
+  ["palSpec", "palSpecAssess"].forEach(id => { const e = $(id); if (e) e.hidden = !on; });
+  /* Moving to a KS3 year group with the bank open would leave a teacher on a
+     screen with no way back to their lesson. */
+  if (!on && bankOpen) showBank(false);
+  if (typeof paintBuildBar === "function") paintBuildBar();
+}
+
+/* ====================================================================
+   THE TASK BANK
+
+   A task built once and used in as many lessons as you like. It is a tab
+   on this page rather than a page of its own so that the editors are the
+   same ones: a task in the bank is drawn by card(), exactly as a task in
+   a lesson is, and there is one set of boxes to keep working rather than
+   two that drift apart.
+
+   Adding a bank task to a lesson COPIES it. The lesson still saves as one
+   blob of JSON that the lesson page reads without knowing the bank
+   exists, which is what keeps students, offline mode and the eight
+   serverless functions all as they were. What the copy keeps is fromTask,
+   the id it came from, and that is what gives it a stable id in the
+   compiled lesson.
+   ==================================================================== */
+/* What can be built here. The whiteboard, the screenshot and the label are
+   left out on purpose: they are KS3 tasks and none of them belongs in a
+   bank of GCSE and A Level work. */
+const BANK_TYPES = [
+  ["exam","Exam question","Worth marks, with a mark scheme"],
+  ["question","Written answer","They type a response"],
+  ["short","Short answer","Matched to the answers you set"],
+  ["mc","Multiple choice","One right answer"],
+  ["quiz","Quiz","Questions with hints"],
+  ["blanks","Fill the gaps","Dropdown answers"],
+  ["order","Put in order","Drag to sort"],
+  ["keywords","Keyword definitions","They write what each word means"],
+  ["code","Coding task","Python, or HTML + CSS + JS"],
+  ["binary","Binary conversion","Binary to denary and back"],
+  ["binadd","Binary addition","Column addition with carries"],
+  ["text","Paragraph","Words, with formatting"],
+  ["picture","Image","Show a picture from a link"],
+  ["embed","Video","Embed a clip"],
+  ["notes","Notes","Their own notes, with formatting"]
+];
+
+let bankOpen = false;        // the Task bank tab is the one on screen
+let bankEditing = false;     // card() is drawing the bank's task, not a lesson's
+let bankList = [];           // the filtered list, without the tasks themselves
+let bankTask = null;         // { id, title, point, component, block } being edited
+let bankDirtyAt = 0;         // when it was last typed in, for the autosave
+let bankSaveTimer = null;
+let bankBusy = false;
+let bankFind = { component:0, strand:"", point:"", search:"" };
+
+function bankId(){
+  return "k" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+}
+function bankSay(words, bad){
+  const e = $("bankSaid");
+  if (!e) return;
+  e.textContent = words || "";
+  e.dataset.bad = bad ? "yes" : "";
+}
+function showBank(on){
+  bankOpen = !!on;
+  /* Everything the lesson side owns goes away together, so there is never
+     half of one view showing behind the other. */
+  const hide = (sel, yes) => document.querySelectorAll(sel).forEach(e => { e.hidden = yes; });
+  hide(".build", bankOpen);
+  hide(".build-top", bankOpen);
+  hide(".modeswitch", bankOpen);
+  $("bankView").hidden = !bankOpen;
+  if (bankOpen) $("assessTabs").hidden = true;
+  else setMode(!!lesson.assessment, !!lesson.practical);
+  $("tabBuild").classList.toggle("on", !bankOpen);
+  $("tabBank").classList.toggle("on", bankOpen);
+  document.documentElement.dataset.bank = bankOpen ? "yes" : "";
+  if (bankOpen){
+    bankFind.component = bankFind.component || 0;
+    bankLoad();
+  }
+  if (typeof paintBuildBar === "function") paintBuildBar();
+}
+on("tabBuild", "click", () => { if (bankOpen){ bankSaveNow(true); showBank(false); } });
+on("tabBank", "click", () => { if (!bankOpen) showBank(true); });
+
+/* ---------- the list ---------- */
+async function bankLoad(){
+  const level = specLevel();
+  if (!level){ bankList = []; renderBank(); return; }
+  if (OFFLINE){
+    /* There is no bank without a server: the tasks live in the database.
+       Saying so is better than an empty list that looks like a bank with
+       nothing in it. */
+    bankList = null;
+    renderBank();
+    return;
+  }
+  const API = (window.HUB && window.HUB.API) || "";
+  const qs = new URLSearchParams({ level: level });
+  if (bankFind.component) qs.set("component", String(bankFind.component));
+  if (bankFind.point) qs.set("point", bankFind.point);
+  try{
+    const r = await fetch(API + "/api/teacher/tasks?" + qs.toString(),
+                          { headers: window.teacherAuth.headers(), cache:"no-store" });
+    if (authFailed(r.status, bankLoad)) return;
+    const d = await r.json();
+    bankList = Array.isArray(d.tasks) ? d.tasks : [];
+  }catch(e){ bankList = []; }
+  renderBank();
+}
+
+function bankMatches(t){
+  const words = bankFind.search.trim().toLowerCase();
+  if (!words) return true;
+  return (String(t.title || "") + " " + specLabel(t.point)).toLowerCase().indexOf(words) >= 0;
+}
+/* Everything under a strand, so picking "1.1 Systems architecture" shows the
+   questions filed against the strand itself and against its points. */
+function bankUnderStrand(t){
+  if (!bankFind.strand) return true;
+  if (t.point === bankFind.strand) return true;
+  const p = specPointOf(t.point);
+  return !!(p && p.parent === bankFind.strand);
+}
+
+function renderBank(){
+  if (!bankOpen) return;
+  const level = specLevel();
+  paintBankFilter(level);
+  const list = $("bankList");
+  list.innerHTML = "";
+  if (bankList === null){
+    list.appendChild(el("p","hint","The task bank needs the server. It is not there in offline mode."));
+  } else {
+    const shown = bankList.filter(t => bankMatches(t) && bankUnderStrand(t));
+    if (!shown.length){
+      list.appendChild(el("p","hint",
+        bankList.length ? "Nothing matches that." : "No tasks yet. Press “+ New task”."));
+    }
+    shown.forEach(t => {
+      const row = el("div","bank-row" + (bankTask && bankTask.id === t.id ? " on" : ""));
+      const main = el("button","bank-open");
+      const code = specPointOf(t.point);
+      main.appendChild(el("b","", t.title || "Untitled task"));
+      const where = el("span","bank-meta");
+      where.appendChild(el("span","bank-kind", LABEL[t.kind] || t.kind || "Task"));
+      if (code) where.appendChild(el("span","bank-code", code.code + " " + code.title));
+      if (t.marks) where.appendChild(el("span","bank-marks", t.marks + (t.marks === 1 ? " mark" : " marks")));
+      main.appendChild(where);
+      main.addEventListener("click", () => bankEdit(t.id));
+      row.appendChild(main);
+      const del = el("button","btn-ghost bmini","✕");
+      del.title = "Delete this task";
+      del.addEventListener("click", () => askDelete("task", () => bankDelete(t.id)));
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+  paintBankEditor();
+}
+
+function paintBankFilter(level){
+  const comps = specComponents(level);
+  const cs = $("bankComponent");
+  cs.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "0"; all.textContent = "Every component";
+  cs.appendChild(all);
+  comps.forEach(n => {
+    const o = document.createElement("option");
+    o.value = String(n); o.textContent = "Component " + n;
+    if (Number(bankFind.component) === n) o.selected = true;
+    cs.appendChild(o);
+  });
+  const ss = $("bankStrand");
+  ss.innerHTML = "";
+  const anyS = document.createElement("option");
+  anyS.value = ""; anyS.textContent = "Every strand";
+  ss.appendChild(anyS);
+  specStrands(level, bankFind.component).forEach(s => {
+    const o = document.createElement("option");
+    o.value = s.id; o.textContent = s.code + " " + s.title;
+    if (bankFind.strand === s.id) o.selected = true;
+    ss.appendChild(o);
+  });
+  const ps = $("bankPoint");
+  ps.innerHTML = "";
+  const anyP = document.createElement("option");
+  anyP.value = ""; anyP.textContent = bankFind.strand ? "Every point in it" : "Pick a strand first";
+  ps.appendChild(anyP);
+  ps.disabled = !bankFind.strand;
+  specPoints(bankFind.strand).forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.id; o.textContent = p.code + " " + p.title;
+    if (bankFind.point === p.id) o.selected = true;
+    ps.appendChild(o);
+  });
+}
+on("bankComponent", "change", () => {
+  bankFind.component = parseInt($("bankComponent").value, 10) || 0;
+  bankFind.strand = ""; bankFind.point = "";
+  bankLoad();
+});
+on("bankStrand", "change", () => {
+  bankFind.strand = $("bankStrand").value;
+  bankFind.point = "";
+  bankLoad();
+});
+on("bankPoint", "change", () => { bankFind.point = $("bankPoint").value; bankLoad(); });
+on("bankSearch", "input", () => { bankFind.search = $("bankSearch").value; renderBank(); });
+on("bankNew", "click", () => bankNew());
+
+/* ---------- the one being edited ---------- */
+function bankNew(){
+  bankSaveNow(true);
+  bankTask = { id: bankId(), title:"", point: bankFind.point || bankFind.strand || "",
+               component: bankFind.component || 0, block: null, fresh: true };
+  const p = specPointOf(bankTask.point);
+  if (p) bankTask.component = Number(p.component) || bankTask.component;
+  renderBank();
+}
+async function bankEdit(id){
+  if (bankTask && bankTask.id === id) return;
+  bankSaveNow(true);
+  const API = (window.HUB && window.HUB.API) || "";
+  bankSay("Opening…");
+  try{
+    const r = await fetch(API + "/api/teacher/tasks?id=" + encodeURIComponent(id),
+                          { headers: window.teacherAuth.headers(), cache:"no-store" });
+    if (authFailed(r.status, () => bankEdit(id))) return;
+    const d = await r.json();
+    let block = null;
+    try{ block = JSON.parse(d.task.data); }catch(e){ block = null; }
+    if (!block || !block.type) throw new Error("That task could not be read.");
+    /* Folding belongs to getting about a long lesson. There is one task on
+       screen here, so it is always open. */
+    delete block.folded;
+    bankTask = { id: d.task.id, title: d.task.title || "", point: d.task.point || "",
+                 component: Number(d.task.component) || 0, block: block };
+    bankSay("");
+  }catch(e){
+    bankSay(e.message || "Could not open that task.", true);
+    return;
+  }
+  renderBank();
+}
+async function bankDelete(id){
+  const API = (window.HUB && window.HUB.API) || "";
+  try{
+    const r = await fetch(API + "/api/teacher/tasks", { method:"POST",
+      headers: window.teacherAuth.json(), body: JSON.stringify({ op:"delete", id }) });
+    if (authFailed(r.status, () => bankDelete(id))) return;
+    if (!r.ok) throw new Error((await r.json()).error || "Could not delete that.");
+    if (bankTask && bankTask.id === id) bankTask = null;
+    /* Lessons already holding a copy keep it, which is worth saying once
+       rather than leaving a teacher to wonder. */
+    bankSay("Deleted. Lessons using it keep their copy.");
+    bankLoad();
+  }catch(e){ bankSay(e.message, true); }
+}
+
+function paintBankEditor(){
+  const pane = $("bankEdit");
+  pane.innerHTML = "";
+  if (!bankTask){
+    /* Not "on the left": on a phone the list is above this, not beside it. */
+    pane.appendChild(el("p","hint","Pick a task from the list, or press “+ New task”."));
+    return;
+  }
+  /* A new task has no type until one is chosen. */
+  if (!bankTask.block){
+    pane.appendChild(el("h3","bank-head","What kind of task?"));
+    const grid = el("div","bank-types");
+    BANK_TYPES.forEach(t => {
+      const btn = el("button","pal");
+      btn.appendChild(el("b","", t[1]));
+      btn.appendChild(el("span","", t[2]));
+      btn.addEventListener("click", () => {
+        bankTask.block = BLANK[t[0]]();
+        /* A task filed before its kind was chosen keeps where it was filed. */
+        if (bankTask.block.type === "exam"){
+          bankTask.block.point = bankTask.point;
+          bankTask.block.component = bankTask.component;
+          const p = specPointOf(bankTask.point);
+          if (p){ bankTask.block.code = p.code; bankTask.block.strand = p.parent ? (specPointOf(p.parent) || {}).title || "" : p.title; }
+        }
+        /* What "untouched" means for this one, filing and all, so a task
+           nobody has written yet is not saved into the list. */
+        bankTask.blank = JSON.stringify(bankTask.block);
+        renderBank();
+      });
+      grid.appendChild(btn);
+    });
+    pane.appendChild(grid);
+    return;
+  }
+
+  const head = el("div","bank-headrow");
+  const nameWrap = el("div","bfield grow");
+  nameWrap.appendChild(el("label","","What this task is called"));
+  const name = el("input");
+  name.placeholder = "Fetch-execute cycle, 4 marks";
+  name.value = bankTask.title || "";
+  name.addEventListener("input", () => { bankTask.title = name.value; bankTouch(); });
+  nameWrap.appendChild(name);
+  head.appendChild(nameWrap);
+  const save = el("button","btn-primary","Save task");
+  save.addEventListener("click", () => bankSaveNow(false));
+  head.appendChild(save);
+  pane.appendChild(head);
+
+  /* Where it is filed. An exam question carries this on the block itself,
+     because a student is shown the number beside the question, and its own
+     editor already has the picker. Everything else is filed here. */
+  if (bankTask.block.type !== "exam"){
+    specPicker(pane, bankTask, () => {
+      bankTask.point = bankTask.point || "";
+      bankTouch();
+    });
+  }
+
+  bankEditing = true;
+  try{
+    pane.appendChild(card(bankTask.block, 0, [bankTask.block]));
+  } finally {
+    bankEditing = false;
+  }
+}
+
+/* Typed in. Saved two and a half seconds after they stop, the way the
+   lesson saves itself, so a teacher moving down a list of past paper
+   questions never has to think about it. */
+function bankTouch(){
+  bankDirtyAt = Date.now();
+  bankSay("Saving…");
+  clearTimeout(bankSaveTimer);
+  bankSaveTimer = setTimeout(() => bankSaveNow(true), 2500);
+}
+async function bankSaveNow(quiet){
+  clearTimeout(bankSaveTimer);
+  if (!bankTask || !bankTask.block) return;
+  if (!bankDirtyAt && !bankTask.fresh) { if (!quiet) bankSay("Nothing to save."); return; }
+  /* Still exactly the blank it was made from, and with no name on it, is
+     not a task yet. Picking a kind and then changing your mind used to
+     leave an empty "Exam question" in the list for somebody else to tidy
+     away. */
+  if (bankTask.fresh && !String(bankTask.title || "").trim()
+      && bankTask.blank === JSON.stringify(bankTask.block)){
+    if (!quiet) bankSay("Give it a name, or write the question first.");
+    return;
+  }
+  if (bankBusy) return;
+  const level = specLevel();
+  if (!level){ bankSay("Pick a GCSE or A Level year group first.", true); return; }
+  bankBusy = true;
+  const block = bankTask.block;
+  const src = block.type === "exam" ? block : bankTask;
+  const payload = {
+    op: "save",
+    id: bankTask.id,
+    title: bankTask.title || LABEL[block.type] || "Untitled task",
+    level: level,
+    component: Number(src.component) || 0,
+    point: src.point || "",
+    kind: block.type,
+    marks: block.type === "exam" ? (parseInt(block.marks, 10) || 0) : 0,
+    data: JSON.stringify(block)
+  };
+  const API = (window.HUB && window.HUB.API) || "";
+  try{
+    const r = await fetch(API + "/api/teacher/tasks", { method:"POST",
+      headers: window.teacherAuth.json(), body: JSON.stringify(payload) });
+    if (authFailed(r.status, () => bankSaveNow(quiet))){ bankBusy = false; return; }
+    if (!r.ok) throw new Error((await r.json()).error || "Could not save that task.");
+    bankDirtyAt = 0;
+    bankTask.fresh = false;
+    bankSay("Saved ✓");
+    bankBusy = false;
+    await bankLoad();
+  }catch(e){
+    bankBusy = false;
+    bankSay(e.message || "Could not save that task.", true);
+  }
+}
+
+/* ---------- taking one into a lesson ----------
+   The picker, off the palette. What it puts in the lesson is a copy, with
+   fromTask on it saying where the copy came from. */
+async function bankPicker(){
+  const level = specLevel();
+  if (!level){
+    say("Pick a year group first", "The task bank belongs to a GCSE or A Level year group.");
+    return;
+  }
+  if (OFFLINE){
+    say("The bank needs the server", "Tasks are kept in the database, so there is no bank in offline mode.");
+    return;
+  }
+  const API = (window.HUB && window.HUB.API) || "";
+  let tasks = [];
+  try{
+    const r = await fetch(API + "/api/teacher/tasks?level=" + encodeURIComponent(level),
+                          { headers: window.teacherAuth.headers(), cache:"no-store" });
+    if (authFailed(r.status, bankPicker)) return;
+    tasks = (await r.json()).tasks || [];
+  }catch(e){
+    say("Could not read the task bank", e.message || "Try again in a moment.");
+    return;
+  }
+  openModal(box => {
+    box.appendChild(el("h2","","Add a task from the bank"));
+    if (!tasks.length){
+      box.appendChild(el("p","modal-text",
+        "There is nothing in the bank for " + level + " yet. Build one on the Task bank tab."));
+      const shut = el("button","btn-ghost modal-stay","Close");
+      shut.addEventListener("click", closeModal);
+      box.appendChild(shut);
+      return;
+    }
+    const find = el("input","bankpick-find");
+    find.placeholder = "Search";
+    box.appendChild(find);
+    const list = el("div","bankpick");
+    const draw = () => {
+      const words = find.value.trim().toLowerCase();
+      list.innerHTML = "";
+      tasks.filter(t => !words ||
+          (String(t.title || "") + " " + specLabel(t.point)).toLowerCase().indexOf(words) >= 0)
+        .forEach(t => {
+          const b = el("button","bankpick-row");
+          b.appendChild(el("b","", t.title || "Untitled task"));
+          const meta = [LABEL[t.kind] || t.kind, specLabel(t.point),
+                        t.marks ? t.marks + (t.marks === 1 ? " mark" : " marks") : ""].filter(Boolean);
+          b.appendChild(el("span","", meta.join("  ·  ")));
+          b.addEventListener("click", () => { closeModal(); bankInsert(t.id); });
+          list.appendChild(b);
+        });
+      if (!list.childNodes.length) list.appendChild(el("p","hint","Nothing matches that."));
+    };
+    find.addEventListener("input", draw);
+    draw();
+    box.appendChild(list);
+    const shut = el("button","btn-ghost modal-stay","Cancel");
+    shut.addEventListener("click", closeModal);
+    box.appendChild(shut);
+    scrollBody(box);
+  });
+}
+async function bankInsert(id){
+  const API = (window.HUB && window.HUB.API) || "";
+  try{
+    const r = await fetch(API + "/api/teacher/tasks?id=" + encodeURIComponent(id),
+                          { headers: window.teacherAuth.headers(), cache:"no-store" });
+    if (authFailed(r.status, () => bankInsert(id))) return;
+    const d = await r.json();
+    const block = JSON.parse(d.task.data);
+    if (!block || !block.type) throw new Error("That task could not be read.");
+    delete block.folded;
+    /* The one kind that cannot go in a test. Its mark scheme is something a
+       student ticks off themselves, which in an assessment would be the
+       answers on screen while they sat it. */
+    if (lesson.assessment && block.type === "exam"){
+      say("Not in an assessment",
+          "An exam question is marked by the student against its scheme, so it would show them "
+          + "the answers during the test. Put it in a lesson instead, or use a short answer or a "
+          + "multiple choice question here.");
+      return;
+    }
+    /* The copy remembers where it came from. That is what gives it a stable
+       id when the lesson is compiled, so the same question in a lesson and
+       in three versions of it lines up in the coverage screen. */
+    block.fromTask = d.task.id;
+    addBlock(block);
+  }catch(e){
+    say("Could not add that task", e.message || "Try again in a moment.");
+  }
+}
+on("palFromBank", "click", bankPicker);
+on("palFromBankAssess", "click", bankPicker);
 
 /* ---------------- live preview ---------------- */
 let prevTimer = null;
 let previewReset = true;      // a freshly opened lesson starts at its first page
 function schedulePreview(){
+  /* The preview is the lesson, and the task bank is not in the lesson.
+     Compiling on every keystroke there would be work nobody can see. */
+  if (bankOpen) return;
   clearTimeout(prevTimer);
   $("prevMsg").textContent = "updating\u2026";
   prevTimer = setTimeout(refreshPreview, 900);
@@ -4632,6 +5473,10 @@ function isRoomy(){ return roomyQ().matches; }
 /* The pieces that move, remembered where they started so they can go back. */
 const homeSlot = document.querySelector(".homebar");
 const topSlot = document.querySelector(".build-top");
+/* Where the Lesson / Task bank strip lives on a wide screen: just above the
+   kind-of-work buttons. Held so it can be put back after a spell in the
+   narrow screen's one row of controls. */
+const modeSlot = document.querySelector(".modeswitch");
 
 function applyBuildLayout(){
   const compact = isCompact();
@@ -4658,6 +5503,13 @@ function applyBuildLayout(){
     if (options) titles.insertBefore(options, titles.firstChild);
     topSlot.appendChild(titles);
     topSlot.appendChild(actions);
+    /* Back above the kind-of-work buttons where it started. Left in the bar
+       it would be inside a row that is hidden on a wide screen, and the one
+       way to the task bank would have gone. */
+    const build = $("buildTabs");
+    const modesHome = modeSlot && modeSlot.parentNode;
+    if (build && modesHome && build.parentNode !== modesHome) modesHome.insertBefore(build, modeSlot);
+    if (build) build.hidden = !specLevel();
     $("buildBar").hidden = true;
     $("modeChip").hidden = true;
     $("saveSite").textContent = "Save to the site";
@@ -4675,15 +5527,28 @@ function paintBuildBar(){
   if (!scroll || !$("assessTabs") || !$("modeChipName")) return;
   const assess = !!lesson.assessment;
   const practical = !!lesson.practical;
+  /* Lesson or task bank comes first on the row, because it decides what the
+     rest of the row is even about. Moved in rather than copied, like the
+     assessment tabs below it, so there is one of each on the page. */
+  const build = $("buildTabs");
+  if (build){
+    const wanted = !!specLevel();
+    build.hidden = !wanted;
+    if (wanted && build.parentNode !== scroll) scroll.insertBefore(build, scroll.firstChild);
+  }
   /* The tab strip is moved in beside New page rather than copied, so the
      three buttons keep working exactly as they do on a desktop. */
   const tabs = $("assessTabs");
-  if (assess || practical){
+  if ((assess || practical) && !bankOpen){
     tabs.hidden = false;
     if (tabs.parentNode !== scroll) scroll.appendChild(tabs);
   } else {
     tabs.hidden = true;
   }
+  /* The chip says what kind of work this is, and on the bank there is no
+     kind: it is not part of the lesson at all. */
+  const chip = $("modeChip");
+  if (chip) chip.hidden = bankOpen;
   $("modeChipName").textContent = practical ? "Practical assessment"
     : assess ? "Assessment"
     : lesson.homework ? "Home learning" : "Lesson";

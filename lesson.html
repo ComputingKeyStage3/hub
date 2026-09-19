@@ -1764,6 +1764,10 @@ const TASK_ICON = {
                d:'<path d="M4 20l4.4-1L19 8.4a2.1 2.1 0 0 0-3-3L5 16z"/><path d="M14.5 6.9l3 3"/>' },
   short:     { name:"Short answer",
                d:'<path d="M20 6.5A1.5 1.5 0 0 0 18.5 5h-13A1.5 1.5 0 0 0 4 6.5v7A1.5 1.5 0 0 0 5.5 15H8v4l4-4h6.5a1.5 1.5 0 0 0 1.5-1.5z"/>' },
+  /* a paper with a mark written on it */
+  exam:      { name:"Exam question",
+               d:'<path d="M6.5 3.5h8l4 4v13h-12z"/><path d="M14.5 3.5V8H19"/>' +
+                 '<path d="M8.5 12.5l2 2 4.5-4.5"/>' },
   /* a list with a bullet against each line */
   keywords:  { name:"Keywords",
                d:'<path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01M9 7h10.5M9 12h10.5M9 17h7"/>' },
@@ -2143,8 +2147,66 @@ async function submitWork(){
     if (!r.ok) return "failed";
     lastSubmittedPayload = payload;
     if (typedAt === mark) unsavedTyping = false;   // it has reached the teacher
+    sendExamMarks();
     return "done";
   }catch(e){ return "failed"; }
+}
+
+/* ---------- exam questions in an ordinary lesson ----------
+   An assessment already writes a results row and works out its own strength
+   and target. A lesson does not, and a lesson of exam questions still has to
+   add up to something a teacher can look at by specification point.
+
+   So a lesson holding exam questions writes a results row too, through the
+   same endpoint, and the breakdown carries the point each question was filed
+   under. Nothing new was added to the server for this: there are eight
+   serverless functions and eight are allowed.
+
+   Sent only when the marks have actually moved. Posting alongside every save
+   would be a second write every few seconds for every student in the room,
+   where marks change only when somebody presses Check or ticks a scheme. */
+let lastExamPost = "";
+function examSummary(){
+  let score = 0, outOf = 0, marked = 0, n = 0;
+  const breakdown = {};
+  Object.keys(fields).forEach(id => {
+    const f = fields[id];
+    if (!f || typeof f.result !== "function") return;
+    const r = f.result();
+    n++;
+    outOf += Number(r.outOf) || 0;
+    /* -1 rather than null for a question nobody has marked yet: the
+       breakdown is capped at 5,000 characters at the other end, and three
+       numbers in an array is the shortest honest way of saying this. */
+    const got = (r.marks === null || r.marks === undefined) ? -1 : Number(r.marks);
+    if (got >= 0){ score += got; marked++; }
+    breakdown[id] = [got, Number(r.outOf) || 0, r.point || ""];
+  });
+  return { n, marked, score, outOf, breakdown };
+}
+async function sendExamMarks(){
+  if (spectate || OFFLINE || !token || !apiReady) return;
+  if (!restoreDone) return;                       // never over the top of real marks
+  if (lesson && lesson.assessment) return;        // that path writes its own row
+  const sum = examSummary();
+  if (!sum.n || !sum.outOf) return;
+  /* Nothing marked yet is not nought out of five. Opening a lesson of exam
+     questions and pressing Save would otherwise write a 0% against the
+     student's name before they had marked a single answer, and that is what
+     their results tab would show them. */
+  if (!sum.marked) return;
+  const body = { lesson: lessonId, score: sum.score, outOf: sum.outOf,
+                 breakdown: sum.breakdown, kind: "exam" };
+  const payload = JSON.stringify(body);
+  if (payload === lastExamPost) return;
+  try{
+    const r = await fetch(API + "/api/assessment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: payload
+    });
+    if (r.ok) lastExamPost = payload;
+  }catch(e){ /* the marks are in their work either way */ }
 }
 
 /* Mid-lesson manual save, for lessons that run out of time. */
@@ -2234,6 +2296,7 @@ function finishLesson(){
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
   finished = true;
   save();
+  sendExamMarks();                   // a lesson of exam questions still has a mark
   showLessonComplete(false, true);   // they have just pressed Finish
 }
 
@@ -2453,6 +2516,7 @@ function buildBlock(b, i){
               board:rBoardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
               keywords:rKeywordsTask,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
+              exam:rExamTask,
               extension:rExtension, choice:rChoice }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
@@ -4416,6 +4480,20 @@ function wrapExtra(b, build, eyebrow){
 const rBoardTask   = (b) => wrapExtra(b, window.rBoard,   "Whiteboard");
 const rKeywordsTask = (b) => wrapExtra(b, window.rKeywords, "Keywords");
 const rLabelTask   = (b) => wrapExtra(b, window.rLabel,   "Labelling");
+/* An exam question is nearly one of the four above, but it also reports what
+   it scored, which wrapExtra has no room for: fields[] would drop result()
+   and the coverage screen would have nothing to read. */
+function rExamTask(b){
+  const made = window.rExam(b, { changed: markDirty,
+                                 assessment: !!(lesson && lesson.assessment) });
+  fields[b.id] = { get: made.get, set: made.set, result: made.result };
+  return {
+    section: made.section,
+    check: () => made.done() ? { ok:true } : { ok:false, message:"Have a go at this one" },
+    brief: { eyebrow: (b.marks ? b.marks + (b.marks === 1 ? " mark" : " marks") : "Exam question"),
+             title: inlineHtml(b.prompt) || "", text: b.code || "" }
+  };
+}
 const rNotesTask   = (b) => wrapExtra(b, window.rNotes,   "Notes");
 const rMindmapTask = (b) => wrapExtra(b, window.rMindmap, "Mind map");
 
@@ -5079,7 +5157,7 @@ function computeAssessment(){
     const codingMarks = (b.type === "ide" || b.type === "web")
       && Array.isArray(b.checks)
       && b.checks.some(c => (parseInt(c.marks, 10) || 0) > 0);
-    if (!codingMarks && !["mc","order","blanks","short"].includes(b.type)) return;
+    if (!codingMarks && !["mc","order","blanks","short","exam"].includes(b.type)) return;
     const v = fields[b.id] ? fields[b.id].get() : null;
     n++;
     let pts = 0, max = 0, review = {};
@@ -5121,6 +5199,33 @@ function computeAssessment(){
       review = { yours: String(v || "").trim() || "(not answered)",
                  mode: r.mode, groups: r.groups, accepted: r.accepted,
                  model: b.model || "" };
+    } else if (b.type === "exam"){
+      /* A one line answer is marked here, the same as a Short answer. A
+         written one carries what the student ticked off against the scheme,
+         which stands until a teacher says otherwise in the markbook: in an
+         assessment somebody reads these, and their word is the one below
+         that overrides any of this. */
+      max = Math.max(0, parseInt(b.marks, 10) || 0);
+      const said = (v && typeof v === "object") ? String(v.text || "") : String(v || "");
+      if (b.answer === "short"){
+        if (!max) max = 1;
+        const r = window.shortAnswer.mark(b, said);
+        pts = r.ok ? max : 0;
+        review = { yours: said.trim() || "(not answered)",
+                   mode: r.mode, groups: r.groups, accepted: r.accepted,
+                   model: b.model || "" };
+      } else {
+        const scheme = (b.scheme || []).filter(p => p && p.text);
+        if (!max) max = scheme.reduce((t, p) => t + Math.max(1, parseInt(p.marks, 10) || 1), 0);
+        const ticked = (v && Array.isArray(v.ticks)) ? v.ticks : [];
+        pts = (v && v.marks !== undefined && v.marks !== null) ? Math.max(0, Math.min(max, Number(v.marks))) : 0;
+        review.items = scheme.map((p, i) => ({
+          given: p.text, ok: !!ticked[i],
+          expected: Math.max(1, parseInt(p.marks, 10) || 1) + " mark"
+        }));
+        review.yours = said.trim() || "(not answered)";
+        review.selfMarked = true;
+      }
     }
     /* A teacher can disagree with the automatic marking, and their word is
        final. Their marks arrive with the work in the link that comes back. */
@@ -6539,6 +6644,40 @@ function buildPdf(){
       const url = String(v || "").trim();
       out.push(url ? { t: "box", text: url, face: "small", colour: PDF.ACCENT }
                    : answerBox("", "No link pasted"));
+      return out;
+    }
+    /* An exam question prints as the paper would have it: what it asked,
+       what they wrote, and the mark, with the scheme underneath so the
+       hand-in can be checked away from the screen. */
+    if (b.type === "exam"){
+      const head = [b.command, b.code].filter(Boolean).join("  ·  ");
+      if (head) out.push({ t: "text", face: "label", text: head.toUpperCase() });
+      out.push({ t: "ask", text: pdfText(b.prompt) || "Exam question" });
+      const said = (v && typeof v === "object") ? String(v.text || "").trim() : String(v || "").trim();
+      out.push(answerBox(said, "Nothing written"));
+      const worth = Math.max(0, parseInt(b.marks, 10) || 0);
+      const got = (v && typeof v === "object" && v.marks !== undefined && v.marks !== null) ? Number(v.marks) : null;
+      if (got === null){
+        if (worth) out.push({ t: "text", face: "sub", text: "Not marked yet, out of " + worth,
+                              colour: PDF.AMBER });
+      } else {
+        const of = (v && v.outOf) ? Number(v.outOf) : worth;
+        out.push({ t: "text", face: "sub",
+                   text: got + " out of " + of + (v.auto ? "" : ", marked by themselves"),
+                   colour: got >= of ? PDF.GREEN : got > 0 ? PDF.AMBER : PDF.RED });
+      }
+      const scheme = Array.isArray(b.scheme) ? b.scheme.filter(x => x && x.text) : [];
+      if (scheme.length){
+        out.push(label("Mark scheme"));
+        const ticked = (v && Array.isArray(v.ticks)) ? v.ticks : [];
+        scheme.forEach((p, i) => {
+          out.push({ t: "text", face: "p", text: tick(!!ticked[i]) + pdfText(p.text),
+                     colour: ticked[i] ? PDF.GREEN : PDF.MUTED });
+        });
+      } else if (b.model){
+        out.push(label("A full answer"));
+        out.push({ t: "text", face: "p", text: pdfText(b.model), colour: PDF.MUTED });
+      }
       return out;
     }
     if (b.type === "notes"){
