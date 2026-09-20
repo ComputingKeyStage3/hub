@@ -70,6 +70,8 @@
       <span class="menu" id="moreMenu" hidden>
         <button id="copyBtn">Save a copy</button>
         <button id="jsonBtn">JSON</button>
+        <button id="importLesson">Import a lesson</button>
+        <button id="importPage">Import a page</button>
         <button id="delLesson">Delete lesson</button>
       </span>
     </span>
@@ -95,8 +97,31 @@
           <span id="palPointNote"></span>
         </div>
         <div id="palPointList"></div>
+        <!-- The rest of the bank, and then the ways of finding your way
+             around it. Same funnel as the task builder's, so the two
+             screens are filtered the same way. -->
+        <div class="pal-allrow">
+          <button class="btn-ghost toggle pal-allbtn" id="palAllBtn" type="button" aria-pressed="false">All tasks</button>
+          <span class="menuwrap" id="palFilterWrap" hidden>
+            <button class="btn-ghost iconbtn" id="palFilterBtn" type="button" title="Narrow the list" aria-label="Narrow the list">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                   stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3.5 5.5h17l-6.6 7.7v5.3l-3.8 1.9v-7.2z"/>
+              </svg>
+            </button>
+            <span class="menu filtermenu" id="palFilterMenu" hidden>
+              <label for="palComponent">Component</label>
+              <select id="palComponent"></select>
+              <label for="palStrand">Part of the specification</label>
+              <select id="palStrand"></select>
+              <label for="palPointSel">Point</label>
+              <select id="palPointSel"></select>
+            </span>
+          </span>
+        </div>
+        <div id="palAllList" hidden></div>
       </div>
-      <button class="pal pal-more" id="palMoreBtn" hidden><b>+ Add extra tasks</b><span>Everything else the builder can make</span></button>
+      <button class="pal pal-more" id="palMoreBtn" hidden><b>+ Add a custom task</b><span>Any of the standard task types</span></button>
       <div id="palStandard">
       <button class="pal strong" data-add="page"><b>+ New page</b><span>Students see one page at a time</span></button>
       <!-- Both of these are hidden for a KS3 year group. The bank button is
@@ -235,26 +260,50 @@
 <!-- The task bank. Only a GCSE or A Level year group has one, so this stays
      hidden entirely for KS3 and the builder is what it always was. -->
 <section class="bank" id="bankView" hidden>
+  <!-- One row, and it opens out rather than starting open. Making a task is
+       the thing most often wanted, so it is first. The builder is opened
+       from one point of the specification and the list starts as the tasks
+       written for that point, so searching and filtering are only worth
+       their room once All tasks has widened it. -->
   <div class="bank-filter">
-    <span class="searchbox"><span class="searchicon">&#128269;</span><input id="bankSearch" placeholder="Search tasks"></span>
-    <!-- The builder is opened from one point of the specification, so the
-         list starts as the tasks written for that point and nothing else.
-         This is the way out to the rest of the bank. The three dropdowns
-         used to sit above every task whether they were wanted or not, on
-         three separate lines, which was most of the screen. -->
-    <button class="btn-ghost bank-morebtn" id="bankMoreBtn" type="button">Show more tasks</button>
+    <button class="btn-primary" id="bankNew">+ New task</button>
+    <button class="btn-ghost toggle" id="bankAllBtn" type="button" aria-pressed="false">All tasks</button>
+    <span class="searchbox" id="bankSearchWrap" hidden><span class="searchicon">&#128269;</span><input id="bankSearch" placeholder="Search tasks"></span>
+    <!-- Three dropdowns side by side are wider than the bar and dropped onto
+         a line of their own, so they live in a menu off this button. -->
+    <span class="menuwrap" id="bankFilterWrap" hidden>
+      <button class="btn-ghost iconbtn" id="bankFilterBtn" type="button" title="Narrow the list" aria-label="Narrow the list">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+             stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3.5 5.5h17l-6.6 7.7v5.3l-3.8 1.9v-7.2z"/>
+        </svg>
+      </button>
+      <span class="menu filtermenu" id="bankFilterMenu" hidden>
+        <label for="bankComponent">Component</label>
+        <select id="bankComponent"></select>
+        <label for="bankStrand">Part of the specification</label>
+        <select id="bankStrand"></select>
+        <label for="bankPoint">Point</label>
+        <select id="bankPoint"></select>
+      </span>
+    </span>
     <span class="bank-spacer"></span>
     <span class="bank-said" id="bankSaid"></span>
-    <button class="btn-primary" id="bankNew">+ New task</button>
-  </div>
-  <div class="bank-more" id="bankMore" hidden>
-    <select id="bankComponent" title="Component"></select>
-    <select id="bankStrand" title="Strand"></select>
-    <select id="bankPoint" title="Specification point"></select>
+    <button class="btn-ghost" id="bankImport" type="button">Import</button>
   </div>
   <div class="bank-cols">
     <div class="bank-list" id="bankList"></div>
     <div class="bank-edit" id="bankEdit"></div>
+    <!-- What a student will see. The same lesson page the lesson builder
+         previews with, given one task instead of a whole lesson. -->
+    <section class="bank-preview" id="bankPreview">
+      <div class="prev-head">
+        <b>Preview</b>
+        <span class="hint" id="bankPrevMsg"></span>
+        <button class="btn-ghost iconbtn" id="bankPrevBtn" title="Refresh the preview">&#8635;</button>
+      </div>
+      <div class="prev-hold"><iframe id="bankPrev" title="Task preview"></iframe></div>
+    </section>
   </div>
 </section>
 
@@ -4386,19 +4435,62 @@ function paintSpecUI(){
   if (typeof paintBuildBar === "function") paintBuildBar();
 }
 
-/* ---------------- the tasks for this lesson's point ----------------
+/* ---------------- the left column, for a lesson on one point ----------
    A lesson started from a point of the specification is built out of the
-   tasks written for that point. They are what the left column offers, and
-   the rest of the builder is behind "Add extra tasks", because a column of
-   nine containers to open is not what somebody planning 1.1.1 is looking
-   for.
+   tasks written for it, so those come first and nothing else is in the
+   way. Behind them, in order of how often they are wanted:
 
-   The whole task comes down with the list here, not just its name: one
+     All tasks          the rest of the bank, with a funnel to narrow it
+     Add a custom task  the standard task types, for the odd thing the
+                        bank has no task for
+
+   The whole task comes down with each list, not just its name: one
    dragged onto a page has to be ready when it lands, and fetching it at
    that moment is a round trip in the middle of a drag. */
 let pointTasks = [];
 let pointTasksFor = null;          // which point the list in hand belongs to
-let showEverything = false;        // "Add extra tasks" has been pressed
+let showEverything = false;        // "Add a custom task" has been pressed
+let palAll = false;                // "All tasks" has been pressed
+let palAllTasks = [];
+let palAllFor = null;              // the filter the list in hand was fetched for
+let palAllCapped = false;
+let palFind = { component:0, strand:"", point:"" };
+
+/* The filter menu, on both screens.
+
+   menus.js decides whether a menu has room below or above and turns it into
+   a pop-up when nothing fits, but it measures height: a menu hanging off a
+   button in a 190px column has room below it and still runs off the left of
+   the screen, because .menu is anchored by its right edge. So it is opened,
+   measured where it actually landed, and anchored the other way round if it
+   went off. Measured rather than assumed: which way it needs to go depends
+   on the column, the pane width and which of the two screens it is on. */
+function openFilterMenu(btn, menu){
+  menu.classList.remove("anchor-left");
+  if (window.placeMenu) window.placeMenu(btn, menu);
+  menu.hidden = false;
+  const box = menu.getBoundingClientRect();
+  if (box.left < 8) menu.classList.add("anchor-left");
+}
+
+/* One task in the column: draggable onto a page, or click to add it. Both
+   lists draw with this, so there is one of them to keep working. */
+function bankTaskButton(t){
+  const btn = el("button","pal pal-bank");
+  btn.appendChild(el("b","", t.title || "Untitled task"));
+  const meta = [LABEL[t.kind] || t.kind, specLabel(t.point),
+                t.marks ? t.marks + (t.marks === 1 ? " mark" : " marks") : ""].filter(Boolean);
+  btn.appendChild(el("span","", meta.join("  ·  ")));
+  btn.draggable = true;
+  btn.addEventListener("dragstart", (e) => {
+    newBank = t; newTask = null; dragFrom = null;
+    btn.classList.add("dragging");
+    if (e.dataTransfer){ e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", t.id); }
+  });
+  btn.addEventListener("dragend", () => { btn.classList.remove("dragging"); newBank = null; });
+  btn.addEventListener("click", () => { const made = bankCopy(t); if (made) addBlock(made); });
+  return btn;
+}
 
 function paintPointPalette(){
   const list = $("palPointList");
@@ -4421,45 +4513,153 @@ function paintPointPalette(){
   }
   $("palPointNote").textContent = pointTasks.length
     ? "Drag one onto the page, or click it."
-    : "No tasks written for this point yet.";
+    : "No tasks written for this part yet.";
   if (!pointTasks.length){
     const make = el("button","btn-ghost bmini2","Write one in the Task builder");
     make.addEventListener("click", () => showBank(true));
     list.appendChild(make);
+  }
+  pointTasks.forEach(t => list.appendChild(bankTaskButton(t)));
+  paintAllPalette();
+}
+
+/* Everything else in the bank. Off by default: the point's own tasks are
+   what this lesson is being built from, and a column of every question the
+   department has ever written is not a shortlist. */
+function paintAllPalette(){
+  const btn = $("palAllBtn");
+  if (!btn) return;
+  btn.classList.toggle("on", palAll);
+  btn.setAttribute("aria-pressed", palAll ? "true" : "false");
+  $("palFilterWrap").hidden = !palAll;
+  if (!palAll) $("palFilterMenu").hidden = true;
+  const box = $("palAllList");
+  box.hidden = !palAll;
+  if (!palAll) return;
+  paintPalFilter();
+  const key = palFind.component + "|" + palFind.strand + "|" + palFind.point;
+  box.innerHTML = "";
+  if (palAllFor !== key){
+    box.appendChild(el("p","bhelp","Loading…"));
+    loadAllTasks(key);
     return;
   }
-  pointTasks.forEach(t => {
-    const btn = el("button","pal pal-bank");
-    btn.appendChild(el("b","", t.title || "Untitled task"));
-    const meta = [LABEL[t.kind] || t.kind,
-                  t.marks ? t.marks + (t.marks === 1 ? " mark" : " marks") : ""].filter(Boolean);
-    btn.appendChild(el("span","", meta.join("  ·  ")));
-    btn.draggable = true;
-    btn.addEventListener("dragstart", (e) => {
-      newBank = t; newTask = null; dragFrom = null;
-      btn.classList.add("dragging");
-      if (e.dataTransfer){ e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", t.id); }
+  /* The ones already offered above are not offered again. */
+  const shown = palAllTasks.filter(t => !pointTasks.some(p => p.id === t.id));
+  if (!shown.length){
+    box.appendChild(el("p","bhelp", palAllTasks.length
+      ? "Nothing here beyond the tasks above."
+      : "No tasks match that."));
+    return;
+  }
+  if (palAllCapped)
+    box.appendChild(el("p","bhelp warn","The first 150. Narrow it down with the funnel."));
+  shown.forEach(t => box.appendChild(bankTaskButton(t)));
+}
+function paintPalFilter(){
+  const level = specLevel();
+  const fill = (sel, first, options, value) => {
+    sel.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = ""; none.textContent = first;
+    sel.appendChild(none);
+    options.forEach(o => {
+      const opt = document.createElement("option");
+      opt.value = String(o[0]); opt.textContent = o[1];
+      if (String(value) === String(o[0])) opt.selected = true;
+      sel.appendChild(opt);
     });
-    btn.addEventListener("dragend", () => { btn.classList.remove("dragging"); newBank = null; });
-    btn.addEventListener("click", () => { const made = bankCopy(t); if (made) addBlock(made); });
-    list.appendChild(btn);
-  });
+  };
+  fill($("palComponent"), "Every component",
+       specComponents(level).map(n => [n, "Component " + n]), palFind.component || "");
+  fill($("palStrand"), "Every part",
+       specStrands(level, palFind.component).map(s => [s.id, s.code + " " + s.title]), palFind.strand);
+  const ps = $("palPointSel");
+  fill(ps, palFind.strand ? "Every point in it" : "Pick a part first",
+       specPoints(palFind.strand).map(p => [p.id, p.code + " " + p.title]), palFind.point);
+  ps.disabled = !palFind.strand;
+}
+async function loadAllTasks(key){
+  if (OFFLINE){ palAllTasks = []; palAllFor = key; paintAllPalette(); return; }
+  const API = (window.HUB && window.HUB.API) || "";
+  const qs = new URLSearchParams({ full:"1", level: specLevel() });
+  if (palFind.component) qs.set("component", String(palFind.component));
+  if (palFind.point) qs.set("point", palFind.point);
+  else if (palFind.strand) qs.set("strand", palFind.strand);
+  try{
+    const r = await fetch(API + "/api/teacher/tasks?" + qs.toString(),
+                          { headers: window.teacherAuth.headers(), cache:"no-store" });
+    if (authFailed(r.status, () => loadAllTasks(key))) return;
+    const d = await r.json();
+    palAllTasks = readBankTasks(d.tasks);
+    palAllCapped = (d.tasks || []).length >= 150;
+  }catch(e){ palAllTasks = []; palAllCapped = false; }
+  palAllFor = key;
+  paintAllPalette();
+}
+on("palAllBtn", "click", () => {
+  palAll = !palAll;
+  /* Opened for the first time, it starts where the lesson is rather than
+     at the whole specification: the part this lesson belongs to is the
+     likeliest place the next task is coming from. */
+  if (palAll && palAllFor === null){
+    const p = specPointOf(lesson.point || "");
+    palFind.component = p ? (Number(p.component) || 0) : 0;
+    palFind.strand = p ? (p.parent || p.id) : "";
+    palFind.point = "";
+  }
+  paintAllPalette();
+});
+on("palFilterBtn", "click", (e) => {
+  e.stopPropagation();
+  const m = $("palFilterMenu"), btn = $("palFilterBtn");
+  if (!m.hidden){ m.hidden = true; return; }
+  openFilterMenu(btn, m);
+});
+document.addEventListener("pointerdown", (e) => {
+  const m = $("palFilterMenu"), b = $("palFilterBtn");
+  if (!m || m.hidden) return;
+  if (e.target === b || (b.contains && b.contains(e.target))) return;
+  if (m.contains && m.contains(e.target)) return;
+  m.hidden = true;
+});
+on("palComponent", "change", () => {
+  palFind.component = parseInt($("palComponent").value, 10) || 0;
+  palFind.strand = ""; palFind.point = "";
+  paintAllPalette();
+});
+on("palStrand", "change", () => {
+  palFind.strand = $("palStrand").value;
+  palFind.point = "";
+  paintAllPalette();
+});
+on("palPointSel", "change", () => { palFind.point = $("palPointSel").value; paintAllPalette(); });
+
+/* What comes back from the tasks route, with each task's contents read out
+   of the JSON it travels as. Anything that will not parse is dropped: a
+   button that adds nothing is worse than no button. */
+function readBankTasks(rows){
+  return (rows || []).map(t => {
+    let block = null;
+    try{ block = JSON.parse(t.data || "null"); }catch(e){ block = null; }
+    return { id:t.id, title:t.title, kind:t.kind, marks:t.marks, point:t.point, block: block };
+  }).filter(t => t.block && t.block.type);
 }
 async function loadPointTasks(point){
   if (OFFLINE || !point){ pointTasks = []; pointTasksFor = point; paintPointPalette(); return; }
   const API = (window.HUB && window.HUB.API) || "";
-  const level = specLevel();
+  const p = specPointOf(point);
+  const qs = new URLSearchParams({ full:"1", level: specLevel() });
+  /* A lesson on 1.1.1 wants what was written for 1.1.1 and what was written
+     for the whole of 1.1, because the hub files both under the same part
+     and both are about the thing being taught. */
+  if (p && p.parent) qs.set("strand", p.parent);
+  else qs.set("strand", point);
   try{
-    const r = await fetch(API + "/api/teacher/tasks?full=1&level=" + encodeURIComponent(level)
-                          + "&point=" + encodeURIComponent(point),
+    const r = await fetch(API + "/api/teacher/tasks?" + qs.toString(),
                           { headers: window.teacherAuth.headers(), cache:"no-store" });
     if (authFailed(r.status, () => loadPointTasks(point))) return;
-    const d = await r.json();
-    pointTasks = (d.tasks || []).map(t => {
-      let block = null;
-      try{ block = JSON.parse(t.data || "null"); }catch(e){ block = null; }
-      return { id:t.id, title:t.title, kind:t.kind, marks:t.marks, block: block };
-    }).filter(t => t.block && t.block.type);
+    pointTasks = readBankTasks((await r.json()).tasks);
   }catch(e){ pointTasks = []; }
   pointTasksFor = point;
   paintPointPalette();
@@ -4475,9 +4675,10 @@ function bankCopy(t){
 on("palMoreBtn", "click", () => {
   showEverything = !showEverything;
   $("palMoreBtn").querySelector("b").textContent =
-    showEverything ? "− Hide the extra tasks" : "+ Add extra tasks";
+    showEverything ? "− Hide the custom tasks" : "+ Add a custom task";
   paintPointPalette();
 });
+
 
 /* ====================================================================
    THE TASK BANK
@@ -4498,12 +4699,11 @@ on("palMoreBtn", "click", () => {
 /* What can be built here. The whiteboard, the screenshot and the label are
    left out on purpose: they are KS3 tasks and none of them belongs in a
    bank of GCSE and A Level work. */
+/* A page of tasks is not offered here. A bank task is one task, and a page
+   is the lesson builder's job: it is where the tasks on a page are ordered
+   against the page they sit on. card() can still draw one, so a task saved
+   as a page before this still opens and still works. */
 const BANK_TYPES = [
-  /* A whole page rather than one task: a bit of theory, the question on it
-     and the code they write, kept together and dropped into a lesson as one
-     thing. It is the same page a lesson is made of, so it arrives in the
-     lesson as a page and not as a task inside one. */
-  ["page","Page of tasks","Several tasks a student sees together"],
   ["exam","Exam question","Worth marks, with a mark scheme"],
   ["question","Written answer","They type a response"],
   ["short","Short answer","Matched to the answers you set"],
@@ -4529,11 +4729,11 @@ let bankDirtyAt = 0;         // when it was last typed in, for the autosave
 let bankSaveTimer = null;
 let bankBusy = false;
 let bankFind = { component:0, strand:"", point:"", search:"" };
-/* Whether the three specification dropdowns are on show. Off means the list
-   is the lesson's own point, which is what a teacher who came in through
-   1.1.1 wants to see; on widens it to the whole bank and offers the
-   dropdowns to narrow it again. */
-let bankMore = false;
+/* Whether the list has been widened to the whole bank. Off means the
+   lesson's own point, which is what a teacher who came in through 1.1.1
+   wants to see; on shows everything and brings out the search box and the
+   filter button to narrow it again. */
+let bankAll = false;
 
 function bankId(){
   return "k" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
@@ -4572,8 +4772,14 @@ function showBank(on){
     /* With no point to start from the list is already the whole bank, so
        there is nothing behind the button and the dropdowns are the only way
        to find anything. */
-    if (!p) bankMore = true;
+    if (!p) bankAll = true;
     bankLoad();
+  } else {
+    /* Both previews are the same lesson page reading the same key, and only
+       one of them is ever on screen. Leaving the task builder therefore has
+       to put the lesson back, or the preview beside the lesson is still
+       showing the last task that was written. */
+    schedulePreview();
   }
   if (typeof paintBuildBar === "function") paintBuildBar();
 }
@@ -4657,15 +4863,17 @@ function renderBank(){
 }
 
 function paintBankFilter(level){
-  $("bankMore").hidden = !bankMore;
-  const btn = $("bankMoreBtn");
-  btn.textContent = bankMore ? "Show fewer tasks" : "Show more tasks";
-  btn.title = bankMore
+  /* Searching and filtering only mean something once the list is more than
+     one point's worth, so they come out with it and go away again. */
+  const btn = $("bankAllBtn");
+  btn.classList.toggle("on", bankAll);
+  btn.setAttribute("aria-pressed", bankAll ? "true" : "false");
+  btn.title = bankAll
     ? "Back to the tasks for " + (specLabel(lesson.point) || "this lesson")
-    : "Look through the tasks written for the rest of the specification";
-  /* Nothing to go back to, so pressing it would only take the dropdowns
-     away and leave the same list behind. */
-  btn.hidden = bankMore && !specPointOf(lesson.point || "");
+    : "Look through every task in the bank";
+  $("bankSearchWrap").hidden = !bankAll;
+  $("bankFilterWrap").hidden = !bankAll;
+  if (!bankAll) $("bankFilterMenu").hidden = true;
   const comps = specComponents(level);
   const cs = $("bankComponent");
   cs.innerHTML = "";
@@ -4681,7 +4889,7 @@ function paintBankFilter(level){
   const ss = $("bankStrand");
   ss.innerHTML = "";
   const anyS = document.createElement("option");
-  anyS.value = ""; anyS.textContent = "Every strand";
+  anyS.value = ""; anyS.textContent = "Every part";
   ss.appendChild(anyS);
   specStrands(level, bankFind.component).forEach(s => {
     const o = document.createElement("option");
@@ -4692,7 +4900,7 @@ function paintBankFilter(level){
   const ps = $("bankPoint");
   ps.innerHTML = "";
   const anyP = document.createElement("option");
-  anyP.value = ""; anyP.textContent = bankFind.strand ? "Every point in it" : "Pick a strand first";
+  anyP.value = ""; anyP.textContent = bankFind.strand ? "Every point in it" : "Pick a part first";
   ps.appendChild(anyP);
   ps.disabled = !bankFind.strand;
   specPoints(bankFind.strand).forEach(p => {
@@ -4715,19 +4923,37 @@ on("bankStrand", "change", () => {
 on("bankPoint", "change", () => { bankFind.point = $("bankPoint").value; bankLoad(); });
 on("bankSearch", "input", () => { bankFind.search = $("bankSearch").value; renderBank(); });
 on("bankNew", "click", () => bankNew());
-/* Opening it up really does show more tasks: the filter is cleared to the
-   whole level, and the dropdowns appear to narrow it again. Closing it puts
-   the lesson's own point back, so the button says what it does both ways. */
-on("bankMoreBtn", "click", () => {
-  bankMore = !bankMore;
-  if (bankMore){ bankFind.component = 0; bankFind.strand = ""; bankFind.point = ""; }
+/* All tasks really does mean all of them: the filter is cleared to the whole
+   level, and the search box and the filter button come out to narrow it
+   again. Pressing it again puts the lesson's own point back, so the button
+   says what it does both ways. */
+on("bankAllBtn", "click", () => {
+  bankAll = !bankAll;
+  if (bankAll){ bankFind.component = 0; bankFind.strand = ""; bankFind.point = ""; }
   else {
     const p = specPointOf(lesson.point || "");
     bankFind.component = p ? (Number(p.component) || 0) : 0;
     bankFind.strand = p ? (p.parent || p.id) : "";
     bankFind.point = p ? p.id : "";
+    bankFind.search = "";
+    $("bankSearch").value = "";
   }
   bankLoad();
+});
+/* The three dropdowns, in a menu off the funnel. menus.js puts it wherever
+   it fits and turns it into a pop-up on a screen with no room at all. */
+on("bankFilterBtn", "click", (e) => {
+  e.stopPropagation();
+  const m = $("bankFilterMenu"), btn = $("bankFilterBtn");
+  if (!m.hidden){ m.hidden = true; return; }
+  openFilterMenu(btn, m);
+});
+document.addEventListener("pointerdown", (e) => {
+  const m = $("bankFilterMenu"), b = $("bankFilterBtn");
+  if (!m || m.hidden) return;
+  if (e.target === b || (b.contains && b.contains(e.target))) return;
+  if (m.contains && m.contains(e.target)) return;
+  m.hidden = true;
 });
 
 /* ---------- the one being edited ---------- */
@@ -4778,7 +5004,7 @@ async function bankDelete(id){
     if (authFailed(r.status, () => bankDelete(id))) return;
     if (!r.ok) throw new Error((await r.json()).error || "Could not delete that.");
     if (bankTask && bankTask.id === id) bankTask = null;
-    pointTasksFor = null;               // the lesson's column has it too
+    pointTasksFor = null; palAllFor = null;   // the lesson's column has them too
     /* Lessons already holding a copy keep it, which is worth saying once
        rather than leaving a teacher to wonder. */
     bankSay("Deleted. Lessons using it keep their copy.");
@@ -4858,6 +5084,10 @@ function paintBankEditor(){
     bankRoot = null;
     viewAll = wasAll;
   }
+  /* Debounced, not immediate: this runs again on every button pressed
+     anywhere in the editor, and reloading the frame each time would leave a
+     teacher watching it flicker. */
+  scheduleBankPreview();
 }
 
 /* Typed in. Saved two and a half seconds after they stop, the way the
@@ -4868,7 +5098,51 @@ function bankTouch(){
   bankSay("Saving…");
   clearTimeout(bankSaveTimer);
   bankSaveTimer = setTimeout(() => bankSaveNow(true), 2500);
+  scheduleBankPreview();
 }
+
+/* ---------- the preview ----------
+   A task on its own is not something the lesson page can open, so it is
+   wrapped in the smallest lesson that will hold it: one page, one task.
+   Everything else is the lesson builder's preview exactly, including the
+   localStorage key, because only one of the two is ever on screen. */
+let bankPrevTimer = null;
+function scheduleBankPreview(){
+  clearTimeout(bankPrevTimer);
+  $("bankPrevMsg").textContent = "updating…";
+  bankPrevTimer = setTimeout(refreshBankPreview, 700);
+}
+function bankPreviewLesson(){
+  const blocks = [];
+  idsUsed = new Set();
+  try{ compileOne(bankTask.block, "preview1", blocks); }
+  finally{ idsUsed = null; }
+  /* A page compiles to a page, and anything else wants one putting round
+     it, because a lesson is made of pages and the page is what draws the
+     task bar and the Continue button a student would see. */
+  const page = (blocks[0] && blocks[0].type === "page")
+    ? blocks[0]
+    : { type:"page", id:"preview1", title: bankTask.title || "", task:"",
+        startLocked:false, blocks: blocks };
+  page.startLocked = false;
+  return { title: bankTask.title || "Task preview", blocks: [page] };
+}
+function refreshBankPreview(){
+  const frame = $("bankPrev");
+  if (!frame) return;
+  if (!bankTask || !bankTask.block){
+    frame.removeAttribute("src");
+    $("bankPrevMsg").textContent = "";
+    return;
+  }
+  try{
+    localStorage.setItem("hub_preview", JSON.stringify(bankPreviewLesson()));
+    try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){}
+    frame.src = "lesson.html?id=__preview&builder=1&t=" + Date.now();
+    $("bankPrevMsg").textContent = "up to date";
+  }catch(e){ $("bankPrevMsg").textContent = e.message; }
+}
+on("bankPrevBtn", "click", refreshBankPreview);
 async function bankSaveNow(quiet){
   clearTimeout(bankSaveTimer);
   if (!bankTask || !bankTask.block) return;
@@ -4912,7 +5186,7 @@ async function bankSaveNow(quiet){
     /* The lesson's left column holds its own copy of the tasks for its
        point. A task just written is one of those, so it is thrown away
        here and fetched again rather than turning up only after a reload. */
-    pointTasksFor = null;
+    pointTasksFor = null; palAllFor = null;
     await bankLoad();
   }catch(e){
     bankBusy = false;
@@ -5103,6 +5377,8 @@ on("moreBtn", "click", (e) => {
   if (!m.hidden){ m.hidden = true; return; }
   const items = [["Save a copy", () => $("copyBtn").click()],
                  ["JSON", () => $("jsonBtn").click()],
+                 ["Import a lesson", () => $("importLesson").click()],
+                 ["Import a page", () => $("importPage").click()],
                  ["Delete lesson", () => $("delLesson").click()]];
   if (window.openMenu) window.openMenu(b, m, "More", items);
   else m.hidden = false;
@@ -5241,6 +5517,299 @@ on("jsonBtn", "click", () => {
     box.appendChild(copy);
   });
 });
+/* ====================================================================
+   IMPORTING FROM A FILE
+
+   A lesson, a page, or tasks for the bank, out of a JSON file. The shape
+   is the one the JSON button writes, because the obvious way to get one
+   of these files is to export it from somewhere else.
+
+   Read forgivingly. These files are written by hand as often as they are
+   exported, so a bare block, a list of blocks and a wrapper object all
+   mean the same thing here. Anything the builder does not recognise is
+   dropped and counted rather than let through: a task type nothing can
+   draw is a lesson that breaks in front of a class.
+
+   Nothing imported saves itself, with one exception. A lesson and a page
+   land in the builder for the teacher to look at and then Save; tasks have
+   nowhere to land but the bank, so those are written, and the count says
+   how many.
+   ==================================================================== */
+const KNOWN_TYPES = Object.keys(LABEL);
+
+function readJsonFile(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error("That file could not be read."));
+    r.onload = () => {
+      try{ resolve(JSON.parse(String(r.result))); }
+      catch(e){ reject(new Error("That file is not valid JSON. It may have been cut off, or be missing a bracket.")); }
+    };
+    r.readAsText(file);
+  });
+}
+
+/* A pop-up with a file picker and a box to paste into, because a school
+   laptop's file picker is not always the easy way and half of these will
+   arrive as text in a message. */
+function importPopup(opts){
+  openModal(box => {
+    const x = el("button","btn-ghost iconbtn modal-x","✕");
+    x.addEventListener("click", closeModal); box.appendChild(x);
+    box.appendChild(el("h2","", opts.title));
+    box.appendChild(el("p","modal-text", opts.help));
+    const msg = el("p","hint","");
+
+    const pick = el("button","btn-ghost modal-cta","Choose a file");
+    const file = el("input","sb-picker");
+    file.type = "file";
+    file.accept = "application/json,.json";
+    pick.addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+      if (!file.files || !file.files[0]) return;
+      msg.textContent = "Reading…";
+      try{
+        const data = await readJsonFile(file.files[0]);
+        await opts.take(data, msg);
+      }catch(e){ msg.textContent = e.message; }
+      file.value = "";
+    });
+    box.appendChild(pick);
+    box.appendChild(file);
+
+    const w = el("div","bfield");
+    w.appendChild(el("label","","Or paste it here"));
+    const area = el("textarea");
+    area.rows = 7; area.className = "mono";
+    area.placeholder = opts.example || "{ }";
+    w.appendChild(area);
+    box.appendChild(w);
+    const go = el("button","btn-primary modal-cta","Import");
+    go.addEventListener("click", async () => {
+      const text = area.value.trim();
+      if (!text){ msg.textContent = "Paste the file's contents in, or choose a file."; return; }
+      let data;
+      try{ data = JSON.parse(text); }
+      catch(e){ msg.textContent = "That is not valid JSON. It may have been cut off, or be missing a bracket."; return; }
+      msg.textContent = "Reading…";
+      try{ await opts.take(data, msg); }
+      catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go);
+    box.appendChild(msg);
+    scrollBody(box);
+  });
+}
+
+/* Whatever shape it arrived in, as a list of blocks the builder can edit.
+   fromCompiled does the converting, so an imported lesson is read exactly
+   the way a saved one is and there is one set of rules for both. */
+function blocksFromImport(data){
+  let raw = null;
+  if (Array.isArray(data)) raw = data;
+  /* type comes first. A page has a type AND a blocks list, so asking about
+     blocks first threw the page itself away and imported its contents as
+     loose tasks. A lesson has a blocks list and no type of its own, which
+     is what keeps these two apart. */
+  else if (data && data.type) raw = [data];
+  else if (data && data.page) raw = [data.page];
+  else if (data && Array.isArray(data.blocks)) raw = data.blocks;
+  if (!raw) throw new Error("There is nothing in there that looks like a task or a page.");
+  const dropped = [];
+  /* All the way down, not just the top. A page holds tasks and a choice
+     holds a set of them for each option, and one unknown type anywhere in
+     there is a task the lesson page cannot draw in front of a class. */
+  const clean = (list) => (list || []).filter(b => {
+    const ok = b && typeof b === "object" && KNOWN_TYPES.indexOf(b.type) >= 0;
+    if (!ok){ dropped.push(b && b.type ? b.type : "something with no type"); return false; }
+    if (Array.isArray(b.blocks)) b.blocks = clean(b.blocks);
+    if (Array.isArray(b.options)) b.options.forEach(o => { if (o) o.blocks = clean(o.blocks); });
+    return true;
+  });
+  const keep = clean(raw.slice());
+  if (!keep.length) throw new Error("None of those are tasks this builder knows how to make.");
+  return { blocks: fromCompiled({ blocks: keep }, {}).blocks, dropped: dropped };
+}
+function saidDropped(dropped){
+  if (!dropped.length) return "";
+  const names = dropped.filter((d, i) => dropped.indexOf(d) === i).join(", ");
+  return " " + dropped.length + (dropped.length === 1 ? " thing was" : " things were")
+       + " left out, because nothing here can make " + names + ".";
+}
+
+/* ---------- a whole lesson ---------- */
+function importLessonFile(){
+  const start = () => importPopup({
+    title: "Import a lesson",
+    help: "A lesson file, the kind the JSON button writes. It opens here for you to "
+        + "look at and then save, so nothing on the site changes until you press Save.",
+    example: '{ "title": "The CPU", "year": "Year 10", "unit": "1.1 Systems architecture",\n  "blocks": [ { "type": "page", "title": "Starter", "blocks": [] } ] }',
+    take: async (data) => {
+      if (!data || typeof data !== "object" || Array.isArray(data))
+        throw new Error("A lesson file is one object with a title and a list of blocks in it.");
+      if (!Array.isArray(data.blocks))
+        throw new Error("That file has no blocks in it, so it is not a lesson.");
+      const check = blocksFromImport(data);          // throws if there is nothing usable
+      const made = fromCompiled(data, {});
+      made.blocks = check.blocks;
+      lesson = made;
+      /* lesson.savedAs is what Save writes over. Cleared, so an imported
+         lesson is saved as a new one rather than on top of whatever was
+         open when it came in. */
+      lesson.savedAs = null;
+      lesson.code = "";
+      openPageRef = null; viewAll = false;
+      pointTasksFor = null; palAllFor = null;
+      tidyIntoPages();
+      startFolded();
+      showTitle(); paintPickers();
+      setMode(!!lesson.assessment, !!lesson.practical);
+      render(); schedulePreview();
+      dirty = true;
+      closeModal();
+      say("Lesson imported", "“" + (lesson.title || "Untitled lesson") + "” is open here."
+          + saidDropped(check.dropped)
+          + " Nothing is on the site until you press Save.");
+    }
+  });
+  if (!lesson.blocks.length && !lesson.title.trim()){ start(); return; }
+  /* Whatever is on screen is about to be replaced. */
+  openModal(box => {
+    box.appendChild(el("h2","","Replace what is open?"));
+    box.appendChild(el("p","modal-text",
+      "Importing a lesson puts it in place of “" + (lesson.title || "the lesson") + "”. "
+      + "Anything here that has not been saved goes with it."));
+    const yes = el("button","btn-primary modal-cta","Import anyway");
+    yes.addEventListener("click", () => { closeModal(); start(); });
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(yes); box.appendChild(no);
+  });
+}
+
+/* ---------- one page ---------- */
+function importPageFile(){
+  importPopup({
+    title: "Import a page",
+    help: "A page, or just a list of tasks, which is added to the end of this lesson. "
+        + "A list of tasks with no page round it gets one.",
+    example: '{ "type": "page", "title": "Memory", "blocks": [\n  { "type": "text", "html": "<p>RAM is volatile.</p>" }\n] }',
+    take: async (data) => {
+      const got = blocksFromImport(data);
+      /* One page arrives as a page. Anything else is tasks, and tasks go on
+         a page, because that is what a lesson is made of. */
+      const onlyPage = got.blocks.length === 1 && got.blocks[0].type === "page";
+      const page = onlyPage ? got.blocks[0]
+                            : Object.assign(BLANK.page(), { title:"Imported page", blocks: got.blocks });
+      if (lesson.assessment && !lesson.practical){
+        /* An assessment has no pages, so what comes in is its questions. */
+        (onlyPage ? page.blocks : got.blocks).forEach(b => lesson.blocks.push(b));
+      } else {
+        lesson.blocks.push(page);
+        openPageRef = page; viewAll = false;
+        tellPreview(page);
+      }
+      dirty = true;
+      render(); schedulePreview();
+      closeModal();
+      say("Page imported",
+          (onlyPage ? "“" + (page.title || "Untitled page") + "”" : got.blocks.length + " tasks")
+          + " added to the end of this lesson." + saidDropped(got.dropped)
+          + " Press Save when you are happy with it.");
+    }
+  });
+}
+
+/* ---------- tasks, into the bank ----------
+   These have nowhere to sit but the bank, so they are written to it. Each
+   one needs a level, and that comes from the year group, so the lesson has
+   to be a GCSE or A Level one before this means anything. */
+function importTasksFile(){
+  const level = specLevel();
+  if (!level){
+    say("Pick a year group first", "The task bank belongs to a GCSE or A Level year group.");
+    return;
+  }
+  if (OFFLINE){
+    say("The bank needs the server", "Tasks are kept in the database, so there is no bank in offline mode.");
+    return;
+  }
+  importPopup({
+    title: "Import tasks",
+    help: "One task, a list of tasks, or a file with a tasks list in it. Anything that "
+        + "does not say where it goes is filed where the list is pointing now. They are "
+        + "saved to the bank straight away.",
+    example: '{ "tasks": [\n  { "title": "Fetch-execute", "point": "j277-1.1.1",\n    "task": { "type": "exam", "prompt": "Describe the cycle.", "marks": 4 } }\n] }',
+    take: async (data, msg) => {
+      const wanted = tasksFromImport(data);
+      if (!wanted.length) throw new Error("There are no tasks in there.");
+      msg.textContent = "Saving " + wanted.length + "…";
+      let saved = 0, failed = 0;
+      for (const t of wanted){
+        try{ await saveImportedTask(t, level); saved++; }
+        catch(e){ failed++; }
+      }
+      pointTasksFor = null; palAllFor = null;
+      await bankLoad();
+      closeModal();
+      say(saved + (saved === 1 ? " task imported" : " tasks imported"),
+          failed ? failed + " could not be saved. The rest are in the bank."
+                 : "They are in the bank and ready to use.");
+    }
+  });
+}
+/* The several shapes a task file comes in, as one list. A task can be a
+   bare block, or a block wrapped in something saying what it is called and
+   where it is filed. */
+function tasksFromImport(data){
+  let raw = null;
+  if (Array.isArray(data)) raw = data;
+  else if (data && Array.isArray(data.tasks)) raw = data.tasks;
+  else if (data && data.type) raw = [data];
+  if (!raw) throw new Error("There is nothing in there that looks like a task.");
+  const out = [];
+  raw.forEach(row => {
+    if (!row || typeof row !== "object") return;
+    /* The block itself, wherever it is hiding in this row. */
+    let block = row.type ? row : (row.task || row.data || row.block || null);
+    if (typeof block === "string"){ try{ block = JSON.parse(block); }catch(e){ block = null; } }
+    if (!block || KNOWN_TYPES.indexOf(block.type) < 0) return;
+    const ready = fromCompiled({ blocks: [block] }, {}).blocks[0];
+    if (!ready) return;
+    out.push({
+      title: String(row.title || block.title || plainWords(block.prompt) || LABEL[block.type] || "Untitled task").slice(0, 200),
+      point: String(row.point || block.point || bankFind.point || bankFind.strand || "").trim(),
+      component: parseInt(row.component || block.component, 10) || 0,
+      marks: Math.max(0, parseInt(row.marks !== undefined ? row.marks : block.marks, 10) || 0),
+      block: ready
+    });
+  });
+  return out;
+}
+async function saveImportedTask(t, level){
+  const API = (window.HUB && window.HUB.API) || "";
+  const p = specPointOf(t.point);
+  const block = t.block;
+  /* An exam question is shown its number and the part it belongs to, and
+     the lesson page cannot look those up, so they travel on the task. */
+  if (block.type === "exam" && p){
+    block.point = p.id; block.code = p.code;
+    block.strand = p.parent ? ((specPointOf(p.parent) || {}).title || "") : p.title;
+    if (!block.component) block.component = Number(p.component) || 0;
+  }
+  const r = await fetch(API + "/api/teacher/tasks", { method:"POST",
+    headers: window.teacherAuth.json(),
+    body: JSON.stringify({ op:"save", id: bankId(), title: t.title, level: level,
+                           component: t.component || (p ? Number(p.component) || 0 : 0),
+                           point: p ? p.id : "", kind: block.type,
+                           marks: block.type === "exam" ? (parseInt(block.marks, 10) || 0) : t.marks,
+                           data: JSON.stringify(block) }) });
+  if (!r.ok) throw new Error((await r.json()).error || "Could not save that task.");
+}
+on("importLesson", "click", () => { $("moreMenu").hidden = true; importLessonFile(); });
+on("importPage", "click", () => { $("moreMenu").hidden = true; importPageFile(); });
+on("bankImport", "click", importTasksFile);
+
 /* ---------- publishing straight to the site ----------
    The lesson goes into the school database through the teacher API, so there
    are no files to upload. It arrives as a draft; publishing to classes still
@@ -5601,6 +6170,11 @@ async function loadUnitsAndMaybeLesson(){
 function fromCompiled(data, meta){
   const out = { title: data.title || (meta && meta.title) || "", intro: data.intro || "",
                 unit: data.unit || (meta && meta.unit) || "", year: data.year || "",
+                /* Where it sits on the specification. Left out here, reopening
+                   a GCSE lesson lost its point: the left column went back to
+                   the plain palette and the task builder stopped knowing what
+                   the lesson was about. */
+                point: data.point || "",
                 assessment: !!data.assessment && !data.practical, practical: !!data.practical,
                 homework: !!data.homework,
                 linger: !!data.linger,
@@ -5608,7 +6182,23 @@ function fromCompiled(data, meta){
                 versionNote: data.versionNote || "", versionCode: data.versionCode || "",
                 marking: data.marking || "score", outOf: data.outOf || 20, rubric: data.rubric || [],
                 topics: data.topics || {}, responses: {}, extensions: [], blocks: [] };
+  /* Two things belong to every task whatever kind it is, and every branch
+     below that builds a fresh object was dropping both.
+
+     fromTask says which bank task a copy came from, and it is what gives
+     that task a stable id when the lesson is compiled. Lost on reopening, a
+     short answer or a quiz out of the bank went back to an id made from its
+     position, and every answer already saved against the old id was
+     orphaned the next time the lesson was saved.
+
+     required is the teacher's "this one can be skipped". */
   const back = (b) => {
+    const made = backOne(b);
+    if (made && b && b.fromTask) made.fromTask = b.fromTask;
+    if (made && b && b.required === false) made.required = false;
+    return made;
+  };
+  const backOne = (b) => {
     /* startLocked and passHash used to be dropped here, so reopening a lesson
        quietly unlocked every page in it. */
     if (b.type === "page") return { type:"page", title:b.title || "", task:b.task || "",

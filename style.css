@@ -1866,9 +1866,9 @@ body.workpage .grow{flex:1}
 /* the teacher picker inside a pop-up, and every dropdown in the builder:
    one rule, so the task builder's filters are the same boxes as the ones
    in a task's own editor rather than something that looks nearly right */
-.bfield select, .bank-filter select, .bank-more select{width:100%; height:44px; padding:0 12px; font-size:15px; font-family:var(--body);
+.bfield select, .filtermenu select{width:100%; height:44px; padding:0 12px; font-size:15px; font-family:var(--body);
   color:var(--text); background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px}
-.bfield select:focus, .bank-filter select:focus, .bank-more select:focus{border-color:var(--amber); outline:none}
+.bfield select:focus, .filtermenu select:focus{border-color:var(--amber); outline:none}
 .bfield .brow select{flex:1}
 #whoView .station{text-align:center}
 #whoView .bigselect{text-align:center; text-align-last:center}
@@ -4436,28 +4436,18 @@ html[data-bank=yes] .build-preview{display:none}
    know the difference. */
 @media (min-width:1181px){
   html.builder .bank{flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain}
-  /* Search, Show more tasks and + New task stay put while the task being
+  /* + New task, All tasks and the funnel stay put while the task being
      written scrolls under them. */
   html.builder .bank-filter{position:sticky; top:0; z-index:4; background:var(--bg);
     padding:12px 0 10px; margin:0}
 }
 .bank-filter{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 16px}
-/* The three dropdowns are a row of their own under the search box, and only
-   when they have been asked for. width:100% earlier in the file put each of
-   them on a line of its own, which is three lines of filtering above two
-   lines of task. */
-.bank-more{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 16px}
-.bank-more[hidden]{display:none}
-/* width:auto beats the width:100% every builder dropdown is given further
-   up the file. Left at 100% each one wraps onto a line of its own, which is
-   the three lines of filtering this row was taken out of the way to stop. */
-.bank-more select{width:auto; min-width:190px; max-width:100%}
 .bank-spacer{flex:1}
 .bank-said{font-size:13.5px; color:var(--muted)}
 .bank-said[data-bad=yes]{color:var(--red)}
 /* The list and the one being edited, side by side. The list keeps a fixed
    share so a long title cannot squeeze the editor out of the way. */
-.bank-cols{display:grid; grid-template-columns:minmax(0,320px) minmax(0,1fr); gap:18px;
+.bank-cols{display:grid; grid-template-columns:minmax(0,300px) minmax(0,1fr) minmax(0,420px); gap:18px;
   align-items:start}
 .bank-list{display:flex; flex-direction:column; gap:8px; max-height:70vh;
   max-height:min(70dvh, 760px); overflow-y:auto; padding-right:4px}
@@ -4502,12 +4492,12 @@ html[data-bank=yes] .build-preview{display:none}
 }
 @media (max-width:640px){
   .bank{padding:0 12px 40px}
-  .bank-filter, .bank-more{gap:8px}
+  .bank-filter{gap:8px}
   /* min-width:0 as well as width:100%: 190px is over half of a 320px
      screen, and a minimum wins over a width. */
-  .bank-filter .searchbox, .bank-more select{width:100%; min-width:0}
+  .bank-filter .searchbox{width:100%; min-width:0}
   .bank-spacer{display:none}
-  .bank-filter .btn-primary, .bank-filter .bank-morebtn{width:100%}
+  .bank-filter .btn-primary, .bank-filter .toggle, .bank-filter #bankImport{flex:1 1 auto}
   .bank-headrow{flex-direction:column; align-items:stretch}
   .bank-types{grid-template-columns:1fr}
   .examq-marks{margin-left:0}
@@ -4613,4 +4603,64 @@ html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
   .buildswitch{gap:2px; padding:2px}
   .buildtab{font-size:13.5px; padding:5px 10px}
   .homebar .title{font-size:13.5px}
+}
+
+/* ---------- the filter menu, on both screens ----------
+   The three specification dropdowns, in a menu off a funnel. They are far
+   too wide to sit in a bar or in a 200px column, and they are wanted
+   rarely enough that a button is the right price for them. */
+.filtermenu{padding:12px; gap:4px; min-width:250px}
+.filtermenu label{font-size:12.5px; font-weight:700; color:var(--muted); padding:6px 2px 2px}
+.filtermenu select{width:100%}
+.filtermenu select:disabled{color:var(--dim); background:var(--panel-2)}
+/* Anchored the other way round when hanging off a button near the left of
+   the screen. Set by measuring where the menu landed, not by guessing from
+   the width of the column. */
+.filtermenu.anchor-left{left:0; right:auto}
+
+/* An outline button that stays pressed. Not a filled one: filled is for
+   the thing a screen is for, and this only changes what is listed. */
+.toggle{white-space:nowrap}
+.toggle.on{border-color:var(--amber); color:var(--amber); background:var(--panel-2);
+  box-shadow:inset 0 0 0 1px var(--amber)}
+
+/* ---------- the task builder's preview ---------- */
+.bank-preview{display:flex; flex-direction:column; min-width:0;
+  border:1.5px solid var(--line); border-radius:16px; background:var(--panel); overflow:hidden}
+.bank-preview .prev-head{display:flex; align-items:center; gap:8px; padding:8px 10px;
+  border-bottom:1px solid var(--line); background:var(--panel-2)}
+.bank-preview .prev-head b{font-family:var(--display); font-size:14px}
+.bank-preview .prev-head .hint{flex:1; font-size:12.5px; margin:0}
+.bank-preview .prev-hold{height:70vh; height:min(70dvh, 700px)}
+.bank-preview iframe{width:100%; height:100%; border:none; display:block; background:var(--bg)}
+
+/* ---------- the left column's second and third sections ---------- */
+.pal-allrow{display:flex; align-items:center; gap:6px; margin:14px 0 8px}
+.pal-allrow .toggle{flex:1; min-width:0; font-size:13.5px; padding:7px 10px;
+  overflow:hidden; text-overflow:ellipsis}
+.pal-allrow .iconbtn{flex:none}
+#palAllList{display:flex; flex-direction:column; gap:8px; max-height:38vh;
+  max-height:min(38dvh, 420px); overflow-y:auto}
+#palAllList[hidden]{display:none}
+#palAllList .bhelp{margin:0 0 4px}
+
+@media (max-width:1180px){
+  /* The preview goes under the two columns once there is no room for three
+     across, which is the same width the lesson builder's preview drops at. */
+  .bank-cols{grid-template-columns:minmax(0,320px) minmax(0,1fr)}
+  .bank-preview{grid-column:1 / -1}
+  .bank-preview .prev-hold{height:60vh; height:min(60dvh, 520px)}
+}
+@media (max-width:900px){
+  /* One column again. The rule that does this is earlier in the file and
+     the 1180px block just above is later, so at 390px that one was winning
+     and the editor came out 28px wide beside a 320px list. Order settles a
+     tie, and a wider breakpoint written afterwards is exactly such a tie. */
+  .bank-cols{grid-template-columns:minmax(0,1fr)}
+  .bank-preview{grid-column:auto}
+  .bank-preview .prev-hold{height:52vh; height:min(52dvh, 440px)}
+}
+@media (max-width:640px){
+  .filtermenu{min-width:0}
+  .pal-allrow{gap:4px}
 }
