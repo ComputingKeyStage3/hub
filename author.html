@@ -957,6 +957,10 @@ function compileOne(b, id, target){
          picture nobody has changed the shape of stays the three lines it was.
          keepArrays drops "" and undefined, which is what does the dropping. */
       push(keepArrays({ type:"picture", id, title: b.title || "", url: b.url || "",
+             /* Which picture in the database this is, where it was
+                uploaded rather than linked to. Dropped here and the
+                lesson would reopen with an empty frame. */
+             imgId: b.imgId || "",
              caption: b.caption || "", note: b.note || "", alt: b.alt || "",
              size: (b.size && b.size !== "full") ? b.size : "",
              width: (b.size === "custom") ? String(b.width || "") : "",
@@ -1809,7 +1813,11 @@ function card(b, i, arr){
     const w = el("div","bfield");
     w.appendChild(el("label","", label));
     const ed = window.richText(b[key] || "", (html) => { b[key] = html; saveDraft(); schedulePreview(); },
-                               { rows: o.rows || 4, placeholder: o.placeholder });
+                               { rows: o.rows || 4, placeholder: o.placeholder,
+                                 /* A picture pasted in here goes into the
+                                    database, not into the lesson's own JSON. */
+                                 upload: pasteUpload,
+                                 imageSrc: (id) => pictureSrc({ imgId: id }) });
     w.appendChild(withHelp(ed, o.help));
     body.appendChild(w);
   }
@@ -1895,12 +1903,57 @@ function card(b, i, arr){
     R("Paragraph", "html", { rows:5 });
   }
   if (b.type === "picture"){
-    F("Address of the picture", "url", { help:"Right-click a picture on the web and choose \u201cCopy image address\u201d." });
-    if (b.url){
+    /* Two ways to get a picture in, and the one a teacher reaches for
+       most is first. Uploading puts it in the database and hands it out
+       through the API; an address points at wherever it already lives,
+       which is right for a diagram in site/images and for anything on
+       the web that is meant to be linked to. */
+    const up = el("div","bfield");
+    up.appendChild(el("label","","The picture"));
+    const upRow = el("div","brow");
+    const pick = el("button","btn-ghost bmini2", b.imgId ? "Replace the picture" : "Upload a picture");
+    const file = el("input","sb-picker");
+    file.type = "file"; file.accept = "image/*";
+    const said = el("span","bhelp","");
+    pick.addEventListener("click", () => file.click());
+    file.addEventListener("change", () => {
+      if (!file.files || !file.files[0]) return;
+      said.textContent = "Shrinking and uploading\u2026";
+      said.classList.remove("warn");
+      uploadPicture(file.files[0], b.alt || "", (made, why) => {
+        file.value = "";
+        if (!made){ said.textContent = why; said.classList.add("warn"); return; }
+        b.imgId = made.id;
+        b.url = "";                 // the upload is the picture now
+        render(); schedulePreview();
+      });
+    });
+    upRow.appendChild(pick);
+    if (b.imgId){
+      const drop = el("button","btn-ghost bmini2","Remove it");
+      drop.addEventListener("click", () => { b.imgId = ""; render(); schedulePreview(); });
+      upRow.appendChild(drop);
+    }
+    upRow.appendChild(said);
+    up.appendChild(upRow);
+    up.appendChild(file);
+    body.appendChild(up);
+    if (!b.imgId)
+      F("Or the address of one", "url",
+        { help:"Right-click a picture on the web and choose \u201cCopy image address\u201d. A picture in the "
+             + "site's own images folder is written as images/whatever.jpg." });
+    const shown = pictureSrc(b);
+    if (shown){
       const prev = el("div","bfield");
-      const img = el("img","bpreview"); img.src = b.url; img.alt = "";
-      img.addEventListener("error", () => { img.hidden = true; prev.appendChild(el("p","bhelp warn","That address did not load a picture.")); });
+      const img = el("img","bpreview"); img.src = shown; img.alt = "";
+      img.addEventListener("error", () => {
+        img.hidden = true;
+        prev.appendChild(el("p","bhelp warn", b.imgId
+          ? "That upload could not be loaded back."
+          : "That address did not load a picture."));
+      });
       prev.appendChild(img);
+      if (b.imgId) prev.appendChild(el("p","bhelp","Kept in the database, not in the public site folder."));
       body.appendChild(prev);
     }
     F("Caption underneath (optional)", "caption");
@@ -5713,6 +5766,94 @@ on("jsonBtn", "click", () => {
     box.appendChild(copy);
   });
 });
+/* ====================================================================
+   PICTURES
+
+   A picture a lesson shows goes into the database and is handed out by
+   the API. site/ is a public repository served by GitHub Pages, so a
+   picture put in there is published to the open web, and most of what a
+   KS4 lesson shows comes off a past paper or a textbook: a school may
+   copy that for its own pupils, not publish it.
+
+   Shrunk here rather than on the server, because the browser has a
+   canvas and a serverless function has not. 1400px is enough for a
+   screenshot of an exam question to stay readable on a laptop, and a
+   diagram the department drew can still go in site/images and be given
+   as an address, where it costs nothing to serve.
+   ==================================================================== */
+const PIC_MAX_SIDE = 1400;
+const PIC_TARGET = 700000;          // base64 length the server will take
+
+/* A File or a data URL in, a small JPEG data URL out. PNG is kept for
+   anything with transparency in it, because a logo laid over white
+   stops being a logo. */
+function shrinkPicture(source, cb){
+  const probe = new Image();
+  probe.onload = () => {
+    let w = probe.naturalWidth, h = probe.naturalHeight;
+    if (!w || !h){ cb(null, "That picture could not be read."); return; }
+    const scale = Math.min(1, PIC_MAX_SIDE / Math.max(w, h));
+    w = Math.round(w * scale); h = Math.round(h * scale);
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(probe, 0, 0, w, h);
+    let out = "", mime = "image/jpeg";
+    /* Quality comes down in steps rather than being guessed at once: a
+       photograph and a screenshot of text compress nothing like each
+       other, and the only honest way to hit a size is to look. */
+    const steps = [0.85, 0.72, 0.6, 0.45, 0.3];
+    for (let i = 0; i < steps.length; i++){
+      out = c.toDataURL("image/jpeg", steps[i]);
+      if (out.length <= PIC_TARGET) break;
+    }
+    if (out.length > PIC_TARGET){ cb(null, "That picture is too big even squeezed. Crop it and try again."); return; }
+    cb({ data: out, mime: mime, width: w, height: h }, null);
+  };
+  probe.onerror = () => cb(null, "That file is not a picture this can read.");
+  if (typeof source === "string") probe.src = source;
+  else {
+    const reader = new FileReader();
+    reader.onerror = () => cb(null, "That file could not be read.");
+    reader.onload = () => { probe.src = String(reader.result); };
+    reader.readAsDataURL(source);
+  }
+}
+
+/* Shrink it, send it, and come back with the id to point at. */
+function uploadPicture(source, alt, cb){
+  if (OFFLINE){ cb(null, "Pictures are uploaded to the database, and there is no server in offline mode. Use an address instead."); return; }
+  shrinkPicture(source, async (made, why) => {
+    if (!made){ cb(null, why); return; }
+    const API = (window.HUB && window.HUB.API) || "";
+    try{
+      const r = await fetch(API + "/api/teacher/upload-image", { method:"POST",
+        headers: window.teacherAuth.json(),
+        body: JSON.stringify({ data: made.data, mime: made.mime,
+                               width: made.width, height: made.height, alt: alt || "" }) });
+      if (authFailed(r.status, () => uploadPicture(source, alt, cb))) return;
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "That picture could not be saved.");
+      cb({ id: d.id, width: made.width, height: made.height }, null);
+    }catch(e){ cb(null, e.message || "That picture could not be saved."); }
+  });
+}
+/* What a formatting box calls when a picture is pasted into it. Hands
+   back the id to keep and an address to show it at right now. */
+function pasteUpload(file, cb){
+  uploadPicture(file, "", (made, why) => {
+    if (!made){ cb(null, why); return; }
+    cb({ id: made.id, width: made.width, height: made.height,
+         src: pictureSrc({ imgId: made.id }) }, null);
+  });
+}
+/* Where the builder shows one, which is the same address the lesson page
+   will use. */
+function pictureSrc(b){
+  if (b && b.imgId) return ((window.HUB && window.HUB.API) || "") + "/api/catalog?image=" + encodeURIComponent(b.imgId);
+  return (b && b.url) || "";
+}
+
 /* ====================================================================
    IMPORTING FROM A FILE
 

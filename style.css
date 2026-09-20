@@ -4740,3 +4740,40 @@ html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
   .tt-actions .tt-check{width:100%}
   .tt-edit input{width:110px}
 }
+
+/* =====================================================================
+   LINING THINGS UP IN A FORMATTING BOX
+
+   The same three classes wherever the writing ends up: in the editor,
+   in a lesson's paragraph, and on a printed hand-in. A class and not an
+   inline style, so the page decides what centred looks like and a
+   lesson does not carry a style declaration per paragraph.
+   ===================================================================== */
+.rt-centre{text-align:center}
+.rt-right{text-align:right}
+.rt-justify{text-align:justify}
+/* A picture or a table is an inline box until it is lined up, and then
+   it has to become a block for there to be anything to line up within.
+   Left alone it sits in the run of text exactly as it always did. */
+.rt-box img.rt-blocked, .prose img.rt-blocked,
+.rt-box table.rt-blocked, .prose table.rt-blocked{display:block; margin-left:0; margin-right:auto}
+.rt-box img.rt-blocked.rt-centre, .prose img.rt-blocked.rt-centre,
+.rt-box table.rt-blocked.rt-centre, .prose table.rt-blocked.rt-centre{margin-left:auto; margin-right:auto}
+.rt-box img.rt-blocked.rt-right, .prose img.rt-blocked.rt-right,
+.rt-box table.rt-blocked.rt-right, .prose table.rt-blocked.rt-right{margin-left:auto; margin-right:0}
+/* A table wrapped in its scroller lines up by the scroller, or centring
+   it does nothing at all: the scroller is the full width. */
+.rt-tscroll{display:flex}
+.rt-tscroll > table{margin:12px 0}
+.rt-tscroll > table.rt-centre{margin-left:auto; margin-right:auto}
+.rt-tscroll > table.rt-right{margin-left:auto; margin-right:0}
+/* The three buttons themselves: lines of decreasing length, which reads
+   faster than three words. */
+.rt-align{font-size:15px; letter-spacing:-.02em}
+
+/* a picture on its way into the database */
+.rt-uploading{display:inline-block; padding:4px 10px; border-radius:8px;
+  background:var(--panel-2); border:1px dashed var(--line-2); color:var(--muted); font-size:13.5px}
+
+/* choosing a picture in the builder */
+.bpreview{max-width:100%; max-height:260px; border-radius:10px; border:1px solid var(--line)}

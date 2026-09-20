@@ -2888,6 +2888,7 @@ function rText(b){
   const s = el("section");
   const div = el("div","prose", b.html || "");
   scrollWideTables(div);
+  fillImageIds(div);
   const h = div.querySelector("h2");
   /* older lessons kept the heading inside the html; newer ones store it
      separately so it can be left out entirely */
@@ -2899,6 +2900,24 @@ function rText(b){
 }
 
 /* A picture the teacher has linked to. Nothing is uploaded or stored. */
+/* Where a picture's bytes come from. A picture uploaded into the lesson is
+   kept in the database and handed out by the API; one given as an address
+   is fetched from wherever that address points, which is how every picture
+   worked before uploading existed, and how they still work offline. */
+function pictureSrc(b){
+  if (b && b.imgId) return (API || "") + "/api/catalog?image=" + encodeURIComponent(b.imgId);
+  return (b && b.url) || "";
+}
+/* Pictures inside a paragraph are written by the teacher's formatting box,
+   so they arrive as <img data-img="..."> with no address on them: the id is
+   turned into one here, once, when the block is drawn. */
+function fillImageIds(holder){
+  Array.from(holder.querySelectorAll("img[data-img]")).forEach(img => {
+    const id = img.getAttribute("data-img");
+    if (id) img.src = (API || "") + "/api/catalog?image=" + encodeURIComponent(id);
+  });
+}
+
 function rPicture(b){
   const s = el("section","picture");
   const fig = el("figure","picfig");
@@ -2915,7 +2934,7 @@ function rPicture(b){
   if (b.align === "centre" || b.align === "right") fig.classList.add("pic-" + b.align);
   if (b.frame === false) fig.classList.add("bare");
   const img = el("img","picimg");
-  img.src = b.url || "";
+  img.src = pictureSrc(b);
   img.alt = b.alt || b.caption || "Picture";
   img.loading = "lazy";
   img.addEventListener("error", () => {

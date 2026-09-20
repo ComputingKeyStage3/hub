@@ -227,6 +227,18 @@
           const size = n.style && n.style.fontSize;
           if (size) keep.style.fontSize = size;
         }
+        /* Which side of the box a line of writing sits on. Kept as a
+           class and not as an inline style, so the page decides what
+           "centred" looks like and a lesson does not carry three CSS
+           declarations for every paragraph in it. */
+        const lined = n.style && (n.style.textAlign || "");
+        if (lined === "center" || lined === "right" || lined === "justify")
+          keep.classList.add("rt-" + (lined === "center" ? "centre" : lined));
+        if (n.classList){
+          ["rt-centre", "rt-right", "rt-justify", "rt-blocked"].forEach(c => {
+            if (n.classList.contains(c)) keep.classList.add(c);
+          });
+        }
         /* A code block keeps its language and its code, and nothing else.
            The colours are painted back on wherever it is shown, so a lesson
            holds the code once rather than a span around every word in it. */
@@ -258,7 +270,14 @@
         if (tag === "IMG"){
           /* keep where it points and how big it was made */
           const src = n.getAttribute ? n.getAttribute("src") : "";
-          if (src) keep.setAttribute("src", src);
+          /* A picture uploaded into the database travels as its id and
+             not as its address: the address has the server's name in it,
+             and a lesson that has been moved or exported would then be
+             pointing at the wrong one. The lesson page turns the id back
+             into an address when it draws the paragraph. */
+          const imgId = n.getAttribute ? n.getAttribute("data-img") : "";
+          if (imgId) keep.setAttribute("data-img", imgId);
+          else if (src) keep.setAttribute("src", src);
           if (n.style && n.style.width) keep.style.width = n.style.width;
           if (n.style && n.style.height) keep.style.height = n.style.height;
         }
@@ -1032,6 +1051,64 @@
       }catch(e){}
     }
 
+    /* ---------- which side of the box things sit on ----------
+       Writing, a picture and a table all line up the same way and with
+       the same three buttons, because to a teacher they are the same
+       question. What differs is what gets the class: a picture or a
+       table is lined up by itself, and writing by the paragraph it is
+       in. execCommand("justifyCenter") is not used: it writes inline
+       styles, does different things to a table in different browsers,
+       and is the deprecated thing this file has been bitten by before. */
+    const ALIGNS = ["", "rt-centre", "rt-right"];
+    let lastPicture = null;
+
+    /* A picture kept in the database travels as its id, so the box has
+       nothing to show until the id is turned into an address. Whoever
+       made this editor knows where the pictures come from and passes a
+       way of asking; without one, an id shows as nothing, which is
+       right for a box that has no server behind it. */
+    function fillPictures(){
+      if (typeof o.imageSrc !== "function") return;
+      Array.from(box.querySelectorAll("img[data-img]")).forEach(img => {
+        const id = img.getAttribute("data-img");
+        if (id) img.src = o.imageSrc(id);
+      });
+    }
+    function alignTarget(){
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return null;
+      let node = sel.getRangeAt(0).startContainer;
+      if (node.nodeType === 3) node = node.parentNode;
+      if (!node || !box.contains(node)) return null;
+      /* A picture or a table that has been clicked is the thing being
+         lined up, rather than whatever it happens to sit inside. */
+      const pic = node.closest("img");
+      if (pic) return pic;
+      const table = node.closest("table");
+      if (table) return table;
+      const block = node.closest("p, li, h1, h2, h3, div, td, th");
+      return (block && block !== box && box.contains(block)) ? block : box;
+    }
+    function setAlign(which){
+      /* A picture that was clicked is remembered, because clicking a
+         toolbar button moves the selection off it. */
+      const target = lastPicture || alignTarget();
+      if (!target) return;
+      ALIGNS.forEach(c => { if (c) target.classList.remove(c); });
+      if (which) target.classList.add(which);
+      /* A picture or a table sits inline until it is lined up, and then
+         it has to become a block for there to be anything to line it up
+         within. Lining it back up on the left takes that away again, so
+         a picture nobody has touched keeps sitting in the run of text
+         exactly as it always did. */
+      if (target.tagName === "IMG" || target.tagName === "TABLE")
+        target.classList.toggle("rt-blocked", !!which);
+      fire();
+    }
+    tool("&#8801;", "Line up on the left", () => setAlign(""), "rt-align");
+    tool("&#8803;", "Line up down the middle", () => setAlign("rt-centre"), "rt-align");
+    tool("&#8802;", "Line up on the right", () => setAlign("rt-right"), "rt-align");
+
     /* ---------- a table ----------
        Put in by hand through the range rather than with execCommand's
        insertHTML: execCommand is deprecated and does different things in
@@ -1182,6 +1259,7 @@
     if (o.rows) box.style.minHeight = (o.rows * 26) + "px";
     if (o.placeholder) box.dataset.placeholder = o.placeholder;
     box.innerHTML = initialHtml || "";
+    fillPictures();
     box.querySelectorAll("pre.rt-cb").forEach(paintBlock);
     /* so the number reads the box's own size before anyone has clicked in it */
     try{ showSize(); }catch(e){}
@@ -1347,6 +1425,37 @@
           }
           const file = item.getAsFile();
           if (!file) return;
+          /* In the builder a pasted picture goes into the database and
+             the paragraph keeps only its id. Inline base64 was making
+             the lesson itself carry the picture: every student
+             downloaded it again with the lesson each time they opened
+             it, and a lesson with three screenshots in it was a
+             megabyte of JSON. Everywhere else, the old way. */
+          if (typeof o.upload === "function"){
+            const mark = document.createElement("span");
+            mark.className = "rt-uploading";
+            mark.contentEditable = "false";
+            mark.textContent = "Uploading the picture…";
+            const at = save();
+            if (at){ at.deleteContents(); at.insertNode(mark); }
+            else box.appendChild(mark);
+            o.upload(file, (made, why) => {
+              const img = document.createElement("img");
+              if (!made){
+                const oops = document.createElement("span");
+                oops.textContent = why || "That picture could not be saved.";
+                mark.replaceWith(oops);
+                fire();
+                return;
+              }
+              img.setAttribute("data-img", made.id);
+              img.src = made.src;
+              img.style.width = Math.min(420, made.width || 420) + "px";
+              mark.replaceWith(img);
+              fire();
+            });
+            return;
+          }
           const reader = new FileReader();
           reader.onload = () => {
             const probe = new Image();
@@ -1374,6 +1483,10 @@
 
     /* Clicking a picture offers a size to change it to. */
     box.addEventListener("click", (e) => {
+      /* Which picture was last clicked, so the line-up buttons know what
+         they are lining up: pressing one of them moves the selection off
+         the picture before they get a chance to look. */
+      lastPicture = (e.target && e.target.tagName === "IMG") ? e.target : null;
       if (!e.target || e.target.tagName !== "IMG") return;
       const img = e.target;
       const old = box.querySelector(".rt-imgsize");
@@ -1407,8 +1520,18 @@
     });
 
     box.addEventListener("paste", (e) => {
+      /* The picture handler further up is a different listener on the same
+         box, and returning from it does not stop this one: both run on
+         every paste. Pasting a picture therefore came through here as
+         well with no text at all, and cmd() turns "" into null, so
+         execCommand("insertText", null) wrote the word "null" into the
+         box in front of the picture. Found by pasting one and looking. */
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      for (const item of items)
+        if (item.type && item.type.indexOf("image") === 0) return;
       e.preventDefault();
       const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+      if (!text) return;                 // nothing to put in, so put nothing in
       const pre = blockNow();
       /* insertText turns the line breaks in pasted code into <br>s and drops
          the spaces at the front of each line, which is the whole shape of a
@@ -1422,6 +1545,7 @@
     wrap.getHtml = () => clean(box);
     wrap.setHtml = (html) => {
       box.innerHTML = html || "";
+      fillPictures();
       box.querySelectorAll("pre.rt-cb").forEach(paintBlock);
     };
     return wrap;
