@@ -947,6 +947,123 @@
   };
 
   /* ===================================================================
+     TABLE
+     { type:"table", title, task, head:[...],
+       rows: [ [ {t:"18"}, {t:"360", fill:true}, ... ], ... ] }
+
+     A table with some of it already filled in and some of it for the
+     student to complete: a trace table, a conversion table, a "state the
+     output for each of these" table. It is the shape a KS4 worksheet is
+     most often in and the one shape the site had no task for, so a whole
+     worksheet had to become a written answer with the table described in
+     words.
+
+     A cell is either given or blank:
+       { t:"18" }               shown, and cannot be typed in
+       { t:"360", fill:true }   a box, and 360 is the answer
+       { t:"",    fill:true }   a box with no right answer, read by a teacher
+
+     Marking is shortmatch, the same comparison Short answers use, so "8"
+     and " 8 " are the same answer and nothing is marked right for merely
+     containing the right characters. A cell with no answer on it is never
+     marked, and a table with no answers anywhere has no Check button at
+     all: it is then a worksheet to be read, which is a perfectly good
+     thing for it to be.
+     =================================================================== */
+  window.rTable = function(b, ctx){
+    const s = make("section", "tabletask");
+    const head = Array.isArray(b.head) ? b.head : [];
+    const rows = Array.isArray(b.rows) ? b.rows : [];
+    const boxes = [];                 // one per fillable cell, in order
+
+    /* A table on a phone is the one thing that genuinely cannot be made
+       narrower, so it scrolls sideways inside its own box rather than
+       pushing the whole page wide. */
+    const scroller = make("div", "tt-scroll");
+    const table = make("table", "tt");
+    if (head.length){
+      const thead = make("thead");
+      const tr = make("tr");
+      head.forEach(h => tr.appendChild(make("th", "", String(h == null ? "" : h))));
+      thead.appendChild(tr);
+      table.appendChild(thead);
+    }
+    const body = make("tbody");
+    rows.forEach((row, r) => {
+      const tr = make("tr");
+      (Array.isArray(row) ? row : []).forEach((cell, c) => {
+        const td = make("td");
+        const want = cell && typeof cell === "object" ? cell : { t: String(cell == null ? "" : cell) };
+        if (want.fill){
+          td.className = "tt-fill";
+          const input = make("input", "tt-in");
+          input.type = "text";
+          input.autocomplete = "off"; input.autocapitalize = "off"; input.spellcheck = false;
+          input.setAttribute("aria-label",
+            (head[c] ? head[c] + ", " : "") + "row " + (r + 1));
+          input.addEventListener("input", () => { td.dataset.verdict = ""; ctx.changed(); });
+          td.appendChild(input);
+          boxes.push({ input: input, td: td, answer: String(want.t == null ? "" : want.t).trim() });
+        } else {
+          td.textContent = String(want.t == null ? "" : want.t);
+        }
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+    scroller.appendChild(table);
+    s.appendChild(scroller);
+
+    const markable = boxes.filter(x => x.answer);
+    const fb = make("p", "tt-said");
+    fb.hidden = true;
+    if (markable.length){
+      const row = make("div", "tt-actions");
+      const btn = make("button", "btn-primary tt-check", "Check the table");
+      btn.addEventListener("click", () => {
+        let right = 0;
+        boxes.forEach(x => {
+          if (!x.answer){ x.td.dataset.verdict = ""; return; }
+          const ok = window.shortAnswer.mark({ answers: [x.answer] }, x.input.value).ok;
+          x.td.dataset.verdict = x.input.value.trim() ? (ok ? "right" : "wrong") : "";
+          if (ok) right++;
+        });
+        fb.hidden = false;
+        fb.textContent = right === markable.length
+          ? "All " + markable.length + " right."
+          : right + " out of " + markable.length + " right so far. Have another go at the others.";
+        fb.dataset.stage = right === markable.length ? "all" : right ? "some" : "none";
+        ctx.changed();
+      });
+      row.appendChild(btn);
+      s.appendChild(row);
+    }
+    s.appendChild(fb);
+
+    const written = () => boxes.filter(x => x.input.value.trim()).length;
+    return {
+      section: s,
+      get: () => boxes.map(x => x.input.value),
+      set: (v) => {
+        if (!Array.isArray(v)) return;
+        v.forEach((text, i) => { if (boxes[i]) boxes[i].input.value = text == null ? "" : String(text); });
+      },
+      done: () => boxes.length > 0 && written() === boxes.length,
+      /* What the table scored, for a lesson that adds its marks up. Null
+         where there is nothing to mark against. */
+      result: () => {
+        if (!markable.length) return null;
+        let right = 0;
+        markable.forEach(x => {
+          if (window.shortAnswer.mark({ answers: [x.answer] }, x.input.value).ok) right++;
+        });
+        return { marks: right, outOf: markable.length };
+      }
+    };
+  };
+
+  /* ===================================================================
      EXAM QUESTION
      { type:"exam", prompt, marks, command, answer:"short"|"lines",
        lines, answers:[...], scheme:[{text,marks}], model,

@@ -1764,6 +1764,10 @@ const TASK_ICON = {
                d:'<path d="M4 20l4.4-1L19 8.4a2.1 2.1 0 0 0-3-3L5 16z"/><path d="M14.5 6.9l3 3"/>' },
   short:     { name:"Short answer",
                d:'<path d="M20 6.5A1.5 1.5 0 0 0 18.5 5h-13A1.5 1.5 0 0 0 4 6.5v7A1.5 1.5 0 0 0 5.5 15H8v4l4-4h6.5a1.5 1.5 0 0 0 1.5-1.5z"/>' },
+  /* a grid */
+  table:     { name:"Table",
+               d:'<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/>' +
+                 '<path d="M3.5 9.5h17M3.5 14.5h17M9.5 4.5v15M15 4.5v15"/>' },
   /* a paper with a mark written on it */
   exam:      { name:"Exam question",
                d:'<path d="M6.5 3.5h8l4 4v13h-12z"/><path d="M14.5 3.5V8H19"/>' +
@@ -2516,7 +2520,7 @@ function buildBlock(b, i){
               board:rBoardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
               keywords:rKeywordsTask,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
-              exam:rExamTask,
+              exam:rExamTask, table:rTableTask,
               extension:rExtension, choice:rChoice }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
@@ -2866,9 +2870,24 @@ function renderBlock(b, i){
 }
 
 /* text: the html is the content; the brief carries the heading */
+/* A table written into a paragraph is put in a box that scrolls sideways.
+   Six columns of a trace table is wider than a phone whatever the type
+   size, and without this it is the whole page that goes wide instead,
+   which is how the site got too wide on phones the last time. */
+function scrollWideTables(holder){
+  Array.from(holder.querySelectorAll("table")).forEach(t => {
+    if (t.parentNode && t.parentNode.classList &&
+        t.parentNode.classList.contains("rt-tscroll")) return;
+    const box = el("div","rt-tscroll");
+    t.parentNode.insertBefore(box, t);
+    box.appendChild(t);
+  });
+}
+
 function rText(b){
   const s = el("section");
   const div = el("div","prose", b.html || "");
+  scrollWideTables(div);
   const h = div.querySelector("h2");
   /* older lessons kept the heading inside the html; newer ones store it
      separately so it can be left out entirely */
@@ -4479,6 +4498,7 @@ function wrapExtra(b, build, eyebrow){
 }
 const rBoardTask   = (b) => wrapExtra(b, window.rBoard,   "Whiteboard");
 const rKeywordsTask = (b) => wrapExtra(b, window.rKeywords, "Keywords");
+const rTableTask  = (b) => wrapExtra(b, window.rTable,    "Table");
 const rLabelTask   = (b) => wrapExtra(b, window.rLabel,   "Labelling");
 /* An exam question is nearly one of the four above, but it also reports what
    it scored, which wrapExtra has no room for: fields[] would drop result()
@@ -6678,6 +6698,29 @@ function buildPdf(){
         out.push(label("A full answer"));
         out.push({ t: "text", face: "p", text: pdfText(b.model), colour: PDF.MUTED });
       }
+      return out;
+    }
+    /* A table prints as its rows, each on a line, with what they typed in
+       the blanks. A grid drawn properly would need column widths worked
+       out against the page, and a hand-in is read for what the student
+       wrote rather than admired. */
+    if (b.type === "table"){
+      out.push({ t: "text", face: "task", text: title || "Table" });
+      const head = Array.isArray(b.head) ? b.head : [];
+      if (head.length) out.push(label(head.join("   |   ")));
+      const said = Array.isArray(v) ? v : [];
+      let at = 0;
+      (b.rows || []).forEach((row, r) => {
+        const parts = (Array.isArray(row) ? row : []).map(cell => {
+          const c = (cell && typeof cell === "object") ? cell : { t: String(cell == null ? "" : cell) };
+          if (!c.fill) return String(c.t == null ? "" : c.t);
+          const typed = String(said[at++] || "").trim();
+          return typed || "____";
+        });
+        out.push({ t: "text", face: "p", text: (r + 1) + ".  " + parts.join("   |   ") });
+      });
+      if (!said.filter(x => String(x || "").trim()).length)
+        out.push({ t: "text", face: "small", text: "Nothing filled in", colour: PDF.AMBER });
       return out;
     }
     if (b.type === "notes"){

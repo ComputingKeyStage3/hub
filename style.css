@@ -4676,3 +4676,67 @@ html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
   padding:7px 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 /* New page is the one filled button in the column, above everything. */
 #palNewPage{margin:0 0 14px}
+
+/* =====================================================================
+   TABLES
+
+   Two of them: one a student fills in (the Table task) and one that is
+   just there to be read (a table in a paragraph, and in the box a
+   teacher writes that paragraph in). They look the same on purpose, so
+   a table a class sees reads the same whichever it came from.
+   ===================================================================== */
+
+/* A table is the one thing that genuinely cannot be made narrower, so it
+   scrolls sideways inside its own box rather than pushing the page wide. */
+.tt-scroll, .prose .rt-tscroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 0 4px}
+.tt, .prose table, .rt-box table{
+  border-collapse:collapse; width:auto; min-width:min(100%, 320px);
+  font-size:15.5px; background:var(--panel)}
+.tt th, .tt td, .prose th, .prose td, .rt-box th, .rt-box td{
+  border:1px solid var(--line-2); padding:9px 12px; text-align:left; vertical-align:top}
+.tt th, .prose th, .rt-box th{background:var(--panel-2); font-weight:700}
+.prose table, .rt-box table{margin:12px 0}
+
+/* the cells a student fills in */
+.tt td.tt-fill{padding:0}
+.tt-in{width:100%; min-width:120px; border:none; background:transparent; color:var(--text);
+  font-family:var(--body); font-size:15.5px; padding:10px 12px; min-height:44px; box-sizing:border-box}
+.tt-in:focus{outline:2px solid var(--amber); outline-offset:-2px; background:var(--panel-2)}
+.tt td[data-verdict=right]{background:var(--mint-dim)}
+.tt td[data-verdict=wrong]{background:var(--red-dim)}
+.tt-actions{display:flex; align-items:center; gap:12px; margin:12px 0 0}
+.tt-said{margin:10px 0 0; font-size:15px; font-weight:700; color:var(--muted)}
+.tt-said[data-stage=all]{color:var(--mint)}
+.tt-said[data-stage=none]{color:var(--red)}
+
+/* the grid in the builder */
+.tt-edit-scroll{overflow-x:auto; margin:0 0 10px}
+.tt-edit{border-collapse:collapse}
+.tt-edit th, .tt-edit td{border:1px solid var(--line); padding:4px; vertical-align:middle}
+.tt-edit input{width:130px; min-width:0; font-size:14px; padding:7px 9px}
+.tt-edit th input{font-weight:700}
+.tt-edit-corner{border:none !important; background:transparent}
+/* Which of the two a cell is, said by the button rather than by a colour
+   alone: the difference matters and colour on its own is not enough. */
+.tt-flip{min-width:30px; font-weight:700}
+.tt-flip.on{border-color:var(--amber); color:var(--amber)}
+
+/* inserting one, in the formatting bar */
+.rt-tablewrap{position:relative; display:inline-block}
+.rt-tablemenu{padding:12px; min-width:220px}
+.rt-tablesize{display:flex; gap:10px; margin:0 0 10px}
+.rt-tablesize label{display:flex; flex-direction:column; gap:4px; font-size:12.5px; color:var(--muted)}
+.rt-tablesize input{width:74px; padding:7px 9px; font-size:14px}
+.rt-tablehead{display:flex; align-items:center; gap:8px; font-size:13.5px; margin:0 0 10px}
+.rt-tablehead input{width:18px; height:18px}
+/* A table being written needs its edges visible even before it has any
+   words in it, or it is an invisible thing the caret disappears into. */
+.rt-box table{min-width:0}
+.rt-box td:empty, .rt-box th:empty{min-width:60px; min-height:22px}
+
+@media (max-width:640px){
+  .tt th, .tt td, .prose th, .prose td, .rt-box th, .rt-box td{padding:8px 10px; font-size:15px}
+  .tt-in{min-width:100px; padding:9px 10px; font-size:15px}
+  .tt-actions .tt-check{width:100%}
+  .tt-edit input{width:110px}
+}

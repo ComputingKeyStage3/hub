@@ -8,7 +8,13 @@
 (function(){
   "use strict";
 
-  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1, IMG:1, KBD:1, PRE:1 };
+  const ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, BR:1, P:1, UL:1, OL:1, LI:1, SPAN:1, CODE:1, A:1, FONT:1, DIV:1, IMG:1, KBD:1, PRE:1,
+                    TABLE:1, THEAD:1, TBODY:1, TR:1, TH:1, TD:1, CAPTION:1 };
+/* A table here is something to read, not something to fill in. A question
+   with boxes for a student to write in is the Table task, which saves what
+   they typed; this is the one in a paragraph, and it is shown exactly the
+   way the rest of a paragraph is. */
+  const TABLE_TAGS = { TABLE:1, THEAD:1, TBODY:1, TR:1, TH:1, TD:1, CAPTION:1 };
   /* A swatch like the ones in Office: a row of hues, each with lighter and
      darker versions underneath. */
   const HUES = [
@@ -231,6 +237,21 @@
              starts on a blank line needs a spare one to survive being saved
              and read back */
           keep.textContent = "\n" + codeText(n);
+          to.appendChild(keep);
+          return;
+        }
+        /* Cells can be merged on a real exam paper, so those two survive.
+           Nothing else about a table does: no widths, no colours, no
+           inline borders. How it looks is the stylesheet's business, and a
+           table carrying its own is a table that ignores dark mode. */
+        if (TABLE_TAGS[tag]){
+          if (tag === "TD" || tag === "TH"){
+            const cs = parseInt(n.getAttribute("colspan"), 10);
+            const rs = parseInt(n.getAttribute("rowspan"), 10);
+            if (cs > 1) keep.setAttribute("colspan", Math.min(20, cs));
+            if (rs > 1) keep.setAttribute("rowspan", Math.min(50, rs));
+          }
+          walk(n, keep);
           to.appendChild(keep);
           return;
         }
@@ -1011,6 +1032,147 @@
       }catch(e){}
     }
 
+    /* ---------- a table ----------
+       Put in by hand through the range rather than with execCommand's
+       insertHTML: execCommand is deprecated and does different things in
+       different browsers, and this project has been caught by that before.
+       Once it is there the browser edits it like any other content. */
+    const tableWrap = document.createElement("span");
+    tableWrap.className = "rt-tablewrap";
+    const tableBtn = document.createElement("button");
+    tableBtn.type = "button";
+    tableBtn.className = "rt-btn rt-tablebtn";
+    tableBtn.title = "Table";
+    tableBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"'
+      + ' stroke-width="1.9" stroke-linecap="round" aria-hidden="true">'
+      + '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/>'
+      + '<path d="M3.5 9.5h17M3.5 14.5h17M9.5 4.5v15M15 4.5v15"/></svg>';
+    tableBtn.addEventListener("mousedown", (e) => e.preventDefault());
+    const tableMenu = document.createElement("div");
+    tableMenu.className = "rt-menu rt-tablemenu";
+    tableMenu.hidden = true;
+    const sizeRow = document.createElement("div");
+    sizeRow.className = "rt-tablesize";
+    const numBox = (label, value) => {
+      const w = document.createElement("label");
+      w.appendChild(document.createTextNode(label));
+      const i = document.createElement("input");
+      i.type = "number"; i.min = "1"; i.max = "20"; i.value = String(value);
+      w.appendChild(i);
+      sizeRow.appendChild(w);
+      return i;
+    };
+    const rowsIn = numBox("Rows", 3);
+    const colsIn = numBox("Columns", 3);
+    const headIn = document.createElement("label");
+    headIn.className = "rt-tablehead";
+    const headTick = document.createElement("input");
+    headTick.type = "checkbox"; headTick.checked = true;
+    headIn.appendChild(headTick);
+    headIn.appendChild(document.createTextNode("First row is a heading"));
+    const insertBtn = document.createElement("button");
+    insertBtn.type = "button";
+    insertBtn.className = "rt-menu-cta";
+    insertBtn.textContent = "Insert";
+    tableMenu.appendChild(sizeRow);
+    tableMenu.appendChild(headIn);
+    tableMenu.appendChild(insertBtn);
+    tableWrap.appendChild(tableBtn);
+    tableWrap.appendChild(tableMenu);
+    bar.appendChild(tableWrap);
+
+    /* Where the caret was before the toolbar took the focus, saved on
+       mousedown the way the colour and code menus do it. */
+    let tableAt = null;
+    tableBtn.addEventListener("mousedown", () => { tableAt = save(); });
+    tableBtn.addEventListener("click", () => {
+      if (!tableMenu.hidden){ tableMenu.hidden = true; return; }
+      openMenuAt(tableBtn, tableMenu);
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!tableMenu.hidden && !tableMenu.contains(e.target) && !tableBtn.contains(e.target))
+        tableMenu.hidden = true;
+    });
+    insertBtn.addEventListener("mousedown", (e) => e.preventDefault());
+    insertBtn.addEventListener("click", () => {
+      const rows = Math.max(1, Math.min(20, parseInt(rowsIn.value, 10) || 3));
+      const cols = Math.max(1, Math.min(20, parseInt(colsIn.value, 10) || 3));
+      tableMenu.hidden = true;
+      insertTable(rows, cols, headTick.checked);
+      box.focus(); fire();
+    });
+
+    function insertTable(rows, cols, withHead){
+      const table = document.createElement("table");
+      const body = document.createElement("tbody");
+      for (let r = 0; r < rows; r++){
+        const tr = document.createElement("tr");
+        for (let c = 0; c < cols; c++){
+          const cell = document.createElement(withHead && r === 0 ? "th" : "td");
+          /* A cell with nothing in it at all cannot be clicked into in some
+             browsers, so each one starts with a break to stand on. */
+          cell.appendChild(document.createElement("br"));
+          tr.appendChild(cell);
+        }
+        body.appendChild(tr);
+      }
+      table.appendChild(body);
+      const after = document.createElement("p");
+      after.appendChild(document.createElement("br"));
+      try{
+        const range = tableAt || save();
+        if (range){
+          range.deleteContents();
+          range.insertNode(after);
+          range.insertNode(table);
+        } else {
+          box.appendChild(table);
+          box.appendChild(after);
+        }
+        /* Land the caret in the first cell, which is where typing starts. */
+        const first = table.querySelector("th, td");
+        if (first){
+          const sel = window.getSelection();
+          const r2 = document.createRange();
+          r2.setStart(first, 0); r2.collapse(true);
+          sel.removeAllRanges(); sel.addRange(r2);
+        }
+      }catch(e){}
+    }
+
+    /* Tab walks the cells, and Tab out of the last one adds a row, which is
+       what every other table anybody has used does. Without it a teacher
+       has to guess the number of rows before they start typing. */
+    function tableKeys(e){
+      if (e.key !== "Tab") return false;
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return false;
+      let node = sel.getRangeAt(0).startContainer;
+      if (node.nodeType === 3) node = node.parentNode;
+      const cell = node.closest && node.closest("th, td");
+      if (!cell || !box.contains(cell)) return false;
+      e.preventDefault();
+      const cells = Array.from(cell.closest("table").querySelectorAll("th, td"));
+      let next = cells[cells.indexOf(cell) + (e.shiftKey ? -1 : 1)];
+      if (!next && !e.shiftKey){
+        const row = cell.closest("tr");
+        const fresh = document.createElement("tr");
+        for (let i = 0; i < row.children.length; i++){
+          const td = document.createElement("td");
+          td.appendChild(document.createElement("br"));
+          fresh.appendChild(td);
+        }
+        row.parentNode.appendChild(fresh);
+        next = fresh.firstChild;
+        fire();
+      }
+      if (!next) return true;              // Tab out of the last cell, handled
+      const r = document.createRange();
+      r.setStart(next, 0); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r);
+      return true;
+    }
+
     tool("&#10006;", "Remove formatting", () => cmd("removeFormat"), "rt-clear");
 
     const box = document.createElement("div");
@@ -1126,6 +1288,10 @@
     box.addEventListener("keydown", (e) => {
       const codeBlock = blockNow();
       if (codeBlock && codeKeys(e, codeBlock)) return;
+      /* Inside a table, Tab walks the cells rather than indenting a list.
+         Checked before the list handling below, because a list inside a
+         table cell would otherwise swallow it. */
+      if (tableKeys(e)) return;
       if (e.key === "Tab"){
         /* only indent when there is already an item above to sit under */
         const sel = window.getSelection();

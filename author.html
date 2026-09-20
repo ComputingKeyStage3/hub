@@ -154,6 +154,7 @@
           <button class="pal" data-add="quiz"><b>Quiz</b><span>Questions with hints</span></button>
           <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
           <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
+          <button class="pal" data-add="table"><b>Table</b><span>They fill in the blank cells</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
         </div>
       </div>
@@ -228,6 +229,7 @@
           <button class="pal" data-add="mc"><b>Multiple choice</b><span>One right answer</span></button>
           <button class="pal" data-add="blanks"><b>Fill the gaps</b><span>Dropdown answers</span></button>
           <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
+          <button class="pal" data-add="table"><b>Table</b><span>They fill in the blank cells</span></button>
           <button class="pal" data-add="short"><b>Short answer</b><span>Matched to the answers you set</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
           <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
@@ -477,6 +479,14 @@ const BLANK = {
   binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
                      showPlace:true, showCarry:true, pairs:"" }),
   short:    () => ({ type:"short", prompt:"", answers:[""], model:"", why:"", topic:"" }),
+  /* A trace table, a conversion table, a table of outputs. Two columns and
+     two rows to start with, the first row a heading, and every cell in the
+     body a box for them to fill in: that is the common case, and a cell is
+     turned back into a given one with the button beside it. */
+  table:    () => ({ type:"table", title:"", task:"",
+                     head:["", ""],
+                     rows:[ [{t:"",fill:true},{t:"",fill:true}],
+                            [{t:"",fill:true},{t:"",fill:true}] ] }),
   /* A question off a past paper. "lines" is the usual one: they write, then
      mark themselves against the scheme. "short" is a one line recall answer
      and is the only shape marked on its own, because the whole line is the
@@ -554,7 +564,8 @@ function codeTaskLabel(entry){
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
                 short:"Short answer", page:"Page", extension:"Extension tasks", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
-                password:"Password checker", caesar:"Caesar cipher", exam:"Exam question" };
+                password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
+                table:"Table" };
 
 /* The lesson page hashes what a student types and compares it with this, so
    the answer is never sitting in the lesson file for anyone to read. Same
@@ -995,6 +1006,31 @@ function compileOne(b, id, target){
       push(keepArrays({ type:"short", id, prompt: b.prompt || "",
         answers: (b.answers || []).map(x => String(x).trim()).filter(Boolean),
         model: b.model || "", topic: lesson.assessment ? b.topic : "" }));
+    else if (b.type === "table"){
+      /* Every row squared off to the width of the headings, and a cell
+         with nothing in it and no box on it dropped to "". A ragged table
+         renders with holes in it, and the holes are not in the same place
+         in every browser. */
+      const head = (b.head || []).map(h => String(h == null ? "" : h));
+      const wide = Math.max(head.length, ...(b.rows || []).map(r => (r || []).length), 1);
+      while (head.length < wide) head.push("");
+      const rows = (b.rows || []).map(row => {
+        const out = [];
+        for (let c = 0; c < wide; c++){
+          const cell = (row || [])[c];
+          const o = (cell && typeof cell === "object") ? cell : { t: String(cell == null ? "" : cell) };
+          const text = String(o.t == null ? "" : o.t);
+          /* fill is written down only when it is on, and the answer only
+             where there is one, so a big table stays a small lesson. */
+          out.push(o.fill ? (text ? { t: text, fill: true } : { fill: true }) : { t: text });
+        }
+        return out;
+      });
+      push(keepArrays({ type:"table", id, title: b.title || "", task: b.task || "",
+        head: head.some(h => h.trim()) ? head : undefined,
+        rows: rows,
+        point: b.point || "", code: b.code || "", strand: b.strand || "" }));
+    }
     /* An exam question carries its specification point and the wording of
        that point with it. The lesson page has no way of reaching the
        specification table, and a lesson opened offline has no server at
@@ -2610,6 +2646,105 @@ function card(b, i, arr){
     F("Model answer", "model", { area:true, rows:2,
       help:"Shown to a student who gets it wrong, and printed beside their work." });
     if (lesson.assessment) F("Topic tag", "topic");
+  }
+  if (b.type === "table"){
+    F("Heading (optional)", "title");
+    R("What are they to do?", "task", { rows:2,
+      placeholder:"Complete the table for the algorithm above." });
+    if (!Array.isArray(b.head)) b.head = [];
+    if (!Array.isArray(b.rows)) b.rows = [];
+    const cols = Math.max(b.head.length, ...b.rows.map(r => (r || []).length), 1);
+    /* Every row the same width, whatever editing has left behind. */
+    while (b.head.length < cols) b.head.push("");
+    b.rows.forEach(r => { while (r.length < cols) r.push({ t:"", fill:true }); });
+
+    const w = el("div","bfield");
+    w.appendChild(el("label","","The table"));
+    w.appendChild(el("p","bhelp",
+      "Type what a student should see. A cell with the box turned on is one "
+      + "they fill in, and whatever you type in it is the answer it is marked "
+      + "against. Leave that empty and the cell is still theirs to fill in, "
+      + "but nothing marks it."));
+    const scroll = el("div","tt-edit-scroll");
+    const grid = el("table","tt-edit");
+
+    const headRow = el("tr");
+    b.head.forEach((h, c) => {
+      const th = el("th");
+      const inp = el("input");
+      inp.value = h || "";
+      inp.placeholder = "Heading";
+      inp.addEventListener("input", () => { b.head[c] = inp.value; saveDraft(); schedulePreview(); });
+      th.appendChild(inp);
+      const drop = el("button","btn-ghost bmini","✕");
+      drop.title = "Remove this column";
+      drop.addEventListener("click", () => {
+        if (cols <= 1) return;
+        b.head.splice(c, 1);
+        b.rows.forEach(r => r.splice(c, 1));
+        render(); schedulePreview();
+      });
+      th.appendChild(drop);
+      headRow.appendChild(th);
+    });
+    headRow.appendChild(el("th","tt-edit-corner",""));
+    grid.appendChild(headRow);
+
+    b.rows.forEach((row, r) => {
+      const tr = el("tr");
+      row.forEach((cell, c) => {
+        if (!cell || typeof cell !== "object") row[c] = cell = { t: String(cell == null ? "" : cell) };
+        const td = el("td");
+        const inp = el("input");
+        inp.value = cell.t || "";
+        inp.placeholder = cell.fill ? "Answer (optional)" : "What they see";
+        inp.addEventListener("input", () => { cell.t = inp.value; saveDraft(); schedulePreview(); });
+        td.appendChild(inp);
+        /* One button a cell, and it says which of the two the cell is. */
+        const flip = el("button","btn-ghost bmini tt-flip" + (cell.fill ? " on" : ""),
+                        cell.fill ? "▢" : "T");
+        flip.title = cell.fill ? "They fill this in. Click to show it instead."
+                               : "They see this. Click to make it a box they fill in.";
+        flip.addEventListener("click", () => { cell.fill = !cell.fill; render(); schedulePreview(); });
+        td.appendChild(flip);
+        tr.appendChild(td);
+      });
+      const end = el("td","tt-edit-corner");
+      const drop = el("button","btn-ghost bmini","✕");
+      drop.title = "Remove this row";
+      drop.addEventListener("click", () => { b.rows.splice(r, 1); render(); schedulePreview(); });
+      end.appendChild(drop);
+      tr.appendChild(end);
+      grid.appendChild(tr);
+    });
+    scroll.appendChild(grid);
+    w.appendChild(scroll);
+
+    const add = el("div","brow");
+    const addRow = el("button","btn-ghost bmini2","+ Row");
+    addRow.addEventListener("click", () => {
+      const fresh = [];
+      for (let c = 0; c < cols; c++) fresh.push({ t:"", fill:true });
+      b.rows.push(fresh);
+      render(); schedulePreview();
+    });
+    const addCol = el("button","btn-ghost bmini2","+ Column");
+    addCol.addEventListener("click", () => {
+      b.head.push("");
+      b.rows.forEach(r => r.push({ t:"", fill:true }));
+      render(); schedulePreview();
+    });
+    add.appendChild(addRow); add.appendChild(addCol);
+    /* Said once, under the grid, rather than left to be discovered when a
+       class has already done it. */
+    const marked = b.rows.reduce((n, r) => n + r.filter(c => c && c.fill && String(c.t || "").trim()).length, 0);
+    const blanks = b.rows.reduce((n, r) => n + r.filter(c => c && c.fill).length, 0);
+    add.appendChild(el("span","bhelp", blanks
+      ? blanks + (blanks === 1 ? " box, " : " boxes, ") + (marked || "none") + " with an answer to mark against"
+      : "No boxes yet, so there is nothing for them to fill in."));
+    w.appendChild(add);
+    body.appendChild(w);
+    if (specLevel()) specPicker(body, b);
   }
   if (b.type === "exam"){
     R("The question", "prompt", { rows:3,
@@ -4717,6 +4852,7 @@ on("palMoreBtn", "click", () => {
    as a page before this still opens and still works. */
 const BANK_TYPES = [
   ["exam","Exam question","Worth marks, with a mark scheme"],
+  ["table","Table","They fill in the blank cells"],
   ["question","Written answer","They type a response"],
   ["short","Short answer","Matched to the answers you set"],
   ["mc","Multiple choice","One right answer"],
