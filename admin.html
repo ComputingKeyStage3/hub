@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="lessonorder.js"></script>
 <script src="shortmatch.js"></script>
 <script src="xlsx.js"></script>
 <script src="menus.js"></script>
@@ -393,6 +394,10 @@ function on(id, ev, fn){
   if (!e){ console.warn("Nothing on the page with id:", id); return; }
   e.addEventListener(ev, fn);
 }
+/* The order lessons are listed in, from lessonorder.js. A list keeps the
+   order it arrived in if that file did not, so one missing script leaves a
+   list in an odd order rather than leaving it empty. */
+const inOrder = (list, titleFor) => window.lessonOrder ? window.lessonOrder.sort(list, titleFor) : list;
 const API = (window.HUB && window.HUB.API) || "";
 /* Without a server the console is the lesson hub and nothing else: the
    lessons folder is the catalogue, there are no classes to give work to and
@@ -2260,6 +2265,9 @@ function lessonCards(list, box){
   box.innerHTML = "";
   if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build a new lesson”.")); return; }
   const grid = el("div","lessongrid");
+  /* Sorted here rather than by each caller, so the hub, a point's lessons
+     and a search all come out in the same order. */
+  inOrder(list, (l) => titleOf(l.lesson_id));
   list.forEach(l => {
     const card = el("div","lessonpill");
     const head = el("div","lp-head");
@@ -3666,6 +3674,7 @@ on("addLessonBtn", "click", () => {
         if (showAll) return true;
         return (l.unit || "") === unit;                                // suggested by the lesson itself
       });
+      inOrder(rows);
       longWord.textContent = showAll ? "Only lessons for this unit" : "Show every lesson";
       shortWord.textContent = showAll ? "This unit" : "All units";
       if (!rows.length){
@@ -3711,7 +3720,7 @@ function paintLessonGrid(){
     g.appendChild(el("p","hint","No lessons here yet for " + cls + ", add one from the hub above."));
     return;
   }
-  mine.sort((a, b) => (a.position || 0) - (b.position || 0));
+  inOrder(mine, (l) => titleOf(l.lesson_id));
   mine.forEach(l => {
     const a = assignOf(l.lesson_id);
     const live = a ? !!a.published : !!l.published;

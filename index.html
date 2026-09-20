@@ -8,6 +8,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="lessonorder.js"></script>
 <script src="practice.js"></script>
 <script src="settings.js"></script>
 </head>
@@ -142,6 +143,11 @@ const API = (window.HUB && window.HUB.API) || "";
 const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
 const ready = !(window.HUB && window.HUB.OFFLINE) && API && API.indexOf("PASTE_") !== 0;
 const $ = (id) => document.getElementById(id);
+/* The order lessons are listed in, from lessonorder.js. A list keeps the
+   order it arrived in if that file did not, so one missing script leaves a
+   list in an odd order rather than leaving it empty. */
+const inOrder = (list, titleFor) => window.lessonOrder ? window.lessonOrder.sort(list, titleFor) : list;
+
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text; return e; }
 /* The waiting dots, the same three the lesson screen uses, for a list that is
@@ -540,7 +546,7 @@ function paintLessons(byId){
       const h = document.createElement("p"); h.className = "unit-head"; h.textContent = unit; box.appendChild(h);
     }
     const wrap = document.createElement("div"); wrap.className = "lessons";
-    groups[unit].sort((a, b) => (a.position || 0) - (b.position || 0)).forEach((c, i) => {
+    inOrder(groups[unit]).forEach((c, i) => {
       const l = byId[c.lesson_id];
       const done = doneLessons.has(l.id);
       const a = document.createElement("a");
