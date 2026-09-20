@@ -2937,17 +2937,33 @@ function nameClass(name){
 async function openClass(name){
   nameClass(name);
   show("classView");
-  /* Coverage is only worth offering where there is a specification behind
-     it. Nothing here knows which year group a class belongs to, so the
-     test is whether any qualification has been set up at all, and that
-     means the catalogue has to have arrived: a class opened straight from
-     the home screen has not been through the hub, and the tile appeared
-     over an empty specification and then said everything was unfiled. */
+  /* Coverage is for a class doing GCSE or A Level work, and a KS3 class
+     should not be offered a screen that can only ever be empty for it.
+
+     Nothing records which year group a class belongs to, and guessing
+     from its name is a guess: 10A is Year 10 until somebody calls a set
+     10X2 or 7-Green. So the test is what the class has actually been
+     given. A lesson filed against a point of the specification is the
+     only thing coverage counts, so a class with none has nothing to
+     show, whatever it is called.
+
+     The catalogue has to have arrived first: a class opened straight
+     from the home screen has not been through the hub. */
   const cover = $("openCover");
   if (cover) cover.hidden = true;
   if (OFFLINE) return;
   try{ await loadCatalogue(); }catch(e){ return; }
-  if (cover) cover.hidden = !(cat.points || []).length;
+  if (cover) cover.hidden = !classDoesSpecWork();
+}
+/* Has this class been given a lesson that is filed against the
+   specification? Versions count: a class doing "1.1.1, lower ability" is
+   doing 1.1.1. */
+function classDoesSpecWork(){
+  return (cat.lessons || []).some(l => {
+    if (!l.point) return false;
+    if (assignOf(l.lesson_id)) return true;
+    return familyOf(l.lesson_id).some(v => assignOf(v.lesson_id));
+  });
 }
 on("openCover", "click", () => { show("coverView"); loadCoverage(); });
 on("backClass3", "click", () => openClass(cls));
@@ -3606,6 +3622,11 @@ on("newLessonBtn", "click", () => {
 on("addLessonBtn", "click", () => {
   let showAll = false, term = "";
   openModal(box => {
+    /* Wider than an ordinary pop-up. This one is a list of lessons with a
+       search box and a button on one line above it, and at the usual 440px
+       the button had no room for its own words and came out three lines
+       tall beside a one line search box. */
+    box.classList.add("modal-pick");
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);
     modalTitle(box, "Add a lesson to " + (unit || "no unit"));
@@ -3616,7 +3637,13 @@ on("addLessonBtn", "click", () => {
     searchWrap.appendChild(el("span","searchicon","\uD83D\uDD0D"));
     const search = el("input"); search.placeholder = "Search lessons\u2026";
     searchWrap.appendChild(search);
-    const toggle = el("button","btn-ghost","Show every lesson");
+    /* Two wordings, and the CSS picks. On a phone there is no room for a
+       sentence on a button sharing a line with a search box, and "All
+       units" says the same thing in the space there is. */
+    const toggle = el("button","btn-ghost pickall");
+    const longWord = el("span","pick-long","Show every lesson");
+    const shortWord = el("span","pick-short","All units");
+    toggle.appendChild(longWord); toggle.appendChild(shortWord);
     tools.appendChild(searchWrap); tools.appendChild(toggle);
     box.appendChild(tools);
     const holder = el("div"); box.appendChild(holder);
@@ -3639,11 +3666,15 @@ on("addLessonBtn", "click", () => {
         if (showAll) return true;
         return (l.unit || "") === unit;                                // suggested by the lesson itself
       });
-      toggle.textContent = showAll ? "Only lessons for this unit" : "Show every lesson";
+      longWord.textContent = showAll ? "Only lessons for this unit" : "Show every lesson";
+      shortWord.textContent = showAll ? "This unit" : "All units";
       if (!rows.length){
+        /* The button beside the search box is not quoted by name: it says
+           something shorter on a phone, and a message telling a teacher to
+           press words that are not on screen is worse than no message. */
         holder.appendChild(el("p","modal-text", showAll
           ? "No other lessons match."
-          : "No lessons name this unit yet, press \u201cShow every lesson\u201d, or build a new one."));
+          : "No lessons name this unit yet. Look in every unit with the button above, or build a new one."));
       }
       rows.forEach(l => {
         const row = el("button","ov-row");

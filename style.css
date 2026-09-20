@@ -4777,3 +4777,22 @@ html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
 
 /* choosing a picture in the builder */
 .bpreview{max-width:100%; max-height:260px; border-radius:10px; border:1px solid var(--line)}
+
+/* ---------- picking a lesson to add to a class ----------
+   A list with a search box and a button on one line above it. At the
+   pop-up's usual 440px the button had no room for its own words and
+   came out three lines tall beside a one line search box. */
+.modal.modal-pick{max-width:720px; text-align:left}
+.modal.modal-pick .toolrow{flex-wrap:nowrap; align-items:stretch}
+.modal.modal-pick .searchbox{min-width:0}
+/* Whatever the wording, the button stays one line and keeps its height
+   the same as the box beside it. */
+.pickall{white-space:nowrap; flex:none; align-self:stretch}
+.pick-short{display:none}
+
+@media (max-width:620px){
+  /* No room for a sentence on a button sharing a line with a search box,
+     so the shorter wording takes over. */
+  .pick-long{display:none}
+  .pick-short{display:inline}
+}
