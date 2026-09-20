@@ -1866,9 +1866,9 @@ body.workpage .grow{flex:1}
 /* the teacher picker inside a pop-up, and every dropdown in the builder:
    one rule, so the task builder's filters are the same boxes as the ones
    in a task's own editor rather than something that looks nearly right */
-.bfield select, .bank-filter select{width:100%; height:44px; padding:0 12px; font-size:15px; font-family:var(--body);
+.bfield select, .bank-filter select, .bank-more select{width:100%; height:44px; padding:0 12px; font-size:15px; font-family:var(--body);
   color:var(--text); background:var(--panel); border:1.5px solid var(--line-2); border-radius:12px}
-.bfield select:focus, .bank-filter select:focus{border-color:var(--amber); outline:none}
+.bfield select:focus, .bank-filter select:focus, .bank-more select:focus{border-color:var(--amber); outline:none}
 .bfield .brow select{flex:1}
 #whoView .station{text-align:center}
 #whoView .bigselect{text-align:center; text-align-last:center}
@@ -4423,8 +4423,35 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
 html[data-bank=yes] .build-preview{display:none}
 .bank{padding:0 20px 40px}
 .bank[hidden]{display:none}
+/* Above 1180px html.builder pins the page to the window and hands the
+   scrolling to the builder's own columns, which have overflow-y:auto on
+   them. The bank is not one of those columns, so it had nowhere to go:
+   anything past the bottom of the window was unreachable and the wheel did
+   nothing at all. An exam question with a mark scheme is taller than a
+   laptop screen, so that was most of them.
+
+   Only above that width. Below it the page itself scrolls again, and a
+   scrolling box inside a scrolling page stops the wheel reaching the page:
+   overscroll-behavior:contain is the whole point of it here and it does not
+   know the difference. */
+@media (min-width:1181px){
+  html.builder .bank{flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain}
+  /* Search, Show more tasks and + New task stay put while the task being
+     written scrolls under them. */
+  html.builder .bank-filter{position:sticky; top:0; z-index:4; background:var(--bg);
+    padding:12px 0 10px; margin:0}
+}
 .bank-filter{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 16px}
-.bank-filter select{max-width:100%}
+/* The three dropdowns are a row of their own under the search box, and only
+   when they have been asked for. width:100% earlier in the file put each of
+   them on a line of its own, which is three lines of filtering above two
+   lines of task. */
+.bank-more{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 16px}
+.bank-more[hidden]{display:none}
+/* width:auto beats the width:100% every builder dropdown is given further
+   up the file. Left at 100% each one wraps onto a line of its own, which is
+   the three lines of filtering this row was taken out of the way to stop. */
+.bank-more select{width:auto; min-width:190px; max-width:100%}
 .bank-spacer{flex:1}
 .bank-said{font-size:13.5px; color:var(--muted)}
 .bank-said[data-bad=yes]{color:var(--red)}
@@ -4457,6 +4484,10 @@ html[data-bank=yes] .build-preview{display:none}
 .bankpick-row:hover{border-color:var(--amber)}
 .bankpick-row b{display:block; font-size:15px}
 .bankpick-row span{display:block; font-size:12.5px; color:var(--muted); margin-top:2px}
+/* Where a task is already filed, said in a line instead of asked again in
+   three dropdowns. */
+.specfiled{font-size:15px; padding:9px 14px; border:1.5px solid var(--line);
+  border-radius:999px; background:var(--panel-2); color:var(--text)}
 /* A number beside a box, for marks. Wide enough for two digits and the
    browser's own spinner, and no wider. */
 .smallnum{width:78px; flex:none}
@@ -4471,10 +4502,12 @@ html[data-bank=yes] .build-preview{display:none}
 }
 @media (max-width:640px){
   .bank{padding:0 12px 40px}
-  .bank-filter{gap:8px}
-  .bank-filter select, .bank-filter .searchbox{width:100%}
+  .bank-filter, .bank-more{gap:8px}
+  /* min-width:0 as well as width:100%: 190px is over half of a 320px
+     screen, and a minimum wins over a width. */
+  .bank-filter .searchbox, .bank-more select{width:100%; min-width:0}
   .bank-spacer{display:none}
-  .bank-filter .btn-primary{width:100%}
+  .bank-filter .btn-primary, .bank-filter .bank-morebtn{width:100%}
   .bank-headrow{flex-direction:column; align-items:stretch}
   .bank-types{grid-template-columns:1fr}
   .examq-marks{margin-left:0}
@@ -4490,7 +4523,21 @@ html[data-bank=yes] .build-preview{display:none}
 .levelchip:hover{border-color:var(--amber)}
 .levelchip[data-level=GCSE], .levelchip[data-level="A Level"]{
   background:var(--amber); border-color:var(--amber); color:var(--amber-ink)}
-.speclist{margin:12px 0 18px}
+/* The specification pop-up is two long lists, so it is given the room for
+   two. max-width only ever caps: on a phone .modal is still width:100% and
+   this changes nothing there. */
+.modal.spec{max-width:1180px; text-align:left}
+/* auto-fit rather than a fixed two, so a specification with three or four
+   components lays out as a grid instead of overflowing. Empty tracks
+   collapse, which is what keeps two components at half the width each
+   rather than two thirds of it. */
+.speclist{display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
+  gap:16px; align-items:start; margin:12px 0 18px}
+/* A border and nothing else: .specrow marks itself out on hover with
+   var(--panel-2), and a column painted the same colour would swallow it. */
+.speccol{min-width:0; border:1px solid var(--line); border-radius:14px;
+  padding:4px 12px 10px}
+.speccol .unit-head{margin-top:12px}
 .specrow{display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:10px;
   min-height:44px; box-sizing:border-box}
 .specrow:hover{background:var(--panel-2)}

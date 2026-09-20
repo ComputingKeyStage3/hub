@@ -236,13 +236,21 @@
      hidden entirely for KS3 and the builder is what it always was. -->
 <section class="bank" id="bankView" hidden>
   <div class="bank-filter">
-    <select id="bankComponent" title="Component"></select>
-    <select id="bankStrand" title="Strand"></select>
-    <select id="bankPoint" title="Specification point"></select>
     <span class="searchbox"><span class="searchicon">&#128269;</span><input id="bankSearch" placeholder="Search tasks"></span>
+    <!-- The builder is opened from one point of the specification, so the
+         list starts as the tasks written for that point and nothing else.
+         This is the way out to the rest of the bank. The three dropdowns
+         used to sit above every task whether they were wanted or not, on
+         three separate lines, which was most of the screen. -->
+    <button class="btn-ghost bank-morebtn" id="bankMoreBtn" type="button">Show more tasks</button>
     <span class="bank-spacer"></span>
     <span class="bank-said" id="bankSaid"></span>
     <button class="btn-primary" id="bankNew">+ New task</button>
+  </div>
+  <div class="bank-more" id="bankMore" hidden>
+    <select id="bankComponent" title="Component"></select>
+    <select id="bankStrand" title="Strand"></select>
+    <select id="bankPoint" title="Specification point"></select>
   </div>
   <div class="bank-cols">
     <div class="bank-list" id="bankList"></div>
@@ -431,6 +439,15 @@ const BLANK = {
                      message:"THE PASSWORD IS FIREWALL", shift:7,
                      prompt:"Type the hidden message here (letters only, spaces are fine):" })
 };
+/* A blank of whatever kind, filed where the lesson is filed. Only an exam
+   question carries a point of the specification in a lesson, so only that
+   one is filed here; putting a point on a paragraph would write three fields
+   into every task in the file that nothing ever reads. */
+function newBlock(kind){
+  const made = BLANK[kind] ? BLANK[kind]() : null;
+  if (made && made.type === "exam" && lesson.point) specFile(made, lesson.point);
+  return made;
+}
 /* A coding task can be told to start from another one. The reference is this
    key rather than a position, so inserting a task in between, or dragging one
    somewhere else, does not quietly point it at the wrong task. */
@@ -1228,7 +1245,7 @@ function renderNow(){
     empty.addEventListener("dragleave", () => empty.classList.remove("over"));
     empty.addEventListener("drop", (e) => {
       e.preventDefault(); empty.classList.remove("over");
-      const made = newBank ? bankCopy(newBank) : (newTask ? BLANK[newTask]() : null);
+      const made = newBank ? bankCopy(newBank) : (newTask ? newBlock(newTask) : null);
       newTask = null; newBank = null;
       addBlock(made);
     });
@@ -1407,7 +1424,7 @@ function dropInto(arr, at){
      accept it, and clearing here would take the task away from it. */
   if (!canDropOn(arr)) return;
   if (newTask || newBank){
-    const made = newBank ? bankCopy(newBank) : BLANK[newTask]();
+    const made = newBank ? bankCopy(newBank) : newBlock(newTask);
     newTask = null; newBank = null;
     if (!made) return;
     arr.splice(at < 0 ? arr.length : at, 0, made);
@@ -2640,6 +2657,30 @@ function card(b, i, arr){
    The lesson page cannot reach the specification table, and offline there is
    no server at all, so what a student is shown has to travel with the task
    rather than be looked up when it is opened. */
+/* Filing something against a point: the id, and beside it the code and the
+   strand's wording, because the lesson page cannot reach the specification
+   table and offline there is no server to ask. One function, so a task filed
+   by the builder, by the bank and by the dropdowns all carry the same
+   three things. */
+function specFile(target, pointId){
+  const p = specPointOf(pointId || "");
+  if (!p){ target.point = ""; target.code = ""; target.strand = ""; return target; }
+  target.point = p.id;
+  target.component = Number(p.component) || 0;
+  target.code = p.code;
+  /* The strand's wording either way: a task filed against the whole of 1.1
+     says "Systems architecture" just as one filed against 1.1.1 does. */
+  const strand = p.parent ? specPointOf(p.parent) : p;
+  target.strand = strand ? strand.title : "";
+  return target;
+}
+/* The one task whose dropdowns are showing. Filed already, a task says where
+   in a line and leaves it there: the builder is opened from a point, every
+   task made in it is filed against that point to begin with, and three
+   dropdowns asking a question that has already been answered sat above every
+   task in the bank. */
+let specOpenOn = null;
+
 function specPicker(into, b, onChange){
   const level = specLevel();
   const w = el("div","bfield");
@@ -2647,6 +2688,16 @@ function specPicker(into, b, onChange){
   const row = el("div","brow");
   if (!level){
     w.appendChild(el("p","bhelp","Pick a GCSE or A Level year group first."));
+    into.appendChild(w);
+    return;
+  }
+  const filed = specPointOf(b.point);
+  if (filed && specOpenOn !== b){
+    row.appendChild(el("span","specfiled", filed.code + " " + filed.title));
+    const change = el("button","btn-ghost bmini2","Change");
+    change.addEventListener("click", () => { specOpenOn = b; render(); });
+    row.appendChild(change);
+    w.appendChild(row);
     into.appendChild(w);
     return;
   }
@@ -2675,13 +2726,9 @@ function specPicker(into, b, onChange){
   const mine = specPointOf(b.point);
   const strandId = mine ? (mine.parent || mine.id) : "";
   sel("Strand…", strandId, strands.map(s => [s.id, s.code + " " + s.title]), (v) => {
-    b.point = ""; b.code = ""; b.strand = "";
-    if (v){
-      const s = specPointOf(v);
-      /* Filed against the strand until a point is picked, which is better
-         than nothing for a question that spans the whole of it. */
-      b.point = v; b.code = s ? s.code : ""; b.strand = s ? s.title : "";
-    }
+    /* Filed against the strand until a point is picked, which is better
+       than nothing for a question that spans the whole of it. */
+    specFile(b, v);
     if (onChange) onChange();
     render();
   });
@@ -2689,16 +2736,17 @@ function specPicker(into, b, onChange){
     const kids = specPoints(strandId);
     if (kids.length) sel("Whole strand", b.point === strandId ? "" : b.point,
       kids.map(p => [p.id, p.code + " " + p.title]), (v) => {
-        const strand = specPointOf(strandId);
-        if (!v){ b.point = strandId; b.code = strand ? strand.code : ""; b.strand = strand ? strand.title : ""; }
-        else {
-          const p = specPointOf(v);
-          b.point = v; b.code = p ? p.code : "";
-          b.strand = p ? (strand ? strand.title : "") : "";
-        }
+        specFile(b, v || strandId);
         if (onChange) onChange();
         render();
       });
+  }
+  /* Once it is filed the line above is enough, so there is a way back to it.
+     Nothing is lost by pressing it: the dropdowns save as they are used. */
+  if (mine){
+    const done = el("button","btn-ghost bmini2","Done");
+    done.addEventListener("click", () => { specOpenOn = null; render(); });
+    row.appendChild(done);
   }
   w.appendChild(row);
   into.appendChild(w);
@@ -3596,7 +3644,7 @@ document.querySelectorAll(".pal[data-add]").forEach(btn => {
     if (e.dataTransfer){ e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", newTask); }
   });
   btn.addEventListener("dragend", () => { btn.classList.remove("dragging"); newTask = null; });
-  btn.addEventListener("click", () => addBlock(BLANK[btn.dataset.add]()));
+  btn.addEventListener("click", () => addBlock(newBlock(btn.dataset.add)));
 });
 
 /* Put a task into the lesson wherever a task should go. Takes the block
@@ -4111,8 +4159,8 @@ function addTaskRow(target, inside){
     group.kinds.forEach(item => {
       const btn = el("button","btn-ghost bmini2", item.label);
       btn.addEventListener("click", () => {
-        if (!BLANK[item.kind]) return;
-        const made = BLANK[item.kind]();
+        const made = newBlock(item.kind);
+        if (!made) return;
         target.push(made);
         openOnly(target, made);
         viewAll = false;
@@ -4481,6 +4529,11 @@ let bankDirtyAt = 0;         // when it was last typed in, for the autosave
 let bankSaveTimer = null;
 let bankBusy = false;
 let bankFind = { component:0, strand:"", point:"", search:"" };
+/* Whether the three specification dropdowns are on show. Off means the list
+   is the lesson's own point, which is what a teacher who came in through
+   1.1.1 wants to see; on widens it to the whole bank and offers the
+   dropdowns to narrow it again. */
+let bankMore = false;
 
 function bankId(){
   return "k" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
@@ -4516,6 +4569,10 @@ function showBank(on){
       bankFind.strand = p.parent || p.id;
       bankFind.point = p.id;
     }
+    /* With no point to start from the list is already the whole bank, so
+       there is nothing behind the button and the dropdowns are the only way
+       to find anything. */
+    if (!p) bankMore = true;
     bankLoad();
   }
   if (typeof paintBuildBar === "function") paintBuildBar();
@@ -4600,6 +4657,15 @@ function renderBank(){
 }
 
 function paintBankFilter(level){
+  $("bankMore").hidden = !bankMore;
+  const btn = $("bankMoreBtn");
+  btn.textContent = bankMore ? "Show fewer tasks" : "Show more tasks";
+  btn.title = bankMore
+    ? "Back to the tasks for " + (specLabel(lesson.point) || "this lesson")
+    : "Look through the tasks written for the rest of the specification";
+  /* Nothing to go back to, so pressing it would only take the dropdowns
+     away and leave the same list behind. */
+  btn.hidden = bankMore && !specPointOf(lesson.point || "");
   const comps = specComponents(level);
   const cs = $("bankComponent");
   cs.innerHTML = "";
@@ -4649,14 +4715,34 @@ on("bankStrand", "change", () => {
 on("bankPoint", "change", () => { bankFind.point = $("bankPoint").value; bankLoad(); });
 on("bankSearch", "input", () => { bankFind.search = $("bankSearch").value; renderBank(); });
 on("bankNew", "click", () => bankNew());
+/* Opening it up really does show more tasks: the filter is cleared to the
+   whole level, and the dropdowns appear to narrow it again. Closing it puts
+   the lesson's own point back, so the button says what it does both ways. */
+on("bankMoreBtn", "click", () => {
+  bankMore = !bankMore;
+  if (bankMore){ bankFind.component = 0; bankFind.strand = ""; bankFind.point = ""; }
+  else {
+    const p = specPointOf(lesson.point || "");
+    bankFind.component = p ? (Number(p.component) || 0) : 0;
+    bankFind.strand = p ? (p.parent || p.id) : "";
+    bankFind.point = p ? p.id : "";
+  }
+  bankLoad();
+});
 
 /* ---------- the one being edited ---------- */
 function bankNew(){
   bankSaveNow(true);
-  bankTask = { id: bankId(), title:"", point: bankFind.point || bankFind.strand || "",
-               component: bankFind.component || 0, block: null, fresh: true };
-  const p = specPointOf(bankTask.point);
-  if (p) bankTask.component = Number(p.component) || bankTask.component;
+  /* Filed before it is written. The builder was opened from a point of the
+     specification, so which point this task belongs to is already known and
+     nobody should have to answer it again out of three dropdowns. Whatever
+     the list is narrowed to wins, because that is the teacher looking at
+     one point on purpose. */
+  const home = specPointOf(lesson.point || "");
+  bankTask = { id: bankId(), title:"", point:"", component:0, block: null, fresh: true };
+  specFile(bankTask, bankFind.point || bankFind.strand || (home ? home.id : ""));
+  if (!bankTask.component) bankTask.component = bankFind.component || 0;
+  specOpenOn = null;
   renderBank();
 }
 async function bankEdit(id){
@@ -4718,12 +4804,12 @@ function paintBankEditor(){
       btn.appendChild(el("span","", t[2]));
       btn.addEventListener("click", () => {
         bankTask.block = BLANK[t[0]]();
-        /* A task filed before its kind was chosen keeps where it was filed. */
+        /* A task filed before its kind was chosen keeps where it was filed.
+           An exam question carries the filing on the block itself, because a
+           student is shown the number beside the question. */
         if (bankTask.block.type === "exam"){
-          bankTask.block.point = bankTask.point;
-          bankTask.block.component = bankTask.component;
-          const p = specPointOf(bankTask.point);
-          if (p){ bankTask.block.code = p.code; bankTask.block.strand = p.parent ? (specPointOf(p.parent) || {}).title || "" : p.title; }
+          specFile(bankTask.block, bankTask.point);
+          if (!bankTask.block.component) bankTask.block.component = bankTask.component;
         }
         /* What "untouched" means for this one, filing and all, so a task
            nobody has written yet is not saved into the list. */

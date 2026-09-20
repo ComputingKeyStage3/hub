@@ -210,6 +210,11 @@ setTimeout(function(){
     </div>
     <div class="toolrow">
       <button class="btn-ghost iconbtn refresh" id="refStrand" title="Refresh">&#8635;</button>
+      <!-- A lesson covering the whole of 1.1 has to live somewhere, but it is
+           one shelf out of thirteen, not a fourteenth point. A tile the same
+           size as 1.1.1 said otherwise and sat where the first point should
+           be. -->
+      <button class="btn-ghost bmini2" id="allOfStrand" hidden></button>
     </div>
     <div class="classgrid" id="hubPoints"></div>
   </div>
@@ -2488,6 +2493,7 @@ function openComponent(n){
 }
 function paintStrands(){
   const g = $("hubPoints"); g.innerHTML = "";
+  $("allOfStrand").hidden = true;          // there is no one strand to show all of
   const strands = strandsOf(hubLevel(), hubComp);
   if (!strands.length){
     g.appendChild(el("p","hint","Nothing in this component yet."));
@@ -2513,6 +2519,7 @@ on("refStrand", "click", async () => {
 on("backStrandComp", "click", () => {
   if (hubStrand) openComponent(hubComp); else openComponents();
 });
+on("allOfStrand", "click", () => { if (hubStrand) openPoint(hubStrand); });
 
 function openStrand(id){
   hubStrand = id; hubPoint = "";
@@ -2522,16 +2529,19 @@ function openStrand(id){
   show("hubPointView");
   paintPoints();
 }
-/* The points inside a strand, and the strand itself at the top: a lesson
-   covering the whole of 1.1 has to have somewhere to live too. */
+/* The points inside a strand. A lesson covering the whole of 1.1 rather than
+   one of its points still has somewhere to live: the small button beside
+   Refresh, rather than a tile at the front of the grid pretending to be a
+   point of the specification. */
 function paintPoints(){
   const g = $("hubPoints"); g.innerHTML = "";
   const strand = pointById(hubStrand);
-  const whole = el("button","classtile");
-  whole.appendChild(el("b","", "All of " + (strand ? strand.code : "")));
-  whole.appendChild(el("span","", countWord(lessonsOfPoint(hubStrand).length, "lesson", "lessons")));
-  whole.addEventListener("click", () => openPoint(hubStrand));
-  g.appendChild(whole);
+  const whole = $("allOfStrand");
+  const n = lessonsOfPoint(hubStrand).length;
+  whole.hidden = false;
+  whole.textContent = "Show all of " + (strand ? strand.code : "");
+  whole.title = countWord(n, "lesson", "lessons") + " filed against the whole of "
+                + (strand ? strand.code : "it") + ", rather than against one of its points.";
   childrenOf(hubStrand).forEach(p => {
     const t = el("button","classtile");
     t.appendChild(el("b","", p.code + " " + p.title));
@@ -2594,6 +2604,11 @@ on("specBtn", "click", () => openSpec());
 function openSpec(){
   const level = levelOf(hubYear);
   openModal(box => {
+    /* A whole specification is two long lists, not one. Stacked in a 440px
+       pop-up, Component 2 began somewhere past the bottom of a laptop
+       screen and the only way to see the shape of either was to scroll.
+       Wide, with a column each, and both fit on the screen at once. */
+    box.classList.add("spec");
     modalTitle(box, level + " specification");
     box.appendChild(el("p","modal-text",
       "What every exam question and bank task can be filed under. "
@@ -2603,19 +2618,24 @@ function openSpec(){
     const draw = () => {
       holder.innerHTML = "";
       componentsOf(level).forEach(n => {
-        holder.appendChild(el("p","unit-head","Component " + n));
+        /* One column per component. Two sit side by side; a specification
+           with more than two lays them out in a grid rather than growing a
+           third column too narrow to read. */
+        const col = el("div","speccol");
+        col.appendChild(el("p","unit-head","Component " + n));
         const strands = strandsOf(level, n);
-        if (!strands.length) holder.appendChild(el("p","hint","Nothing in this component yet."));
+        if (!strands.length) col.appendChild(el("p","hint","Nothing in this component yet."));
         strands.forEach(s => {
-          holder.appendChild(specRow(s, false, draw));
-          childrenOf(s.id).forEach(p => holder.appendChild(specRow(p, true, draw)));
+          col.appendChild(specRow(s, false, draw));
+          childrenOf(s.id).forEach(p => col.appendChild(specRow(p, true, draw)));
           const add = el("button","btn-ghost bmini2 specadd","+ Add a point under " + s.code);
           add.addEventListener("click", () => addPoint(level, n, s.id, draw));
-          holder.appendChild(add);
+          col.appendChild(add);
         });
         const addS = el("button","btn-ghost bmini2 specadd","+ Add a strand to component " + n);
         addS.addEventListener("click", () => addPoint(level, n, "", draw));
-        holder.appendChild(addS);
+        col.appendChild(addS);
+        holder.appendChild(col);
       });
       if (!(cat.points || []).length)
         holder.appendChild(el("p","hint",
