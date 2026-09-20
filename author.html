@@ -90,7 +90,13 @@
       <!-- A lesson built under a point of the specification is built out of
            the tasks written for that point, so those are what the column
            offers and nothing else is in the way. Everything the builder can
-           make is still one button away. -->
+           make is still one button away.
+
+           New page is above all of it and outside all of it. A lesson is
+           made of pages whichever key stage it is for, and having to open
+           the custom tasks to find the one button that makes a page put a
+           KS4 lesson's own shape behind a flap. -->
+      <button class="pal strong" id="palNewPage" data-add="page" hidden><b>+ New page</b><span>Students see one page at a time</span></button>
       <div id="palPoint" hidden>
         <div class="pal-pointhead">
           <b id="palPointName"></b>
@@ -121,7 +127,7 @@
         </div>
         <div id="palAllList" hidden></div>
       </div>
-      <button class="pal pal-more" id="palMoreBtn" hidden><b>+ Add a custom task</b><span>Any of the standard task types</span></button>
+      <button class="btn-ghost toggle pal-morebtn" id="palMoreBtn" type="button" aria-pressed="false" hidden>+ Add custom task</button>
       <div id="palStandard">
       <button class="pal strong" data-add="page"><b>+ New page</b><span>Students see one page at a time</span></button>
       <!-- Both of these are hidden for a KS3 year group. The bank button is
@@ -4499,6 +4505,14 @@ function paintPointPalette(){
   const wanted = !!point && !!specLevel() && !lesson.assessment;
   $("palPoint").hidden = !wanted;
   $("palMoreBtn").hidden = !wanted;
+  /* New page stands on its own above everything, so the palette's own copy
+     inside the standard list is taken out to leave one of it. */
+  $("palNewPage").hidden = !wanted;
+  const inList = $("palStandard").querySelector('.pal[data-add="page"]');
+  if (inList) inList.hidden = wanted;
+  const more = $("palMoreBtn");
+  more.classList.toggle("on", showEverything);
+  more.setAttribute("aria-pressed", showEverything ? "true" : "false");
   /* Without a point there is nothing to narrow the column down to, so it is
      the full palette exactly as it has always been. */
   $("palStandard").hidden = wanted && !showEverything;
@@ -4674,8 +4688,6 @@ function bankCopy(t){
 }
 on("palMoreBtn", "click", () => {
   showEverything = !showEverything;
-  $("palMoreBtn").querySelector("b").textContent =
-    showEverything ? "− Hide the custom tasks" : "+ Add a custom task";
   paintPointPalette();
 });
 
@@ -4738,11 +4750,16 @@ let bankAll = false;
 function bankId(){
   return "k" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
 }
-function bankSay(words, bad){
+/* The line beside the buttons. `state` is nothing for an ordinary word,
+   true for something that went wrong, and "warn" for work that has not
+   been saved, which is neither of those: nothing is broken, but a teacher
+   about to close the tab needs to see it. */
+function bankSay(words, state){
   const e = $("bankSaid");
   if (!e) return;
   e.textContent = words || "";
-  e.dataset.bad = bad ? "yes" : "";
+  e.dataset.bad = state === true ? "yes" : "";
+  e.dataset.warn = state === "warn" ? "yes" : "";
 }
 function showBank(on){
   bankOpen = !!on;
@@ -4775,6 +4792,15 @@ function showBank(on){
     if (!p) bankAll = true;
     bankLoad();
   } else {
+    /* Coming back to the lesson, the column on the left is out of date: a
+       task written and saved while the task builder was open is exactly
+       the task somebody now wants to drag onto the page, and it was not
+       in the list that was fetched before they went. Thrown away and
+       fetched again rather than added to, because tasks can also have
+       been renamed, refiled or deleted over there. */
+    pointTasksFor = null;
+    palAllFor = null;
+    paintPointPalette();
     /* Both previews are the same lesson page reading the same key, and only
        one of them is ever on screen. Leaving the task builder therefore has
        to put the lesson back, or the preview beside the lesson is still
@@ -4783,8 +4809,38 @@ function showBank(on){
   }
   if (typeof paintBuildBar === "function") paintBuildBar();
 }
-on("tabBuild", "click", () => { if (bankOpen){ bankSaveNow(true); showBank(false); } });
+on("tabBuild", "click", () => { if (bankOpen) bankLeave(() => showBank(false)); });
 on("tabBank", "click", () => { if (!bankOpen) showBank(true); });
+
+/* Is there something written here that Save has not had? */
+function bankUnsaved(){ return !!(bankTask && bankTask.block && bankDirtyAt); }
+/* About to leave the task, or the whole screen, with work that has not
+   been saved. Nothing writes itself now, so this is the one place that
+   stands between a written question and losing it. */
+function bankLeave(then){
+  if (!bankUnsaved()){ then(); return; }
+  openModal(box => {
+    box.appendChild(el("h2","","Save this task first?"));
+    box.appendChild(el("p","modal-text",
+      "“" + (bankTask.title || "This task") + "” has changes that have not been saved. "
+      + "Tasks are only saved when you press Save task."));
+    const save = el("button","btn-primary modal-cta","Save it");
+    save.addEventListener("click", async () => {
+      closeModal();
+      await bankSaveNow(true);
+      then();
+    });
+    const drop = el("button","btn-ghost modal-cta","Leave it unsaved");
+    drop.addEventListener("click", () => {
+      closeModal();
+      bankDirtyAt = 0;
+      then();
+    });
+    const no = el("button","btn-ghost modal-stay","Stay here");
+    no.addEventListener("click", closeModal);
+    box.appendChild(save); box.appendChild(drop); box.appendChild(no);
+  });
+}
 
 /* ---------- the list ---------- */
 async function bankLoad(){
@@ -4958,7 +5014,7 @@ document.addEventListener("pointerdown", (e) => {
 
 /* ---------- the one being edited ---------- */
 function bankNew(){
-  bankSaveNow(true);
+  if (bankUnsaved()){ bankLeave(bankNew); return; }
   /* Filed before it is written. The builder was opened from a point of the
      specification, so which point this task belongs to is already known and
      nobody should have to answer it again out of three dropdowns. Whatever
@@ -4973,7 +5029,7 @@ function bankNew(){
 }
 async function bankEdit(id){
   if (bankTask && bankTask.id === id) return;
-  bankSaveNow(true);
+  if (bankUnsaved()){ bankLeave(() => bankEdit(id)); return; }
   const API = (window.HUB && window.HUB.API) || "";
   bankSay("Opening…");
   try{
@@ -5093,11 +5149,15 @@ function paintBankEditor(){
 /* Typed in. Saved two and a half seconds after they stop, the way the
    lesson saves itself, so a teacher moving down a list of past paper
    questions never has to think about it. */
+/* Typed in. A task is NOT saved on a timer: a lesson is a thing you leave
+   half written and come back to, and saving it as you go is right, but a
+   bank task is written, looked at in the preview and then either kept or
+   thrown away. Saving every few seconds filled the bank with half-written
+   questions and with the ones somebody changed their mind about. Save task
+   is the only thing that writes one. */
 function bankTouch(){
   bankDirtyAt = Date.now();
-  bankSay("Saving…");
-  clearTimeout(bankSaveTimer);
-  bankSaveTimer = setTimeout(() => bankSaveNow(true), 2500);
+  bankSay("Not saved yet", "warn");
   scheduleBankPreview();
 }
 

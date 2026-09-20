@@ -4664,3 +4664,15 @@ html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
   .filtermenu{min-width:0}
   .pal-allrow{gap:4px}
 }
+
+/* ---------- v10.0 follow-ups ---------- */
+/* Work written in the task builder and not yet saved. Not red: nothing has
+   gone wrong, but it must not look like "Saved" either. */
+.bank-said[data-warn=yes]{color:var(--amber-dark); font-weight:700}
+
+/* Add custom task sits like All tasks above it: an outline button that
+   stays pressed, not a dashed block pretending to be a task. */
+.pal-morebtn{display:block; width:100%; margin:14px 0 8px; font-size:13.5px;
+  padding:7px 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+/* New page is the one filled button in the column, above everything. */
+#palNewPage{margin:0 0 14px}
