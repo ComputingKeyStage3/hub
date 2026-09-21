@@ -13,9 +13,40 @@
 <script src="pyedit.js"></script>
 <script src="teacher.js"></script>
 <script src="menus.js"></script>
+<script src="dragline.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
+
+<!-- Shown while a lesson is being opened, not while a new one is started:
+     a blank lesson has nothing to wait for, and a screen that comes and
+     goes inside one frame reads as a flicker rather than as a page loading.
+     Written out here rather than built by the script at the foot of the
+     page, because that script is thousands of lines and the wait for it to
+     be read is part of what this covers. -->
+<div class="loadscreen gone" id="loadScreen" hidden>
+  <div class="load-inner">
+    <div class="load-dots"><span></span><span></span><span></span></div>
+    <p id="loadMsg">Loading</p>
+    <!-- Only if the wait goes on far too long. -->
+    <div class="load-stuck" id="loadStuck" hidden>
+      <p id="loadStuckMsg">This is taking longer than it should. The school network may be busy.</p>
+      <div class="row">
+        <button class="btn-primary" id="loadRetry" type="button">Try again</button>
+        <a class="btn-ghost" href="admin.html">Back to the teacher console</a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  if (!new URLSearchParams(location.search).get("edit")) return;
+  var screen = document.getElementById("loadScreen");
+  screen.hidden = false;
+  screen.classList.remove("gone");
+  document.getElementById("loadRetry").addEventListener("click", function(){ location.reload(); });
+})();
+</script>
 
 <div class="homebar">
   <!-- Which of the two things this page is. They were a strip of their own
@@ -349,6 +380,77 @@ function el(tag, cls, text){
   return e;
 }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+/* ---------------- the loading screen ----------------
+   Opening a lesson is several waits one after another: the year groups and
+   units, the lesson itself, then putting it back together into cards. Saying
+   which one is going on is the difference between a page that is working and
+   a page that has hung, and the builder took long enough over a big lesson
+   that teachers were reloading it half way through.
+
+   The steps are told by the code as it reaches them rather than guessed on a
+   timer. The standard lines only come out when a step has taken longer than
+   a step should, so they never pretend to be progress. */
+const LOAD_WAITING = ["Still loading", "Almost there", "Nearly ready"];
+let loadShownAt = 0, loadWaitTimer = null, loadWaitAt = 0, loadStuckTimer = null;
+let loadStage = "Loading";                   // the last thing the code actually said
+
+function showLoader(text){
+  const screen = $("loadScreen");
+  if (!screen) return;
+  screen.hidden = false;
+  screen.classList.remove("gone");
+  const stuck = $("loadStuck"); if (stuck) stuck.hidden = true;
+  loadShownAt = Date.now();
+  clearTimeout(loadStuckTimer);
+  /* Past the time limit on a single call, so only a real jam shows this. */
+  loadStuckTimer = setTimeout(() => {
+    if (screen.hidden || !stuck) return;
+    /* Back to the stage it is really on. "Nearly ready" above a note saying
+       this has taken too long contradicts itself, and which step it has
+       stopped at is the useful thing at this point. */
+    clearTimeout(loadWaitTimer);
+    const msg = $("loadMsg"); if (msg) msg.textContent = loadStage;
+    stuck.hidden = false;
+  }, 22000);
+  return loadStep(text || "Loading");
+}
+
+/* Say which stage the load has reached, and hand the browser back long
+   enough to draw it. Everything after most of these calls is synchronous:
+   without the pause the words are all set within one turn and the only line
+   anybody ever sees is the last of them. */
+function loadStep(text){
+  const screen = $("loadScreen");
+  if (!screen || screen.hidden) return Promise.resolve();
+  const msg = $("loadMsg");
+  loadStage = text;
+  if (msg) msg.textContent = text;
+  clearTimeout(loadWaitTimer);
+  loadWaitAt = 0;
+  const waiting = () => {
+    if (screen.hidden || !msg) return;
+    msg.textContent = LOAD_WAITING[Math.min(loadWaitAt, LOAD_WAITING.length - 1)];
+    loadWaitAt++;
+    loadWaitTimer = setTimeout(waiting, 4000);
+  };
+  loadWaitTimer = setTimeout(waiting, 3000);
+  return new Promise(done => setTimeout(done, 30));
+}
+
+/* atOnce for the times the screen is in the way of something that has to be
+   read now: a pop-up asking for the sign-in key, or a lesson that would not
+   open. Everything else waits out the short minimum below. */
+function hideLoader(atOnce){
+  const screen = $("loadScreen");
+  if (!screen || screen.hidden) return;
+  const left = atOnce ? 0 : 450 - (Date.now() - loadShownAt);
+  if (left > 0){ setTimeout(() => hideLoader(true), left); return; }
+  clearTimeout(loadWaitTimer);
+  clearTimeout(loadStuckTimer);
+  screen.hidden = true;
+  screen.classList.add("gone");
+}
 
 /* ---------------- the little question marks ---------------- */
 /* Every note that used to sit under a box as a grey paragraph is now behind
@@ -5370,10 +5472,14 @@ function bankTree(){
     const up = keep.has(t.group_id) ? t.group_id : "";
     (kids[up] = kids[up] || []).push(t);
   });
-  /* Groups above loose tasks at every level, so the shape of the bank reads
-     before the contents of it do. */
+  /* The order a teacher has dragged them into. Everything starts at nought,
+     and while two rows are still level the older arrangement decides: groups
+     above loose tasks, so the shape of the bank reads before the contents of
+     it do, and the server's newest-first within that. A bank nobody has
+     dragged anything in therefore looks exactly as it always did. */
   Object.keys(kids).forEach(k => {
-    kids[k].sort((a, b) => (isGroupRow(b) ? 1 : 0) - (isGroupRow(a) ? 1 : 0));
+    kids[k].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0)
+                        || (isGroupRow(b) ? 1 : 0) - (isGroupRow(a) ? 1 : 0));
   });
   return { kids, count: keep.size };
 }
@@ -5393,6 +5499,7 @@ function renderBank(){
   const level = specLevel();
   paintBankFilter(level);
   const list = $("bankList");
+  wireBankList(list);
   list.innerHTML = "";
   if (bankList === null){
     list.appendChild(el("p","hint","The task bank needs the server. It is not there in offline mode."));
@@ -5492,19 +5599,6 @@ function bankGroupRow(g, depth){
   del.addEventListener("click", () => askDeleteGroup(g));
   acts.appendChild(del);
   bankDraggable(row, g);
-  /* A group takes what is dropped on it. */
-  row.addEventListener("dragover", (e) => {
-    if (!bankDragging || bankDragging.id === g.id) return;
-    if (bankHoldsRow(g.id, bankDragging.id)) return;    // never into its own insides
-    e.preventDefault(); e.stopPropagation();
-    row.classList.add("over");
-  });
-  row.addEventListener("dragleave", () => row.classList.remove("over"));
-  row.addEventListener("drop", (e) => {
-    e.preventDefault(); e.stopPropagation();
-    row.classList.remove("over");
-    if (bankDragging) bankFile(bankDragging, g.id);
-  });
   return row;
 }
 /* Whatever is being dragged about the list, so the row under the pointer
@@ -5512,12 +5606,76 @@ function bankGroupRow(g, depth){
 let bankDragging = null;
 function bankDraggable(row, t){
   row.draggable = true;
+  /* The list works out where a drop lands from the rows themselves, so each
+     one has to be able to say which task it is drawing. */
+  row.__task = t;
   row.addEventListener("dragstart", (e) => {
     bankDragging = t;
     row.classList.add("dragging");
     if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", t.id); }
   });
-  row.addEventListener("dragend", () => { row.classList.remove("dragging"); bankDragging = null; });
+  row.addEventListener("dragend", () => {
+    row.classList.remove("dragging"); bankDragging = null;
+    document.querySelectorAll("#bankList .over").forEach(x => x.classList.remove("over"));
+  });
+}
+/* ---------- one drop target for the whole list ----------
+   Every row used to take its own drop, and a group row took the only one
+   that did anything. Measured in a browser, that left a dead band seven or
+   eight pixels deep between every pair of rows, where the pointer is over
+   the list and nothing else: letting go there threw the drop away without a
+   word, and it is most of the width of the gap a teacher is aiming at when
+   they mean "between these two". Every task row was dead the same way.
+
+   So the list takes the drop and works out from the pointer which row was
+   meant. There are no gaps in it to fall down. */
+let bankListWired = false;
+function wireBankList(list){
+  if (bankListWired) return;
+  bankListWired = true;
+  const rows = () => Array.from(list.querySelectorAll(".bank-row"));
+  const lit = (row) => {
+    list.querySelectorAll(".bank-row.over").forEach(x => { if (x !== row) x.classList.remove("over"); });
+    if (row) row.classList.add("over");
+  };
+  /* A group can take something inside it, unless it is the thing being
+     dragged or somewhere under it: a group made its own parent draws itself
+     until the tab gives up. */
+  const holds = (row) => {
+    const t = row.__task;
+    return !!t && isGroupRow(t) && bankDragging
+        && t.id !== bankDragging.id && !bankHoldsRow(t.id, bankDragging.id);
+  };
+  list.addEventListener("dragover", (e) => {
+    if (!bankDragging) return;
+    const all = rows();
+    if (!all.length) return;
+    e.preventDefault();
+    const hit = window.dragLine.mark(list, all, e, { into: holds });
+    lit(hit.into);
+  });
+  list.addEventListener("dragleave", (e) => {
+    if (!window.dragLine.left(list, e)) return;
+    window.dragLine.hide(); lit(null);
+  });
+  list.addEventListener("drop", (e) => {
+    e.preventDefault();
+    window.dragLine.hide(); lit(null);
+    const moved = bankDragging;
+    if (!moved) return;
+    const all = rows();
+    const hit = window.dragLine.mark(list, all, e, { into: holds });
+    window.dragLine.hide();
+    if (hit.into){ bankFile(moved, hit.into.__task.id); return; }
+    /* The line is drawn above a row, so that row is the one it joins: same
+       group, same place in it. Past the end of the list there is no row
+       above to follow, so the last one stands in, and the strip underneath
+       is there for anybody who meant the top of the list instead. */
+    const below = all[hit.slot] || all[all.length - 1];
+    const beside = below && below.__task;
+    if (!beside || beside.id === moved.id) return;
+    bankPlace(moved, beside.group_id || "", all[hit.slot] ? beside.id : null);
+  });
 }
 /* Is `id` somewhere inside the group `top`? Dropping a group onto its own
    insides would make it its own parent, and the list would then draw itself
@@ -5537,13 +5695,20 @@ function dropOutOfGroups(list){
   const out = el("div","bank-outzone","Drag a task here to take it out of its group");
   out.addEventListener("dragover", (e) => {
     if (!bankDragging || !bankDragging.group_id) return;
-    e.preventDefault();
+    /* The list behind this takes every drop that reaches it and draws a line
+       in the nearest gap. Over this strip there is no gap being aimed at, so
+       the list is not told about it. */
+    e.preventDefault(); e.stopPropagation();
+    window.dragLine.hide();
     out.classList.add("over");
   });
-  out.addEventListener("dragleave", () => out.classList.remove("over"));
+  out.addEventListener("dragleave", (e) => {
+    if (window.dragLine.left(out, e)) out.classList.remove("over");
+  });
   out.addEventListener("drop", (e) => {
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     out.classList.remove("over");
+    window.dragLine.hide();
     if (bankDragging) bankFile(bankDragging, "");
   });
   list.appendChild(out);
@@ -5779,34 +5944,60 @@ function askDeleteGroup(g){
    from what the list is holding would write an empty task over a real one:
    the first go at this did, and it quietly emptied the line a group shows
    under its heading in a lesson. */
-async function bankFile(row, into){
-  if (!row || row.id === into) return;
-  if (into && bankHoldsRow(into, row.id)) return;      // never inside itself
-  if ((row.group_id || "") === (into || "")) return;
+function bankFile(row, into){
+  return bankPlace(row, into, null);
+}
+/* The order rows are in at one level of the bank, which is the order the
+   list draws them in. */
+function bankKin(all, into){
+  return all.filter(t => (t.group_id || "") === (into || ""))
+            .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0)
+                          || (isGroupRow(b) ? 1 : 0) - (isGroupRow(a) ? 1 : 0));
+}
+/* Put `row` in group `into`, above `beforeId` or at the end of it.
+
+   It sends the whole of that group's contents in the order they should be
+   in, rather than one row's new place. Written a row at a time, two of them
+   end up claiming the same slot the moment a save is lost; written as a
+   list, the worst that can happen is that the list stays as it was. The
+   hub's tiles are reordered the same way for the same reason.
+
+   It also used to take two round trips. Filing a row meant fetching the
+   whole task back first, because saving from what the list holds would have
+   written an empty task over a real one. Nothing about the task itself is
+   touched here, so neither of those is needed and the wait is halved. */
+async function bankPlace(row, into, beforeId){
+  if (!row) return;
+  into = into || "";
+  if (into === row.id || (into && bankHoldsRow(into, row.id))) return;   // never inside itself
+  const all = bankList || [];
+  const now = bankKin(all, into).map(t => t.id);
+  const kin = bankKin(all, into).filter(t => t.id !== row.id);
+  let at = beforeId ? kin.findIndex(t => t.id === beforeId) : -1;
+  if (at < 0) at = kin.length;
+  kin.splice(at, 0, row);
+  const ids = kin.map(t => t.id);
+  /* It is already there, in that place. Saying so to the server would be a
+     wait and a redraw for nothing. */
+  if ((row.group_id || "") === into && now.join("|") === ids.join("|")) return;
+
+  const wasGroup = row.group_id || "";
+  const wasAt = new Map(kin.map(t => [t, t.position]));
+  row.group_id = into;
+  kin.forEach((t, i) => { t.position = i; });
+  renderBank();                                        // instantly, before anything is sent
+
   const API = (window.HUB && window.HUB.API) || "";
-  const was = row.group_id || "";
-  row.group_id = into || "";                            // so the list redraws at once
-  renderBank();
   try{
-    const r0 = await fetch(API + "/api/teacher/tasks?id=" + encodeURIComponent(row.id),
-                           { headers: window.teacherAuth.headers(), cache:"no-store" });
-    if (authFailed(r0.status, () => bankFile(row, into))) return;
-    const d0 = await r0.json();
-    if (!d0 || !d0.task) throw new Error("Could not read that one.");
     const r = await fetch(API + "/api/teacher/tasks", { method:"POST",
       headers: window.teacherAuth.json(),
-      body: JSON.stringify({ op:"save", id: row.id, title: d0.task.title || row.title || "",
-                             level: d0.task.level || specLevel(),
-                             component: Number(d0.task.component) || 0,
-                             point: d0.task.point || "", kind: d0.task.kind || row.kind || "",
-                             marks: Number(d0.task.marks) || 0,
-                             groupId: row.group_id, data: d0.task.data }) });
-    if (authFailed(r.status, () => bankFile(row, into))) return;
+      body: JSON.stringify({ op:"reorder", groupId: into, ids: ids }) });
+    if (authFailed(r.status, () => bankPlace(row, into, beforeId))) return;
     if (!r.ok) throw new Error((await r.json()).error || "Could not move that.");
     pointTasksFor = null; palAllFor = null;
-    await bankLoad();
   }catch(e){
-    row.group_id = was;                                 // put it back where it was
+    row.group_id = wasGroup;                           // put it back where it was
+    kin.forEach(t => { t.position = wasAt.get(t); });
     bankSay(e.message || "Could not move that.", true);
     renderBank();
   }
@@ -7153,9 +7344,11 @@ async function loadUnitsAndYears(){
    thing that has to come from the index is the code, which lives there. */
 async function loadLessonFromFolder(editId){
   try{
+    await loadStep("Fetching the lesson");
     const r = await fetch("lessons/" + encodeURIComponent(editId) + ".json", { cache:"no-store" });
     if (!r.ok) throw new Error("There is no lessons/" + editId + ".json.");
     const data = await r.json();
+    await loadStep("Checking where it is filed");
     let known = {};
     try{
       const file = await window.lessonFile.load();
@@ -7165,20 +7358,29 @@ async function loadLessonFromFolder(editId){
     if (!lesson.year && known.year) lesson.year = known.year;
     lesson.savedAs = editId;
     lesson.code = known.code || "";
+    await loadStep("Populating the lesson content");
     migrate(lesson.blocks); tidyIntoPages(); startFolded();
     dirty = false;
     showTitle();
     paintPickers();
     setMode(!!lesson.assessment && !lesson.practical, !!lesson.practical);
-    render(); refreshPreview();
-  }catch(e){ say("Could not open that lesson", e.message); }
+    await loadStep("Laying out the pages");
+    render();
+    await loadStep("Almost there");
+    refreshPreview();
+  }catch(e){ hideLoader(true); say("Could not open that lesson", e.message); }
 }
 
 async function loadUnitsAndMaybeLesson(){
   const API = (window.HUB && window.HUB.API) || "";
-  if (!API && !OFFLINE) return;
-  await loadUnitsAndYears();
   const editId = new URLSearchParams(location.search).get("edit");
+  /* Coming back from the sign-in box calls this again from the top, so the
+     screen has to come back with it. On a new lesson there is nothing to
+     wait for and showLoader is never called at all. */
+  if (editId) await showLoader("Opening the lesson");
+  if (!API && !OFFLINE){ hideLoader(true); return; }
+  await loadStep("Checking the year groups and units");
+  await loadUnitsAndYears();
   const qs2 = new URLSearchParams(location.search);
   const wantYear = qs2.get("year"), wantUnit = qs2.get("unit"), wantPoint = qs2.get("point");
   if (wantYear && !lesson.year) lesson.year = wantYear;
@@ -7188,7 +7390,7 @@ async function loadUnitsAndMaybeLesson(){
      whole reason for coming in that way. */
   if (wantPoint && !lesson.point) lesson.point = wantPoint;
   if (wantYear || wantUnit || wantPoint) paintPickers();
-  if (!editId) return;
+  if (!editId){ hideLoader(true); return; }
   /* The console offers "a new version" beside Edit, and sends the builder here
      with the lesson to start from and this on the address. Asked for once the
      lesson is on the screen, not before, so what is about to be copied is
@@ -7199,19 +7401,27 @@ async function loadUnitsAndMaybeLesson(){
                   code: (qs2.get("vcode") || "").trim() };
   if (OFFLINE){
     await loadLessonFromFolder(editId);
+    hideLoader();
     if (askVersion && lesson.savedAs) startVersion(given);
     return;
   }
-  if (!signedIn()){ askForKey(loadUnitsAndMaybeLesson, "Sign in to open this lesson."); return; }
+  if (!signedIn()){
+    hideLoader(true);         // the pop-up asking for the key is underneath it
+    askForKey(loadUnitsAndMaybeLesson, "Sign in to open this lesson.");
+    return;
+  }
   try{
+    await loadStep("Fetching the lesson");
     const r = await fetch(API + "/api/teacher/get-lesson?id=" + encodeURIComponent(editId),
                           { headers: window.teacherAuth.headers(), cache:"no-store" });
     const d = await r.json().catch(() => ({}));
-    if (authFailed(r.status, loadUnitsAndMaybeLesson)) return;
+    if (authFailed(r.status, loadUnitsAndMaybeLesson)){ hideLoader(true); return; }
     if (!r.ok) throw new Error(d.error || "Could not open that lesson.");
+    await loadStep("Reading the lesson");
     const data = JSON.parse(d.lesson.data);
     lesson = fromCompiled(data, d.lesson);
     lesson.savedAs = editId;
+    await loadStep("Populating the lesson content");
     migrate(lesson.blocks); tidyIntoPages(); startFolded();
     dirty = false;
     $("delLesson").hidden = false;
@@ -7219,9 +7429,13 @@ async function loadUnitsAndMaybeLesson(){
     showTitle(); 
     paintPickers();
     setMode(!!lesson.assessment && !lesson.practical, !!lesson.practical);
-    render(); refreshPreview();
+    await loadStep("Laying out the pages");
+    render();
+    await loadStep("Almost there");
+    refreshPreview();
+    hideLoader();
     if (askVersion) startVersion(given);
-  }catch(e){ say("Could not open that lesson", e.message); }
+  }catch(e){ hideLoader(true); say("Could not open that lesson", e.message); }
 }
 
 /* turn a saved lesson file back into editable cards */

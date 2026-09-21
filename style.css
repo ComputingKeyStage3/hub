@@ -894,6 +894,12 @@ body.spectating{padding-top:40px}
 /* ---- loading screen ---- */
 .loadscreen{position:fixed; inset:0; z-index:300; background:var(--bg); display:grid; place-items:center}
 .loadscreen.gone{display:none}
+/* In the builder a pop-up can be asked for while the lesson is still being
+   opened: the sign-in key, or the note that the lesson would not open. The
+   modal sits at 100, so the screen goes under it there rather than over the
+   top of the one thing that has to be read. It still covers the page, which
+   is all it is for. */
+html.builder .loadscreen{z-index:90}
 .load-inner{text-align:center}
 .load-inner p{margin:16px 0 0; color:var(--muted); font-size:16.5px; font-weight:700}
 /* The way off the loading screen, shown only once a wait has gone on too
@@ -4850,3 +4856,16 @@ html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
   .pick-long{display:none}
   .pick-short{display:inline}
 }
+
+/* ---------- where a dragged thing will land ----------
+   One line, fixed to the window and drawn over the list rather than put
+   into it: a real element in the list pushes everything below it down by
+   its own height, which moves the row under the pointer, which moves the
+   line again, and the two never settle. dragline.js puts it in place.
+
+   No animation on it. It has to be in the right place the instant the
+   pointer moves, and Windows has animation effects switched off across the
+   school estate anyway, so anything that faded in would never be seen. */
+.dragline{position:fixed; z-index:120; pointer-events:none; border-radius:2px;
+  background:var(--amber); box-shadow:0 0 0 1px var(--bg), 0 1px 4px rgba(0,0,0,.28)}
+.dragline[hidden]{display:none}

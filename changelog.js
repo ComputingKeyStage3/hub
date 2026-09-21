@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"10.3.4", text:"Opening a lesson in the builder now shows a loading screen that says what it is doing, so a big lesson no longer looks like a page that has frozen. If it takes far too long, there is a way to try again or go back to the console." },
   { v:"10.3.3", text:"Coding tasks are better at telling a quote or a bracket that opens something from one that finishes it off. Adding the speech marks to print(Hello!) now puts in the one mark typed instead of a pair, and nothing pairs up inside a string or in front of the rest of a line." },
   { v:"10.3.2", text:"A task put into a group in the Task builder stays there. It jumped straight back out to the top of the list, because nothing was ever saving which group it was in. The Task builder’s preview now has the same two buttons as the lesson builder’s: open it in a new tab, or fill the screen with it." },
   { v:"10.3.1", text:"In the Sandbox, answering a question asked by an input() inside a loop works. The loop went round again asking the same question, and a stray symbol appeared between the answers in the console." },
