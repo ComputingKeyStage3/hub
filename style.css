@@ -429,6 +429,14 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
   color:var(--amber); margin:0 0 10px;
 }
 .modal h2{font-size:25px; margin:0 0 12px; line-height:1.2}
+/* The close cross is absolutely positioned over the top right corner, so a
+   heading long enough to reach it ran underneath it. The room it takes is
+   kept clear rather than every heading kept short. Only where there is a
+   cross: the name gate on a lesson has none and centres its heading, and
+   padding on that one would knock it off centre. scrollBody() moves the
+   heading into the scrolling middle, so the two are no longer siblings and
+   it is the pop-up that has to be asked. */
+.modal:has(> .modal-x) h2{padding-right:44px}
 .modal-text{font-size:16.5px; line-height:1.55; color:var(--muted); margin:0 0 24px}
 .modal-text b{color:var(--text)}
 .modal-cta{
