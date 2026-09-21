@@ -15,6 +15,7 @@
 <script src="pyedit.js"></script>
 <script src="teacher.js"></script>
 <script src="tasks-extra.js"></script>
+<script src="dragline.js"></script>
 <script src="config.js"></script>
 <script src="worklink.js"></script>
 <script src="settings.js"></script>
@@ -5093,17 +5094,46 @@ function rOrder(b){
       mv.appendChild(up); mv.appendChild(dn);
       row.appendChild(mv);
 
-      row.addEventListener("dragstart", (e) => { row.classList.add("dragging"); e.dataTransfer && e.dataTransfer.setData("text/plain", String(pos)); });
-      row.addEventListener("dragend", () => row.classList.remove("dragging"));
-      row.addEventListener("dragover", (e) => e.preventDefault());
-      row.addEventListener("drop", (e) => {
-        e.preventDefault();
-        const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
-        if (!isNaN(from)) move(from, pos);
+      row.addEventListener("dragstart", (e) => {
+        lifted = pos;
+        row.classList.add("dragging");
+        e.dataTransfer && e.dataTransfer.setData("text/plain", String(pos));
+      });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("dragging"); lifted = -1; window.dragLine.hide();
       });
       list.appendChild(row);
     });
   }
+  /* The list takes the drop, not the line under the pointer. Dropping onto a
+     line moved the one being dragged into that line's place with nothing on
+     screen having said so first, and the gap between two lines belonged to
+     neither of them, so letting go there did nothing at all. The line shows
+     which gap it is going into.
+
+     Wired once: redraw() empties this box and fills it again every time
+     something moves, but the box itself stays. */
+  let lifted = -1;
+  const lines = () => Array.from(list.children);
+  list.addEventListener("dragover", (e) => {
+    if (lifted < 0) return;
+    e.preventDefault();
+    window.dragLine.mark(list, lines(), e, {});
+  });
+  list.addEventListener("dragleave", (e) => {
+    if (window.dragLine.left(list, e)) window.dragLine.hide();
+  });
+  list.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const hit = window.dragLine.mark(list, lines(), e, {});
+    window.dragLine.hide();
+    const from = lifted; lifted = -1;
+    if (from < 0) return;
+    /* The slot is counted with the line still in the list, so anything past
+       its own place is one too far once it has been lifted out. */
+    const to = Math.min(arrangement.length - 1, hit.slot > from ? hit.slot - 1 : hit.slot);
+    move(from, to);
+  });
   function move(from, to){
     if (to < 0 || to >= arrangement.length || from === to) return;
     const [x] = arrangement.splice(from, 1);
@@ -6541,7 +6571,12 @@ function buildPdf(){
     const title = pdfText(b.title || b.heading || b.prompt);
 
     if (b.type === "text"){
-      const h = blockHeading(b.html);
+      /* Older paragraphs keep the heading inside the html as an <h2>; newer
+         ones keep it in a field of its own, which is where a heading written
+         over a run of tasks from the task bank lives. Reading only the html
+         left those out of the hand-in altogether. */
+      const h = (b.heading !== undefined && String(b.heading).trim())
+        ? pdfText(b.heading) : blockHeading(b.html);
       if (h) out.push({ t: "text", face: "task", text: h });
       proseParts(String(b.html || "").replace(/<h2[\s\S]*?<\/h2>/i, "")).forEach(p => out.push(p));
       return out;

@@ -1327,17 +1327,53 @@ let listWired = false;
 function wireList(){
   if (listWired) return;
   listWired = true;
-  const list = $("list");
-  list.addEventListener("dragover", (e) => {
-    if (!canDropOn(lesson.blocks)) return;
-    e.preventDefault();
-    list.classList.add("over");
+  wireDropList($("list"), () => lesson.blocks);
+}
+/* ---------- a box that takes tasks ----------
+   The box works out where a drop would land and draws the line there, and
+   the drop uses the answer the line was drawn from. One piece of code
+   decides, so what a teacher is shown and what actually happens cannot
+   disagree, which they did: every card took its own drop and landed the
+   thing above itself, with nothing on screen saying so, and the gap between
+   two cards belonged to neither of them.
+
+   `arr` comes in as a function because the list is redrawn far more often
+   than it is wired, and a box holding on to the array it had at the time
+   would go on filing tasks into a page that has since been thrown away. */
+function wireDropList(box, arr){
+  /* Only the cards this box drew itself. A group on a page has cards of its
+     own inside it, and they belong to that group's list, not this one. */
+  const cards = () => Array.from(box.children).filter(c => c.classList && c.classList.contains("bcard"));
+  /* Where in the array a drop here would go, worked out from the block each
+     card is drawing rather than from how many cards there are: the strip of
+     pages, the empty-state line and the row of add buttons all sit in these
+     boxes too, and counting them in put tasks in the wrong place. */
+  const slotIn = (list, hit) => {
+    const under = hit.slot < cards().length ? cards()[hit.slot] : null;
+    if (!under || !under.__block) return -1;              // -1 means at the end
+    const at = list.indexOf(under.__block);
+    return at < 0 ? -1 : at;
+  };
+  box.addEventListener("dragover", (e) => {
+    if (!dragFrom && !newTask && !newBank) return;
+    const list = arr();
+    if (!canDropOn(list)) return;
+    e.preventDefault(); e.stopPropagation();
+    box.classList.add("over");
+    window.dragLine.mark(box, cards(), e, {});
   });
-  list.addEventListener("dragleave", () => list.classList.remove("over"));
-  list.addEventListener("drop", (e) => {
-    e.preventDefault();
-    list.classList.remove("over");
-    dropInto(lesson.blocks, -1);
+  box.addEventListener("dragleave", (e) => {
+    if (!window.dragLine.left(box, e)) return;
+    box.classList.remove("over");
+    window.dragLine.hide();
+  });
+  box.addEventListener("drop", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    box.classList.remove("over");
+    const list = arr();
+    const hit = window.dragLine.mark(box, cards(), e, {});
+    window.dragLine.hide();
+    dropInto(list, slotIn(list, hit));
   });
 }
 function firstPageOpen(){
@@ -1472,9 +1508,13 @@ function renderNow(){
     empty.addEventListener("dragleave", () => empty.classList.remove("over"));
     empty.addEventListener("drop", (e) => {
       e.preventDefault(); empty.classList.remove("over");
-      const made = newBank ? bankCopy(newBank) : (newTask ? newBlock(newTask) : null);
+      const group = (newBank && newBank.kind === "group") ? newBank : null;
+      const bank = newBank, kind = newTask;
       newTask = null; newBank = null;
-      addBlock(made);
+      /* No page yet, so there is nowhere to put these but a new one, and
+         bankGroupAdd makes it the same way clicking any other task does. */
+      if (group){ bankGroupAdd(group, null, -1); return; }
+      addBlock(bank ? bankCopy(bank) : (kind ? newBlock(kind) : null));
     });
     list.appendChild(empty);
     saveDraft();
@@ -1495,6 +1535,12 @@ function renderNow(){
   saveDraft();
 }
 
+/* The page chips, without the two buttons on the end of the strip: those are
+   things to press, not places in the lesson, and a line drawn beside "+ Page"
+   would be pointing at a gap that is not one. */
+function pageChips(bar){
+  return Array.from(bar.children).filter(c => c.__page);
+}
 /* The pages side by side above the one being edited. It is how you get about a
    lesson now that only one is on screen: numbered, with the task count on each
    so a thin page shows up without opening it, and dragging a chip reorders the
@@ -1526,25 +1572,36 @@ function pageStrip(){
       if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain","page"); }
     });
     chip.addEventListener("dragend", () => { chip.classList.remove("dragging"); pageDrag = null; });
-    chip.addEventListener("dragover", (e) => {
-      if (!pageDrag || pageDrag === p) return;
-      e.preventDefault(); e.stopPropagation();
-      chip.classList.add("over");
-    });
-    chip.addEventListener("dragleave", () => chip.classList.remove("over"));
-    chip.addEventListener("drop", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      chip.classList.remove("over");
-      const moved = pageDrag; pageDrag = null;
-      if (!moved || moved === p) return;
-      const from = lesson.blocks.indexOf(moved);
-      if (from < 0) return;
-      lesson.blocks.splice(from, 1);
-      lesson.blocks.splice(lesson.blocks.indexOf(p), 0, moved);
-      firstPageOpen();
-      render(); schedulePreview();
-    });
     bar.appendChild(chip);
+  });
+  /* The strip takes the drop, not the chip. A chip that took its own put the
+     page one place to the left of wherever it was dropped and never said so,
+     and the gap between two chips belonged to neither of them. The line runs
+     down the gap the page is going into. */
+  bar.addEventListener("dragover", (e) => {
+    if (!pageDrag) return;
+    e.preventDefault(); e.stopPropagation();
+    window.dragLine.mark(bar, pageChips(bar), e, { across: true });
+  });
+  bar.addEventListener("dragleave", (e) => { if (window.dragLine.left(bar, e)) window.dragLine.hide(); });
+  bar.addEventListener("drop", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const moved = pageDrag; pageDrag = null;
+    const all = pageChips(bar);
+    const hit = window.dragLine.mark(bar, all, e, { across: true });
+    window.dragLine.hide();
+    if (!moved) return;
+    const from = lesson.blocks.indexOf(moved);
+    if (from < 0) return;
+    /* Which page it goes in front of, worked out before anything moves: the
+       chip under the line, or the end of the lesson when there is none. */
+    const before = all[hit.slot] ? all[hit.slot].__page : null;
+    if (before === moved) return;
+    lesson.blocks.splice(from, 1);
+    const at = before ? lesson.blocks.indexOf(before) : -1;
+    if (at < 0) lesson.blocks.push(moved); else lesson.blocks.splice(at, 0, moved);
+    firstPageOpen();
+    render(); schedulePreview();
   });
   const add = el("button","pagechip add","+ Page");
   add.type = "button";
@@ -1668,6 +1725,15 @@ function dropInto(arr, at){
      accept it, and clearing here would take the task away from it. */
   if (!canDropOn(arr)) return;
   if (newTask || newBank){
+    /* A group is not one block to splice in here. It is several tasks, and
+       a group of groups may be several pages' worth, so it takes itself
+       where it is going rather than handing back something to insert. */
+    if (newBank && newBank.kind === "group"){
+      const group = newBank;
+      newTask = null; newBank = null;
+      bankGroupAdd(group, arr, at);
+      return;
+    }
     const made = newBank ? bankCopy(newBank) : newBlock(newTask);
     newTask = null; newBank = null;
     if (!made) return;
@@ -1894,19 +1960,11 @@ function card(b, i, arr){
     if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "task"); }
   });
   if (draggable){
+    /* A card is something to drag, not somewhere to drop. The box it sits in
+       takes the drop and says with a line which gap it is going into. Each
+       card taking its own put the thing above itself with nothing on screen
+       saying so, and left the gap between two cards belonging to neither. */
     c.addEventListener("dragend", () => { c.classList.remove("dragging"); c.draggable = false; dragFrom = null; });
-    c.addEventListener("dragover", (e) => {
-      if (!dragFrom && !newTask && !newBank) return;
-      if (!canDropOn(arr)) return;
-      e.preventDefault(); e.stopPropagation();
-      c.classList.add("over");
-    });
-    c.addEventListener("dragleave", () => c.classList.remove("over"));
-    c.addEventListener("drop", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      c.classList.remove("over");
-      dropInto(arr, i);
-    });
   }
 
   /* A shut card is its head and nothing else: the body is not built at all.
@@ -2461,17 +2519,7 @@ function card(b, i, arr){
       ? "Nothing on this page yet."
       : "Drag a task here, or use the buttons below."));
     b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
-    inner.addEventListener("dragover", (e) => {
-      if (!canDropOn(b.blocks)) return;
-      e.preventDefault(); e.stopPropagation();
-      inner.classList.add("over");
-    });
-    inner.addEventListener("dragleave", () => inner.classList.remove("over"));
-    inner.addEventListener("drop", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      inner.classList.remove("over");
-      dropInto(b.blocks, -1);              // -1 means "at the end"
-    });
+    wireDropList(inner, () => b.blocks);
     body.appendChild(inner);
     if (!viewAll) body.appendChild(addTaskRow(b.blocks));
   }
@@ -2486,17 +2534,7 @@ function card(b, i, arr){
     if (!b.blocks) b.blocks = [];
     if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
     b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
-    inner.addEventListener("dragover", (e) => {
-      if (!canDropOn(b.blocks)) return;
-      e.preventDefault(); e.stopPropagation();
-      inner.classList.add("over");
-    });
-    inner.addEventListener("dragleave", () => inner.classList.remove("over"));
-    inner.addEventListener("drop", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      inner.classList.remove("over");
-      dropInto(b.blocks, -1);
-    });
+    wireDropList(inner, () => b.blocks);
     body.appendChild(inner);
     body.appendChild(addTaskRow(b.blocks, "extension"));
   }
@@ -2512,17 +2550,7 @@ function card(b, i, arr){
     if (!b.blocks) b.blocks = [];
     if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
     b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
-    inner.addEventListener("dragover", (e) => {
-      if (!canDropOn(b.blocks)) return;
-      e.preventDefault(); e.stopPropagation();
-      inner.classList.add("over");
-    });
-    inner.addEventListener("dragleave", () => inner.classList.remove("over"));
-    inner.addEventListener("drop", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      inner.classList.remove("over");
-      dropInto(b.blocks, -1);
-    });
+    wireDropList(inner, () => b.blocks);
     body.appendChild(inner);
     body.appendChild(addTaskRow(b.blocks, "group"));
   }
@@ -2549,17 +2577,7 @@ function card(b, i, arr){
       const inner = el("div","pagekids");
       if (!opt.blocks.length) inner.appendChild(el("p","bhelp dropzone","What they get for this choice. Use the buttons below."));
       opt.blocks.forEach((child, j) => inner.appendChild(card(child, j, opt.blocks)));
-      inner.addEventListener("dragover", (e) => {
-        if (!canDropOn(opt.blocks)) return;
-        e.preventDefault(); e.stopPropagation();
-        inner.classList.add("over");
-      });
-      inner.addEventListener("dragleave", () => inner.classList.remove("over"));
-      inner.addEventListener("drop", (e) => {
-        e.preventDefault(); e.stopPropagation();
-        inner.classList.remove("over");
-        dropInto(opt.blocks, -1);
-      });
+      wireDropList(inner, () => opt.blocks);
       w.appendChild(inner);
       w.appendChild(addTaskRow(opt.blocks, "choice"));
       body.appendChild(w);
@@ -4978,7 +4996,11 @@ function bankTaskButton(t){
     if (e.dataTransfer){ e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", t.id); }
   });
   btn.addEventListener("dragend", () => { btn.classList.remove("dragging"); newBank = null; });
-  btn.addEventListener("click", () => { const made = bankCopy(t); if (made) addBlock(made); });
+  btn.addEventListener("click", () => {
+    if (t.kind === "group"){ bankGroupAdd(t, null, -1); return; }
+    const made = bankCopy(t);
+    if (made) addBlock(made);
+  });
   return btn;
 }
 
@@ -5216,20 +5238,180 @@ function bankGroupBlock(t, all, seen){
   });
   return made;
 }
-/* A copy to put in the lesson, remembering which bank task it came from. */
+/* A copy to put in the lesson, remembering which bank task it came from.
+
+   One task, one block. A group is not one block any more: its tasks go
+   into the lesson on their own, which bankGroupAdd does, so every caller
+   asks what kind it is before it gets here. */
 function bankCopy(t){
-  if (!t) return null;
-  if (t.kind === "group"){
-    const made = bankGroupBlock(t, bankKnown());
-    if (!made) return null;
-    made.fromTask = t.id;
-    return made;
-  }
-  if (!t.block) return null;
+  if (!t || t.kind === "group" || !t.block) return null;
   const made = JSON.parse(JSON.stringify(t.block));
   delete made.folded;
   made.fromTask = t.id;
   return made;
+}
+
+/* ---------- a group of tasks landing in a lesson ----------
+
+   A group keeps several tasks together, so what it means on a page is
+   those tasks: dropping one adds them to the page exactly as though they
+   had been dragged over one at a time, rather than putting one more box
+   around them. A group of groups is more than that, because each group
+   inside it is a piece of work in its own right and may well be a page's
+   worth, so where those go is asked rather than guessed.
+
+   The group block itself is not kept. Every task inside it still carries
+   the fromTask it was copied with, which is what gives it the same id in
+   this lesson as in every other version of it, so nothing the coverage
+   screen adds up changes. A group built by hand in the lesson builder is
+   untouched, and so is every lesson already holding one. */
+
+/* A group taken apart into the runs of tasks it means. A group with no
+   groups in it is one run under its own heading. A group of groups is one
+   run for each group inside it, however deep they go, and loose tasks
+   sitting beside those groups are a run of their own under the outer
+   group's name. */
+function groupRuns(b, inherited){
+  const kids = (b && b.blocks) || [];
+  const name = String((b && b.title) || "").trim() || inherited || "";
+  const said = String((b && b.task) || "").trim();
+  if (!kids.some(k => k && k.type === "group"))
+    return kids.length ? [{ title:name, task:said, blocks: kids.slice() }] : [];
+  const runs = [];
+  let loose = null, named = false;
+  kids.forEach(k => {
+    if (!k) return;
+    if (k.type === "group"){
+      loose = null;                     // what follows a group is not part of what came before it
+      groupRuns(k, name).forEach(r => runs.push(r));
+      return;
+    }
+    if (!loose){
+      /* Only the first of these wears the outer group's name. Tasks either
+         side of a group are two runs, and heading both with the same words
+         would read as the same thing said twice. */
+      loose = { title: named ? "" : name, task: named ? "" : said, blocks: [] };
+      named = true;
+      runs.push(loose);
+    }
+    loose.blocks.push(k);
+  });
+  return runs.filter(r => r.blocks.length);
+}
+/* The heading that stands at the start of a run when the whole group goes
+   on one page. An ordinary paragraph, so the lesson page, the builder and
+   the hand-in all already know what to do with it and a teacher can edit
+   or delete it like anything else. A group with neither a heading nor a
+   subtitle gets nothing: its tasks simply follow one another, which is
+   what they did inside the group. */
+function runHeading(run){
+  if (!run.title && !run.task) return null;
+  return { type:"text", heading: run.title || "", html: run.task || "" };
+}
+/* Where the tasks go when they all land together: the list they were
+   dropped on, or, when the group was clicked rather than dragged, wherever
+   a task clicked in the palette would have gone. A lesson with no pages
+   yet gets one, the same as clicking any other task does. */
+function runList(arr){
+  if (arr) return arr;
+  if (respEditing) return respEditing === "__ext" ? lesson.extensions : lesson.responses[respEditing];
+  if (lesson.assessment) return lesson.blocks;
+  let page = targetPage();
+  if (!page){
+    page = BLANK.page();
+    page.title = "New page";
+    lesson.blocks.push(page);
+    openPageRef = page;
+  }
+  return page.blocks;
+}
+/* All of it where it was dropped, each run behind its own heading. */
+function putRunsHere(runs, arr, at){
+  const into = runList(arr);
+  if (!into) return;
+  const made = [];
+  runs.forEach(run => {
+    const head = runHeading(run);
+    if (head) made.push(head);
+    run.blocks.forEach(x => made.push(x));
+  });
+  if (!made.length) return;
+  const where = (at === undefined || at === null || at < 0) ? into.length : at;
+  into.splice.apply(into, [where, 0].concat(made));
+  /* The first of them opens and the rest fold, the same as adding any one
+     task. Eight editors springing open at once is the wall of boxes the
+     builder shows one page at a time to avoid. */
+  openOnly(into, made[0]);
+  viewAll = false;
+  lastAddedAt = -1;
+  scrollToBlock = made[0];
+  render(); schedulePreview();
+}
+/* One page for each run, after the page being worked on. */
+function putRunsOnPages(runs){
+  const pages = runs.map(run => {
+    const p = BLANK.page();
+    p.title = run.title || "Tasks";
+    p.task = run.task || "";
+    p.blocks = run.blocks;
+    p.blocks.forEach(x => { x.folded = true; });
+    return p;
+  });
+  const at = pageIndex();
+  lesson.blocks.splice.apply(lesson.blocks,
+    [(at < 0 ? lesson.blocks.length : at + 1), 0].concat(pages));
+  viewAll = false;
+  tellPreview(pages[0]);            // the first of the new ones is the one to look at
+  scrollToBlock = pages[0];
+  render(); schedulePreview();
+}
+/* Where several groups' worth of tasks should go. Only a teacher can say:
+   one page per group reads as the lesson it was written as, and all of it
+   on one page is the right answer when the groups are short. */
+function askGroupShape(runs, arr, at){
+  const tasks = runs.reduce((n, r) => n + r.blocks.length, 0);
+  openModal(box => {
+    box.appendChild(el("h2","","Do you want to add these tasks..."));
+    box.appendChild(el("p","modal-text",
+      "There are " + runs.length + " groups of tasks in here, " + tasks +
+      " task" + (tasks === 1 ? "" : "s") + " altogether."));
+    const split = el("button","btn-primary modal-cta","On separate pages, one page per group");
+    split.addEventListener("click", () => { closeModal(); putRunsOnPages(runs); });
+    box.appendChild(split);
+    const here = el("button","btn-ghost modal-cta","All on this page");
+    here.addEventListener("click", () => { closeModal(); putRunsHere(runs, arr, at); });
+    box.appendChild(here);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+  });
+}
+/* A group block on its way into the lesson, from wherever it came. */
+function addGroupBlock(block, arr, at){
+  const runs = groupRuns(block);
+  if (!runs.length) return;
+  /* Pages only exist in a lesson, and only the top of a page can be
+     followed by another page. Inside an extension, a choice, a response
+     set or an assessment there is nowhere for a page to go, so there is
+     nothing to ask and it all lands where it was dropped. */
+  const onPage = !arr || lesson.blocks.some(x => x.type === "page" && x.blocks === arr);
+  if (runs.length < 2 || !onPage || respEditing || lesson.assessment){
+    putRunsHere(runs, arr, at);
+    return;
+  }
+  askGroupShape(runs, arr, at);
+}
+/* The same, starting from a row in one of the palette lists. Both lists
+   come down with each task's contents attached, so what is in the group is
+   already in hand and a drag does not stop for a round trip. */
+function bankGroupAdd(t, arr, at){
+  const block = bankGroupBlock(t, bankKnown());
+  if (!block || !block.blocks.length){
+    say("There is nothing in that group yet",
+        "Open it on the Task bank tab and put some tasks in it first.");
+    return;
+  }
+  addGroupBlock(block, arr, at);
 }
 on("palMoreBtn", "click", () => {
   showEverything = !showEverything;
@@ -6390,15 +6572,13 @@ async function bankInsert(id){
           + "multiple choice question here.");
       return;
     }
-    /* An assessment is a flat list of numbered questions, and the markbook
-       counts them that way. A group would put questions inside one of those
-       numbers, so the marks for them would have nowhere to go. */
-    if (lesson.assessment && block.type === "group"){
-      say("Not in an assessment",
-          "An assessment is one list of numbered questions, so a group cannot go in it. "
-          + "Add the questions inside it one at a time, or keep the group for a lesson.");
-      return;
-    }
+    /* A group is not one block to add: it is the tasks in it, and each of
+       those already remembers the bank task it was copied from. An
+       assessment can take them too, now that they go in as questions of
+       their own. What it could not take was the group itself, which would
+       have put questions inside one of its numbered ones with nowhere for
+       the marks to go. */
+    if (block.type === "group"){ addGroupBlock(block, null, -1); return; }
     /* The copy remembers where it came from. That is what gives it a stable
        id when the lesson is compiled, so the same question in a lesson and
        in three versions of it lines up in the coverage screen. */

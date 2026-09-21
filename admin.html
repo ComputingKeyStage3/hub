@@ -12,6 +12,7 @@
 <script src="shortmatch.js"></script>
 <script src="xlsx.js"></script>
 <script src="menus.js"></script>
+<script src="dragline.js"></script>
 <script src="teacher.js"></script>
 <script src="settings.js"></script>
 <script src="changelog.js"></script>
@@ -2063,36 +2064,57 @@ on("backHubUnits", "click", () => openYear(hubYear));
    in the database; classes keep theirs in this browser, because a class is a
    row of students rather than a thing with an order of its own. */
 function makeSortable(container, names, onDrop){
-  let from = null;
-  Array.from(container.children).forEach((tile, i) => {
-    if (!tile.classList || !tile.classList.contains("classtile")) return;
+  /* The grid is emptied and filled again on every repaint but the element
+     itself stays, so what it is holding this time is written down on it
+     rather than shut inside handlers that would pile up one set per paint. */
+  const state = container.__sort || (container.__sort = {});
+  state.names = names; state.onDrop = onDrop; state.from = null;
+  const tiles = () => Array.from(container.children)
+                           .filter(c => c.classList && c.classList.contains("classtile"));
+  tiles().forEach((tile, i) => {
     tile.draggable = true;
     tile.dataset.at = String(i);
     tile.addEventListener("dragstart", (e) => {
-      from = i;
+      state.from = i;
       tile.classList.add("dragging");
       if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); }
     });
     tile.addEventListener("dragend", () => {
       tile.classList.remove("dragging");
-      Array.from(container.children).forEach(c => c.classList.remove("over"));
-      from = null;
+      window.dragLine.hide();
+      state.from = null;
     });
-    tile.addEventListener("dragover", (e) => {
-      if (from === null) return;
-      e.preventDefault();
-      tile.classList.add("over");
-    });
-    tile.addEventListener("dragleave", () => tile.classList.remove("over"));
-    tile.addEventListener("drop", (e) => {
-      e.preventDefault();
-      tile.classList.remove("over");
-      const at = parseInt(tile.dataset.at, 10);
-      if (from === null || from === at) return;
-      const moved = names.slice();
-      moved.splice(at, 0, moved.splice(from, 1)[0]);
-      onDrop(moved);
-    });
+  });
+  if (container.__sortWired) return;
+  container.__sortWired = true;
+  /* The grid takes the drop, not the tile under the pointer. Outlining that
+     tile said "this one" when what a teacher is asking is "before it, or
+     after it?", and the gap between two tiles belonged to neither of them, so
+     letting go there did nothing at all. The line goes down the gap the tile
+     will land in. */
+  container.addEventListener("dragover", (e) => {
+    if (state.from === null) return;
+    e.preventDefault();
+    window.dragLine.mark(container, tiles(), e, { across: true });
+  });
+  container.addEventListener("dragleave", (e) => {
+    if (window.dragLine.left(container, e)) window.dragLine.hide();
+  });
+  container.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const hit = window.dragLine.mark(container, tiles(), e, { across: true });
+    window.dragLine.hide();
+    const from = state.from;
+    state.from = null;
+    if (from === null) return;
+    /* The slot is counted with the tile still in the list, so anything past
+       its own place is one too far once it has been lifted out. */
+    let at = hit.slot > from ? hit.slot - 1 : hit.slot;
+    at = Math.max(0, Math.min(state.names.length - 1, at));
+    if (at === from) return;
+    const moved = state.names.slice();
+    moved.splice(at, 0, moved.splice(from, 1)[0]);
+    state.onDrop(moved);
   });
 }
 

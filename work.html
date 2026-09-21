@@ -106,6 +106,7 @@
 
 <div class="modal-back" id="mBack" hidden><div class="modal" id="mBox"></div></div>
 
+<script src="dragline.js"></script>
 <script src="menus.js"></script>
 <script src="settings.js"></script>
 <script>
@@ -414,7 +415,12 @@ function paintSeats(){
       const cell = el("div","seatcell");
       cell.dataset.c = c; cell.dataset.r = r;
       cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("over"); });
-      cell.addEventListener("dragleave", () => cell.classList.remove("over"));
+      /* A seat with somebody in it has their card inside it, and the browser
+         fires a dragleave every time the pointer crosses onto that card. Taken
+         at face value the square flickers while the pointer sits still on it. */
+      cell.addEventListener("dragleave", (e) => {
+        if (window.dragLine.left(cell, e)) cell.classList.remove("over");
+      });
       cell.addEventListener("drop", (e) => {
         e.preventDefault(); cell.classList.remove("over");
         const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
@@ -469,7 +475,9 @@ document.addEventListener("pointerdown", (e) => {
   m.hidden = true;
 });
 $("seatPool").addEventListener("dragover", (e) => { e.preventDefault(); $("seatPool").classList.add("over"); });
-$("seatPool").addEventListener("dragleave", () => $("seatPool").classList.remove("over"));
+$("seatPool").addEventListener("dragleave", (e) => {
+  if (window.dragLine.left($("seatPool"), e)) $("seatPool").classList.remove("over");
+});
 $("seatPool").addEventListener("drop", (e) => {
   e.preventDefault(); $("seatPool").classList.remove("over");
   const who = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
