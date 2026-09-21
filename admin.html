@@ -4273,6 +4273,11 @@ async function addWholeUnit(name){
 let lessonLocks = {};        // lesson_id -> whole-lesson lock for this class
 let locks = new Set();       // task locks for the lesson being managed
 let usingDefaults = false;
+/* Set when the locks could not be fetched, so the pop-up says so rather than
+   printing a summary of the empty set it fell back to. "Every task is open
+   for 10A" when nobody knows whether that is true is worse than saying
+   nothing: a teacher reads it and moves on. */
+let locksUnknown = false;
 
 function defaultLocks(){
   const out = new Set();
@@ -4296,7 +4301,14 @@ async function loadClassLocks(){
     const d = await r.json();
     lessonLocks = {};
     (d.rows || []).forEach(row => { lessonLocks[row.lesson] = !!row.lessonLocked; });
-  }catch(e){ setOnline(false); }
+  }catch(e){
+    /* The padlock on a lesson card is extra detail, and this must not reject:
+       restoreSpot awaits it and sends a teacher to Home when it throws, and
+       the Refresh button on a class's lessons empties the grid and prints
+       whatever the error said. Neither is worth a padlock nobody could read.
+       Until v3.3 this told the "Online" pill; the pill went and the call to
+       it stayed behind, calling a function that no longer existed. */
+  }
 }
 async function manageLesson(id){
   lessonId = id;
@@ -4385,7 +4397,14 @@ async function refreshRelease(){
       usingDefaults = false;
     } else { locks = new Set(); usingDefaults = false; }
     lessonLocks[lessonId] = !!d.lessonLocked;
-  }catch(e){ setOnline(false); }
+    locksUnknown = false;
+  }catch(e){
+    /* The pop-up still opens: manageLesson awaits this one, so throwing here
+       replaced the whole of Manage with "Could not open that lesson", when
+       the lesson itself had arrived perfectly well and only its lock
+       settings had not. What is not known is said instead of guessed. */
+    locksUnknown = true;
+  }
   paintTasks();
 }
 async function postLocks(next){
@@ -4394,7 +4413,9 @@ async function postLocks(next){
     const r = await fetch(API + "/api/release", { method:"POST", headers: HJ(),
       body: JSON.stringify({ lesson: lessonId, group: cls, locks: [...next].sort((a,b)=>a-b) }) });
     if (!r.ok) throw new Error((await r.json()).error || "Could not update.");
-    locks = next; usingDefaults = false;
+    /* The server took the change, so what the locks are is known again even
+       if reading them failed a moment ago. */
+    locks = next; usingDefaults = false; locksUnknown = false;
     if (msg) msg.textContent = "";
   }catch(e){ if (msg) msg.textContent = e.message; }
   paintTasks();
@@ -4421,7 +4442,9 @@ function paintTasks(){
     const base = locks.size === 0 ? "Every task is open for " + cls + "."
       : locks.size >= rows ? "Every task is locked for " + cls + "."
       : locks.size + " task" + (locks.size === 1 ? "" : "s") + " locked for " + cls + ".";
-    msg.textContent = usingDefaults ? base + " (starting pattern, unlock as you teach)" : base;
+    msg.textContent = locksUnknown
+      ? "Could not check which tasks are locked for " + cls + ". Try again in a moment."
+      : usingDefaults ? base + " (starting pattern, unlock as you teach)" : base;
   }
   lessonJson.blocks.forEach((b, i) => {
     const open = lessonJson.assessment ? true : !locks.has(i);
@@ -4909,7 +4932,13 @@ async function loadResetQueue(){
       line.appendChild(yes); line.appendChild(no);
       box.appendChild(line);
     });
-  }catch(e){ setOnline(false); }
+    if (pwPoll) $("pwPollMsg").textContent = "Checking every 5 seconds…";
+  }catch(e){
+    /* This runs on a timer and off the Approve and Deny buttons, and nothing
+       was catching what it threw. The list simply stopped changing, with the
+       line above it still promising a check every five seconds. */
+    $("pwPollMsg").textContent = "Could not check for requests just now. Still trying.";
+  }
 }
 
 /* ---------- boot ---------- */
