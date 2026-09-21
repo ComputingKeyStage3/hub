@@ -545,8 +545,29 @@ function paintLessons(byId){
     } else if (unit){
       const h = document.createElement("p"); h.className = "unit-head"; h.textContent = unit; box.appendChild(h);
     }
+    /* A unit of a GCSE or A Level course is one point of the specification,
+       and the lessons in it come in named groups: its sub-points. A KS3 unit
+       has none of those, so it stays the one list it has always been, and so
+       does a unit whose lessons all cover the whole of it. */
+    const partNames = [];
+    const parts = {};
+    groups[unit].slice().sort(bySubunit).forEach(c => {
+      const name = c.subunit || "";
+      if (!parts[name]){ parts[name] = []; partNames.push(name); }
+      parts[name].push(c);
+    });
+    /* Counted across the whole unit, not restarted in each group: the numbers
+       down the side are where a student is up to in this unit. */
+    let nth = 0;
+    partNames.forEach(part => {
+      if (part && partNames.length > 1){
+        const sh = document.createElement("p");
+        sh.className = "sub-head"; sh.textContent = part;
+        body.appendChild(sh);
+      }
     const wrap = document.createElement("div"); wrap.className = "lessons";
-    inOrder(groups[unit]).forEach((c, i) => {
+    inOrder(parts[part]).forEach((c) => {
+      const i = nth++;
       const l = byId[c.lesson_id];
       const done = doneLessons.has(l.id);
       const a = document.createElement("a");
@@ -588,7 +609,20 @@ function paintLessons(byId){
       wrap.appendChild(a);
     });
     body.appendChild(wrap);
+    });
   });
+}
+
+/* Which sub-point of its unit a lesson is in. The number in the wording is
+   read as a number, so 2.2.10 comes after 2.2.9, and a lesson covering the
+   whole unit has no sub-point and comes first. */
+function bySubunit(a, b){
+  const x = String(a.subunit || ""), y = String(b.subunit || "");
+  if (x === y) return 0;
+  if (!x) return -1;
+  if (!y) return 1;
+  return window.lessonOrder ? window.lessonOrder.compareText(x, y)
+                            : (x < y ? -1 : 1);
 }
 
 on("tabActive", "click", () => { showing = "active"; paintSub(); });

@@ -62,6 +62,9 @@
     <button class="btn-ghost" id="optionsBtn">Lesson options</button>
     <select id="lYear" title="Year group"></select>
     <select id="lUnit" title="Unit"></select>
+    <!-- Only for GCSE and A Level, where the unit picker beside it is the
+         point of the specification and this is the point inside it. -->
+    <select id="lSub" title="Sub-point" hidden></select>
   </div>
   <div class="build-actions">
     <button class="btn-primary" id="saveSite">Save to the site</button>
@@ -200,6 +203,9 @@
         <div class="palbody" hidden>
           <button class="pal" data-add="choice" id="palChoiceBtn"><b>Choice</b><span>They pick, and get the task that follows</span></button>
           <button class="pal" data-add="extension" id="palExtensionBtn"><b>Extension tasks</b><span>Only once the page is finished</span></button>
+          <!-- GCSE and A Level only, the same as the task bank it is for.
+               Nothing about a KS3 lesson changes. -->
+          <button class="pal" data-add="group" id="palGroupBtn" hidden><b>Group</b><span>Several tasks kept together as one</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="handin">
@@ -275,6 +281,9 @@
        their room once All tasks has widened it. -->
   <div class="bank-filter">
     <button class="btn-primary" id="bankNew">+ New task</button>
+    <!-- A group is made in the list on the left and filled from there. It is
+         not a kind of task, so it never opens the task editor. -->
+    <button class="btn-ghost" id="bankNewGroup" type="button">+ New group</button>
     <button class="btn-ghost toggle" id="bankAllBtn" type="button" aria-pressed="false">All tasks</button>
     <span class="searchbox" id="bankSearchWrap" hidden><span class="searchicon">&#128269;</span><input id="bankSearch" placeholder="Search tasks"></span>
     <!-- Three dropdowns side by side are wider than the bar and dropped onto
@@ -430,7 +439,7 @@ window.addEventListener("scroll", placeHelp, true);
    original. A version is a whole lesson of its own, with its own id and its
    own students' work: the three fields beside it are only what the console
    shows to tell one apart from another. */
-let lesson = { title:"", intro:"", unit:"", year:"", point:"", assessment:false, practical:false, homework:false,
+let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false,
                versionOf:"", versionName:"", versionNote:"", versionCode:"",
                topics:{}, responses:{}, extensions:[], blocks:[] };
 
@@ -458,6 +467,13 @@ const BLANK = {
      wording rather than something every one of these has to carry. */
   extension:() => ({ type:"extension", title:"Extension tasks",
                      task:"Have a go at these", blocks:[] }),
+  /* Several tasks kept together as one. Unlike a page it is not a screen of
+     its own, and unlike extension tasks nothing about it is held back: what
+     is in it is on the page from the start and holds it up exactly as it
+     would on its own. A group can hold groups, which is what lets a piece of
+     work built in the task builder keep its shape when it is dropped into a
+     lesson. */
+  group:    () => ({ type:"group", title:"", task:"", blocks:[] }),
   /* They pick one, and what they picked decides the work they then get. */
   choice:   () => ({ type:"choice", title:"", task:"", prompt:"Choose one",
                      options:[{ label:"", blocks:[] }, { label:"", blocks:[] }] }),
@@ -563,7 +579,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table" };
 
@@ -660,7 +676,7 @@ function migrate(arr){
       b.questions = [{ q: b.q || "", options: b.options || ["",""], answer: b.answer || 0, hint: b.hint || "" }];
       delete b.q; delete b.options; delete b.answer; delete b.hint;
     }
-    if (b.type === "page" || b.type === "extension") migrate(b.blocks);
+    if (b.type === "page" || b.type === "extension" || b.type === "group") migrate(b.blocks);
     if (b.type === "choice") (b.options || []).forEach(o => migrate(o.blocks || []));
   });
 }
@@ -690,6 +706,10 @@ function compile(){
      it knows, and copied out to the catalogue when it is saved, which is
      what the GCSE and A Level hub files it by. */
   if (lesson.point) out.point = lesson.point;
+  /* The sub-point's wording, alongside the unit. Both are written out in
+     words because the catalogue is what a class's lessons and a student's
+     home page group by, and neither of those has the specification. */
+  if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
   if (lesson.linger) out.linger = true;
   /* Kept in the lesson itself as well as in the catalogue, so reopening it
@@ -806,6 +826,13 @@ function compileOne(b, id, target){
     if (!kids.length) return;                 // an empty one is not worth saving
     push({ type:"extension", id, title: b.title || "Extension tasks",
            task: b.task || "Have a go at these", blocks: kids });
+    return;
+  }
+  if (b.type === "group"){
+    const kids = [];
+    (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
+    if (!kids.length) return;                 // a group with nothing in it is nothing
+    push({ type:"group", id, title: b.title || "", task: b.task || "", blocks: kids });
     return;
   }
   {
@@ -1138,7 +1165,7 @@ function startFolded(){
   const fold = (arr) => (arr || []).forEach(b => {
     if (b.type === "page"){ fold(b.blocks); return; }
     b.folded = true;
-    if (b.type === "extension") fold(b.blocks);
+    if (b.type === "extension" || b.type === "group") fold(b.blocks);
     if (b.type === "choice") (b.options || []).forEach(o => fold(o.blocks));
   });
   fold(lesson.blocks);
@@ -1167,9 +1194,10 @@ function taskSummary(b){
     const labels = (b.options || []).map(o => String(o.label || "").trim()).filter(Boolean);
     if (labels.length) return plainWords(labels.join(" / "));
   }
-  if (b.type === "extension"){
+  if (b.type === "extension" || b.type === "group"){
     const n = (b.blocks || []).length;
-    return n + " task" + (n === 1 ? "" : "s");
+    return (b.type === "group" && b.title ? b.title + ", " : "")
+           + n + " task" + (n === 1 ? "" : "s");
   }
   if (b.type === "code") return "Python or a web page, not picked yet";
   for (let i = 0; i < SUMMARY_FIELDS.length; i++){
@@ -1494,6 +1522,22 @@ function openArray(){
   if (!respEditing) return null;
   return respEditing === "__ext" ? lesson.extensions : (lesson.responses[respEditing] || []);
 }
+/* Everything inside a block, however deep. A group can hold groups, so a
+   group can be dragged onto its own insides, and dropping it there would
+   make it its own child: render() would then draw it until the tab gave
+   up. Whatever is being dragged is therefore not allowed to land anywhere
+   under itself. */
+function holdsList(b, arr){
+  if (!b) return false;
+  const lists = (b.type === "choice")
+    ? (b.options || []).map(o => o.blocks || [])
+    : [b.blocks || []];
+  for (const list of lists){
+    if (list === arr) return true;
+    for (const child of list) if (holdsList(child, arr)) return true;
+  }
+  return false;
+}
 function canDropOn(arr){
   /* Three things can be dropped: a kind off the palette, a task out of the
      bank, and a task already in the lesson being moved. What a bank task
@@ -1501,6 +1545,7 @@ function canDropOn(arr){
   const kind = newTask || (newBank && newBank.block && newBank.block.type)
                        || (dragFrom && dragFrom.type);
   if (!kind) return false;
+  if (dragFrom && holdsList(dragFrom.arr[dragFrom.i], arr)) return false;
   /* a page only makes sense at the top of a lesson */
   if (kind === "page") return arr === lesson.blocks && !respEditing;
   /* and extension tasks only inside one of those pages: not loose at the top,
@@ -2350,6 +2395,32 @@ function card(b, i, arr){
     });
     body.appendChild(inner);
     body.appendChild(addTaskRow(b.blocks, "extension"));
+  }
+  if (b.type === "group"){
+    F("Heading (optional)", "title");
+    R("Subtitle (optional)", "task", { rows:2, help:[
+      "A group keeps several tasks together as one thing. Everything in it is "
+      + "on the page from the start and counts the same as it would on its own: "
+      + "it is a way of building a piece of work once and dropping it into as "
+      + "many lessons as you like, not a way of hiding anything.",
+      "Leave both boxes empty and the tasks simply follow one another."] });
+    const inner = el("div","pagekids");
+    if (!b.blocks) b.blocks = [];
+    if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
+    b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
+    inner.addEventListener("dragover", (e) => {
+      if (!canDropOn(b.blocks)) return;
+      e.preventDefault(); e.stopPropagation();
+      inner.classList.add("over");
+    });
+    inner.addEventListener("dragleave", () => inner.classList.remove("over"));
+    inner.addEventListener("drop", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      inner.classList.remove("over");
+      dropInto(b.blocks, -1);
+    });
+    body.appendChild(inner);
+    body.appendChild(addTaskRow(b.blocks, "group"));
   }
   if (b.type === "choice"){
     F("Heading (optional)", "title");
@@ -3971,9 +4042,11 @@ on("optionsBtn", "click", () => {
     /* The real pickers are moved in, not copied, so "+ New year group" and
        everything else attached to them still works. */
     const w3 = el("div","bfield savepickers");
-    w3.appendChild(el("label","","Year group and unit"));
+    w3.appendChild(el("label","", specLevel() ? "Year group and specification point"
+                                             : "Year group and unit"));
     w3.appendChild($("lYear"));
     w3.appendChild($("lUnit"));
+    w3.appendChild($("lSub"));
     box.appendChild(w3);
 
     const w4 = el("div","bfield");
@@ -4280,10 +4353,21 @@ on("lYear", "change", async () => {
     lesson.year = v;
   }
   lesson.unit = "";                       // units belong to a year
+  /* And a point belongs to a specification, so moving between year groups
+     working towards different ones cannot keep it either. */
+  lesson.subunit = ""; lesson.point = "";
   paintPickers(); saveDraft();
 });
 on("lUnit", "change", async () => {
   const v = $("lUnit").value;
+  /* For GCSE and A Level this picker is the point of the specification, and
+     choosing a different one starts its sub-point again rather than leaving
+     2.2.1 filed under 1.1. */
+  if (specLevel()){
+    fileLessonUnder(v ? specPointOf(v) : null, "");
+    paintPickers(); saveDraft(); schedulePreview();
+    return;
+  }
   if (v === "__new"){
     const name = await askNew("New unit", "Name (e.g. 8.1 Programming with Python)");
     if (!name){ paintPickers(); return; }
@@ -4298,6 +4382,12 @@ on("lUnit", "change", async () => {
     lesson.unit = v;
   }
   paintPickers(); saveDraft();
+});
+/* The sub-point. Empty means the lesson covers the whole of its point, which
+   the hub already has a place for: "Show all of 2.2", beside Refresh. */
+on("lSub", "change", () => {
+  fileLessonUnder(specStrandOfLesson(), $("lSub").value);
+  paintPickers(); saveDraft(); schedulePreview();
 });
 
 /* Setting the passcode for a page. Only its hash reaches the lesson file, so
@@ -4388,7 +4478,10 @@ function addTaskRow(target, inside){
     name: g.name,
     kinds: g.kinds.filter(k => {
       if (inside === "choice") return k.kind !== "choice" && k.kind !== "extension";
-      if (inside === "extension") return k.kind !== "extension";
+      /* Extension tasks are a page's own "finished early?" flap, so they go
+         on a page and nowhere else. A group inside either of these is fine,
+         and a group inside a group is the whole point of one. */
+      if (inside === "extension" || inside === "group") return k.kind !== "extension";
       return true;
     })
   })).filter(g => g.kinds.length);
@@ -4575,8 +4668,78 @@ function specLabel(id){
   if (!p) return "";
   return p.code + " " + p.title;
 }
+/* Which strand of the specification this lesson sits under. The point it is
+   filed against says so, and where nothing is filed yet the unit already
+   written is the only clue: a GCSE lesson saved before this picker existed
+   carries the strand's wording and nothing else. */
+function specStrandOfLesson(){
+  const p = specPointOf(lesson.point || "");
+  if (p) return p.parent ? (specPointOf(p.parent) || null) : p;
+  const named = (lesson.unit || "").trim();
+  if (!named) return null;
+  return specStrands(specLevel(), 0).find(s => (s.code + " " + s.title) === named) || null;
+}
+/* Writing the filing down. The id decides everything; the two names are
+   written out beside it because that is what goes into the catalogue, and
+   the screens that read them, a class's lessons and a student's home page,
+   are never sent the specification to look an id up in. */
+function fileLessonUnder(strand, pointId){
+  const p = specPointOf(pointId || "");
+  const sub = (p && p.parent) ? p : null;
+  lesson.unit = strand ? (strand.code + " " + strand.title) : "";
+  lesson.subunit = sub ? (sub.code + " " + sub.title) : "";
+  lesson.point = sub ? sub.id : (strand ? strand.id : "");
+}
+/* The two pickers a GCSE or A Level lesson is filed with, in place of the one
+   unit picker a KS3 lesson has. The point down the first, its sub-points down
+   the second, and a lesson that covers the whole of 2.2 rather than one part
+   of it leaves the second on "The whole of 2.2". */
+function paintSpecPickers(us, sub){
+  const level = specLevel();
+  const strand = specStrandOfLesson();
+  us.disabled = false;
+  us.title = "Which point of the specification this lesson is for";
+  us.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = "Specification point…";
+  us.appendChild(none);
+  /* Grouped by paper, because 1.1 and 2.1 are different things and a flat
+     list of thirteen numbers gives no sign of which is which. */
+  specComponents(level).forEach(n => {
+    const group = document.createElement("optgroup");
+    group.label = "Component " + n;
+    specStrands(level, n).forEach(s => {
+      const o = document.createElement("option");
+      o.value = s.id; o.textContent = s.code + " " + s.title;
+      group.appendChild(o);
+    });
+    if (group.childNodes.length) us.appendChild(group);
+  });
+  us.value = strand ? strand.id : "";
+
+  const kids = strand ? specPoints(strand.id) : [];
+  sub.innerHTML = "";
+  const whole = document.createElement("option");
+  whole.value = "";
+  whole.textContent = strand ? ("The whole of " + strand.code)
+                             : "Choose a specification point first";
+  sub.appendChild(whole);
+  kids.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.id; o.textContent = p.code + " " + p.title;
+    sub.appendChild(o);
+  });
+  sub.disabled = !kids.length;
+  sub.title = kids.length ? "Which part of it" : "Pick a specification point before the sub-point";
+  const mine = specPointOf(lesson.point || "");
+  sub.value = (mine && mine.parent) ? mine.id : "";
+  /* The words follow the ids, so a lesson opened from a point of the
+     specification is filed under both without anybody having to touch
+     either picker. */
+  fileLessonUnder(strand, sub.value);
+}
 function paintPickers(){
-  const ys = $("lYear"), us = $("lUnit");
+  const ys = $("lYear"), us = $("lUnit"), sub = $("lSub");
   const years = (cat.years || []).map(y => y.name);
   (cat.units || []).forEach(u => { if (u.year && years.indexOf(u.year) < 0) years.push(u.year); });
   ys.innerHTML = "";
@@ -4589,6 +4752,30 @@ function paintPickers(){
   });
   const yNew = document.createElement("option");
   yNew.value = "__new"; yNew.textContent = "+ New year group"; ys.appendChild(yNew);
+
+  /* A GCSE or A Level year group is not divided into units: it is divided by
+     the specification, so the same two pickers stand for the point and the
+     sub-point instead. Nothing is duplicated, so there is only ever one of
+     each on the page and the Save pop-up can borrow them the way it always
+     has. */
+  if (specLevel()){
+    sub.hidden = false;
+    paintSpecPickers(us, sub);
+    paintSpecUI();
+    return;
+  }
+  sub.hidden = true;
+  /* A year group changed from GCSE back to KS3 leaves its filing behind:
+     "2.2.1 Programming fundamentals" means nothing in a hub divided into
+     units, and a point still written down would send the lesson back to a
+     screen its year group no longer has.
+
+     Only where the year group is one we have, and it is KS3. A catalogue
+     that has not arrived, or did not arrive at all, looks exactly like a
+     KS3 year group from here, and throwing the filing away over a failed
+     fetch would lose it the moment the lesson was saved again. */
+  const chosen = (cat.years || []).find(y => y.name === lesson.year);
+  if (chosen){ lesson.subunit = ""; lesson.point = ""; }
 
   /* Units belong to a year, so until one is chosen there is nothing sensible
      to offer. Listing them all let the browser pick the first by itself. */
@@ -4621,7 +4808,7 @@ function paintSpecUI(){
   const on = !!specLevel();
   const tab = $("tabBank");
   if (tab) tab.hidden = !on;
-  ["palSpec", "palSpecAssess"].forEach(id => { const e = $(id); if (e) e.hidden = !on; });
+  ["palSpec", "palSpecAssess", "palGroupBtn"].forEach(id => { const e = $(id); if (e) e.hidden = !on; });
   /* Moving to a KS3 year group with the task builder open would leave a
      teacher on a screen with no way back to their lesson. */
   if (!on && bankOpen) showBank(false);
@@ -4670,9 +4857,14 @@ function openFilterMenu(btn, menu){
 /* One task in the column: draggable onto a page, or click to add it. Both
    lists draw with this, so there is one of them to keep working. */
 function bankTaskButton(t){
-  const btn = el("button","pal pal-bank");
-  btn.appendChild(el("b","", t.title || "Untitled task"));
-  const meta = [LABEL[t.kind] || t.kind, specLabel(t.point),
+  const btn = el("button","pal pal-bank" + (t.kind === "group" ? " pal-group" : ""));
+  btn.appendChild(el("b","", t.title || (t.kind === "group" ? "Untitled group" : "Untitled task")));
+  /* A group says how many tasks come with it, because that is the thing a
+     teacher is deciding about when they drag one onto a page. */
+  const inside = t.kind === "group" ? bankGroupSize(t, bankKnown()) : 0;
+  const meta = [t.kind === "group" ? "Group" : (LABEL[t.kind] || t.kind),
+                t.kind === "group" ? inside + " task" + (inside === 1 ? "" : "s") : "",
+                specLabel(t.point),
                 t.marks ? t.marks + (t.marks === 1 ? " mark" : " marks") : ""].filter(Boolean);
   btn.appendChild(el("span","", meta.join("  ·  ")));
   btn.draggable = true;
@@ -4686,6 +4878,26 @@ function bankTaskButton(t){
   return btn;
 }
 
+/* How many tasks a group holds, counting the ones in the groups inside it. */
+function bankGroupSize(t, all, seen){
+  seen = seen || new Set();
+  if (seen.has(t.id)) return 0;
+  seen.add(t.id);
+  let n = 0;
+  all.filter(x => (x.group_id || "") === t.id).forEach(x => {
+    n += (x.kind === "group") ? bankGroupSize(x, all, seen) : 1;
+  });
+  return n;
+}
+/* What the palette lists: the groups, and then the tasks that are not in one
+   of them. A task inside a group comes with the group, so listing it again on
+   its own would offer the same question twice. A task whose group is not in
+   this list, because the list is one point's worth and the group is filed
+   under another, is still offered on its own rather than lost. */
+function bankTopLevel(rows){
+  const have = new Set((rows || []).map(t => t.id));
+  return (rows || []).filter(t => !(t.group_id && have.has(t.group_id)));
+}
 function paintPointPalette(){
   const list = $("palPointList");
   if (!list) return;
@@ -4721,7 +4933,7 @@ function paintPointPalette(){
     make.addEventListener("click", () => showBank(true));
     list.appendChild(make);
   }
-  pointTasks.forEach(t => list.appendChild(bankTaskButton(t)));
+  bankTopLevel(pointTasks).forEach(t => list.appendChild(bankTaskButton(t)));
   paintAllPalette();
 }
 
@@ -4746,8 +4958,10 @@ function paintAllPalette(){
     loadAllTasks(key);
     return;
   }
-  /* The ones already offered above are not offered again. */
-  const shown = palAllTasks.filter(t => !pointTasks.some(p => p.id === t.id));
+  /* The ones already offered above are not offered again, and neither is
+     anything sitting inside a group that is offered here: it comes with the
+     group. */
+  const shown = bankTopLevel(palAllTasks).filter(t => !pointTasks.some(p => p.id === t.id));
   if (!shown.length){
     box.appendChild(el("p","bhelp", palAllTasks.length
       ? "Nothing here beyond the tasks above."
@@ -4844,7 +5058,8 @@ function readBankTasks(rows){
   return (rows || []).map(t => {
     let block = null;
     try{ block = JSON.parse(t.data || "null"); }catch(e){ block = null; }
-    return { id:t.id, title:t.title, kind:t.kind, marks:t.marks, point:t.point, block: block };
+    return { id:t.id, title:t.title, kind:t.kind, marks:t.marks, point:t.point,
+             group_id: t.group_id || "", block: block };
   }).filter(t => t.block && t.block.type);
 }
 async function loadPointTasks(point){
@@ -4866,9 +5081,47 @@ async function loadPointTasks(point){
   pointTasksFor = point;
   paintPointPalette();
 }
+/* Every task the two palette lists are holding, so a group can find what is
+   inside it without another trip to the server. Both lists come down with
+   each task's contents attached, for exactly this reason. */
+function bankKnown(){
+  const seen = new Map();
+  (pointTasks || []).concat(palAllTasks || []).forEach(t => { if (!seen.has(t.id)) seen.set(t.id, t); });
+  return Array.from(seen.values());
+}
+/* A group, as the one block a lesson holds: the tasks in it, in order, with
+   the groups inside it built the same way.
+
+   A lesson still knows nothing about the bank, so what goes in is a copy,
+   and every part of it keeps the task it was copied from: that is what gives
+   each one the same id in this lesson and in every version of it, which is
+   what the coverage screen adds up. */
+function bankGroupBlock(t, all, seen){
+  seen = seen || new Set();
+  if (seen.has(t.id)) return null;            // a group inside itself, somehow
+  seen.add(t.id);
+  const own = t.block || {};
+  const made = { type:"group", title: own.title || t.title || "", task: own.task || "", blocks: [] };
+  (all || []).filter(x => (x.group_id || "") === t.id).forEach(x => {
+    const kid = (x.kind === "group") ? bankGroupBlock(x, all, seen)
+                                     : (x.block ? JSON.parse(JSON.stringify(x.block)) : null);
+    if (!kid) return;
+    delete kid.folded;
+    kid.fromTask = x.id;
+    made.blocks.push(kid);
+  });
+  return made;
+}
 /* A copy to put in the lesson, remembering which bank task it came from. */
 function bankCopy(t){
-  if (!t || !t.block) return null;
+  if (!t) return null;
+  if (t.kind === "group"){
+    const made = bankGroupBlock(t, bankKnown());
+    if (!made) return null;
+    made.fromTask = t.id;
+    return made;
+  }
+  if (!t.block) return null;
   const made = JSON.parse(JSON.stringify(t.block));
   delete made.folded;
   made.fromTask = t.id;
@@ -5071,6 +5324,68 @@ function bankUnderStrand(t){
   return !!(p && p.parent === bankFind.strand);
 }
 
+/* ---------- groups, in the list ----------
+   A group is a row in the tasks table like any other, with kind "group",
+   and the tasks in it name it in group_id. One group inside another is the
+   same column pointing at that one, so the depth costs nothing and there is
+   no second table to keep in step.
+
+   None of it opens the task editor. A group is filing, and filing is done in
+   the list: made here, named here, filled from here. Whatever the pane
+   beside it is showing is left exactly as it was. */
+const isGroupRow = (t) => !!t && t.kind === "group";
+/* Which groups are folded away. Kept while the tab is open, so shutting one
+   and going back to a task does not open it again. */
+let bankShut = new Set();
+
+/* The list as the tree it really is.
+
+   Everything matching the filter is in it, and so is every group above
+   something that matches: a task must never be hidden because the folder
+   holding it did not match the words typed. A task whose group is not in
+   the list at all, because the filter asked for one point and the group is
+   filed under another, is shown at the top rather than lost. */
+function bankTree(){
+  const all = bankList || [];
+  const byId = new Map(all.map(t => [t.id, t]));
+  const keep = new Set();
+  const everythingUnder = (id) => all.forEach(x => {
+    if (x.group_id !== id || keep.has(x.id)) return;
+    keep.add(x.id);
+    everythingUnder(x.id);
+  });
+  all.forEach(t => {
+    if (!bankMatches(t) || !bankUnderStrand(t)) return;
+    keep.add(t.id);
+    /* A group whose name was searched for brings what is in it with it. */
+    if (isGroupRow(t)) everythingUnder(t.id);
+    let up = byId.get(t.group_id);
+    while (up && !keep.has(up.id)){ keep.add(up.id); up = byId.get(up.group_id); }
+  });
+  const kids = {};
+  all.forEach(t => {
+    if (!keep.has(t.id)) return;
+    const up = keep.has(t.group_id) ? t.group_id : "";
+    (kids[up] = kids[up] || []).push(t);
+  });
+  /* Groups above loose tasks at every level, so the shape of the bank reads
+     before the contents of it do. */
+  Object.keys(kids).forEach(k => {
+    kids[k].sort((a, b) => (isGroupRow(b) ? 1 : 0) - (isGroupRow(a) ? 1 : 0));
+  });
+  return { kids, count: keep.size };
+}
+/* How many tasks are in a group, counting the ones in the groups inside it.
+   That is the number a teacher wants: "4 tasks", not "2 tasks and a group". */
+function bankCountIn(id){
+  let n = 0;
+  (bankList || []).forEach(t => {
+    if (t.group_id !== id) return;
+    if (isGroupRow(t)) n += bankCountIn(t.id); else n++;
+  });
+  return n;
+}
+
 function renderBank(){
   if (!bankOpen) return;
   const level = specLevel();
@@ -5080,31 +5395,156 @@ function renderBank(){
   if (bankList === null){
     list.appendChild(el("p","hint","The task bank needs the server. It is not there in offline mode."));
   } else {
-    const shown = bankList.filter(t => bankMatches(t) && bankUnderStrand(t));
-    if (!shown.length){
+    const tree = bankTree();
+    if (!tree.count){
       list.appendChild(el("p","hint",
         bankList.length ? "Nothing matches that." : "No tasks yet. Press “+ New task”."));
     }
-    shown.forEach(t => {
-      const row = el("div","bank-row" + (bankTask && bankTask.id === t.id ? " on" : ""));
-      const main = el("button","bank-open");
-      const code = specPointOf(t.point);
-      main.appendChild(el("b","", t.title || "Untitled task"));
-      const where = el("span","bank-meta");
-      where.appendChild(el("span","bank-kind", LABEL[t.kind] || t.kind || "Task"));
-      if (code) where.appendChild(el("span","bank-code", code.code + " " + code.title));
-      if (t.marks) where.appendChild(el("span","bank-marks", t.marks + (t.marks === 1 ? " mark" : " marks")));
-      main.appendChild(where);
-      main.addEventListener("click", () => bankEdit(t.id));
-      row.appendChild(main);
-      const del = el("button","btn-ghost bmini","✕");
-      del.title = "Delete this task";
-      del.addEventListener("click", () => askDelete("task", () => bankDelete(t.id)));
-      row.appendChild(del);
-      list.appendChild(row);
-    });
+    bankRows(list, tree, "", 0);
+    /* The foot of the list is where something dragged out of a group lands,
+       which is the only way back to the top of it. */
+    dropOutOfGroups(list);
   }
   paintBankEditor();
+}
+function bankRows(into, tree, parent, depth){
+  (tree.kids[parent] || []).forEach(t => {
+    into.appendChild(isGroupRow(t) ? bankGroupRow(t, depth) : bankTaskRow(t, depth));
+    if (isGroupRow(t) && !bankShut.has(t.id)) bankRows(into, tree, t.id, depth + 1);
+  });
+}
+function bankTaskRow(t, depth){
+  const row = el("div","bank-row" + (bankTask && bankTask.id === t.id ? " on" : ""));
+  if (depth) row.style.marginLeft = (depth * 16) + "px";
+  const main = el("button","bank-open");
+  const code = specPointOf(t.point);
+  main.appendChild(el("b","", t.title || "Untitled task"));
+  const where = el("span","bank-meta");
+  where.appendChild(el("span","bank-kind", LABEL[t.kind] || t.kind || "Task"));
+  if (code) where.appendChild(el("span","bank-code", code.code + " " + code.title));
+  if (t.marks) where.appendChild(el("span","bank-marks", t.marks + (t.marks === 1 ? " mark" : " marks")));
+  main.appendChild(where);
+  main.addEventListener("click", () => bankEdit(t.id));
+  row.appendChild(main);
+  /* Dragging is the quick way and the picker is the sure one. A touch screen
+     has no drag, and nor has a teacher working down a list of past paper
+     questions with one hand on a trackpad. */
+  const mv = el("button","btn-ghost bmini","⇄");
+  mv.title = "Put this in a group";
+  mv.addEventListener("click", () => bankMovePicker(t));
+  row.appendChild(mv);
+  const del = el("button","btn-ghost bmini","✕");
+  del.title = "Delete this task";
+  del.addEventListener("click", () => askDelete("task", () => bankDelete(t.id)));
+  row.appendChild(del);
+  bankDraggable(row, t);
+  return row;
+}
+function bankGroupRow(g, depth){
+  const row = el("div","bank-row bank-group");
+  if (depth) row.style.marginLeft = (depth * 16) + "px";
+  /* Two lines, not one. There is more to do with a folder than with a task,
+     and five small buttons beside the name in a 300px column left the name
+     eighty pixels to wrap in: "Binary conversion practice" came out one word
+     to a line. The name gets the first line to itself. */
+  const top = el("div","bg-top");
+  const acts = el("div","bg-acts");
+  row.appendChild(top); row.appendChild(acts);
+  const shut = bankShut.has(g.id);
+  const fold = el("button","btn-ghost bmini foldbtn", shut ? "▸" : "▾");
+  fold.title = shut ? "Open this group" : "Fold this group away";
+  top.appendChild(fold);
+  const main = el("button","bank-open");
+  main.appendChild(el("b","", g.title || "Untitled group"));
+  const where = el("span","bank-meta");
+  const n = bankCountIn(g.id);
+  where.appendChild(el("span","bank-kind","Group"));
+  where.appendChild(el("span","", n + " task" + (n === 1 ? "" : "s")));
+  /* Where it is filed is left off on purpose. Every task inside it says so
+     already, and the wording of a point runs to several words: on a row this
+     narrow it took two more lines for something the rows underneath repeat. */
+  main.appendChild(where);
+  /* Pressing a group opens and shuts it and does nothing else. It is a
+     folder, not a task, so the editor beside it is not disturbed. */
+  const toggle = () => {
+    if (bankShut.has(g.id)) bankShut.delete(g.id); else bankShut.add(g.id);
+    renderBank();
+  };
+  main.addEventListener("click", toggle);
+  fold.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
+  top.appendChild(main);
+  const add = el("button","btn-ghost bmini2","+ Task");
+  add.title = "New task in this group";
+  add.addEventListener("click", () => bankNew(g.id));
+  acts.appendChild(add);
+  const pen = el("button","btn-ghost bmini","✎");
+  pen.title = "Rename this group";
+  pen.addEventListener("click", () => bankGroupEdit(g));
+  acts.appendChild(pen);
+  const mv = el("button","btn-ghost bmini","⇄");
+  mv.title = "Put this group inside another";
+  mv.addEventListener("click", () => bankMovePicker(g));
+  acts.appendChild(mv);
+  const del = el("button","btn-ghost bmini","✕");
+  del.title = "Delete this group";
+  del.addEventListener("click", () => askDeleteGroup(g));
+  acts.appendChild(del);
+  bankDraggable(row, g);
+  /* A group takes what is dropped on it. */
+  row.addEventListener("dragover", (e) => {
+    if (!bankDragging || bankDragging.id === g.id) return;
+    if (bankHoldsRow(g.id, bankDragging.id)) return;    // never into its own insides
+    e.preventDefault(); e.stopPropagation();
+    row.classList.add("over");
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("over"));
+  row.addEventListener("drop", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    row.classList.remove("over");
+    if (bankDragging) bankFile(bankDragging, g.id);
+  });
+  return row;
+}
+/* Whatever is being dragged about the list, so the row under the pointer
+   knows whether it may take it. */
+let bankDragging = null;
+function bankDraggable(row, t){
+  row.draggable = true;
+  row.addEventListener("dragstart", (e) => {
+    bankDragging = t;
+    row.classList.add("dragging");
+    if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", t.id); }
+  });
+  row.addEventListener("dragend", () => { row.classList.remove("dragging"); bankDragging = null; });
+}
+/* Is `id` somewhere inside the group `top`? Dropping a group onto its own
+   insides would make it its own parent, and the list would then draw itself
+   until the tab gave up. */
+function bankHoldsRow(id, top){
+  const all = bankList || [];
+  let up = all.find(t => t.id === id);
+  const seen = new Set();
+  while (up && !seen.has(up.id)){
+    if (up.id === top) return true;
+    seen.add(up.id);
+    up = all.find(t => t.id === up.group_id);
+  }
+  return false;
+}
+function dropOutOfGroups(list){
+  const out = el("div","bank-outzone","Drag a task here to take it out of its group");
+  out.addEventListener("dragover", (e) => {
+    if (!bankDragging || !bankDragging.group_id) return;
+    e.preventDefault();
+    out.classList.add("over");
+  });
+  out.addEventListener("dragleave", () => out.classList.remove("over"));
+  out.addEventListener("drop", (e) => {
+    e.preventDefault();
+    out.classList.remove("over");
+    if (bankDragging) bankFile(bankDragging, "");
+  });
+  list.appendChild(out);
 }
 
 function paintBankFilter(level){
@@ -5167,7 +5607,8 @@ on("bankStrand", "change", () => {
 });
 on("bankPoint", "change", () => { bankFind.point = $("bankPoint").value; bankLoad(); });
 on("bankSearch", "input", () => { bankFind.search = $("bankSearch").value; renderBank(); });
-on("bankNew", "click", () => bankNew());
+on("bankNew", "click", () => bankNew(""));
+on("bankNewGroup", "click", () => bankGroupEdit(null));
 /* All tasks really does mean all of them: the filter is cleared to the whole
    level, and the search box and the filter button come out to narrow it
    again. Pressing it again puts the lesson's own point back, so the button
@@ -5202,19 +5643,206 @@ document.addEventListener("pointerdown", (e) => {
 });
 
 /* ---------- the one being edited ---------- */
-function bankNew(){
-  if (bankUnsaved()){ bankLeave(bankNew); return; }
+function bankNew(inGroup){
+  if (bankUnsaved()){ bankLeave(() => bankNew(inGroup)); return; }
   /* Filed before it is written. The builder was opened from a point of the
      specification, so which point this task belongs to is already known and
      nobody should have to answer it again out of three dropdowns. Whatever
      the list is narrowed to wins, because that is the teacher looking at
      one point on purpose. */
   const home = specPointOf(lesson.point || "");
-  bankTask = { id: bankId(), title:"", point:"", component:0, block: null, fresh: true };
+  bankTask = { id: bankId(), title:"", point:"", component:0,
+               /* Pressed on a group, it is made in that group. Pressed at the
+                  top of the list it is made at the top of the list. */
+               groupId: String(inGroup || ""),
+               block: null, fresh: true };
   specFile(bankTask, bankFind.point || bankFind.strand || (home ? home.id : ""));
   if (!bankTask.component) bankTask.component = bankFind.component || 0;
+  /* A task made inside a group takes the group's filing, because that is
+     almost always what it is for. The picker under the name still moves it. */
+  const box = (bankList || []).find(t => t.id === inGroup);
+  if (box && box.point) specFile(bankTask, box.point);
   specOpenOn = null;
+  bankShut.delete(String(inGroup || ""));
   renderBank();
+}
+
+/* ---------- making and naming a group ----------
+   Saved through the same route as a task, because that is what it is: one
+   row with kind "group", whose data is the heading and subtitle a lesson
+   shows above whatever the group holds. */
+function bankGroupSave(g){
+  const API = (window.HUB && window.HUB.API) || "";
+  const block = { type:"group", title: g.title || "", task: g.task || "", blocks: [] };
+  return fetch(API + "/api/teacher/tasks", { method:"POST",
+    headers: window.teacherAuth.json(),
+    body: JSON.stringify({ op:"save", id: g.id, title: g.title || "Untitled group",
+                           level: specLevel(), component: Number(g.component) || 0,
+                           point: g.point || "", kind:"group", marks: 0,
+                           groupId: g.group_id || "", data: JSON.stringify(block) }) })
+    .then(async (r) => {
+      if (authFailed(r.status, () => bankGroupSave(g))) return;
+      if (!r.ok) throw new Error((await r.json()).error || "Could not save that group.");
+      pointTasksFor = null; palAllFor = null;     // the lesson's column has them too
+      await bankLoad();
+    });
+}
+async function bankGroupEdit(g){
+  const making = !g;
+  const row = g || { id: bankId(), title:"", task:"", point:"", component: bankFind.component || 0,
+                     group_id: "" };
+  if (!making){
+    /* The list holds a name and a count and nothing else, so the line the
+       group shows under its heading has to be fetched before it can be put
+       in the box. Without this, opening the rename pop-up and saving would
+       write that line away. */
+    const API = (window.HUB && window.HUB.API) || "";
+    try{
+      const r = await fetch(API + "/api/teacher/tasks?id=" + encodeURIComponent(row.id),
+                            { headers: window.teacherAuth.headers(), cache:"no-store" });
+      if (authFailed(r.status, () => bankGroupEdit(g))) return;
+      const d = await r.json();
+      const held = JSON.parse((d.task && d.task.data) || "{}");
+      row.task = held.task || "";
+      row.title = (d.task && d.task.title) || row.title;
+    }catch(e){ bankSay("Could not open that group.", true); return; }
+  }
+  if (making){
+    /* A new group is made where the list is looking: inside whichever group
+       is open, or at the top when none is. Filed under whatever the filter
+       is set to, the same as a new task. */
+    const home = specPointOf(lesson.point || "");
+    row.point = bankFind.point || bankFind.strand || (home ? home.id : "");
+    const p = specPointOf(row.point);
+    if (p && !row.component) row.component = Number(p.component) || 0;
+  }
+  openModal(box => {
+    box.appendChild(el("h2","", making ? "New group" : "Rename group"));
+    box.appendChild(el("p","modal-text",
+      "A group keeps several tasks together. Added to a lesson it goes in as one "
+      + "thing, with everything in it, and a group can hold other groups."));
+    const w1 = el("div","bfield");
+    w1.appendChild(el("label","","What it is called"));
+    const name = el("input");
+    name.placeholder = "Binary conversion practice";
+    name.value = row.title || "";
+    w1.appendChild(name); box.appendChild(w1);
+    const w2 = el("div","bfield");
+    w2.appendChild(el("label","","A line under it, for the lesson (optional)"));
+    const note = el("input");
+    note.placeholder = "Work through these in order";
+    note.value = row.task || "";
+    w2.appendChild(note); box.appendChild(w2);
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta", making ? "Make the group" : "Save");
+    go.addEventListener("click", async () => {
+      if (!name.value.trim()){ msg.textContent = "Give it a name."; return; }
+      if (!specLevel()){ msg.textContent = "Pick a GCSE or A Level year group first."; return; }
+      row.title = name.value.trim();
+      row.task = note.value.trim();
+      msg.textContent = "Saving\u2026";
+      try{ await bankGroupSave(row); closeModal(); }
+      catch(e){ msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(msg);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+    setTimeout(() => name.focus(), 30);
+  });
+}
+/* Deleting a group leaves the tasks in it alone: they move up to wherever
+   the group was. A bin beside a folder should not take a term of question
+   writing with it, which is the same rule the specification screen keeps. */
+function askDeleteGroup(g){
+  const n = bankCountIn(g.id);
+  openModal(box => {
+    box.appendChild(el("h2","", "Delete \u201c" + (g.title || "this group") + "\u201d?"));
+    box.appendChild(el("p","modal-text", n
+      ? "The " + n + " task" + (n === 1 ? "" : "s") + " in it are kept. They move out to "
+        + "where the group was, so nothing is lost."
+      : "There is nothing in it."));
+    const yes = el("button","btn-primary modal-cta","Delete the group");
+    yes.style.background = "var(--red)";
+    yes.addEventListener("click", () => { closeModal(); bankDelete(g.id); });
+    const no = el("button","btn-ghost modal-stay","Keep it");
+    no.addEventListener("click", closeModal);
+    box.appendChild(yes); box.appendChild(no);
+  });
+}
+/* Filing one row under another, for the button and for the drag.
+
+   The row is fetched whole first and its contents are written back exactly as
+   they came. The list carries a title and a kind and nothing else, so saving
+   from what the list is holding would write an empty task over a real one:
+   the first go at this did, and it quietly emptied the line a group shows
+   under its heading in a lesson. */
+async function bankFile(row, into){
+  if (!row || row.id === into) return;
+  if (into && bankHoldsRow(into, row.id)) return;      // never inside itself
+  if ((row.group_id || "") === (into || "")) return;
+  const API = (window.HUB && window.HUB.API) || "";
+  const was = row.group_id || "";
+  row.group_id = into || "";                            // so the list redraws at once
+  renderBank();
+  try{
+    const r0 = await fetch(API + "/api/teacher/tasks?id=" + encodeURIComponent(row.id),
+                           { headers: window.teacherAuth.headers(), cache:"no-store" });
+    if (authFailed(r0.status, () => bankFile(row, into))) return;
+    const d0 = await r0.json();
+    if (!d0 || !d0.task) throw new Error("Could not read that one.");
+    const r = await fetch(API + "/api/teacher/tasks", { method:"POST",
+      headers: window.teacherAuth.json(),
+      body: JSON.stringify({ op:"save", id: row.id, title: d0.task.title || row.title || "",
+                             level: d0.task.level || specLevel(),
+                             component: Number(d0.task.component) || 0,
+                             point: d0.task.point || "", kind: d0.task.kind || row.kind || "",
+                             marks: Number(d0.task.marks) || 0,
+                             groupId: row.group_id, data: d0.task.data }) });
+    if (authFailed(r.status, () => bankFile(row, into))) return;
+    if (!r.ok) throw new Error((await r.json()).error || "Could not move that.");
+    pointTasksFor = null; palAllFor = null;
+    await bankLoad();
+  }catch(e){
+    row.group_id = was;                                 // put it back where it was
+    bankSay(e.message || "Could not move that.", true);
+    renderBank();
+  }
+}
+/* Which group to put something in, for a screen with no drag. */
+function bankMovePicker(row){
+  openModal(box => {
+    box.appendChild(el("h2","","Where does this go?"));
+    box.appendChild(el("p","modal-text",
+      "\u201c" + (row.title || "This") + "\u201d is in "
+      + (bankNameOf(row.group_id) || "no group") + "."));
+    const list = el("div","bankpick");
+    const offer = (id, words, depth) => {
+      const b = el("button","bankpick-row");
+      b.appendChild(el("b","", words));
+      if (depth) b.style.paddingLeft = (14 + depth * 16) + "px";
+      b.disabled = (row.group_id || "") === (id || "");
+      b.addEventListener("click", () => { closeModal(); bankFile(row, id); });
+      list.appendChild(b);
+    };
+    offer("", "The top of the list", 0);
+    const walk = (parent, depth) => {
+      (bankList || []).filter(t => isGroupRow(t) && (t.group_id || "") === parent).forEach(g => {
+        /* A group cannot go inside itself or inside anything it holds. */
+        if (g.id !== row.id && !bankHoldsRow(g.id, row.id)) offer(g.id, g.title || "Untitled group", depth + 1);
+        walk(g.id, depth + 1);
+      });
+    };
+    walk("", 0);
+    box.appendChild(list);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    box.appendChild(no);
+  });
+}
+function bankNameOf(id){
+  const g = (bankList || []).find(t => t.id === id);
+  return g ? "\u201c" + (g.title || "a group") + "\u201d" : "";
 }
 async function bankEdit(id){
   if (bankTask && bankTask.id === id) return;
@@ -5233,7 +5861,8 @@ async function bankEdit(id){
        screen here, so it is always open. */
     delete block.folded;
     bankTask = { id: d.task.id, title: d.task.title || "", point: d.task.point || "",
-                 component: Number(d.task.component) || 0, block: block };
+                 component: Number(d.task.component) || 0,
+                 groupId: d.task.group_id || "", block: block };
     bankSay("");
   }catch(e){
     bankSay(e.message || "Could not open that task.", true);
@@ -5420,6 +6049,10 @@ async function bankSaveNow(quiet){
     point: src.point || "",
     kind: block.type,
     marks: block.type === "exam" ? (parseInt(block.marks, 10) || 0) : 0,
+    /* Which group of the bank it is filed in. Written on every save, not only
+       when it changes, so a task moved and then edited does not go back to
+       the top of the list the next time it is saved. */
+    groupId: bankTask.groupId || "",
     data: JSON.stringify(block)
   };
   const API = (window.HUB && window.HUB.API) || "";
@@ -5481,15 +6114,19 @@ async function bankPicker(){
     find.placeholder = "Search";
     box.appendChild(find);
     const list = el("div","bankpick");
+    const top = bankTopLevel(tasks);
     const draw = () => {
       const words = find.value.trim().toLowerCase();
       list.innerHTML = "";
-      tasks.filter(t => !words ||
+      top.filter(t => !words ||
           (String(t.title || "") + " " + specLabel(t.point)).toLowerCase().indexOf(words) >= 0)
         .forEach(t => {
           const b = el("button","bankpick-row");
-          b.appendChild(el("b","", t.title || "Untitled task"));
-          const meta = [LABEL[t.kind] || t.kind, specLabel(t.point),
+          b.appendChild(el("b","", t.title || (t.kind === "group" ? "Untitled group" : "Untitled task")));
+          const inside = t.kind === "group" ? bankGroupSize(t, tasks) : 0;
+          const meta = [t.kind === "group" ? "Group" : (LABEL[t.kind] || t.kind),
+                        t.kind === "group" ? inside + " task" + (inside === 1 ? "" : "s") : "",
+                        specLabel(t.point),
                         t.marks ? t.marks + (t.marks === 1 ? " mark" : " marks") : ""].filter(Boolean);
           b.appendChild(el("span","", meta.join("  ·  ")));
           b.addEventListener("click", () => { closeModal(); bankInsert(t.id); });
@@ -5513,17 +6150,46 @@ async function bankInsert(id){
                           { headers: window.teacherAuth.headers(), cache:"no-store" });
     if (authFailed(r.status, () => bankInsert(id))) return;
     const d = await r.json();
-    const block = JSON.parse(d.task.data);
+    let block;
+    if (d.task && d.task.kind === "group"){
+      /* A group is a row that names its contents rather than holding them,
+         so what goes in the lesson is built from the tasks filed under it.
+         Fetched with their contents, which the plain list leaves out. */
+      const all = await fetch(API + "/api/teacher/tasks?full=1&level="
+                              + encodeURIComponent(specLevel()),
+                              { headers: window.teacherAuth.headers(), cache:"no-store" })
+                        .then(x => x.json()).catch(() => ({}));
+      const rows = readBankTasks(all.tasks);
+      const me = rows.find(x => x.id === id)
+              || { id: id, title: d.task.title, kind:"group", group_id: d.task.group_id || "",
+                   block: JSON.parse(d.task.data || "{}") };
+      block = bankGroupBlock(me, rows);
+      if (!block || !block.blocks.length)
+        throw new Error("There is nothing in that group yet.");
+    } else {
+      block = JSON.parse(d.task.data);
+    }
     if (!block || !block.type) throw new Error("That task could not be read.");
     delete block.folded;
     /* The one kind that cannot go in a test. Its mark scheme is something a
        student ticks off themselves, which in an assessment would be the
-       answers on screen while they sat it. */
-    if (lesson.assessment && block.type === "exam"){
+       answers on screen while they sat it. A group holding one is turned
+       away for the same reason: the rule is about what reaches the screen,
+       not about what the block at the top is called. */
+    if (lesson.assessment && holdsExam(block)){
       say("Not in an assessment",
           "An exam question is marked by the student against its scheme, so it would show them "
           + "the answers during the test. Put it in a lesson instead, or use a short answer or a "
           + "multiple choice question here.");
+      return;
+    }
+    /* An assessment is a flat list of numbered questions, and the markbook
+       counts them that way. A group would put questions inside one of those
+       numbers, so the marks for them would have nowhere to go. */
+    if (lesson.assessment && block.type === "group"){
+      say("Not in an assessment",
+          "An assessment is one list of numbered questions, so a group cannot go in it. "
+          + "Add the questions inside it one at a time, or keep the group for a lesson.");
       return;
     }
     /* The copy remembers where it came from. That is what gives it a stable
@@ -5534,6 +6200,15 @@ async function bankInsert(id){
   }catch(e){
     say("Could not add that task", e.message || "Try again in a moment.");
   }
+}
+/* An exam question, at any depth. A group can hold groups, so this has to
+   look all the way down rather than at the block it is given. */
+function holdsExam(b){
+  if (!b) return false;
+  if (b.type === "exam") return true;
+  const lists = (b.type === "choice") ? (b.options || []).map(o => o.blocks || [])
+                                      : [b.blocks || []];
+  return lists.some(list => list.some(holdsExam));
 }
 on("palFromBank", "click", bankPicker);
 on("palFromBankAssess", "click", bankPicker);
@@ -5699,7 +6374,7 @@ function scrollBody(box){
 function homePickers(){
   const titles = document.querySelector(".build-titles");
   if (!titles) return;
-  ["lYear", "lUnit"].forEach(id => {
+  ["lYear", "lUnit", "lSub"].forEach(id => {
     const pick = $(id);
     if (pick && pick.parentNode !== titles) titles.appendChild(pick);
   });
@@ -5737,7 +6412,7 @@ on("jsonBtn", "click", () => {
   const missing = [];
   if (!lesson.title.trim()) missing.push("a title");
   if (!lesson.year || !lesson.year.trim()) missing.push("a year group");
-  if (!lesson.unit || !lesson.unit.trim()) missing.push("a unit");
+  if (!lesson.unit || !lesson.unit.trim()) missing.push(specLevel() ? "a specification point" : "a unit");
   if (missing.length){
     say("Not ready yet", "This lesson still needs " + joinWords(missing) +
         ". They go in the boxes at the top, and they are what files it on the site.");
@@ -6206,7 +6881,12 @@ async function downloadForFolder(){
     return;
   }
   if (!lesson.unit || !lesson.unit.trim()){
-    say("Which unit?", "Choose a unit at the top, or make a new one. Units sit inside a year group.");
+    if (specLevel())
+      say("Which point of the specification?",
+          "Choose one at the top. The sub-point beside it is optional: leave it on “The whole of” "
+          + "for a lesson that covers all of it.");
+    else
+      say("Which unit?", "Choose a unit at the top, or make a new one. Units sit inside a year group.");
     return;
   }
   /* A locked page with no passcode can never be opened by anybody, so the
@@ -6317,7 +6997,15 @@ async function saveToSite(){
   if (!API){ say("Not connected", "This copy of the site has no server address in config.js, so it can't save lessons."); return; }
   if (!lesson.title.trim()){ say("Give it a title first", "The title becomes the lesson's name on the site."); return; }
   if (!lesson.year || !lesson.year.trim()){ say("Which year group?", "Choose a year group at the top, or make a new one."); return; }
-  if (!lesson.unit || !lesson.unit.trim()){ say("Which unit?", "Choose a unit at the top, or make a new one."); return; }
+  if (!lesson.unit || !lesson.unit.trim()){
+    if (specLevel())
+      say("Which point of the specification?",
+          "Choose one at the top. The sub-point beside it is optional: leave it on “The whole of” "
+          + "for a lesson that covers all of it.");
+    else
+      say("Which unit?", "Choose a unit at the top, or make a new one.");
+    return;
+  }
   if (!signedIn()){ askForKey(saveToSite, "Sign in to save this lesson to the site."); return; }
   const btn = $("saveSite");
   btn.disabled = true; btn.textContent = "Saving\u2026";
@@ -6507,6 +7195,9 @@ async function loadUnitsAndMaybeLesson(){
 function fromCompiled(data, meta){
   const out = { title: data.title || (meta && meta.title) || "", intro: data.intro || "",
                 unit: data.unit || (meta && meta.unit) || "", year: data.year || "",
+                /* The sub-point it was filed under, so reopening a lesson
+                   finds both pickers where they were left. */
+                subunit: data.subunit || "",
                 /* Where it sits on the specification. Left out here, reopening
                    a GCSE lesson lost its point: the left column went back to
                    the plain palette and the task builder stopped knowing what
@@ -6547,6 +7238,9 @@ function fromCompiled(data, meta){
     if (b.type === "extension") return { type:"extension", title:b.title || "",
                                          task:b.task || "",
                                          blocks:(b.blocks || []).map(back) };
+    if (b.type === "group") return { type:"group", title:b.title || "",
+                                     task:b.task || "",
+                                     blocks:(b.blocks || []).map(back) };
     if (b.type === "choice") return { type:"choice", title:b.title || "", task:b.task || "",
                                       prompt:b.prompt || "",
                                       options:(b.options || []).map(o => ({

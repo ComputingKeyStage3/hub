@@ -40,6 +40,10 @@
   }
 
   window.lessonOrder = {
+    /* The same numbers-as-numbers comparison, for the headings a list of
+       lessons is grouped under. A unit's sub-points are 2.2.1, 2.2.2 and
+       2.2.10, and sorted as plain text the last of those comes second. */
+    compareText: compareText,
     /* titleFor is for the console, where the title on screen comes from
        its own list of lessons rather than from the row being sorted. */
     compare: function(a, b, titleFor){

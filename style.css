@@ -667,6 +667,11 @@ textarea.code{background:var(--code-bg) !important; color:var(--code-fg) !import
 /* no more orange caps */
 .unit-head{font-family:var(--display); font-size:16px; letter-spacing:0; text-transform:none;
   color:var(--muted); font-weight:800}
+/* The groups inside a unit: the sub-points of a point of the specification.
+   Quieter than the unit above it, and indented, so the two headings read as
+   one inside the other rather than as two lists side by side. */
+.sub-head{font-family:var(--display); font-size:14px; font-weight:700; color:var(--muted);
+  opacity:.85; margin:18px 0 6px 2px}
 .badge{letter-spacing:.02em; text-transform:none; font-family:var(--body); font-size:12.5px; font-weight:700;
   color:var(--amber-dark); border-color:var(--line-2); background:var(--panel)}
 .badge-done{color:var(--mint); border-color:var(--mint-dim); background:var(--panel)}
@@ -1202,13 +1207,20 @@ body.spectating{padding-top:40px}
 .crumb-sep{color:var(--dim)}
 .crumb-here{font-weight:800; color:var(--text)}
 
-/* builder: unit box sits with the titles */
-.build-titles #lUnit{max-width:190px}
+/* builder: unit box sits with the titles. For GCSE and A Level the same two
+   boxes are the point of the specification and its sub-point, and those
+   wordings are long, so both are cut to the same width and say the rest in
+   their dropdown. */
+.build-titles #lUnit,
+.build-titles #lSub{max-width:190px}
 
 
 /* lesson hub */
 #hubList .unit-head{margin-top:26px}
 #hubList .lessongrid{margin-top:10px}
+/* a class's lessons, grouped under the sub-points of the unit */
+#lessonGrid .unit-head{margin-top:26px}
+#lessonGrid .lessongrid{margin-top:10px}
 .lp-acts button{flex:0 0 auto; font-size:12px}
 
 
@@ -3348,6 +3360,21 @@ body > .loadscreen{ animation:none }
 .ext-title{display:block; font-size:15px; color:var(--amber)}
 .ext-task{margin:4px 0 0; color:var(--muted); font-size:14px}
 
+/* ---------- a group of tasks ----------
+   Several tasks kept together as one, built in the task builder. It is not
+   marked off the way extension tasks are: everything in it is ordinary work
+   on the page, and a box round it would say otherwise. A line down the side
+   is enough to show which tasks belong together, and it is the same line the
+   builder draws down the inside of a page. */
+.taskgroup{padding-left:14px; border-left:3px solid var(--line-2); margin:2px 0}
+/* A group inside a group, which is allowed, must not take another 14px for
+   every level: four deep and the work would start halfway across a phone. */
+.taskgroup .taskgroup{padding-left:10px}
+@media (max-width:620px){
+  .taskgroup{padding-left:10px}
+  .taskgroup .taskgroup{padding-left:8px}
+}
+
 /* ---------- choice ----------
    The buttons sit in a row and only the chosen one's work is on the page. */
 .choice-row{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0}
@@ -4461,6 +4488,33 @@ html[data-bank=yes] .build-preview{display:none}
 .bank-meta span{font-size:12px; color:var(--muted)}
 .bank-kind{font-weight:700}
 .bank-marks{color:var(--text)}
+/* A group in the list. Filled in rather than outlined, so the folders read
+   as the shape of the bank and the tasks as what is in it. The row is not a
+   task and never shows as the one being edited, so it has no .on state. */
+.bank-group{background:var(--panel-2); border-color:var(--line-2);
+  flex-direction:column; align-items:stretch; gap:0}
+.bank-group .bg-top{display:flex; align-items:center; gap:6px}
+.bank-group .bg-acts{display:flex; justify-content:flex-end; gap:4px; padding:0 2px 4px}
+.bank-group .bank-open b{font-weight:800}
+.bank-group .foldbtn{flex:0 0 auto}
+/* Where a row is about to land. The same wash the builder uses for a page
+   taking a task, so the two lists behave alike. */
+.bank-row.over{border-color:var(--amber); box-shadow:0 0 0 3px rgba(47,107,174,.14)}
+.bank-row.dragging{opacity:.5}
+/* Dragging something here takes it out of whatever group it is in. It is the
+   only way back to the top of the list, so it is always there rather than
+   appearing only while something is being dragged: a target that shows up
+   halfway through a drag is a target nobody aims at. */
+.bank-outzone{border:1.5px dashed var(--line-2); border-radius:14px; padding:12px;
+  text-align:center; font-size:12.5px; color:var(--muted)}
+.bank-outzone.over{border-color:var(--amber); color:var(--text)}
+/* On a touch screen there is no drag, so an invitation to drag something is
+   an instruction nobody can follow. The button on each row does the same
+   job there, and it offers the top of the list as one of its choices. */
+@media (hover:none){ .bank-outzone{display:none} }
+/* A group in the builder's left column, so a teacher can see at a glance
+   which of these brings several tasks with it. */
+.pal-group b::before{content:"\2630\00a0\00a0"; font-weight:400; color:var(--muted)}
 .bank-edit{min-width:0}
 .bank-headrow{display:flex; align-items:flex-end; gap:12px; margin:0 0 14px}
 .bank-headrow .grow{flex:1; min-width:0; margin:0}

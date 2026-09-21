@@ -2521,7 +2521,7 @@ function buildBlock(b, i){
               keywords:rKeywordsTask,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
               exam:rExamTask, table:rTableTask,
-              extension:rExtension, choice:rChoice }[b.type];
+              extension:rExtension, group:rGroup, choice:rChoice }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try { return R(b); }
   catch (err){
@@ -2843,6 +2843,50 @@ function rExtension(b){
            onShow: () => kids.forEach(k => { if (k.onShow) k.onShow(); }),
            check:() => ({ ok:true }),
            brief:{ eyebrow:"Extension", title:b.title || "Extension tasks", text:b.task || "" } };
+}
+
+/* A group: several tasks kept together as one thing, built once in the task
+   builder and dropped into as many lessons as it is wanted in. A group can
+   hold groups, and this draws them by asking buildBlock for each one, so the
+   depth costs nothing here.
+
+   It is not a page and it is not extension tasks. Nothing in it is held back
+   and nothing in it is excused: a task inside a group holds the page exactly
+   as the same task outside one would, which is what makes a group a way of
+   arranging work rather than a way of hiding it.
+
+   Its own heading is not written into the section. Whatever is drawing it,
+   a page or another group, prints the brief above it the way it prints every
+   other task's, and putting it here as well printed it twice. */
+function rGroup(b){
+  const s = el("section","taskgroup");
+  const kids = [];
+  const slots = pageSlot(s);
+  (b.blocks || []).forEach((child, j) => {
+    if (!child.id) child.id = b.id + "_" + j;
+    const built = buildBlock(child, j);
+    if (!built) return;
+    if (child.required === false) built.check = () => ({ ok:true });
+    const item = el("div","pg-item");
+    const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
+    if (child.type !== "picture"){
+      if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
+      if (bb.text) item.appendChild(el("p","pg-t", bb.text));
+    }
+    built.section.hidden = false;
+    item.appendChild(built.section);
+    slots.place(item, child);
+    kids.push(built);
+  });
+  return {
+    section: s,
+    onShow: () => kids.forEach(k => { if (k.onShow) k.onShow(); }),
+    check: () => {
+      for (const k of kids){ const r = k.check(); if (!r.ok) return r; }
+      return { ok:true };
+    },
+    brief:{ title: b.title || "", text: stripTags(b.task || "") }
+  };
 }
 
 function renderBlock(b, i){
@@ -6836,20 +6880,23 @@ function buildPdf(){
   doc.line(M, y, M + W, y);
   y += 7;
 
-  /* Lessons are made of pages, so the tasks are one level in. */
+  /* Lessons are made of pages, so the tasks are one level in. Extension
+     tasks are a level deeper again, and a group can be deeper still and can
+     hold groups, so this walks down rather than reaching in twice. Each
+     container puts its own heading in front of what it holds, and a group
+     with no heading simply hands its tasks up: a rule across the page for
+     something the teacher did not name says nothing. */
   const flat = [];
-  (lesson.blocks || []).forEach(b => {
-    if (b.type === "page"){
-      if (b.title) flat.push({ type: "__page", title: b.title });
-      (b.blocks || []).forEach(child => {
-        /* extension tasks are a level deeper again, under their own heading */
-        if (child.type === "extension"){
-          flat.push({ type: "__page", title: child.title || "Extension tasks" });
-          (child.blocks || []).forEach(g => flat.push(g));
-        } else flat.push(child);
-      });
-    } else flat.push(b);
+  const flatten = (list) => (list || []).forEach(b => {
+    if (b.type === "page" || b.type === "extension" || b.type === "group"){
+      const head = b.type === "extension" ? (b.title || "Extension tasks") : (b.title || "");
+      if (head) flat.push({ type: "__page", title: head });
+      flatten(b.blocks);
+      return;
+    }
+    flat.push(b);
   });
+  flatten(lesson.blocks);
 
   flat.forEach(b => {
     if (b.type === "__page"){

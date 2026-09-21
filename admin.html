@@ -374,7 +374,9 @@ setTimeout(function(){
       <button class="btn-primary" id="addLessonBtn">+ Add an existing lesson</button>
       <button class="btn-ghost" id="newLessonBtn">+ Build a new lesson</button>
     </div>
-    <div class="lessongrid" id="lessonGrid"></div>
+    <!-- The grids themselves are made inside this, one per sub-point of the
+         unit, so a heading can sit between them. -->
+    <div id="lessonGrid"></div>
   </div>
 
 </div>
@@ -2488,7 +2490,18 @@ function paintComponents(){
     g.appendChild(t);
   });
 }
-on("refComp", "click", async () => { await loadCatalogue(true); paintComponents(); });
+/* Refresh, on all three of the specification screens.
+   These used to fetch and redraw with nothing on screen to say so, and with
+   nothing to say so when the fetch failed either: a teacher who had just
+   built a lesson in another tab pressed it, saw the same list, and quite
+   reasonably decided the button did nothing. Dots while it is working, and
+   the reason where it did not, the same as every other Refresh here. */
+async function refreshSpec(box, what, draw){
+  wait(box, what, true);
+  try{ await loadCatalogue(true); draw(); }
+  catch(e){ $(box).innerHTML = ""; $(box).appendChild(el("p","hint", e.message)); }
+}
+on("refComp", "click", () => refreshSpec("hubStrands", "Loading the specification", paintComponents));
 on("compSpecBtn", "click", () => openSpec());
 on("backCompYear", "click", () => { show("hubView"); paintYears(); });
 
@@ -2520,10 +2533,9 @@ function paintStrands(){
 /* One screen holds two lists: the parts of a component, and the points
    inside one of those parts. Which it is showing decides what Refresh
    redraws and where Back goes. */
-on("refStrand", "click", async () => {
-  await loadCatalogue(true);
-  if (hubStrand) paintPoints(); else paintStrands();
-});
+on("refStrand", "click", () => refreshSpec("hubPoints",
+  hubStrand ? "Loading the points" : "Loading the specification",
+  () => { if (hubStrand) paintPoints(); else paintStrands(); }));
 on("backStrandComp", "click", () => {
   if (hubStrand) openComponent(hubComp); else openComponents();
 });
@@ -2569,7 +2581,7 @@ function openPoint(id){
   paintPointLessons();
 }
 function paintPointLessons(){ lessonCards(lessonsOfPoint(hubPoint), $("hubPointList")); }
-on("refPoint", "click", async () => { await loadCatalogue(true); paintPointLessons(); });
+on("refPoint", "click", () => refreshSpec("hubPointList", "Loading the lessons", paintPointLessons));
 on("backPointStrand", "click", () => { if (hubStrand) openStrand(hubStrand); else openComponent(hubComp); });
 /* The builder opens knowing where it is: the year group, the point, and the
    strand's name for the unit the lesson is also filed under. Its task bank
@@ -3721,6 +3733,17 @@ function paintLessonGrid(){
     return;
   }
   inOrder(mine, (l) => titleOf(l.lesson_id));
+  /* A unit is one point of the specification, and the lessons inside it are
+     grouped under its sub-points. A KS3 unit has none, so its lessons come
+     out as one list exactly as they always did, and so do the lessons of a
+     GCSE unit filed against the whole of 2.2 rather than one part of it:
+     those go first, under the unit itself, because they are the ones that
+     belong to all of it. */
+  /* Then by sub-point, so the groups come out in the order the course is
+     taught in rather than in the order the first lesson of each happened to
+     be named. Stable, so inside a group the titles still decide. */
+  mine.sort(bySubunit);
+  const boxOf = subunitBoxes(g);
   mine.forEach(l => {
     const a = assignOf(l.lesson_id);
     const live = a ? !!a.published : !!l.published;
@@ -3806,8 +3829,44 @@ function paintLessonGrid(){
     }
     acts.appendChild(overflowMenu(extras));
     card.appendChild(acts);
-    g.appendChild(card);
+    boxOf(l.subunit || "").appendChild(card);
   });
+}
+
+/* The sub-point a lesson is filed under decides which group it is in, and
+   the number in that wording is read as a number: 2.2.10 comes after 2.2.9.
+   Lessons covering the whole unit have no sub-point and go first, because
+   they belong to all of it rather than to one part. */
+function bySubunit(a, b){
+  const x = String(a.subunit || ""), y = String(b.subunit || "");
+  if (x === y) return 0;
+  if (!x) return -1;
+  if (!y) return 1;
+  return window.lessonOrder ? window.lessonOrder.compareText(x, y)
+                            : (x < y ? -1 : 1);
+}
+/* Handing out the part of a list a lesson belongs in. Each sub-point gets a
+   heading and its own grid the first time something is filed under it, and
+   the headings are left off entirely where there is only ever one group:
+   "2.2 Programming fundamentals" written above the one list on a screen
+   already headed "2.2 Programming fundamentals" says nothing. */
+function subunitBoxes(into){
+  const made = {};
+  let only = true;
+  return function(name){
+    if (made[name]) return made[name];
+    /* The second group is what turns the headings on, so the first one has
+       to grow a heading after the fact rather than before it. */
+    if (Object.keys(made).length === 1) only = false;
+    const grid = el("div","lessongrid");
+    const head = el("p","unit-head", name || "All of this unit");
+    made[name] = grid;
+    into.appendChild(head);
+    into.appendChild(grid);
+    if (only) head.hidden = true;
+    else into.querySelectorAll(".unit-head").forEach(h => { h.hidden = false; });
+    return grid;
+  };
 }
 
 async function fetchLesson(id){
