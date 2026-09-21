@@ -75,9 +75,11 @@ function hlLine(line, state, opts){
 
    `carry` is whatever triple-quoted string was still open at the end of the
    line before, so a docstring does not turn the lines inside it into code.
-   Comes back with the code alone, the string contents blanked, and whatever
-   is still open. */
-function strip(line, carry){
+   `comment` is what starts a comment, because it is not # in every language
+   the editor paints; left out, it is Python's. Comes back with the code
+   alone, the string contents blanked, and whatever is still open. */
+function strip(line, carry, comment){
+  const com = comment === undefined ? "#" : comment;
   let out = "", i = 0, open = carry || "";
   while (i < line.length){
     const three = line.slice(i, i + 3);
@@ -90,7 +92,7 @@ function strip(line, carry){
       if (line[i] === open){ open = ""; i++; out += '""'; continue; }
       i++; continue;
     }
-    if (line[i] === "#") break;                        // the rest is a comment
+    if (com && line[i] === com) break;                 // the rest is a comment
     if (three === '"""' || three === "'''"){ open = three; i += 3; continue; }
     if (line[i] === '"' || line[i] === "'"){ open = line[i]; i++; continue; }
     out += line[i]; i++;
@@ -490,6 +492,7 @@ const pythonLang = {
   find: checkPython,
   state: () => ({ triple: null }),
   indent: "    ",
+  comment: "#",
   opens: (line) => /:\s*$/.test(line),
   suggest: suggestPython
 };
@@ -501,6 +504,7 @@ const plainLang = {
   find: () => [],
   state: () => ({}),
   indent: "  ",
+  comment: "",
   opens: () => false
 };
 
@@ -518,6 +522,7 @@ function webLang(which){
     find: (code) => window.webCheck ? window.webCheck(which, code) : [],
     state: () => ({ block: false }),
     indent: "  ",
+    comment: "",
     opens: (line) => window.webOpens ? window.webOpens(which, line) : /[{>]\s*$/.test(line),
     closeTag: which === "html",
     suggest: (ctx) => window.webSuggest ? window.webSuggest(which, ctx) : null
@@ -604,11 +609,21 @@ function attach(opts){
      this is a list of pairs rather than a list of brackets. */
   const PAIRS = { "(":")", "[":"]", "{":"}", '"':'"', "'":"'" };
   const SHUTS = ")]}\"'";
-  /* An opening half only writes its partner when what follows is somewhere a
-     partner belongs: the end of the line, a space, or another closing half.
-     Typing ( in front of an existing word should not push a ) into the middle
-     of it. */
-  const ROOM_AFTER = /^$|^[\s)\]}>,;.:]/;
+  /* An opening half only writes its partner when the rest of the line has
+     room for one: nothing after the caret but spaces, or a closing half
+     already sitting there. A space with more line after it is not room, which
+     is what stops a ( typed in front of print Hello giving print() Hello. */
+  const ROOM_AFTER = /^\s*$|^[)\]}>,;.:]/;
+  /* A quote needs room in front of it as well, which a bracket does not: it
+     only opens a string where a string could start, at the beginning of the
+     line or after a space, bracket, comma or operator. Anywhere else the
+     quote is finishing something off rather than starting it. A student
+     correcting print(Hello!) types the quote against the !, and a pair there
+     hands them print(Hello!"") to sort out. */
+  const QUOTE_ROOM_BEFORE = /(^|[\s([{,:=+\-*\/])$/;
+  /* f"..." and r"..." are one string, so the letter in front of the quote
+     belongs to it and is not a word the quote has been stuck on the end of. */
+  const STRING_PREFIX = /[fFrRbB]$/;
 
   const ac = (opts.autocomplete === false) ? null : suggestBox();
   function acOpen(){ return ac && ac.openFor(ta); }
@@ -787,11 +802,18 @@ function attach(opts){
       ta.selectionStart = st + 1; ta.selectionEnd = en + 1;
       return;
     }
-    const wordBefore = /[\w$]/.test(text.charAt(st - 1));
-    /* A quote after a letter is an apostrophe, as in don't, or the end of
-       something. Either way it has no partner coming. */
-    if ((e.key === '"' || e.key === "'") && wordBefore) return;
-    if (!ROOM_AFTER.test(text.slice(en, en + 1))) return;
+    const lineBefore = text.slice(0, st).split("\n").pop();
+    /* Inside a string already, nothing being typed is an opening half: a
+       bracket in there is a character in a sentence, and a quote is the one
+       that closes the string. Walked rather than counted, because the
+       apostrophe in "let's" is not a quote mark. */
+    if (strip(lineBefore, "", lang.comment).open) return;
+    if (e.key === '"' || e.key === "'"){
+      const roomBefore = QUOTE_ROOM_BEFORE.test(lineBefore) ||
+        (STRING_PREFIX.test(lineBefore) && QUOTE_ROOM_BEFORE.test(lineBefore.slice(0, -1)));
+      if (!roomBefore) return;
+    }
+    if (!ROOM_AFTER.test(text.slice(en).split("\n")[0])) return;
     e.preventDefault();
     put(st, en, e.key + shut, st + 1);
     acHide();
