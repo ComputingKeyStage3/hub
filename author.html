@@ -318,6 +318,8 @@
         <b>Preview</b>
         <span class="hint" id="bankPrevMsg"></span>
         <button class="btn-ghost iconbtn" id="bankPrevBtn" title="Refresh the preview">&#8635;</button>
+        <button class="btn-ghost iconbtn" id="bankPrevPop" title="Open the preview in a new tab">&#10696;</button>
+        <button class="btn-ghost iconbtn" id="bankPrevFull" title="Full screen preview">&#9974;</button>
       </div>
       <div class="prev-hold"><iframe id="bankPrev" title="Task preview"></iframe></div>
     </section>
@@ -6021,6 +6023,20 @@ function refreshBankPreview(){
   }catch(e){ $("bankPrevMsg").textContent = e.message; }
 }
 on("bankPrevBtn", "click", refreshBankPreview);
+/* Nothing open is nothing to show, so both say so rather than opening a
+   blank tab or an empty pop-up over the list. */
+on("bankPrevPop", "click", () => {
+  if (!bankTask || !bankTask.block){ $("bankPrevMsg").textContent = "Open a task first."; return; }
+  popOutPreview(bankPreviewLesson, "bankPrevMsg");
+});
+on("bankPrevFull", "click", () => {
+  if (!bankTask || !bankTask.block){ $("bankPrevMsg").textContent = "Open a task first."; return; }
+  /* Written out again first. The panel's frame can be a keystroke or two
+     behind, and the full screen one is the one somebody is about to read
+     properly. */
+  refreshBankPreview();
+  openFullPreview($("bankPrev").src);
+});
 async function bankSaveNow(quiet){
   clearTimeout(bankSaveTimer);
   if (!bankTask || !bankTask.block) return;
@@ -6228,12 +6244,43 @@ function schedulePreview(){
    reads the compiled lesson out of localStorage exactly as the panel does, so
    the only thing to be careful about is writing that first: opening the tab
    before compiling would show whatever was there from last time. */
-on("prevPop", "click", () => {
+on("prevPop", "click", () => popOutPreview(compile, "prevMsg"));
+
+/* Both previews are the same lesson page reading the same key, so the two
+   buttons beside Refresh are the same two buttons. All that differs is which
+   lesson to write before opening one: the whole lesson in the lesson builder,
+   the one task wrapped in a page in the task builder. */
+function popOutPreview(make, msgId){
   try{
-    localStorage.setItem("hub_preview", JSON.stringify(compile()));
+    localStorage.setItem("hub_preview", JSON.stringify(make()));
+    /* Which page the preview is on is deliberately left alone. It lives in
+       this tab's sessionStorage, which the panel's frame shares and the new
+       tab does not, so clearing it here would only throw the panel back to
+       page one. */
     window.open("lesson.html?id=__preview&builder=1&t=" + Date.now(), "_blank", "noopener");
-  }catch(e){ $("prevMsg").textContent = e.message; }
-});
+  }catch(e){ const m = $(msgId); if (m) m.textContent = e.message; }
+}
+/* The pop-up is given the address, not the panel's own frame, so shutting it
+   leaves the panel showing exactly what it was showing. */
+function openFullPreview(src){
+  if (!src) return;
+  const back = el("div","modal-back");
+  const box = el("div","modal wide fullprev");
+  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+  const shut = () => { back.remove(); document.removeEventListener("keydown", esc); };
+  function esc(e){ if (e.key === "Escape") shut(); }
+  x.addEventListener("click", shut);
+  box.appendChild(x);
+  const frame = document.createElement("iframe");
+  frame.className = "fullprev-frame";
+  frame.title = "Preview";
+  frame.src = src;
+  box.appendChild(frame);
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) shut(); });
+  document.addEventListener("keydown", esc);
+  document.body.appendChild(back);
+}
 
 function refreshPreview(){
   try{
@@ -6280,21 +6327,7 @@ function putPreviewScroll(frame, keep){
 }
 on("prevBtn", "click", refreshPreview);
 /* the same preview, with the room to see it properly */
-on("prevFull", "click", () => {
-  const back = el("div","modal-back");
-  const box = el("div","modal wide fullprev");
-  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
-  x.addEventListener("click", () => back.remove());
-  box.appendChild(x);
-  const frame = document.createElement("iframe");
-  frame.className = "fullprev-frame";
-  const live = document.getElementById("prevFrame") || document.querySelector(".build-preview iframe");
-  frame.src = live ? live.src : "";
-  box.appendChild(frame);
-  back.appendChild(box);
-  back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
-  document.body.appendChild(back);
-});
+on("prevFull", "click", () => openFullPreview($("prev").src));
 on("moreBtn", "click", (e) => {
   e.stopPropagation();
   const m = $("moreMenu"), b = $("moreBtn");
