@@ -2741,18 +2741,27 @@ function rChoice(b){
       slots.place(item, child);
       kids.push(built);
     });
-    btn.addEventListener("click", () => { pick(k); markDirty(); });
+    btn.addEventListener("click", () => { pick(k, true); markDirty(); });
     row.appendChild(btn);
     s.appendChild(panel);
     opts.push({ btn, panel, kids });
   });
   let picked = -1;
-  function pick(k){
+  function pick(k, chosenNow){
     picked = k;
     opts.forEach((o, i) => {
       o.btn.classList.toggle("on", i === k);
       o.panel.hidden = i !== k;
     });
+    /* Pressing an option is the moment that branch is shown, so a coding
+       task inside it picks up the code it carries on from now. The panels
+       are built with the page and kept hidden, so when the page was shown
+       nothing had been chosen and no branch had been shown with it: a
+       choice inside extension tasks opened on its own starter code and
+       stayed on it until the student went to another page and came back.
+       Only on a press, because restoring saved work sets every task from
+       what was saved and that has to win. */
+    if (chosenNow) opts[k].kids.forEach(kid => { if (kid.onShow) kid.onShow(); });
   }
   fields[b.id] = {
     get: () => picked,
