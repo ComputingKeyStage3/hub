@@ -715,7 +715,7 @@ function pythonEditor(p){
     const py = await window.hubPython.start(out);
     await window.hubPython.loadImports(py, p.code || "", out);
     putFiles(py, p.files || []);
-    py.globals.set("_hub_next_inputs", answers.join(" "));
+    py.globals.set("_hub_next_inputs", answers.join("\u0000"));
     py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
     py.globals.set("_hub_src", p.code || "");
     const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
