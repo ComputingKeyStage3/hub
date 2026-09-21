@@ -364,8 +364,27 @@ setTimeout(function(){
     <div class="classgrid" id="unitGrid"></div>
   </div>
 
+  <!-- A GCSE or A Level unit is one point of the specification, so a class's
+       lessons are divided the way the hub divides them: 2.2, then 2.2.1, then
+       the lessons. A KS3 unit has no sub-points and this screen is stepped
+       over entirely, so nothing about a KS3 class changes. -->
+  <div id="partsView" hidden>
+    <button class="crumb" id="backUnits2">&larr; Units</button>
+    <div class="classhead">
+      <h2 id="partsUnitName"></h2>
+    </div>
+    <div class="toolrow">
+      <button class="btn-ghost iconbtn refresh" id="refParts" title="Refresh">&#8635;</button>
+      <!-- The same shape as the hub: a lesson covering the whole of 2.2 is
+           one shelf among its parts, not another part, so it is a small
+           button rather than a tile sitting where 2.2.1 should be. -->
+      <button class="btn-ghost bmini2" id="allOfUnit" hidden></button>
+    </div>
+    <div class="classgrid" id="partGrid"></div>
+  </div>
+
   <div id="lessonsView" hidden>
-    <button class="crumb" id="backUnits">&larr; Units</button>
+    <button class="crumb" id="backUnits">&larr; <span class="bkpart">Units</span></button>
     <button class="btn-ghost iconbtn refresh" id="refLessons" title="Refresh">&#8635;</button>
     <div class="classhead">
       <h2 id="unitName"></h2>
@@ -508,8 +527,16 @@ function paintCrumbs(){
   if (v === "coverView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Specification coverage" }]);
   if (v === "unitsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units" }]);
   if (v === "keepView") return crumbs([top, home, { name:"Backups and devices" }]);
-  if (v === "lessonsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
-                                          { name: unit || "Not in a unit" }]);
+  if (v === "partsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
+                                        { name: unit || "Not in a unit" }]);
+  /* One crumb longer when the unit was divided, so the trail says which part
+     of 2.2 this is and leads back to the rest of them. A KS3 unit has no
+     parts screen to go back to, so it keeps the trail it always had. */
+  if (v === "lessonsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits }]
+      .concat(partsOfUnit().length
+        ? [{ name: unit || "Not in a unit", go: () => openUnit(unit) },
+           { name: subunit || "All of " + unitCode() }]
+        : [{ name: unit || "Not in a unit" }]));
   crumbs([top]);
 }
 
@@ -521,7 +548,7 @@ function crumbName(id){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","lessonsView","keepView","pwView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
@@ -542,16 +569,17 @@ function show(view, quiet){
   if (view !== "keyView" && view !== "whoView"){
     try{
       sessionStorage.setItem("hub_spot", JSON.stringify(
-        { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit,
+        { view: view, cls: cls, unit: unit, subunit: subunit, hubYear: hubYear, hubUnit: hubUnit,
           hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint }));
     }catch(e){}
   }
   if (!quiet && !goingBack && view !== "keyView"){
     try{
-      const state = { view: view, cls: cls, unit: unit, hubYear: hubYear, hubUnit: hubUnit,
+      const state = { view: view, cls: cls, unit: unit, subunit: subunit, hubYear: hubYear, hubUnit: hubUnit,
                       hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint };
       if (!history.state || history.state.view !== view ||
           history.state.cls !== cls || history.state.unit !== unit ||
+          history.state.subunit !== subunit ||
           history.state.hubYear !== hubYear || history.state.hubUnit !== hubUnit ||
           history.state.hubStrand !== hubStrand || history.state.hubPoint !== hubPoint){
         history.pushState(state, "", location.pathname + location.search);
@@ -586,7 +614,7 @@ try{
     if (!st || !st.view) return;
     goingBack = true;
     try{
-      cls = st.cls || cls; unit = st.unit || "";
+      cls = st.cls || cls; unit = st.unit || ""; subunit = st.subunit || "";
       hubYear = st.hubYear || ""; hubUnit = st.hubUnit || "";
       hubComp = st.hubComp || 0; hubStrand = st.hubStrand || ""; hubPoint = st.hubPoint || "";
       show(st.view, true);
@@ -598,7 +626,8 @@ try{
       else if (st.view === "hubPointLessonsView") paintPointLessons();
       else if (st.view === "hubLessonsView") paintHub();
       else if (st.view === "unitsView") paintClassUnits();
-      else if (st.view === "lessonsView") paintLessonGrid();
+      else if (st.view === "partsView"){ namePartsUnit(); paintParts(); }
+      else if (st.view === "lessonsView"){ nameLessonShelf(); paintLessonGrid(); }
       else if (st.view === "studentsView") loadStudents();
       else if (st.view === "classView"){ $("clsName").textContent = cls; }
     }catch(err){}
@@ -936,7 +965,7 @@ function lastSpot(){
    blank page, and where they would have ended up anyway if it failed. */
 async function restoreSpot(spot){
   if (!spot || !spot.view || spot.view === "homeView"){ show("homeView"); return; }
-  cls = spot.cls || ""; unit = spot.unit || "";
+  cls = spot.cls || ""; unit = spot.unit || ""; subunit = spot.subunit || "";
   hubYear = spot.hubYear || ""; hubUnit = spot.hubUnit || "";
   hubComp = spot.hubComp || 0; hubStrand = spot.hubStrand || ""; hubPoint = spot.hubPoint || "";
   /* A class renamed or deleted from another machine is not there to go back
@@ -957,9 +986,16 @@ async function restoreSpot(spot){
     if (here && spot.view === "unitsView"){
       nameClass(cls); await loadCatalogue(); show("unitsView"); paintClassUnits(); return;
     }
-    if (here && spot.view === "lessonsView"){
+    /* Both of a class's lesson screens come back the same way, through
+       openUnit, so the heading and the crumbs are built by the one thing that
+       builds them anywhere else. openUnit clears the part on its way in, so
+       the one that was open is held on to first. */
+    if (here && (spot.view === "partsView" || spot.view === "lessonsView")){
       nameClass(cls); await loadCatalogue(); await loadClassLocks();
-      show("lessonsView"); paintLessonGrid(); return;
+      const want = subunit;
+      openUnit(unit);
+      if (spot.view === "lessonsView") openPart(want);
+      return;
     }
     if (spot.view === "hubView"){ await loadCatalogue(); show("hubView"); paintYears(); return; }
     if (spot.view === "hubUnitsView"){ await loadCatalogue(); openYear(hubYear); return; }
@@ -3544,6 +3580,12 @@ function askPasswords(found){
 let cat = { units: [], lessons: [] };     // from the database
 let fileLessons = [];                     // every lesson: the database online, the folder offline
 let unit = "";                            // the unit being managed
+/* Which sub-point of it, for GCSE and A Level. Empty means the whole of the
+   unit: everything, on a KS3 unit that has no sub-points at all, and the
+   lessons filed against the whole of 2.2 rather than one part on a unit that
+   has. It is the point's wording, "2.2.1 Programming fundamentals", because
+   that is what the catalogue carries. */
+let subunit = "";
 
 /* Kept for as long as the page is open. Reloading the page starts again,
    and every screen has a refresh button for when something has changed. */
@@ -3643,23 +3685,123 @@ function paintClassUnits(){
   if (!names.length)
     g.appendChild(el("p","hint", cls + " has no lessons yet. Add some from the lesson hub, or with the button below."));
 }
-on("backUnits", "click", () => { show("unitsView"); paintClassUnits(); });
+/* Back off the lessons, which is the parts screen where the unit was divided
+   and the units themselves where it was not. */
+on("backUnits", "click", () => { if (partsOfUnit().length) openUnit(unit); else toUnits(); });
+on("backUnits2", "click", toUnits);
+on("refParts", "click", async () => {
+  wait("partGrid", "Loading the parts", true);
+  try{ await loadCatalogue(true); paintParts(); }
+  catch(e){ $("partGrid").innerHTML = ""; $("partGrid").appendChild(el("p","hint", e.message)); }
+});
 
-async function openUnit(name){
+/* "2.2" out of "2.2 Programming fundamentals". The catalogue holds the
+   wording rather than the id, so the number is read back off the front of it
+   rather than looked up. */
+function unitCode(){ return String(unit || "").trim().split(/\s+/)[0] || ""; }
+
+/* The sub-points this class has lessons in, in the order the course is taught
+   in. Only the ones it has: a class doing three points of 2.2 has no use for
+   a screen offering the nine it is not doing, which is the difference between
+   this and the hub, where every point of the specification is a shelf
+   something can be filed on. */
+function partsOfUnit(){
+  const names = [];
+  classLessonsIn(unit).forEach(l => {
+    const s = l.subunit || "";
+    if (s && names.indexOf(s) < 0) names.push(s);
+  });
+  return names.sort(byPartName);
+}
+function classLessonsIn(name){
+  return (cat.lessons || []).filter(l => (l.unit || "") === name && assignOf(l.lesson_id));
+}
+/* The number in the wording is read as a number, so 2.2.10 comes after
+   2.2.9 rather than after 2.2.1. */
+function byPartName(a, b){
+  return window.lessonOrder ? window.lessonOrder.compareText(a, b)
+                            : (a < b ? -1 : a > b ? 1 : 0);
+}
+
+function namePartsUnit(){ $("partsUnitName").textContent = unit || "Not in a unit"; }
+function nameLessonShelf(){
+  $("unitName").textContent = subunit || unit || "Not in a unit";
+  /* The back button says where it goes, which is not always Units now. */
+  const parts = partsOfUnit().length;
+  document.querySelectorAll(".bkpart").forEach(b => { b.textContent = parts ? unitCode() || "Back" : "Units"; });
+}
+
+/* A unit opens on its parts where it has any, and on its lessons where it has
+   none. A KS3 unit never has any, so it goes straight through exactly as it
+   always did. */
+function openUnit(name){
   unit = name;
-  $("unitName").textContent = name || "Not in a unit";
+  subunit = "";
+  if (!partsOfUnit().length){ openPart(""); return; }
+  namePartsUnit();
+  show("partsView");
+  paintParts();
+  /* the padlocks are wanted by the screen after this one, and nothing here
+     should wait for them */
+  loadClassLocks().catch(() => {});
+}
+
+/* One part of a unit, or everything filed against the whole of it. */
+function openPart(name){
+  subunit = name;
+  nameLessonShelf();
   show("lessonsView");
   paintLessonGrid();
   /* the padlocks need the class's locks, but the page should not wait for them */
   loadClassLocks().then(paintLessonGrid).catch(() => {});
 }
 
+function paintParts(){
+  const g = $("partGrid"); g.innerHTML = "";
+  const mine = classLessonsIn(unit);
+  const whole = mine.filter(l => !(l.subunit || "")).length;
+  const all = $("allOfUnit");
+  /* The hub offers this however few are filed there, because filing something
+     against the whole of 2.2 is a thing you do on that screen. A class only
+     reads it, so with nothing on that shelf the button leads to an empty
+     page and is left off. */
+  all.hidden = !whole;
+  all.textContent = "Show all of " + unitCode();
+  all.title = countWord(whole, "lesson", "lessons") + " filed against the whole of "
+              + (unitCode() || "it") + ", rather than against one of its parts.";
+  partsOfUnit().forEach(name => {
+    const n = mine.filter(l => (l.subunit || "") === name).length;
+    const t = el("button","classtile");
+    t.appendChild(el("b","", name));
+    t.appendChild(el("span","", countWord(n, "lesson", "lessons")));
+    t.addEventListener("click", () => openPart(name));
+    g.appendChild(t);
+  });
+}
+on("allOfUnit", "click", () => openPart(""));
+
 /* Every lesson goes in the hub. A lesson meant for one class is a version of
    one that is already there, made in the builder, which is the same job done
    somewhere it can be reused. */
 on("newLessonBtn", "click", () => {
-  window.open("author.html?unit=" + encodeURIComponent(unit || ""), "_blank");
+  /* The builder opens knowing where it is, the same way it does from the hub:
+     the unit, the year group, and the point where the class is standing in
+     one of them, so what comes back is filed under the part it was built for
+     rather than against the whole of 2.2. */
+  const bits = ["unit=" + encodeURIComponent(unit || "")];
+  const year = yearOfClass();
+  if (year) bits.push("year=" + encodeURIComponent(year));
+  const p = pointNamed(subunit);
+  if (p) bits.push("point=" + encodeURIComponent(p.id));
+  window.open("author.html?" + bits.join("&"), "_blank");
 });
+/* The point of the specification a part's wording belongs to. The catalogue
+   carries the wording and not the id, because the screens that group by it
+   are never sent the specification, so it is matched back by name here. */
+function pointNamed(name){
+  if (!name) return null;
+  return (cat.points || []).find(x => (x.code + " " + x.title) === name) || null;
+}
 
 on("addLessonBtn", "click", () => {
   let showAll = false, term = "";
@@ -3671,7 +3813,7 @@ on("addLessonBtn", "click", () => {
     box.classList.add("modal-pick");
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);
-    modalTitle(box, "Add a lesson to " + (unit || "no unit"));
+    modalTitle(box, "Add a lesson to " + (subunit || unit || "no unit"));
     const tools = el("div","toolrow");
     /* the same box as the one on the hub, rather than a bare input */
     const searchWrap = el("span","searchbox");
@@ -3732,8 +3874,16 @@ on("addLessonBtn", "click", () => {
           /* This pop-up goes, and either the lesson is added or the one
              asking which version takes its place. */
           closeModal();
-          addLessonToClass(l.id, paintLessonGrid)
-            .catch(e => say("Could not add that", e.message));
+          /* A lesson brings its own part of the specification with it, and
+             re-filing it because of the screen a teacher happened to be on
+             would change what the hub and Specification coverage say about
+             it. So it lands where it belongs and the screen follows it,
+             rather than adding it somewhere it will not appear. */
+          addLessonToClass(l.id, () => {
+            const landed = catOf(l.id).subunit || "";
+            if (landed === subunit) paintLessonGrid();
+            else openPart(landed);
+          }).catch(e => say("Could not add that", e.message));
         });
         holder.appendChild(row);
       });
@@ -3749,23 +3899,17 @@ function paintLessonGrid(){
   const g = $("lessonGrid"); g.innerHTML = "";
   /* only the lessons this class has been given (older setups, with nothing
      assigned anywhere, still show what was published to everyone) */
-  const mine = (cat.lessons || []).filter(l => (l.unit || "") === unit && assignOf(l.lesson_id));
+  /* One shelf at a time: the part of the unit that was opened, or the whole
+     of it, which on a KS3 unit is every lesson it has because nothing there
+     carries a part. */
+  const mine = classLessonsIn(unit).filter(l => (l.subunit || "") === subunit);
   if (!mine.length){
     g.appendChild(el("p","hint","No lessons here yet for " + cls + ", add one from the hub above."));
     return;
   }
   inOrder(mine, (l) => titleOf(l.lesson_id));
-  /* A unit is one point of the specification, and the lessons inside it are
-     grouped under its sub-points. A KS3 unit has none, so its lessons come
-     out as one list exactly as they always did, and so do the lessons of a
-     GCSE unit filed against the whole of 2.2 rather than one part of it:
-     those go first, under the unit itself, because they are the ones that
-     belong to all of it. */
-  /* Then by sub-point, so the groups come out in the order the course is
-     taught in rather than in the order the first lesson of each happened to
-     be named. Stable, so inside a group the titles still decide. */
-  mine.sort(bySubunit);
-  const boxOf = subunitBoxes(g);
+  const grid = el("div","lessongrid");
+  g.appendChild(grid);
   mine.forEach(l => {
     const a = assignOf(l.lesson_id);
     const live = a ? !!a.published : !!l.published;
@@ -3851,45 +3995,13 @@ function paintLessonGrid(){
     }
     acts.appendChild(overflowMenu(extras));
     card.appendChild(acts);
-    boxOf(l.subunit || "").appendChild(card);
+    grid.appendChild(card);
   });
 }
 
-/* The sub-point a lesson is filed under decides which group it is in, and
-   the number in that wording is read as a number: 2.2.10 comes after 2.2.9.
-   Lessons covering the whole unit have no sub-point and go first, because
-   they belong to all of it rather than to one part. */
-function bySubunit(a, b){
-  const x = String(a.subunit || ""), y = String(b.subunit || "");
-  if (x === y) return 0;
-  if (!x) return -1;
-  if (!y) return 1;
-  return window.lessonOrder ? window.lessonOrder.compareText(x, y)
-                            : (x < y ? -1 : 1);
-}
-/* Handing out the part of a list a lesson belongs in. Each sub-point gets a
-   heading and its own grid the first time something is filed under it, and
-   the headings are left off entirely where there is only ever one group:
-   "2.2 Programming fundamentals" written above the one list on a screen
-   already headed "2.2 Programming fundamentals" says nothing. */
-function subunitBoxes(into){
-  const made = {};
-  let only = true;
-  return function(name){
-    if (made[name]) return made[name];
-    /* The second group is what turns the headings on, so the first one has
-       to grow a heading after the fact rather than before it. */
-    if (Object.keys(made).length === 1) only = false;
-    const grid = el("div","lessongrid");
-    const head = el("p","unit-head", name || "All of this unit");
-    made[name] = grid;
-    into.appendChild(head);
-    into.appendChild(grid);
-    if (only) head.hidden = true;
-    else into.querySelectorAll(".unit-head").forEach(h => { h.hidden = false; });
-    return grid;
-  };
-}
+/* The sub-point headings that used to sit inside this list have gone: the
+   parts are a screen of their own now, so the list is only ever one of them
+   and a heading over it would repeat the heading above it. */
 
 async function fetchLesson(id){
   /* The lessons folder is offline mode's. With a server the database is the

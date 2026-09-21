@@ -560,7 +560,12 @@ function paintLessons(byId){
        down the side are where a student is up to in this unit. */
     let nth = 0;
     partNames.forEach(part => {
-      if (part && partNames.length > 1){
+      /* A named sub-point always says so, even where the unit has only the
+         one. It used to be left off in that case, so a class given one lesson
+         out of 2.2.1 saw it under "2.2 Programming fundamentals" with no sign
+         of which part of it they were doing. The unit's own group has no name
+         and never gets a heading. */
+      if (part){
         const sh = document.createElement("p");
         sh.className = "sub-head"; sh.textContent = part;
         body.appendChild(sh);
