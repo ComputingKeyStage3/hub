@@ -1719,9 +1719,6 @@ html[data-bg=dark] .fb-s{color:var(--mint)}
 .allpage-sub{color:var(--muted); margin:0 0 12px}
 
 @media (max-width:900px){
-  .seatwrap{grid-template-columns:minmax(0,1fr)}
-  .seatpool{flex-direction:row; flex-wrap:wrap}
-  .seat{min-width:130px}
   .worksplit{grid-template-columns:minmax(0,1fr)}
   .workmain iframe{height:52vh}
 }
@@ -1738,56 +1735,24 @@ body.workpage .grow{flex:1}
 .workwrap{flex:1; min-height:0; display:flex; flex-direction:column;
   padding:12px 22px 14px; box-sizing:border-box; overflow:hidden}
 
-/* --- seating plan --- */
-.seatwrap{flex:1; min-height:0; display:grid; grid-template-columns:210px minmax(0,1fr); gap:16px}
-.seatpool{overflow-y:auto; padding:10px; background:var(--panel-2);
-  border:2px dashed var(--line-2); border-radius:14px;
-  display:flex; flex-direction:column; gap:8px; align-content:start}
-.seatpool.over{border-color:var(--amber); background:rgba(220,138,62,.1)}
-
-/* the board holds the grid and a "Front" bar on whichever side is chosen */
-.seatboard{position:relative; display:grid; gap:10px; min-height:0}
-.seatboard[data-front=bottom]{grid-template-rows:minmax(0,1fr) auto; grid-template-columns:minmax(0,1fr)}
-.seatboard[data-front=top]{grid-template-rows:auto minmax(0,1fr); grid-template-columns:minmax(0,1fr)}
-.seatboard[data-front=left]{grid-template-columns:auto minmax(0,1fr); grid-template-rows:minmax(0,1fr)}
-.seatboard[data-front=right]{grid-template-columns:minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr)}
-.seatboard[data-front=bottom] .seatgrid{order:1}
-.seatboard[data-front=bottom] .seatfront{order:2}
-.seatboard[data-front=top] .seatfront{order:1}
-.seatboard[data-front=top] .seatgrid{order:2}
-.seatboard[data-front=left] .seatfront{order:1}
-.seatboard[data-front=left] .seatgrid{order:2}
-.seatboard[data-front=right] .seatgrid{order:1}
-.seatboard[data-front=right] .seatfront{order:2}
-
-.seatfront{display:flex; align-items:center; justify-content:center; gap:10px;
-  background:var(--bar); border:1.5px solid var(--line-2); border-radius:12px;
-  font-size:13px; letter-spacing:.16em; text-transform:uppercase; font-weight:800;
-  color:var(--muted); padding:10px 14px; user-select:none}
-.seatboard[data-front=left] .seatfront,
-.seatboard[data-front=right] .seatfront{writing-mode:vertical-rl; padding:14px 10px}
-.seatboard[data-front=left] .seatfront{transform:rotate(180deg)}
-.seatboard[data-front=left] .frontdots,
-.seatboard[data-front=right] .frontdots{writing-mode:horizontal-tb}
-.frontdots{font-size:16px; min-height:30px; min-width:30px; padding:0}
-
-
-.seatgrid{min-height:0; display:grid; gap:4px; overflow:auto; justify-content:start; align-content:start;
-  background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:10px}
-.seatcell{border:none; border-radius:10px; display:flex; padding:3px; box-sizing:border-box}
-.seatcell.over{background:rgba(220,138,62,.18)}
-.seatcell.over{border-color:var(--amber); background:rgba(220,138,62,.12)}
-.seat{flex:1; background:var(--panel); border:1.5px solid var(--line-2); border-radius:8px;
-  padding:6px 8px; cursor:grab; display:flex; flex-direction:column; justify-content:center;
-  box-sizing:border-box; min-width:0; overflow:hidden}
-.seat:hover{border-color:var(--amber)}
-.seat.dragging{opacity:.45}
-.seat b{font-size:13.5px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.seat span{font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.sizer{display:inline-flex; align-items:center; gap:6px; padding:0 10px; height:42px;
-  border:1.5px solid var(--line-2); border-radius:12px; background:var(--panel)}
-.sizer b{font-size:13px; color:var(--muted); font-weight:700}
-.sizer .iconbtn{min-height:30px; min-width:30px; font-size:16px}
+/* --- the progress markbook --- */
+.progress-pill{font-size:13px; font-weight:700; padding:6px 14px; border-radius:999px;
+  border:1.5px solid var(--line-2); background:var(--panel); color:var(--muted); cursor:pointer}
+.progress-pill.on{border-color:var(--amber); color:var(--amber)}
+.progresswrap{flex:1; min-height:0; overflow:auto; border:1px solid var(--line); border-radius:14px}
+.progresstable{width:100%; border-collapse:collapse; font-size:14.5px; white-space:nowrap}
+.progresstable th,.progresstable td{border-bottom:1px solid var(--line); padding:8px 12px; text-align:center}
+.progresstable th{position:sticky; top:0; background:var(--panel); font-size:12.5px;
+  color:var(--muted); font-weight:800; z-index:2}
+.progresstable .pcol-name{position:sticky; left:0; background:var(--panel); text-align:left}
+.progresstable td.pcol-name{cursor:pointer}
+.progresstable .pcol-name span{display:block; font-size:12px; color:var(--muted); font-weight:400}
+.progresstable .pcol-total{position:sticky; right:0; background:var(--panel); font-weight:800}
+.progresstable th.pcol-name,.progresstable th.pcol-total{z-index:3}
+.progresscell .yes{color:var(--mint); font-weight:800}
+.progresscell .part{color:var(--amber-dark); font-weight:800}
+.progresscell .no{color:var(--red)}
+.progresscell .none{color:var(--line-2)}
 
 /* --- looking at work --- */
 .worksplit{flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 340px;
@@ -1813,9 +1778,6 @@ body.workpage .grow{flex:1}
 @media (max-width:1000px){
   body.workpage{height:auto; overflow:auto}
   .workwrap{overflow:visible}
-  .seatwrap{grid-template-columns:minmax(0,1fr)}
-  .seatpool{flex-direction:row; flex-wrap:wrap; max-height:190px}
-  .seatpool .seat{min-width:140px; flex:0 0 auto}
   .worksplit{grid-template-columns:minmax(0,1fr)}
   .workframe{height:60vh}
   body.workpage .homebar{flex-wrap:wrap}
@@ -1826,11 +1788,6 @@ body.workpage .grow{flex:1}
 /* a menu near the bottom of the window opens upwards, so it is never cut off */
 .menu{max-height:min(60vh, 340px); overflow-y:auto}
 .menuwrap.up .menu{top:auto; bottom:calc(100% + 4px)}
-.seatboard[data-front=bottom] .menu,
-.seatboard[data-front=right] .menu{top:auto; bottom:calc(100% + 4px)}
-.seatboard[data-front=left] .seatfront .menuwrap,
-.seatboard[data-front=right] .seatfront .menuwrap{writing-mode:horizontal-tb}
-.seatboard[data-front=left] .menu{top:auto; bottom:calc(100% + 4px)}
 
 
 /* a menu placed wherever it fits */
@@ -1949,12 +1906,12 @@ h1{ font-size:clamp(28px,5.5vw,2.4rem); line-height:1.2 }
 h2{ font-size:clamp(22px,4.5vw,1.8rem); line-height:1.25 }
 h3{ font-size:clamp(18px,3.5vw,1.35rem); line-height:1.3 }
 body{ font-size:16.5px; line-height:1.65 }/* --- edges: soft, with the roundest reserved for buttons and pills --- */
-.station, .modal, .bcard, .qsub, .st-card, .result-card, .allpage, .workside, .workframe, .mbscroll, .seatgrid, .seatpool, .rubriccol, .ide-wrap{ border-radius:14px }
+.station, .modal, .bcard, .qsub, .st-card, .result-card, .allpage, .workside, .workframe, .mbscroll, .progresswrap, .rubriccol, .ide-wrap{ border-radius:14px }
 .lessonCard,.classtile,.lessonpill,.brief,.linkprev,.picimg,.embed,.framed,
-.seat,.seatcell,.seatfront,.menu,.rt,.periodbtn,.bankpick{ border-radius:12px !important }
+.menu,.rt,.periodbtn,.bankpick{ border-radius:12px !important }
 .field input,.bfield input,.bfield textarea,.bfield select,
 input[type=text],input[type=password],input[type=number],input[type=date],
-textarea,select,.searchbox,.sizer{ border-radius:10px }
+textarea,select,.searchbox{ border-radius:10px }
 .num,.allpage-n{ border-radius:50% }
 
 /* --- buttons: rounded, filling in when pointed at --- */
@@ -2077,10 +2034,9 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
   display:inline-flex; align-items:center; justify-content:center;
   font-size:16px; line-height:1; flex:0 0 auto;
 }
-.sizer .iconbtn,.stepper .iconbtn{ width:30px; min-width:30px; height:30px; min-height:30px; font-size:15px }
+.stepper .iconbtn{ width:30px; min-width:30px; height:30px; min-height:30px; font-size:15px }
 .bmini{ width:30px; min-width:30px; height:30px; min-height:30px; padding:0 !important;
   border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:14px }
-.frontdots{ width:30px; min-width:30px; height:30px; min-height:30px }
 @media (pointer:coarse){
   .iconbtn,.btn-ghost.iconbtn{ width:42px; min-width:42px; height:42px; min-height:42px }
 }
@@ -2310,7 +2266,7 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   .fullprev{ height:88vh }
 
   /* side-by-side layouts become one column */
-  .worksplit, .seatwrap, .ide-wrap, .build{ grid-template-columns:minmax(0,1fr) !important }
+  .worksplit, .ide-wrap, .build{ grid-template-columns:minmax(0,1fr) !important }
   .workside{ min-width:0; max-width:100% }
   .workside{ width:auto }
   .build-preview{ grid-column:1 / -1 }
@@ -2320,17 +2276,11 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   .workwrap{ overflow:visible; padding-left:14px; padding-right:14px }
   .workframe{ height:60vh }
 
-  /* the seating plan holds its own scroll, rather than stretching the page */
-  .seatgrid{ max-width:100%; overflow:auto }
-  .seatpool{ flex-direction:row; flex-wrap:wrap; max-height:180px }
-  .seatpool .seat{ min-width:140px; flex:0 0 auto }
-
   /* rows of controls wrap instead of running off the edge */
   .toolrow, .workbar, .lp-acts, .bhead, .brow, .tabs, .subtabs, .worktabs{
     flex-wrap:wrap; max-width:100%
   }
   .workbar select{ max-width:100% }
-  .sizer{ flex:0 0 auto }
 }
 
 @media (max-width:640px){
@@ -2411,7 +2361,7 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 
   /* --- nothing may insist on being wider than the screen --- */
   .build-titles, .rt-palette, .rt-nummenu, .workbar select,
-  .blank-select, .ide-helpword, .mbstat, .seat, .seatpool .seat{
+  .blank-select, .ide-helpword, .mbstat{
     min-width:0 !important; max-width:100%;
   }
   /* A menu hangs off a button that is only as wide as its icon, so being told
@@ -2430,7 +2380,6 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   /* --- rows of controls stack rather than squeeze --- */
   .toolrow{ gap:6px }
   .toolrow > *{ flex:0 1 auto; max-width:100% }
-  .seatpool{ max-height:150px }
 
   /* --- text scaled down a touch so lines break less awkwardly --- */
   body{ font-size:15.5px }
@@ -2679,9 +2628,6 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 /* while the class is still being fetched */
 .loadpane{align-items:center; justify-content:center}
 .loadmsg{margin:0; color:var(--muted); font-size:17px}
-/* a seat for someone with nothing handed in */
-.seat.nowork{background:var(--panel-2); border-style:dashed; color:var(--muted)}
-.seat.nowork b{color:var(--muted)}
 
 
 /* whiteboard */
@@ -3248,21 +3194,9 @@ html[data-build=compact][data-preview=full] .homebar{display:none}
   /* the tabs sit under the title rather than squeezing beside it */
   body.workpage .homebar{ flex-wrap:wrap; row-gap:8px }
   .worktabs{ order:3; width:100% }
-
-  /* --- the seating plan ---
-     A twenty by twenty board of empty squares is mostly empty space on a
-     tablet. It is given a sensible height and scrolls inside itself, the
-     way it does beside a class list on a desktop. */
-  .seatwrap{ display:flex; flex-direction:column; gap:12px }
-  .seatpool{ flex-direction:row; flex-wrap:wrap; max-height:150px; align-content:flex-start }
-  .seatpool .seat{ min-width:130px; flex:0 0 auto }
-  .seatboard{ min-height:0 }
-  .seatgrid{ max-height:60vh; max-height:60dvh; overflow:auto }
 }
 @media (max-width:640px){
   .workframe{ height:68vh; height:68dvh; min-height:360px }
-  .seatgrid{ max-height:52vh; max-height:52dvh }
-  .seatpool{ max-height:120px }
 }
 
 /* the pointer matches whichever tool is in hand */
