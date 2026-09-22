@@ -47,6 +47,7 @@
 
   <!-- one of them, open -->
   <div id="editView" hidden>
+    <div class="sb-fb" id="progFb" hidden></div>
     <div id="holder"></div>
   </div>
 
@@ -134,6 +135,19 @@ const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
 const store = window.practice.sandbox;
 const MAX = store.MAX_PROGRAMS;
 
+/* ---------- a teacher looking at somebody else's programs ----------
+   The same page, with nothing that writes. The work viewer puts the student's
+   programs in localStorage and opens this in its frame, the way it opens
+   lesson.html to show a lesson's work, so a teacher reads a program in the
+   editor it was written in and can run it to see what it does.
+
+   Nothing here saves: `changed()` returns before it reaches the store, and
+   the buttons that make, rename or delete a program are not drawn. */
+const VIEW = new URLSearchParams(location.search).get("view") !== null;
+const EMBED = new URLSearchParams(location.search).get("embed") !== null;
+let viewing = null;         // { name, username, programs, notes }
+let notes = {};             // program id -> what the teacher wrote
+
 function el(tag, cls, text){
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -167,6 +181,9 @@ let openId = "";          // "" means the list is showing
 function paintSave(){
   const btn = $("saveState");
   if (!btn) return;
+  /* Nothing a teacher does here is saved, so a pill saying it was would be a
+     lie about somebody else's work. */
+  if (VIEW){ btn.hidden = true; return; }
   btn.hidden = false;
   if (OFFLINE){
     btn.dataset.state = "local";
@@ -190,7 +207,7 @@ on("saveState", "click", () => { store.flush(); paintSave(); });
    seconds, and a child who closes the tab inside those ten seconds would lose
    what they last typed. */
 window.addEventListener("beforeunload", (e) => {
-  if (OFFLINE || !store.waiting()) return;
+  if (VIEW || OFFLINE || !store.waiting()) return;
   e.preventDefault();
   e.returnValue = "";       // older browsers want this one instead
 });
@@ -200,6 +217,9 @@ window.addEventListener("beforeunload", (e) => {
    waits for the pause the store leaves, so a lesson is not hundreds of
    writes. */
 function changed(p, now){
+  /* A teacher can type in the box to try something out. It belongs to the
+     student and is never written back. */
+  if (VIEW) return;
   if (p) p.updated = Date.now();
   store.keep(programs, now);
   paintSave();
@@ -228,13 +248,19 @@ function when(ms){
 function paintList(){
   const box = $("progList");
   box.innerHTML = "";
+  $("newBtn").hidden = VIEW;
   $("newBtn").disabled = programs.length >= MAX;
-  $("listCount").textContent = programs.length >= MAX
-    ? "That is all " + MAX + ". Delete one you have finished with to start another."
-    : programs.length + " of " + MAX + " used";
+  $("listCount").textContent = VIEW
+    ? (programs.length === 1 ? "1 program" : programs.length + " programs")
+    : (programs.length >= MAX
+        ? "That is all " + MAX + ". Delete one you have finished with to start another."
+        : programs.length + " of " + MAX + " used");
 
   if (!programs.length){
-    box.appendChild(el("p","hint","Nothing here yet. Press New program to start one."));
+    box.appendChild(el("p","hint", VIEW
+      ? (viewing && viewing.name ? viewing.name + " has not written any programs yet."
+                                 : "No programs here yet.")
+      : "Nothing here yet. Press New program to start one."));
     return;
   }
   const wrap = el("div","lessons");
@@ -250,23 +276,30 @@ function paintList(){
     const body = el("span","body");
     body.appendChild(el("b","", p.name || "Program"));
     body.appendChild(el("span","", kind.label + " · " + when(p.updated)));
+    /* Something to see from the list, so a note is not hidden behind opening
+       every program in turn to find out which one it was about. */
+    if (notes[p.id])
+      body.appendChild(el("span","sb-fbchip", VIEW ? "Feedback given"
+                                                   : "Your teacher has written something"));
     open.appendChild(body);
     open.addEventListener("click", () => openProgram(p.id));
     row.appendChild(open);
 
-    const rename = el("button","sb-icon","✎︎");
-    rename.type = "button";
-    rename.title = "Rename " + (p.name || "this program");
-    rename.setAttribute("aria-label", rename.title);
-    rename.addEventListener("click", () => askRename(p));
-    row.appendChild(rename);
+    if (!VIEW){
+      const rename = el("button","sb-icon","✎︎");
+      rename.type = "button";
+      rename.title = "Rename " + (p.name || "this program");
+      rename.setAttribute("aria-label", rename.title);
+      rename.addEventListener("click", () => askRename(p));
+      row.appendChild(rename);
 
-    const del = el("button","sb-icon sb-bin","🗑︎");
-    del.type = "button";
-    del.title = "Delete " + (p.name || "this program");
-    del.setAttribute("aria-label", del.title);
-    del.addEventListener("click", () => askDelete(p));
-    row.appendChild(del);
+      const del = el("button","sb-icon sb-bin","🗑︎");
+      del.type = "button";
+      del.title = "Delete " + (p.name || "this program");
+      del.setAttribute("aria-label", del.title);
+      del.addEventListener("click", () => askDelete(p));
+      row.appendChild(del);
+    }
 
     wrap.appendChild(row);
   });
@@ -371,10 +404,13 @@ function showList(push){
   $("listView").hidden = false;
   $("editView").hidden = true;
   $("holder").innerHTML = "";
-  $("crumb").textContent = "Sandbox";
+  $("crumb").textContent = VIEW && viewing ? viewing.name + " · Sandbox" : "Sandbox";
+  $("backLink").hidden = VIEW;
   $("backLink").textContent = "← Practice";
   $("backLink").href = "index.html?tab=practice";
   paintList();
+  paintFeedback(null);
+  tellOutside();
   if (push !== false) go("sandbox.html");
 }
 
@@ -385,15 +421,66 @@ function openProgram(id, push){
   $("listView").hidden = true;
   $("editView").hidden = false;
   $("crumb").textContent = p.name || "Program";
+  $("backLink").hidden = false;
   $("backLink").textContent = "← Sandbox";
   $("backLink").href = "sandbox.html";
+  paintFeedback(p);
   drawEditor(p);
+  tellOutside();
   if (push !== false) go("sandbox.html?open=" + encodeURIComponent(id));
 }
 
 function go(url){
+  /* Inside the work viewer's frame the address bar belongs to the page
+     around it, and pushing here would put the teacher's Back button through
+     every program they had opened before it left the viewer. */
+  if (EMBED) return;
   try{ history.pushState({ open: openId }, "", url); }catch(e){}
 }
+
+/* ---------- what the teacher wrote ----------
+   Shown above the editor, where the program it is about is. A strength and a
+   target are the same two boxes the marking screen has for a lesson, so
+   feedback on a program reads the same way as feedback on anything else. */
+function paintFeedback(p){
+  const box = $("progFb");
+  if (!box) return;
+  box.innerHTML = "";
+  /* A teacher has the boxes themselves on the other side of the frame.
+     Showing the saved copy here as well would sit there disagreeing with
+     whatever they were part way through typing. */
+  const note = (!VIEW && p) ? notes[p.id] : null;
+  if (!note){ box.hidden = true; return; }
+  box.hidden = false;
+  box.appendChild(el("b","sb-fbhead","What your teacher said"));
+  if (note.strength){
+    const line = el("p","sb-fbline");
+    line.appendChild(el("span","sb-fblabel","Strength"));
+    line.appendChild(el("span","", note.strength));
+    box.appendChild(line);
+  }
+  if (note.target){
+    const line = el("p","sb-fbline");
+    line.appendChild(el("span","sb-fblabel","Target"));
+    line.appendChild(el("span","", note.target));
+    box.appendChild(line);
+  }
+  if (note.comment) box.appendChild(el("p","sb-fbline", note.comment));
+}
+
+/* The work viewer draws its own list of programs beside this one and writes
+   feedback against whichever is open, so it has to be told which that is. */
+function tellOutside(){
+  if (!EMBED || window.parent === window) return;
+  try{ window.parent.postMessage({ hubSandboxOpen: openId }, "*"); }catch(e){}
+}
+/* and it can ask for one to be opened, from that list */
+window.addEventListener("message", (e) => {
+  if (!EMBED || !e || !e.data || typeof e.data.hubSandboxShow !== "string") return;
+  const id = e.data.hubSandboxShow;
+  if (!id) showList(false);
+  else if (id !== openId && programs.some(p => p.id === id)) openProgram(id, false);
+});
 window.addEventListener("popstate", () => {
   const id = new URLSearchParams(location.search).get("open") || "";
   if (id && programs.some(p => p.id === id)) openProgram(id, false);
@@ -561,7 +648,7 @@ function pythonEditor(p){
       const tab = el("button","web-file" + (name === current ? " on" : ""), name);
       tab.type = "button";
       tab.addEventListener("click", () => openFile(name));
-      if (name !== MAIN){
+      if (name !== MAIN && !VIEW){
         /* main.py is the program itself and has no cross. */
         const x = el("span","web-x","×");
         x.title = "Delete " + name;
@@ -573,6 +660,7 @@ function pythonEditor(p){
       }
       fileTabs.appendChild(tab);
     });
+    if (VIEW) return;              // a teacher is reading, not adding files
     const full = (p.files || []).length >= store.MAX_FILES;
     const add = el("button","web-add", full ? "That is all " + store.MAX_FILES : "+ New file");
     add.type = "button";
@@ -1038,7 +1126,15 @@ function webEditor(p){
 /* ---------- starting up ---------- */
 on("goSignIn", "click", () => { location.href = "index.html"; });
 
+/* The notes belonging to these programs, out of the store, by id. */
+function noteMap(list){
+  const out = {};
+  list.forEach(p => { const n = store.noteFor(p.id); if (n) out[p.id] = n; });
+  return out;
+}
+
 async function start(){
+  if (VIEW) return startViewing();
   const signedIn = OFFLINE || !!localStorage.getItem("hub_token");
   $("needIn").hidden = signedIn;
   if (!signedIn) return;
@@ -1047,6 +1143,10 @@ async function start(){
      reading their list rather than watching dots. The real one arrives
      underneath. */
   programs = store.localCopy();
+  /* Anything the teacher said last time came down with them and is kept
+     beside them, so the list arrives with its chips on rather than growing
+     one a second later when the server answers. */
+  notes = noteMap(programs);
   const wanted = new URLSearchParams(location.search).get("open") || "";
   if (wanted && programs.some(p => p.id === wanted)) openProgram(wanted, false);
   else showList(false);
@@ -1054,6 +1154,9 @@ async function start(){
 
   try{
     const up = await store.load();
+    const arrived = noteMap(up);
+    const saidSomething = JSON.stringify(arrived) !== JSON.stringify(notes);
+    notes = arrived;
     /* Only worth redrawing when the server knew something this browser did
        not. Redrawing regardless would throw away whatever was typed in the
        second or two it took to answer. */
@@ -1061,6 +1164,11 @@ async function start(){
       programs = up;
       if (openId && programs.some(p => p.id === openId)) openProgram(openId, false);
       else showList(false);
+    } else if (saidSomething){
+      /* A note that arrived on its own needs no new editor, and drawing one
+         would take the last second's typing with it. */
+      if (openId) paintFeedback(programs.find(p => p.id === openId));
+      else paintList();
     }
   }catch(e){
     /* The browser's copy is already on the screen, which is the whole point
@@ -1070,14 +1178,45 @@ async function start(){
   paintSave();
 }
 
+/* ---------- starting up as a teacher ----------
+   Everything is already in localStorage, put there by the work viewer before
+   it opened this frame: one fetch of the whole class is what that page does
+   anyway, so asking the server again here would be a second request for
+   something already in hand. */
+const INSPECT = "hub_sandbox_inspect";
+function startViewing(){
+  let box = null;
+  try{ box = JSON.parse(localStorage.getItem(INSPECT) || "null"); }catch(e){ box = null; }
+  $("needIn").hidden = true;
+  const foot = document.querySelector(".sb-foot");
+  if (foot) foot.hidden = true;
+  const cog = $("setBtn");
+  if (cog && EMBED) cog.hidden = true;
+  if (!box || !Array.isArray(box.programs)){
+    $("listView").hidden = false;
+    $("progList").innerHTML = "";
+    $("newBtn").hidden = true;
+    $("listCount").textContent = "";
+    $("progList").appendChild(el("p","hint",
+      "There is nothing to show. Open a student from the teacher console."));
+    return;
+  }
+  viewing = box;
+  programs = box.programs;
+  notes = box.notes || {};
+  const wanted = box.open || "";
+  if (wanted && programs.some(p => p.id === wanted)) openProgram(wanted, false);
+  else showList(false);
+}
+
 /* Leaving the page, or even flicking to another tab, is the moment to make
    sure the server has everything. On a phone, hidden is often the last thing
    that happens before the tab is thrown away, so it matters more than
    pagehide does. */
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") store.flush(true);
+  if (!VIEW && document.visibilityState === "hidden") store.flush(true);
 });
-window.addEventListener("pagehide", () => { store.flush(true); });
+window.addEventListener("pagehide", () => { if (!VIEW) store.flush(true); });
 
 if (window.initSettings) initSettings($("setBtn"));
 start();

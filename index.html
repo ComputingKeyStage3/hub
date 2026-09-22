@@ -723,6 +723,7 @@ function clearStudentCache(){
       const k = localStorage.key(i);
       if (k && (k.startsWith("hub_work_") || k.startsWith("hub_rel_") ||
                 k === "hub_close" || k === "hub_inspect" ||
+                k === "hub_sandbox_inspect" ||
                 k === "hub_sandbox")) doomed.push(k);
     }
     doomed.forEach(k => localStorage.removeItem(k));   // display settings are kept

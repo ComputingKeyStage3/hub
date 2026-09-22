@@ -9,6 +9,9 @@
 <script src="worklink.js"></script>
 <script src="teacher.js"></script>
 <script src="settings.js"></script>
+<!-- for the one thing it names: the lesson id a practice sandbox is kept
+     under, which has to be the same word here as in the sandbox itself -->
+<script src="practice.js"></script>
 </head>
 <body class="workpage">
 
@@ -81,6 +84,13 @@
     <aside class="workside">
       <h3>Feedback</h3>
       <p class="hint" id="fbWho"></p>
+      <!-- Practice only: a sandbox is several programs and feedback belongs
+           to one of them, so the boxes below say which. It follows whatever
+           is open in the frame, and opens one when it is changed here. -->
+      <div class="bfield" id="progWrap" hidden>
+        <label for="progPick">Program</label>
+        <select id="progPick" class="bigselect"></select>
+      </div>
       <div class="bfield" id="markWrap" hidden>
         <label id="markLabel">Mark</label>
         <span class="markrow2" id="scoreRow">
@@ -161,9 +171,24 @@ const H = () => window.teacherAuth.headers();
 const HJ = () => window.teacherAuth.json();
 
 const qs = new URLSearchParams(location.search);
+/* ---- practice, rather than a lesson ----
+   ?practice=1&group=8A[&student=jbloggs] shows a class's sandbox programs
+   instead of a lesson's work. It is the same page throughout: the same
+   student picker, the same seating plan, the same feedback boxes down the
+   right. What changes is where the work comes from (one reserved row per
+   student rather than a lesson's), what is drawn in the frame (the sandbox
+   rather than the lesson page) and that feedback is written against one
+   program rather than the whole of it.
+
+   Nothing in practice is marked, here or anywhere else, so the mark and the
+   grade never appear: a score on work nobody set would be the one thing the
+   Practice tab was built not to be. */
+const PRACTICE = qs.get("practice") === "1";
+const SLOT = (window.practice && window.practice.sandbox && window.practice.sandbox.SLOT)
+             || "__practice_sandbox";
 /* A link handed in by a student carries the lesson on "id"; the console
    opens this page with "lesson" and a class alongside it. */
-const lessonId = qs.get("lesson") || qs.get("id") || "";
+const lessonId = PRACTICE ? SLOT : (qs.get("lesson") || qs.get("id") || "");
 const cls = qs.get("group") || "";
 const OFFLINE = !!(window.HUB && window.HUB.OFFLINE);
 let handedIn = null;          // the work that arrived on the address
@@ -211,18 +236,34 @@ async function boot(){
   }
   $("seatMsg").textContent = "Loading\u2026";
   try{
+    /* There is no lesson behind a sandbox, so there is none to fetch: asking
+       the catalogue for a lesson called __practice_sandbox would fail and
+       take the whole screen down with it. */
     const [lesson, students, work, seating] = await Promise.all([
-      fetchLesson(), fetchRoster(), fetchWork(), fetchSeating()
+      PRACTICE ? Promise.resolve(null) : fetchLesson(), fetchRoster(), fetchWork(), fetchSeating()
     ]);
     lessonJson = lesson;
     roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
     rows = work;
-    await loadMarks();
+    if (!PRACTICE) await loadMarks();
     if (seating && seating.seats) plan = Object.assign(plan, seating);
-    $("barTitle").textContent = "Computing Teacher Console \u2022 Viewing Student Work for " +
-      (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
-    document.title = "Student work \u00b7 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
+    if (PRACTICE){
+      $("barTitle").textContent = "Computing Teacher Console \u2022 Practice programs \u2022 " + cls;
+      document.title = "Practice programs \u00b7 " + cls;
+      practiceBar();
+    } else {
+      $("barTitle").textContent = "Computing Teacher Console \u2022 Viewing Student Work for " +
+        (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
+      document.title = "Student work \u00b7 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
+    }
     paintSeats();
+    /* Opened on one student, from a class list or the username search: start
+       on them rather than on whoever is first alphabetically. */
+    const asked = (qs.get("student") || "").toLowerCase();
+    if (asked){
+      const at = roster.findIndex(x => String(x.username || "").toLowerCase() === asked);
+      if (at >= 0) idx = at;
+    }
     paintPicker();
     $("loadPane").hidden = true;
     tab("work");            // looking at work is the usual reason to be here
@@ -230,6 +271,20 @@ async function boot(){
   }catch(e){
     workStopped(e.message);
   }
+}
+
+/* The few pieces of the bar that only make sense against a lesson. A PDF is
+   built out of a lesson's tasks, and "All on one page" is about a lesson's
+   pages; a sandbox has neither. */
+function practiceBar(){
+  ["viewMode","openPdf"].forEach(id => { const e = $(id); if (e) e.hidden = true; });
+  const tabW = $("tabWork");
+  if (tabW) tabW.textContent = "Programs";
+  /* p.hint, not .hint: the first .hint inside that pane is the little message
+     span up in the toolrow, and writing the instructions into that put them
+     where nothing shows them and left the real line saying "their work". */
+  const hint = document.querySelector("#seatPane p.hint");
+  if (hint) hint.textContent = "Drag a student onto the plan. Click one to open their programs.";
 }
 /* ---------------- one student, arriving on a link (no server) ----------------
    The whole hand-in is in the address, so there is no class to page through
@@ -342,7 +397,7 @@ async function refreshWork(){
     const [students, work] = await Promise.all([fetchRoster(), fetchWork()]);
     roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
     rows = work;
-    await loadMarks();
+    if (!PRACTICE) await loadMarks();
     /* Back to the same student, by name rather than by position: somebody
        added to the class since would otherwise shift everyone along. */
     const back = roster.findIndex(x => x.username === who);
@@ -381,10 +436,13 @@ on("tabWork", "click", () => tab("work"));
 
 /* ---------------- the seating plan ---------------- */
 function seatCard(st){
-  const hasWork = rows.some(r => r.username === st.username && r.data &&
-                                 Object.keys(r.data).length);
+  const hasWork = PRACTICE
+    ? rows.some(r => r.username === st.username && programsOf(r).length)
+    : rows.some(r => r.username === st.username && r.data && Object.keys(r.data).length);
   const card = el("div","seat" + (hasWork ? "" : " nowork"));
-  if (!hasWork) card.title = st.display_name + " has not saved any work for this lesson.";
+  if (!hasWork) card.title = st.display_name + (PRACTICE
+    ? " has not written any programs yet."
+    : " has not saved any work for this lesson.");
   card.draggable = true;
   card.dataset.user = st.username;
   card.appendChild(el("b","", st.display_name));
@@ -522,7 +580,8 @@ function paintPicker(){
     const o = document.createElement("option");
     o.value = String(i);
     const row = rows.find(r => r.username === st.username);
-    o.textContent = st.display_name + (row ? "" : "  \u00b7 nothing saved");
+    const has = PRACTICE ? programsOf(row).length : !!row;
+    o.textContent = st.display_name + (has ? "" : (PRACTICE ? "  \u00b7 no programs" : "  \u00b7 nothing saved"));
     sel.appendChild(o);
   });
   sel.value = String(idx);
@@ -532,6 +591,7 @@ window.addEventListener("message", (e) => {
 });
 function showStudent(i, step){
   if (i < 0 || i >= roster.length) return;
+  if (PRACTICE) return showPrograms(i);
   /* stay on the same page when moving to the next student */
   if (step === undefined) step = lastStep;
   idx = i;
@@ -560,6 +620,137 @@ function showStudent(i, step){
   loadFeedback(row);
   paintFb("idle");
 }
+/* ---------------- one student's practice programs ----------------
+   The sandbox itself, in the frame, reading the programs out of localStorage
+   the way lesson.html reads a hand-in: it is the editor they were written in,
+   so a teacher sees the colouring, the files beside main.py and the console,
+   and can press Run to find out what the program actually does.
+
+   Nothing in the frame writes. What it does do is say which program is open,
+   because that is what the feedback down the right is about. */
+const INSPECT = "hub_sandbox_inspect";
+let progs = [];            // the open student's programs
+let progNotes = {};        // program id -> what has been written about it
+let openProg = "";         // which one the frame is showing
+
+function programsOf(row){
+  const list = (row && row.data && Array.isArray(row.data.programs)) ? row.data.programs : [];
+  return list.filter(p => p && typeof p === "object" && p.id);
+}
+function notesOf(row){
+  try{
+    const all = JSON.parse((row && row.feedback) || "{}") || {};
+    const p = all.programs;
+    return (p && typeof p === "object" && !Array.isArray(p)) ? p : {};
+  }catch(e){ return {}; }
+}
+
+function showPrograms(i){
+  idx = i;
+  paintPicker();
+  const st = roster[i];
+  const row = rows.find(r => r.username === st.username);
+  progs = programsOf(row);
+  progNotes = notesOf(row);
+  /* Whichever they were reading stays open where the next student has one of
+     their own; otherwise the list, which is the honest thing to show when
+     there is nothing in common between two children's programs. */
+  openProg = progs.some(p => p.id === openProg) ? openProg : "";
+  try{
+    localStorage.setItem(INSPECT, JSON.stringify({
+      name: st.display_name, username: st.username,
+      programs: progs, notes: progNotes, open: openProg }));
+  }catch(e){}
+  $("workFrame").src = "sandbox.html?view=1&embed=1&t=" + Date.now();
+  $("fbWho").textContent = st.display_name + (progs.length ? "" : ", no programs yet");
+  $("markWrap").hidden = true;
+  paintProgPick();
+  loadProgFeedback();
+  paintFb("idle");
+}
+
+function paintProgPick(){
+  const wrap = $("progWrap"), sel = $("progPick");
+  if (!wrap || !sel) return;
+  wrap.hidden = false;
+  sel.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = progs.length ? "Choose a program" : "No programs yet";
+  sel.appendChild(none);
+  progs.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = (p.name || "Program") + (progNotes[p.id] ? "  · feedback given" : "");
+    sel.appendChild(o);
+  });
+  sel.value = openProg;
+  sel.disabled = !progs.length;
+  fbBoxes(!!openProg);
+}
+/* The boxes are no use with no program chosen: feedback on a sandbox is
+   feedback on one of the programs in it. */
+function fbBoxes(on){
+  ["fbStrength","fbTarget","fbComment"].forEach(id => { const e = $(id); if (e) e.disabled = !on; });
+  const save = $("saveFb");
+  if (save) save.disabled = !on;
+  $("fbMsg").textContent = on ? "" :
+    (progs.length ? "Open a program to write about it." : "");
+}
+function loadProgFeedback(){
+  const note = progNotes[openProg] || {};
+  $("fbStrength").value = note.strength || "";
+  $("fbTarget").value = note.target || "";
+  $("fbComment").value = note.comment || "";
+  paintBank("Strength"); paintBank("Target");
+  $("fbMsg").textContent = "";
+}
+on("progPick", "change", () => {
+  openProg = $("progPick").value;
+  loadProgFeedback();
+  fbBoxes(!!openProg);
+  paintFb("idle");
+  const frame = $("workFrame");
+  if (frame && frame.contentWindow)
+    frame.contentWindow.postMessage({ hubSandboxShow: openProg }, "*");
+});
+/* and the other way round: the program opened in the frame is the one the
+   boxes are about */
+window.addEventListener("message", (e) => {
+  if (!PRACTICE || !e || !e.data || typeof e.data.hubSandboxOpen !== "string") return;
+  if (e.data.hubSandboxOpen === openProg) return;
+  openProg = e.data.hubSandboxOpen;
+  $("progPick").value = openProg;
+  loadProgFeedback();
+  fbBoxes(!!openProg);
+  paintFb("idle");
+});
+
+async function saveProgFeedback(){
+  const st = roster[idx];
+  if (!st || !openProg) return;
+  paintFb("saving");
+  $("fbMsg").textContent = "";
+  const note = { strength: $("fbStrength").value.trim(),
+                 target: $("fbTarget").value.trim(),
+                 comment: $("fbComment").value.trim() };
+  try{
+    const r = await fetch(API + "/api/teacher/feedback", { method:"POST", headers: HJ(),
+      body: JSON.stringify({ username: st.username, lesson: lessonId, program: openProg,
+                             strength: note.strength, target: note.target, text: note.comment }) });
+    if (!r.ok) throw new Error((await r.json()).error || "Could not save it.");
+    /* Kept here as well, so paging to another student and back shows what was
+       written rather than an empty box until the page is reloaded. */
+    if (note.strength || note.target || note.comment) progNotes[openProg] = note;
+    else delete progNotes[openProg];
+    let row = rows.find(x => x.username === st.username);
+    if (!row){ row = { username: st.username, display_name: st.display_name, data: {} }; rows.push(row); }
+    row.feedback = JSON.stringify({ programs: progNotes });
+    paintProgPick();
+    paintFb("saved");
+  }catch(e){ paintFb("idle"); $("fbMsg").textContent = e.message; }
+}
+
 on("prevStu", "click", () => showStudent(idx - 1));
 on("nextStu", "click", () => showStudent(idx + 1));
 on("stuPick", "change", () => showStudent(parseInt($("stuPick").value, 10) || 0));
@@ -704,6 +895,13 @@ function bankPopup(which){
     paint(); refresh();
   });
 }
+/* There is nothing to save feedback against until a program is open, and it
+   is asked here rather than only where the boxes are set up: paintFb runs
+   after that as well as before it, and a plain `disabled = false` in the
+   line below was quietly turning the button back on over a student with no
+   programs at all. */
+function fbLocked(){ return PRACTICE && !openProg; }
+
 /* The Save button says where it is up to itself, the way a student's does,
    rather than leaving a line of text underneath to be read. It stays saying
    Saved until part of the feedback is changed. */
@@ -711,8 +909,8 @@ function paintFb(state){
   const btn = $("saveFb");
   if (!btn) return;
   if (state === "saving"){ btn.textContent = "Saving…"; btn.disabled = true; btn.dataset.saved = "no"; }
-  else if (state === "saved"){ btn.textContent = "✓ Saved"; btn.disabled = false; btn.dataset.saved = "yes"; }
-  else { btn.textContent = "Save feedback"; btn.disabled = false; btn.dataset.saved = "no"; }
+  else if (state === "saved"){ btn.textContent = "✓ Saved"; btn.disabled = fbLocked(); btn.dataset.saved = "yes"; }
+  else { btn.textContent = "Save feedback"; btn.disabled = fbLocked(); btn.dataset.saved = "no"; }
 }
 ["fbStrength","fbTarget","fbComment","fbScore","fbGrade"].forEach(id => {
   const e = $(id);
@@ -723,6 +921,10 @@ function paintFb(state){
 });
 
 on("saveFb", "click", () => {
+  /* Practice is not marked and a note on it is not a report: a teacher
+     writing one line about a program somebody made in their own time should
+     not be asked for the other half of it. */
+  if (PRACTICE) return saveProgFeedback();
   /* Both boxes are on screen, so a missing one is a choice rather than an
      oversight. Only say something when exactly one has been filled in. */
   const hasS = !!$("fbStrength").value.trim(), hasT = !!$("fbTarget").value.trim();

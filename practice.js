@@ -62,7 +62,7 @@
   const token = () => localStorage.getItem("hub_token") || "";
   const whoami = () => (localStorage.getItem("hub_user") || "").toLowerCase();
 
-  function blank(){ return { user: whoami(), programs: [], pending: false, saved: 0 }; }
+  function blank(){ return { user: whoami(), programs: [], notes: {}, pending: false, saved: 0 }; }
 
   /* What is in this browser. Whose it is, is written down beside it: a
      shared computer hands the next child the same localStorage, and marks
@@ -73,6 +73,7 @@
     if (!d || !Array.isArray(d.programs)) return blank();
     if (!OFFLINE && String(d.user || "") !== whoami()) return blank();
     return { user: d.user || "", programs: d.programs.map(tidy).filter(Boolean),
+             notes: tidyNotes(d.notes),
              pending: !!d.pending, saved: d.saved || 0 };
   }
   function writeLocal(d){
@@ -116,6 +117,23 @@
     return out;
   }
   function text(v, cap){ return String(v == null ? "" : v).slice(0, cap); }
+
+  /* What a teacher has written about each program, kept beside them so the
+     sandbox can show it without asking the server a second time. Checked the
+     same way the programs are: this arrives as JSON out of a text column and
+     an object where a string is expected would break the page showing it. */
+  function tidyNotes(raw){
+    const out = {};
+    if (!raw || typeof raw !== "object") return out;
+    Object.keys(raw).slice(0, 20).forEach(id => {
+      const n = raw[id];
+      if (!n || typeof n !== "object") return;
+      const note = { strength: text(n.strength, 600), target: text(n.target, 600),
+                     comment: text(n.comment, 2000), at: text(n.at, 40) };
+      if (note.strength || note.target || note.comment) out[String(id).slice(0, 40)] = note;
+    });
+    return out;
+  }
   const isCode = (name) => /\.py$/i.test(String(name || ""));
 
   /* What a file may be called, before it is written into Python's own little
@@ -181,7 +199,11 @@
     if (!r.ok) throw new Error("Could not load your programs.");
     const d = await r.json();
     const got = (d && d.data && Array.isArray(d.data.programs)) ? d.data.programs : [];
-    return capped(got.map(tidy).filter(Boolean));
+    /* The teacher's notes ride along in the same row, in the feedback column
+       the marking screen writes, so they cost nothing extra to fetch. */
+    let notes = {};
+    try{ notes = tidyNotes((JSON.parse(d.feedback || "{}") || {}).programs); }catch(e){ notes = {}; }
+    return { programs: capped(got.map(tidy).filter(Boolean)), notes: notes };
   }
 
   /* ---------- the store the sandbox page talks to ----------
@@ -221,11 +243,18 @@
       }
       const up = await pullDown();
       if (up){
-        state = { user: whoami(), programs: up, pending: false, saved: Date.now() };
+        state = { user: whoami(), programs: up.programs, notes: up.notes,
+                  pending: false, saved: Date.now() };
         writeLocal(state);
       }
       return state.programs.slice();
     },
+
+    /* What the teacher has said about one program, or null. Read off whatever
+       the last load brought down: nothing here ever asks on its own, because
+       a note is not worth a request of its own when the programs have just
+       been fetched from the same row. */
+    noteFor(id){ return (state.notes || {})[id] || null; },
 
     /* Changed on the page: written down here and now, sent up shortly.
        `now` is for the changes worth not losing to a closed tab, which is
@@ -283,7 +312,7 @@
        telling it already failed? The page turns these into words. */
     waiting(){ return !!state.pending; },
     stuck(){ return stuck; },
-    newId, fileName, isCode, MAIN
+    newId, fileName, isCode, MAIN, SLOT
   };
 
   /* Compared whole rather than field by field. The field list was written

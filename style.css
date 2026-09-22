@@ -805,6 +805,13 @@ textarea.code{background:var(--code-bg) !important; color:var(--code-fg) !import
 .stutable{width:100%; border-collapse:collapse; margin-top:14px}
 .stutable td{padding:11px 10px; border-bottom:1px solid var(--line); font-size:16.5px}
 .stutable td:last-child{text-align:right; white-space:nowrap}
+/* A name that opens something. It reads as the name it is, with the underline
+   only once it is pointed at, so a class list still reads as a list. */
+.linkbtn{
+  background:transparent; border:none; padding:4px 0; min-height:32px;
+  font:inherit; font-weight:700; color:var(--text); text-align:left;
+}
+.linkbtn:hover{color:var(--amber); text-decoration:underline}
 .taskrow{display:flex; align-items:center; gap:12px; background:var(--panel); border:1.5px solid var(--line);
   border-radius:12px; padding:11px 14px; margin:0 0 9px; font-size:16px}
 .taskrow .tn{font-weight:800; color:var(--dim); min-width:22px}
@@ -4307,13 +4314,19 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
    It does not slide sideways when pointed at the way a lesson does: half of
    it is buttons, and a target that moves as the pointer nears it is harder to
    hit, which matters most for the one that deletes. */
-.lessonCard.sb-card{gap:10px; padding:14px 16px}
-.lessonCard.sb-card:hover{transform:none}
-.sb-open{
+/* A student found by the Practice search opens the same thing a program card
+   does, so it is the same card rather than one that looks nearly like it. */
+.lessonCard.sb-card,
+.lessonCard.pracCard{gap:10px; padding:14px 16px}
+.lessonCard.sb-card:hover,
+.lessonCard.pracCard:hover{transform:none}
+.sb-open,
+.pracOpen{
   flex:1; min-width:0; display:flex; align-items:center; gap:20px;
   background:transparent; border:none; padding:6px 8px; text-align:left; color:inherit;
 }
-.sb-open:hover b{color:var(--amber-dark)}
+.sb-open:hover b,
+.pracOpen:hover b{color:var(--amber-dark)}
 .sb-icon{
   flex:none; width:40px; height:40px; display:grid; place-items:center;
   font-size:17px; line-height:1; background:transparent;
@@ -4321,6 +4334,31 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
 }
 .sb-icon:hover{border-color:var(--amber); color:var(--amber)}
 .sb-icon.sb-bin:hover{border-color:var(--red); color:var(--red)}
+
+/* ---- what a teacher wrote about a program ----
+   Practice is not marked, so there is no score anywhere here. A note is a
+   note: it sits above the editor, and the list says which programs have one
+   so nobody has to open all five to find it. */
+/* Written against .lessonCard, because the card's own ".lessonCard span"
+   sets the size and colour of everything in it and beats a lone class
+   whatever the order. */
+.lessonCard .sb-fbchip{
+  display:inline-block; margin-top:6px; font-size:12.5px; font-weight:800;
+  color:var(--mint); border:1.5px solid var(--mint-dim); border-radius:999px;
+  padding:2px 10px;
+}
+.sb-fb{
+  margin:0 0 14px; padding:14px 16px; border-radius:14px;
+  background:var(--panel-2); border:1.5px solid var(--mint-dim);
+}
+.sb-fbhead{display:block; font-family:var(--display); font-size:16px; margin-bottom:6px}
+.sb-fbline{margin:6px 0 0; font-size:14.5px; line-height:1.55}
+/* Wide enough for STRENGTH, so the two lines start in the same place. */
+.sb-fblabel{
+  display:inline-block; min-width:82px; margin-right:8px;
+  font-weight:800; font-size:12.5px; text-transform:uppercase;
+  letter-spacing:.04em; color:var(--muted);
+}
 
 /* ---- which kind of program to start ---- */
 .sb-kinds{display:grid; gap:12px; margin:6px 0 4px}
@@ -4388,6 +4426,8 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
 
 @media (max-width:640px){
   .sb-page{padding:16px 12px 64px}
+  .sb-fb{padding:12px 13px; margin-bottom:10px}
+  .sb-fbline{font-size:14px}
   .lessonCard.sb-card{padding:10px 12px; gap:6px}
   .sb-open{gap:12px; padding:4px}
   .sb-icon{width:38px; height:38px}

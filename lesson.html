@@ -688,7 +688,8 @@ function clearStudentWork(){
       const k = localStorage.key(i);
       if (k && (k.indexOf("hub_work_") === 0 || k.indexOf("hub_rel_") === 0 ||
                 k.indexOf("hub_page_") === 0 || k.indexOf("hub_unlock_") === 0 ||
-                k === "hub_results" || k === "hub_close" || k === "hub_inspect")) doomed.push(k);
+                k === "hub_results" || k === "hub_close" || k === "hub_inspect" ||
+                k === "hub_sandbox_inspect")) doomed.push(k);
     }
     doomed.forEach(k => localStorage.removeItem(k));
   }catch(e){}

@@ -152,7 +152,26 @@ setTimeout(function(){
     <div class="bigcards">
       <button class="classtile" id="openHub"><b>&#128218; Lesson hub</b><span id="hubCount">All units and lessons</span></button>
       <button class="classtile" id="openClasses"><b>&#128101; Classes</b><span id="clsCount">Publish, pace and mark</span></button>
+      <button class="classtile" id="openPractice" hidden><b>&#9654; Practice</b><span>Sandbox programs, by student</span></button>
     </div>
+  </div>
+
+  <!-- ============ practice ============
+       Work nobody set and nobody marks, which is exactly why it has no other
+       way in: a sandbox program is not on a class's lesson list and never
+       will be. A username is what a teacher has in front of them when a child
+       asks them to look at something, so that is what this asks for. -->
+  <div id="practiceView" hidden>
+    <button class="crumb" id="backHome2">&larr; Home</button>
+    <h2 style="margin:14px 0 4px">Practice</h2>
+    <p class="hint">Find a student by their username or their name, then open their sandbox programs.</p>
+    <div class="toolrow">
+      <span class="searchbox"><span class="searchicon">&#128269;</span><input id="pracSearch" placeholder="Search by username or name"></span>
+      <button class="btn-primary" id="pracGo">Search</button>
+    </div>
+    <div class="loading mid" id="pracWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Looking</span></div>
+    <div id="pracList"></div>
+    <p class="hint" id="pracMsg" style="margin-top:12px"></p>
   </div>
 
   <div id="hubView" hidden>
@@ -287,6 +306,7 @@ setTimeout(function(){
       <button class="btn-primary" id="addOneBtn">+ Add student</button>
       <button class="btn-ghost" id="importBtn">Import from Arbor</button>
     </div>
+    <p class="hint" id="stuHint" hidden>Click a name to see their practice programs.</p>
     <div id="resetBox"></div>
     <div class="loading mid" id="stuWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Loading the students</span></div>
     <table class="stutable" id="stuTable"></table>
@@ -521,6 +541,7 @@ function paintCrumbs(){
                                              { name: hubYear || "Not in a year group", go: toHubYear },
                                              { name: hubUnit || "Not in a unit" }]));
   if (v === "classesView") return crumbs([top, { name:"Classes" }]);
+  if (v === "practiceView") return crumbs([top, { name:"Practice" }]);
   if (v === "pwView") return crumbs([top, { name:"Password updates" }]);
   if (v === "classView") return crumbs([top, home, { name: cls }]);
   if (v === "studentsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Students" }]);
@@ -548,7 +569,7 @@ function crumbName(id){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView","practiceView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
@@ -975,6 +996,9 @@ async function restoreSpot(spot){
   const here = cls && allClasses().some(g => String(g.name).toLowerCase() === cls.toLowerCase());
   try{
     if (spot.view === "classesView"){ toClasses(); return; }
+    /* Nothing is fetched until something is searched for, so this comes back
+       whole with only the box waiting in it. */
+    if (spot.view === "practiceView"){ toPractice(); return; }
     if (here && spot.view === "classView"){ openClass(cls); return; }
     if (here && spot.view === "studentsView"){ openClass(cls); show("studentsView"); loadStudents(); return; }
     /* Nothing is put on screen before the catalogue has come. show() is what
@@ -3139,6 +3163,78 @@ function paintCoverage(){
 on("backClasses", "click", () => { refreshGroups(); show("classesView"); });
 on("openClasses", "click", toClasses);
 on("backHome", "click", toHome);
+
+/* ---------- practice: find a student, open their programs ----------
+   A sandbox program belongs to a child rather than to a class or a lesson,
+   so there is nowhere in the console it would already have appeared. Two ways
+   in, both ending in the same place: a name in a class list, and this, for
+   when all a teacher has is the username a child has just read out. */
+function toPractice(){
+  show("practiceView");
+  $("pracSearch").focus();
+}
+/* Offline there are no accounts and no sandboxes to look at, so the tile
+   stays where it starts: out of the way. */
+if (!OFFLINE){ const tile = $("openPractice"); if (tile) tile.hidden = false; }
+on("openPractice", "click", toPractice);
+on("backHome2", "click", toHome);
+on("pracGo", "click", () => searchStudents());
+on("pracSearch", "keydown", (e) => { if (e.key === "Enter") searchStudents(); });
+
+/* Their programs, in the same viewer a lesson's work opens in. */
+function openPrograms(st){
+  window.open("work.html?practice=1&group=" + encodeURIComponent(st.group_name || cls) +
+              "&student=" + encodeURIComponent(st.username), "_blank");
+}
+
+async function searchStudents(){
+  const term = ($("pracSearch").value || "").trim();
+  const list = $("pracList"), msg = $("pracMsg");
+  list.innerHTML = ""; msg.textContent = "";
+  if (term.length < 2){ msg.textContent = "Type at least two letters."; return; }
+  $("pracWait").hidden = false;
+  try{
+    const r = await fetch(API + "/api/teacher/students?find=" + encodeURIComponent(term),
+                          { headers: H(), cache: "no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not search just now.");
+    const found = d.students || [];
+    /* The console shows one teacher their own classes everywhere else, and
+       this must not be the one screen that hands over the whole school. The
+       ones left out are counted rather than hidden silently, so a search that
+       finds nothing says why. */
+    const mine = meCode ? found.filter(st => myClasses([{ name: st.group_name || "" }]).length) : found;
+    const hidden = found.length - mine.length;
+    if (!mine.length){
+      msg.textContent = hidden
+        ? "Nobody in your classes matches that. " + hidden +
+          (hidden === 1 ? " student in another class does." : " students in other classes do.")
+        : "Nobody matches that.";
+      return;
+    }
+    const wrap = el("div","lessons");
+    mine.forEach(st => {
+      const row = el("div","lessonCard pracCard");
+      const open = el("button","pracOpen");
+      open.type = "button";
+      open.title = "Open " + st.display_name + "'s programs";
+      const body = el("span","body");
+      body.appendChild(el("b","", st.username));
+      body.appendChild(el("span","", st.display_name + " · " + (st.group_name || "no class")));
+      open.appendChild(body);
+      open.appendChild(el("span","go","→"));
+      open.addEventListener("click", () => openPrograms(st));
+      row.appendChild(open);
+      wrap.appendChild(row);
+    });
+    list.appendChild(wrap);
+    if (hidden) msg.textContent = hidden +
+      (hidden === 1 ? " other student matches but is not in one of your classes."
+                    : " other students match but are not in your classes.");
+  }catch(e){
+    msg.textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
+  }finally{ $("pracWait").hidden = true; }
+}
 on("refStudents", "click", () => { students = []; workCache = { key:"", rows:[], t:0 }; loadStudents(); });
 on("refUnits", "click", async () => {
   wait("unitGrid", "Loading the units", true);
@@ -3250,9 +3346,25 @@ async function loadStudents(){
 }
 function paintStudents(){
   const t = $("stuTable"); t.innerHTML = "";
+  const hint = $("stuHint");
+  if (hint) hint.hidden = OFFLINE || !students.length;
   students.forEach(st => {
     const tr = el("tr");
-    const td1 = el("td","", st.display_name); td1.style.fontWeight = "700";
+    const td1 = el("td");
+    /* The name opens their practice programs. There is nowhere else in the
+       console a sandbox appears, and the class list is where a teacher
+       already is when a child asks them to come and look at one. Editing
+       them is still the pencil, which is where it has always been. */
+    if (OFFLINE){
+      td1.textContent = st.display_name;
+      td1.style.fontWeight = "700";
+    } else {
+      const open = el("button","linkbtn", st.display_name);
+      open.type = "button";
+      open.title = "See " + st.display_name + "'s practice programs";
+      open.addEventListener("click", () => openPrograms(st));
+      td1.appendChild(open);
+    }
     const td2 = el("td"); td2.style.color = "var(--muted)";
     td2.appendChild(el("span","", st.username));
     if (!st.pw_set) td2.appendChild(el("span","statechip shut","No password yet"));
