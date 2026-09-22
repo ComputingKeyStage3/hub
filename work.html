@@ -775,12 +775,19 @@ function frameGo(url){
    tells them apart: a letter first, and a second only if the first one
    still leaves them alike. Beyond that they are left alike; a class where
    two students match on both name and the start of their username is not
-   one this is meant to solve on its own. */
+   one this is meant to solve on its own.
+
+   Written the way an initial is, not the way a username is: a capital
+   then a lower case letter, with nothing to mark it out as a fragment of
+   something else, since it reads as one no matter what case the real
+   username happens to be in. */
 function pickerDisambig(st, group){
   if (group.length < 2) return "";
   let n = 1;
-  while (n < 2 && new Set(group.map(x => (x.username || "").slice(0, n))).size < group.length) n++;
-  return " (" + (st.username || "").slice(0, n) + ")";
+  while (n < 2 && new Set(group.map(x => (x.username || "").slice(0, n).toLowerCase())).size < group.length) n++;
+  const letters = (st.username || "").slice(0, n).toLowerCase();
+  if (!letters) return "";
+  return " " + letters.charAt(0).toUpperCase() + letters.slice(1);
 }
 function paintPicker(){
   const sel = $("stuPick");
