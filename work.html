@@ -126,6 +126,7 @@ function el(tag, cls, text){
 
 function openModal(build){
   const box = $("mBox");
+  box.className = "modal";
   box.innerHTML = "";
   build(box);
   if (!box.querySelector(".modal-x")){
@@ -394,6 +395,7 @@ function tab(which){
   $("workPane").hidden = progress;
   $("tabProgress").classList.toggle("on", progress);
   $("tabWork").classList.toggle("on", !progress);
+  if (progress) syncProgressHeaderOffset();
   if (!progress && !framedYet) showStudent(idx);
 }
 on("tabProgress", "click", () => tab("progress"));
@@ -423,15 +425,23 @@ function taskInfo(b){
            title: plainText(b.prompt || b.title) || label, block: b };
 }
 /* Pages, groups and extensions are not tasks themselves, they hold tasks;
-   an assessment has no pages at all, so its blocks are already the leaves. */
+   an assessment has no pages at all, so a top-level block is already the
+   leaf. Every task is stamped with the page it came from (its index in
+   lesson.blocks, which is exactly what lesson.html's own step= reads, and
+   its title) so a lesson with several checklists reads as several page
+   columns rather than one column nobody can tell apart from the others. */
 function quantifiableTasks(){
   const out = [];
-  const walk = (blocks) => (blocks || []).forEach(b => {
-    if (b.type === "page" || b.type === "extension" || b.type === "group"){ walk(b.blocks); return; }
-    const t = taskInfo(b);
-    if (t) out.push(t);
+  (((lessonJson && lessonJson.blocks) || [])).forEach((page, pageIndex) => {
+    const isPage = page.type === "page" || page.type === "extension" || page.type === "group";
+    const pageTitle = (isPage ? page.title : plainText(page.prompt || page.title)) || "Page " + (pageIndex + 1);
+    const walk = (blocks) => (blocks || []).forEach(b => {
+      if (b.type === "page" || b.type === "extension" || b.type === "group"){ walk(b.blocks); return; }
+      const t = taskInfo(b);
+      if (t){ t.pageIndex = pageIndex; t.pageTitle = pageTitle; out.push(t); }
+    });
+    walk([page]);
   });
-  walk((lessonJson && lessonJson.blocks) || []);
   return out;
 }
 /* { got, max } for one task. Marked the same way as markQuestion() in the
@@ -479,9 +489,28 @@ function attempted(data, id){
   return true;
 }
 
-/* Task types hidden by the filter pills. A type not yet seen is shown, so a
-   fresh lesson opens with every column on. */
-let progressHidden = new Set();
+/* Task types picked out by the filter pills. Empty means no filter at all,
+   which is why every pill opens unpicked: ticking one narrows the columns
+   down to it, and there is no "everything" pill to press to get back,
+   because un-ticking the one you picked already means that. */
+let progressPicked = new Set();
+/* Sticky headers stack: the page row pins to the top, and the task row
+   pins just below it, however tall the page row turns out to be once its
+   own text has wrapped. Getting that height needs a real layout, and
+   paintProgress runs once while the pane is still hidden behind the
+   loading screen, where everything measures as nothing; this is called
+   again once the pane is actually shown, when the answer means something. */
+function syncProgressHeaderOffset(){
+  const table = $("progressTable");
+  const rowPage = table && table.querySelector("thead tr:first-child");
+  const rowTask = table && table.querySelector("thead tr:nth-child(2)");
+  if (!rowPage || !rowTask) return;
+  requestAnimationFrame(() => {
+    const h = rowPage.getBoundingClientRect().height;
+    if (!h) return;      // still hidden; whoever shows it next asks again
+    Array.from(rowTask.children).forEach(th => { th.style.top = h + "px"; });
+  });
+}
 function paintProgress(){
   const filters = $("progressFilters"), table = $("progressTable"), msg = $("progressMsg");
   if (!filters || !table) return;
@@ -494,20 +523,44 @@ function paintProgress(){
   msg.textContent = "";
   const labels = [...new Set(tasks.map(t => t.label))];
   labels.forEach(label => {
-    const pill = el("button","progress-pill" + (progressHidden.has(label) ? "" : " on"), label);
+    const pill = el("button","progress-pill" + (progressPicked.has(label) ? " on" : ""), label);
     pill.addEventListener("click", () => {
-      if (progressHidden.has(label)) progressHidden.delete(label); else progressHidden.add(label);
+      if (progressPicked.has(label)) progressPicked.delete(label); else progressPicked.add(label);
       paintProgress();
     });
     filters.appendChild(pill);
   });
-  const shown = tasks.filter(t => !progressHidden.has(t.label));
+  const shown = progressPicked.size ? tasks.filter(t => progressPicked.has(t.label)) : tasks;
 
-  const head = el("tr");
-  head.appendChild(el("th","pcol-name","Student"));
-  shown.forEach(t => { const th = el("th","", t.label); th.title = t.title; head.appendChild(th); });
-  head.appendChild(el("th","pcol-total","Total"));
-  table.appendChild(head);
+  const thead = el("thead"), tbody = el("tbody");
+  table.appendChild(thead); table.appendChild(tbody);
+  const rowPage = el("tr"), rowTask = el("tr");
+  thead.appendChild(rowPage); thead.appendChild(rowTask);
+  const nameHead = el("th","pcol-name","Student"); nameHead.rowSpan = 2;
+  rowPage.appendChild(nameHead);
+  /* Columns for the same page sit under one heading between them, so a page
+     with two checklists on it reads as one page with two columns rather
+     than two unrelated columns that happen to be neighbours. */
+  let i = 0;
+  while (i < shown.length){
+    let j = i + 1;
+    while (j < shown.length && shown[j].pageIndex === shown[i].pageIndex) j++;
+    const pageHead = el("th","pcol-page", shown[i].pageTitle);
+    pageHead.colSpan = j - i;
+    rowPage.appendChild(pageHead);
+    i = j;
+  }
+  const totalHead = el("th","pcol-total","Total"); totalHead.rowSpan = 2;
+  rowPage.appendChild(totalHead);
+  shown.forEach(t => {
+    const th = el("th","", t.label);
+    /* The type is what fits in the column; the page row above already says
+       where it is, so the full title is left for a hover rather than
+       crowding the header. */
+    th.title = t.pageTitle + " \u2014 " + t.title;
+    rowTask.appendChild(th);
+  });
+  syncProgressHeaderOffset();
 
   roster.forEach(st => {
     const row = rows.find(r => r.username === st.username) || null;
@@ -529,15 +582,57 @@ function paintProgress(){
       if (!attempted(data, t.id)) td.appendChild(el("span","none","\u2013"));
       else{
         const cls = sc.max === 0 ? "none" : sc.got === sc.max ? "yes" : sc.got > 0 ? "part" : "no";
-        td.appendChild(el("span", cls, sc.got + "/" + sc.max));
+        const mark = el("span", cls + " score", sc.got + "/" + sc.max);
+        mark.title = "Open " + st.display_name + "\u2019s " + t.label.toLowerCase();
+        mark.addEventListener("click", () => openTaskPreview(st, t));
+        td.appendChild(mark);
       }
       tr.appendChild(td);
     });
     const total = el("td","pcol-total");
     total.appendChild(el("b","", gotSum + "/" + maxSum));
     tr.appendChild(total);
-    table.appendChild(tr);
+    tbody.appendChild(tr);
   });
+}
+
+/* One task, one student, on its own: what clicking a mark opens. The same
+   lesson.html view the "View work" tab already uses, jumped to the right
+   page and told which task to point at, with no feedback carried in, since
+   this is about seeing the work, not marking it.
+
+   Built the way author.html's openFullPreview is, rather than through
+   openModal: that one wraps anything past a single child in a scrolling
+   middle, which is right for a form and wrong for an iframe meant to fill
+   the whole thing. */
+function openTaskPreview(st, t){
+  const row = rows.find(r => r.username === st.username) || null;
+  const payload = {
+    lesson: lessonId, idx: 0, json: OFFLINE ? undefined : lessonJson,
+    list: [{ name: st.display_name, username: st.username,
+             data: row ? row.data : {}, feedback: "" }]
+  };
+  try{ localStorage.setItem("hub_inspect", JSON.stringify(payload)); }
+  catch(e){ delete payload.json; localStorage.setItem("hub_inspect", JSON.stringify(payload)); }
+
+  const back = el("div","modal-back");
+  const box = el("div","modal wide fullprev");
+  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+  x.title = "Close";
+  const shut = () => { back.remove(); document.removeEventListener("keydown", esc); };
+  function esc(e){ if (e.key === "Escape") shut(); }
+  x.addEventListener("click", shut);
+  box.appendChild(x);
+  const frame = document.createElement("iframe");
+  frame.className = "fullprev-frame";
+  frame.title = t.label + " \u00b7 " + st.display_name + " \u00b7 " + t.pageTitle;
+  frame.src = "lesson.html?id=" + encodeURIComponent(lessonId) +
+    "&view=1&embed=1&step=" + t.pageIndex + "&highlight=" + encodeURIComponent(t.id);
+  box.appendChild(frame);
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) shut(); });
+  document.addEventListener("keydown", esc);
+  document.body.appendChild(back);
 }
 
 /* ---------------- one student's work ---------------- */

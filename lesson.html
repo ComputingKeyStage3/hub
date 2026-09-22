@@ -103,6 +103,7 @@ const builderParam = qs.get("builder");
 const allParam = qs.get("all");                                  // every page on one scroll
 const embedParam = qs.get("embed");
 const summaryParam = qs.get("summary");   // show the finished screen instead of a task                              // shown inside the teacher console                          // preview inside the lesson builder
+const highlightParam = qs.get("highlight");   // scroll to and flash one task, for the Progress tab
 const spectate = previewParam !== null || viewParam !== null || pdfParam !== null || builderParam !== null;
 let inspectName = "";
 let inspectList = null, inspectIdx = 0, keepStep = null, inspectUser = "";
@@ -1059,6 +1060,7 @@ const handedOver = handedLesson();
           return;
         }
         showStep(Math.min(Math.max(stepParam !== null ? parseInt(stepParam, 10) : step, 0), steps.length - 1));
+        if (highlightParam) highlightBlock(highlightParam);
         return;
       }
       const vb = el("div","viewbar");
@@ -1361,6 +1363,20 @@ function keepPlaceForParent(){
   /* pictures and code boxes go on growing the page after it is drawn */
   const put = () => { if (settling) stage.scrollTop = want; };
   [0, 80, 300, 800].forEach(ms => setTimeout(put, ms));
+}
+/* Scrolls to and briefly flashes one task on the page just shown, for the
+   Progress tab: it opens a page already knowing which mark it is asking
+   about, and this is what points at it. Every block on a page carries its
+   id as data-block-id, from a page, a group or extension tasks alike. */
+function highlightBlock(id){
+  setTimeout(() => {
+    const item = Array.from(document.querySelectorAll(".pg-item"))
+      .find(x => x.dataset.blockId === id);
+    if (!item) return;
+    item.scrollIntoView({ behavior:"smooth", block:"center" });
+    item.classList.add("justopened");
+    setTimeout(() => item.classList.remove("justopened"), 1800);
+  }, 80);
 }
 function showStep(i){
   /* inside the builder's preview, keep a note of the page so a refresh comes
@@ -2619,6 +2635,7 @@ function rPage(b){
       built.hold = null;
     }
     const item = el("div","pg-item");
+    item.dataset.blockId = child.id;
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
     if (child.type !== "picture"){
       if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
@@ -2780,6 +2797,7 @@ function rChoice(b){
       const built = buildBlock(child, j);
       if (!built) return;
       const item = el("div","pg-item");
+      item.dataset.blockId = child.id;
       const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
       if (child.type !== "picture"){
         if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
@@ -2860,6 +2878,7 @@ function rExtension(b){
     const built = buildBlock(child, j);
     if (!built) return;
     const item = el("div","pg-item");
+    item.dataset.blockId = child.id;
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
     if (child.type !== "picture"){
       if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
@@ -2927,6 +2946,7 @@ function rGroup(b){
     if (!built) return;
     if (child.required === false) built.check = () => ({ ok:true });
     const item = el("div","pg-item");
+    item.dataset.blockId = child.id;
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
     if (child.type !== "picture"){
       if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
