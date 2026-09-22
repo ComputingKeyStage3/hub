@@ -222,6 +222,7 @@ async function boot(){
     roster = students.sort(byUsername);
     rows = work;
     if (!PRACTICE) await loadMarks();
+    if (!PRACTICE) lockedPages = await fetchLocks(lessonJson);
     if (PRACTICE){
       $("barTitle").textContent = "Computing Teacher Console \u2022 Practice programs \u2022 " + cls;
       document.title = "Practice programs \u00b7 " + cls;
@@ -378,6 +379,7 @@ async function refreshWork(){
     rows = work;
     if (lesson) lessonJson = lesson;
     if (!PRACTICE) await loadMarks();
+    if (!PRACTICE) lockedPages = await fetchLocks(lessonJson);
     /* Back to the same student, by name rather than by position: somebody
        added to the class since would otherwise shift everyone along. */
     const back = roster.findIndex(x => x.username === who);
@@ -506,11 +508,49 @@ function attempted(data, id){
   return true;
 }
 
+/* The pages this class cannot reach yet, so the markbook never asks about a
+   task nobody has been able to attempt. Worked out exactly the way Manage
+   does in the console, down to the same default when nobody has set locks
+   by hand, because a page this reads as open has to be one the console
+   agrees is open. */
+function defaultLocks(lesson){
+  const out = new Set();
+  if (!lesson || lesson.assessment) return out;
+  const b = lesson.blocks || [];
+  out.add(b.length);          // the summary page
+  const said = b.some(x => x.startLocked !== undefined);
+  if (said){ b.forEach((x, i) => { if (x.startLocked) out.add(i); }); return out; }
+  let firstDo = -1;
+  for (let i = 0; i < b.length; i++){
+    const t = b[i].type;
+    if (t !== "text" && t !== "picture"){ firstDo = i; break; }
+  }
+  if (firstDo === -1) return out;
+  for (let i = firstDo + 1; i < b.length; i++) out.add(i);
+  return out;
+}
+async function fetchLocks(lesson){
+  try{
+    const r = await fetch(API + "/api/release?lesson=" + encodeURIComponent(lessonId) +
+      "&group=" + encodeURIComponent(cls) + "&t=" + Date.now(), { cache: "no-store" });
+    const d = await r.json();
+    if (d.managed === false) return defaultLocks(lesson);
+    if (Array.isArray(d.locks)) return new Set(d.locks);
+    if (typeof d.released === "number"){
+      const s = new Set();
+      for (let i = d.released; i < ((lesson && lesson.blocks) || []).length; i++) s.add(i);
+      return s;
+    }
+    return new Set();
+  }catch(e){ return new Set(); }  // shown as though nothing were locked, rather than not shown at all
+}
+
 /* Task types picked out by the filter pills. Empty means no filter at all,
    which is why every pill opens unpicked: ticking one narrows the columns
    down to it, and there is no "everything" pill to press to get back,
    because un-ticking the one you picked already means that. */
 let progressPicked = new Set();
+let lockedPages = new Set();   // filled by fetchLocks in boot() and refreshWork()
 /* What the markbook is sorted by. "username"/"displayName" are the two
    ways to read the name column; anything else is a task id, or "total". */
 let progressSort = { key: "username", dir: 1 };
@@ -550,10 +590,17 @@ function syncProgressHeaderOffset(){
 function paintProgress(){
   const filters = $("progressFilters"), table = $("progressTable"), msg = $("progressMsg");
   if (!filters || !table) return;
-  const tasks = quantifiableTasks();
+  /* A locked page is one the class cannot reach yet, so there is nothing
+     behind its tasks worth asking about: a column of dashes for a page
+     nobody could have opened would read as a class that has not tried,
+     not as a page that is not open yet. */
+  const allTasks = quantifiableTasks();
+  const tasks = allTasks.filter(t => !lockedPages.has(t.pageIndex));
   filters.innerHTML = ""; table.innerHTML = "";
   if (!tasks.length){
-    msg.textContent = "Nothing in this lesson can be scored automatically yet.";
+    msg.textContent = allTasks.length
+      ? "Every page with a scored task on it is still locked for this class."
+      : "Nothing in this lesson can be scored automatically yet.";
     return;
   }
   msg.textContent = "";
@@ -723,34 +770,41 @@ function openWorkPreview(src, frameTitle, buildFoot){
 /* One task, one student, on its own: what clicking a mark opens. The same
    lesson.html view the "View work" tab already uses, jumped to the right
    page and told which task to point at. */
+/* The way out of either pop-up into the real marking screen: the same
+   student, on the page this pop-up was about. Left undefined, showStudent
+   falls back to lastStep, the page whoever was looked at before this one
+   was left on, which is the right answer for the summary screen, since
+   that is never a page of its own to jump back to. */
+function addFeedbackFoot(st, pageIndex){
+  return (shut) => {
+    const foot = el("div","fullprev-foot");
+    const btn = el("button","btn-primary","Add feedback");
+    btn.addEventListener("click", () => {
+      shut();
+      const at = roster.findIndex(x => x.username === st.username);
+      if (at >= 0){ idx = at; tab("work"); showStudent(at, pageIndex); }
+    });
+    foot.appendChild(btn);
+    return foot;
+  };
+}
 function openTaskPreview(st, t){
   setInspectPayload(st, rows.find(r => r.username === st.username) || null);
   openWorkPreview(
     "lesson.html?id=" + encodeURIComponent(lessonId) +
       "&view=1&embed=1&step=" + t.pageIndex + "&highlight=" + encodeURIComponent(t.id),
-    t.label + " \u00b7 " + st.display_name + " \u00b7 " + t.pageTitle);
+    t.label + " \u00b7 " + st.display_name + " \u00b7 " + t.pageTitle,
+    addFeedbackFoot(st, t.pageIndex));
 }
 /* A whole student's work, on its own: what clicking a name in the markbook
    opens, on their summary screen since that is the one page that is never
-   any particular task. "Add feedback" is the way out of it into the real
-   marking screen, on the page and at the scroll position it was last left
-   at, the same as switching to any other student there does. */
+   any particular task. */
 function openStudentPreview(st){
   setInspectPayload(st, rows.find(r => r.username === st.username) || null);
   openWorkPreview(
     "lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&embed=1&summary=1",
     st.display_name + "\u2019s work",
-    (shut) => {
-      const foot = el("div","fullprev-foot");
-      const btn = el("button","btn-primary","Add feedback");
-      btn.addEventListener("click", () => {
-        shut();
-        const at = roster.findIndex(x => x.username === st.username);
-        if (at >= 0){ idx = at; tab("work"); showStudent(at); }
-      });
-      foot.appendChild(btn);
-      return foot;
-    });
+    addFeedbackFoot(st));
 }
 
 /* ---------------- one student's work ---------------- */
