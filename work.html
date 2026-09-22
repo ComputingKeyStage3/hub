@@ -394,9 +394,17 @@ async function refreshWork(){
   btn.textContent = "Checking…";
   $("workFresh").textContent = "";
   try{
-    const [students, work] = await Promise.all([fetchRoster(), fetchWork()]);
+    /* The lesson comes back as well: the frame is given this copy rather
+       than fetching its own, so this is the one press that picks up a lesson
+       a colleague has edited since this screen was opened. It is also the
+       one thing here that can fail without spoiling the press, because the
+       work is what Refresh is for and the copy already in hand still draws
+       the page. */
+    const [students, work, lesson] = await Promise.all([fetchRoster(), fetchWork(),
+      PRACTICE ? Promise.resolve(null) : fetchLesson().catch(() => null)]);
     roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
     rows = work;
+    if (lesson) lessonJson = lesson;
     if (!PRACTICE) await loadMarks();
     /* Back to the same student, by name rather than by position: somebody
        added to the class since would otherwise shift everyone along. */
@@ -429,7 +437,7 @@ function tab(which){
   $("workPane").hidden = seats;
   $("tabSeats").classList.toggle("on", seats);
   $("tabWork").classList.toggle("on", !seats);
-  if (!seats && !$("workFrame").src) showStudent(idx);
+  if (!seats && !framedYet) showStudent(idx);
 }
 on("tabSeats", "click", () => tab("seats"));
 on("tabWork", "click", () => tab("work"));
@@ -572,6 +580,22 @@ on("saveSeats", "click", async () => {
 });
 
 /* ---------------- one student's work ---------------- */
+
+/* Putting a new address on the frame only reloads it if the address has
+   changed, so every student used to carry a timestamp on the end of theirs.
+   That also meant the browser could never reuse the copy of lesson.html it
+   already had: a third of a megabyte down the wire between one child and the
+   next. Navigating the frame's own window reloads it whether the address has
+   changed or not, so the timestamp can go and the cache can do its job. */
+let framedYet = false;
+function frameGo(url){
+  const frame = $("workFrame");
+  framedYet = true;
+  try{
+    if (frame.contentWindow) return frame.contentWindow.location.replace(url);
+  }catch(e){}
+  frame.src = url;
+}
 function paintPicker(){
   const sel = $("stuPick");
   if (!sel) return;             // a single hand-in has nobody to page between
@@ -598,22 +622,38 @@ function showStudent(i, step){
   paintPicker();
   const st = roster[i];
   const row = rows.find(r => r.username === st.username);
-  /* the lesson page reads this to know whose work to put on the screen */
-  localStorage.setItem("hub_inspect", JSON.stringify({
-    lesson: lessonId, idx: 0,
+  /* The lesson page reads this to know whose work to put on the screen, and
+     the lesson itself goes with it. The frame is loaded again for every
+     student, and it used to ask the API for the same lesson every time: one
+     round trip to the server, in front of the work, thirty times for a class
+     of thirty. This page already fetched it when it opened. Refresh is what
+     fetches it again, so a lesson edited next door is one press away. */
+  const box = {
+    /* Offline the frame reads the lesson out of the lessons folder and could
+       not use this copy anyway, and that browser's storage is where a
+       student's own work lives. */
+    lesson: lessonId, idx: 0, json: OFFLINE ? undefined : lessonJson,
     list: [{ name: st.display_name, username: st.username,
              data: row ? row.data : {}, feedback: row ? (row.feedback || "") : "" }]
-  }));
+  };
+  try{ localStorage.setItem("hub_inspect", JSON.stringify(box)); }
+  catch(e){
+    /* A long lesson and a page of work together can be more than this
+       browser will keep. The work is the part that cannot be asked for
+       again from inside the frame, so the lesson is what goes. */
+    delete box.json;
+    localStorage.setItem("hub_inspect", JSON.stringify(box));
+  }
   /* The progress bar in the frame counts the summary as one past the last
      page, the same as the teacher console does, and posts that number out
      when it opens. Asking for it again by number would clamp to the last
      page, so it is asked for by name. */
   const pages = ((lessonJson && lessonJson.blocks) || []).length;
   const onSummary = !allPages && step !== undefined && step >= pages;
-  $("workFrame").src = "lesson.html?id=" + encodeURIComponent(lessonId) +
+  frameGo("lesson.html?id=" + encodeURIComponent(lessonId) +
     "&view=1&embed=1" + (allPages ? "&all=1" : "") +
     (onSummary ? "&summary=1" : "") +
-    (step !== undefined && !allPages && !onSummary ? "&step=" + step : "") + "&t=" + Date.now();
+    (step !== undefined && !allPages && !onSummary ? "&step=" + step : ""));
   $("fbWho").textContent = st.display_name + (row ? "" : ", nothing saved yet");
   /* a practical assessment is marked by hand, so the boxes appear */
   paintMarking(st.username);
@@ -661,7 +701,7 @@ function showPrograms(i){
       name: st.display_name, username: st.username,
       programs: progs, notes: progNotes, open: openProg }));
   }catch(e){}
-  $("workFrame").src = "sandbox.html?view=1&embed=1&t=" + Date.now();
+  frameGo("sandbox.html?view=1&embed=1");
   $("fbWho").textContent = st.display_name + (progs.length ? "" : ", no programs yet");
   $("markWrap").hidden = true;
   paintProgPick();

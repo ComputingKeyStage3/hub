@@ -6,7 +6,6 @@
 <title>Lesson</title>
 <link rel="stylesheet" href="style.css">
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="pyhub.js"></script>
 <script src="webhub.js"></script>
 <script src="autograder.js"></script>
@@ -913,7 +912,27 @@ function showWaitModal(words){
 function hideWaitModal(){ $("waitModal").hidden = true; }
 
 /* ---------- load ---------- */
-(lessonId === "__preview"
+
+/* The marking screen fetched this lesson when it opened, and hands it over
+   with the work rather than leaving this page to ask the API for the same
+   lesson once per child. That fetch was the longest part of moving from one
+   student to the next: nothing could be drawn until it came back. Only a
+   teacher looking at work ever sees this, and only where the id matches, so
+   a leftover box from another lesson cannot stand in for the real one. */
+function handedLesson(){
+  if (OFFLINE || !spectate || viewParam === null) return null;
+  try{
+    const box = JSON.parse(localStorage.getItem("hub_inspect") || "null");
+    if (box && box.lesson === lessonId && box.json && Array.isArray(box.json.blocks))
+      return box.json;
+  }catch(e){}
+  return null;
+}
+const handedOver = handedLesson();
+
+(handedOver
+   ? Promise.resolve({ ok:true, json: async () => handedOver })
+   : lessonId === "__preview"
    ? Promise.resolve({ ok:true, json: async () => {
        const raw = localStorage.getItem("hub_preview");
        if (!raw) throw new Error("missing");
@@ -2245,9 +2264,9 @@ async function manualSave(){
       return;
     }
     btn.textContent = "Making the PDF…";
-    setTimeout(() => {
+    setTimeout(async () => {
       try{
-        if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
+        if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
         buildPdf().save(fileName());
         settle("Saved a PDF ✓", "flash-ok");
       }catch(e){
@@ -5917,7 +5936,7 @@ function showEverything(){
   if (brief) brief.hidden = true;
 }
 
-function showPdfView(){
+async function showPdfView(){
   $("dock").classList.add("gone");
   const rail = $("taskRail");
   if (rail) rail.hidden = true;
@@ -5933,7 +5952,7 @@ function showPdfView(){
   shell.appendChild(frame);
   document.body.appendChild(shell);
   try{
-    if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
+    if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
     const doc = buildPdf();
     frame.src = doc.output("bloburl");
     dl.addEventListener("click", () => doc.save(fileName()));
@@ -6085,9 +6104,9 @@ function pdfButton(statusEl, primary){
   btn.addEventListener("click", () => {
     /* built here and downloaded, no print dialogue to get lost in */
     btn.textContent = "Making the PDF\u2026";
-    setTimeout(() => {
+    setTimeout(async () => {
       try{
-        if (!(window.jspdf && window.jspdf.jsPDF)) throw new Error("The PDF builder didn't load.");
+        if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
         buildPdf().save(fileName());
         btn.textContent = "\u2713 Saved as a PDF";
         if (statusEl) statusEl.textContent = "Saved as " + fileName() + ", hand that in.";
@@ -6256,11 +6275,38 @@ if (!OFFLINE && !spectate){
    that. So we build the document ourselves with jsPDF and save it straight
    to disk. It's assembled from what the student actually did, so it captures
    every activity rather than a screenshot of whatever happened to be on
-   screen. If jsPDF can't load (blocked CDN), we fall back to print().     */
+   screen. If the builder can't be fetched, because the school's filter
+   stands in front of the CDN, the button says so: there is no print()
+   fallback, because the dialog is the thing this exists to avoid.        */
 function stripHtml(s){
   const d = document.createElement("div");
   d.innerHTML = String(s || "");
   return (d.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+/* The PDF builder is a third of a megabyte, it comes from a CDN, and most
+   lessons are opened, worked through and handed in without one ever being
+   made. It used to be loaded in the head of every lesson, so every child
+   waited for it before their first page appeared, and a teacher paging
+   through a class paid for it again on every student. It is fetched the
+   first time a PDF is actually wanted and kept from then on. The three
+   places that build one all said "The PDF builder didn't load." when it was
+   missing and they still do: what has changed is when the asking happens. */
+let pdfLib = null;
+function needPdf(){
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(true);
+  if (!pdfLib){
+    pdfLib = new Promise((yes) => {
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js";
+      sc.onload = () => yes(!!(window.jspdf && window.jspdf.jsPDF));
+      /* Blocked by the school's filter, or no internet at all. The caller
+         says so in words a child can read, and there is nothing to retry. */
+      sc.onerror = () => { pdfLib = null; yes(false); };
+      document.head.appendChild(sc);
+    });
+  }
+  return pdfLib;
 }
 
 /* jsPDF's built-in fonts only cover Latin-1, so emoji and symbols such as a
