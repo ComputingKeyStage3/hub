@@ -1752,6 +1752,12 @@ body.workpage .grow{flex:1}
 /* the page a column belongs to, above the task-type row */
 .progresstable .pcol-page{font-size:11.5px; letter-spacing:.04em; text-transform:uppercase;
   color:var(--dim); background:var(--panel-2); border-bottom:1px solid var(--line-2)}
+/* a task that only ever appears once a student says they have finished early */
+.progresstable .pcol-ext{color:var(--amber-dark);
+  background:color-mix(in srgb, var(--amber) 12%, var(--panel-2))}
+/* every header that reorders the rows when clicked */
+.progresstable .pcol-sort{cursor:pointer; user-select:none}
+.progresstable .pcol-sort:hover{color:var(--text)}
 .progresscell .yes{color:var(--mint); font-weight:800}
 .progresscell .part{color:var(--amber-dark); font-weight:800}
 .progresscell .no{color:var(--red)}
@@ -2089,10 +2095,16 @@ html[data-bg=night] #hubTint{mix-blend-mode:screen; opacity:.5}
 .pal-head.open::after{transform:rotate(-90deg)}
 .palbody{padding:6px 0 2px; display:flex; flex-direction:column; gap:6px}
 
-/* the preview, full screen */
+/* the preview, full screen. .modal is already a flex column (see the
+   pop-up rules further down), so the frame only has to claim the space a
+   bottom bar, when there is one, has not: an explicit height:100% would
+   claim the whole box regardless and push any bar below it clean off. */
 .fullprev{width:100%; max-width:1500px; height:92vh; padding:0; overflow:hidden}
-.fullprev-frame{width:100%; height:100%; border:none; display:block; border-radius:14px}
+.fullprev .fullprev-frame{width:100%; flex:1 1 auto; min-height:0; border:none; display:block; border-radius:14px}
 .fullprev .modal-x{z-index:5; background:var(--panel)}
+/* "Add feedback", under a student's own preview */
+.fullprev-foot{flex:0 0 auto; display:flex; justify-content:center;
+  padding:14px 16px; border-top:1px solid var(--line); background:var(--panel)}
 
 /* place values sit tight against what they label */
 .bin-placerow{margin-bottom:-2px; opacity:.75}

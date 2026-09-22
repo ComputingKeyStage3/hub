@@ -123,6 +123,12 @@ function el(tag, cls, text){
   if (text !== undefined) e.textContent = text;
   return e;
 }
+/* The class list, the picker, the feedback panel and the Progress markbook
+   all list a class in the same order, and it is by username rather than by
+   display name: two students called Amelia are still two different rows in
+   the register, and the username is the one thing on this page that always
+   tells them apart. */
+function byUsername(a, b){ return (a.username || "").localeCompare(b.username || ""); }
 
 function openModal(build){
   const box = $("mBox");
@@ -213,7 +219,7 @@ async function boot(){
       PRACTICE ? Promise.resolve(null) : fetchLesson(), fetchRoster(), fetchWork()
     ]);
     lessonJson = lesson;
-    roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+    roster = students.sort(byUsername);
     rows = work;
     if (!PRACTICE) await loadMarks();
     if (PRACTICE){
@@ -368,7 +374,7 @@ async function refreshWork(){
        the page. */
     const [students, work, lesson] = await Promise.all([fetchRoster(), fetchWork(),
       PRACTICE ? Promise.resolve(null) : fetchLesson().catch(() => null)]);
-    roster = students.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+    roster = students.sort(byUsername);
     rows = work;
     if (lesson) lessonJson = lesson;
     if (!PRACTICE) await loadMarks();
@@ -429,18 +435,29 @@ function taskInfo(b){
    leaf. Every task is stamped with the page it came from (its index in
    lesson.blocks, which is exactly what lesson.html's own step= reads, and
    its title) so a lesson with several checklists reads as several page
-   columns rather than one column nobody can tell apart from the others. */
+   columns rather than one column nobody can tell apart from the others.
+
+   A task inside an extension is stamped with the extension's own title
+   instead of its page's, and marked extension: true, so it comes out under
+   its own "Extension:" heading rather than looking like ordinary work on
+   the page it happens to sit on. It keeps the page's index, not the
+   extension's own: there is no such thing as "step=" for an extension on
+   its own, it opens with the page around it. */
 function quantifiableTasks(){
   const out = [];
   (((lessonJson && lessonJson.blocks) || [])).forEach((page, pageIndex) => {
     const isPage = page.type === "page" || page.type === "extension" || page.type === "group";
     const pageTitle = (isPage ? page.title : plainText(page.prompt || page.title)) || "Page " + (pageIndex + 1);
-    const walk = (blocks) => (blocks || []).forEach(b => {
-      if (b.type === "page" || b.type === "extension" || b.type === "group"){ walk(b.blocks); return; }
+    const walk = (blocks, title, ext) => (blocks || []).forEach(b => {
+      if (b.type === "extension"){
+        walk(b.blocks, "Extension: " + (b.title || "Extension tasks"), true);
+        return;
+      }
+      if (b.type === "page" || b.type === "group"){ walk(b.blocks, title, ext); return; }
       const t = taskInfo(b);
-      if (t){ t.pageIndex = pageIndex; t.pageTitle = pageTitle; out.push(t); }
+      if (t){ t.pageIndex = pageIndex; t.pageTitle = title; t.extension = ext; out.push(t); }
     });
-    walk([page]);
+    walk([page], pageTitle, false);
   });
   return out;
 }
@@ -494,6 +511,25 @@ function attempted(data, id){
    down to it, and there is no "everything" pill to press to get back,
    because un-ticking the one you picked already means that. */
 let progressPicked = new Set();
+/* What the markbook is sorted by. "username"/"displayName" are the two
+   ways to read the name column; anything else is a task id, or "total". */
+let progressSort = { key: "username", dir: 1 };
+/* The name column cycles through both fields rather than just flipping
+   direction, since there are two different things "Student" could mean
+   here and a plain toggle could only ever offer one of them. */
+function clickNameSort(){
+  const cycle = [["username",1], ["username",-1], ["displayName",1], ["displayName",-1]];
+  const at = cycle.findIndex(c => c[0] === progressSort.key && c[1] === progressSort.dir);
+  const next = cycle[(at + 1) % cycle.length];
+  progressSort = { key: next[0], dir: next[1] };
+  paintProgress();
+}
+function clickColumnSort(key){
+  if (progressSort.key === key) progressSort.dir = -progressSort.dir;
+  else progressSort = { key: key, dir: -1 };   // a mark you have just asked about is one you want the best or worst of first
+  paintProgress();
+}
+function sortArrow(key){ return progressSort.key === key ? (progressSort.dir === 1 ? " ↑" : " ↓") : ""; }
 /* Sticky headers stack: the page row pins to the top, and the task row
    pins just below it, however tall the page row turns out to be once its
    own text has wrapped. Getting that height needs a real layout, and
@@ -532,54 +568,89 @@ function paintProgress(){
   });
   const shown = progressPicked.size ? tasks.filter(t => progressPicked.has(t.label)) : tasks;
 
+  /* Every mark, for every student, worked out once rather than once per
+     sort: the column being sorted by is only known after this runs, and
+     re-marking the whole class on every click would be asking scoreTask
+     to do the same sum again for no reason. */
+  const marks = {};      // username -> { taskId: {got,max}, total: {got,max} }
+  roster.forEach(st => {
+    const row = rows.find(r => r.username === st.username) || null;
+    const data = row ? row.data : null;
+    const perTask = {};
+    let gotSum = 0, maxSum = 0;
+    shown.forEach(t => {
+      const sc = scoreTask(t.block, data ? data[t.id] : undefined);
+      perTask[t.id] = sc;
+      gotSum += sc.got; maxSum += sc.max;
+    });
+    marks[st.username] = { data: data, perTask: perTask, total: { got: gotSum, max: maxSum } };
+  });
+
+  const sorted = roster.slice().sort((a, b) => {
+    const k = progressSort.key, d = progressSort.dir;
+    let x, y;
+    if (k === "username"){ x = a.username || ""; y = b.username || ""; }
+    else if (k === "displayName"){ x = a.display_name || ""; y = b.display_name || ""; }
+    else if (k === "total"){ x = marks[a.username].total.got; y = marks[b.username].total.got; }
+    else { x = marks[a.username].perTask[k] ? marks[a.username].perTask[k].got : -1;
+           y = marks[b.username].perTask[k] ? marks[b.username].perTask[k].got : -1; }
+    if (typeof x === "string") return x.localeCompare(y) * d;
+    if (x < y) return -1 * d;
+    if (x > y) return 1 * d;
+    return (a.username || "").localeCompare(b.username || "");   // a stable tie-break
+  });
+
   const thead = el("thead"), tbody = el("tbody");
   table.appendChild(thead); table.appendChild(tbody);
   const rowPage = el("tr"), rowTask = el("tr");
   thead.appendChild(rowPage); thead.appendChild(rowTask);
-  const nameHead = el("th","pcol-name","Student"); nameHead.rowSpan = 2;
+  const nameHead = el("th","pcol-name pcol-sort","Student" + sortArrow(progressSort.key === "displayName" ? "displayName" : "username"));
+  nameHead.rowSpan = 2;
+  nameHead.title = "Sort by username or by name";
+  nameHead.addEventListener("click", clickNameSort);
   rowPage.appendChild(nameHead);
   /* Columns for the same page sit under one heading between them, so a page
      with two checklists on it reads as one page with two columns rather
-     than two unrelated columns that happen to be neighbours. */
+     than two unrelated columns that happen to be neighbours. An extension
+     task never merges into its page's group: it is stamped with its own
+     title in quantifiableTasks, so the two never look like one run. */
   let i = 0;
   while (i < shown.length){
     let j = i + 1;
-    while (j < shown.length && shown[j].pageIndex === shown[i].pageIndex) j++;
-    const pageHead = el("th","pcol-page", shown[i].pageTitle);
+    while (j < shown.length && shown[j].pageIndex === shown[i].pageIndex &&
+           shown[j].pageTitle === shown[i].pageTitle) j++;
+    const pageHead = el("th","pcol-page" + (shown[i].extension ? " pcol-ext" : ""), shown[i].pageTitle);
     pageHead.colSpan = j - i;
     rowPage.appendChild(pageHead);
     i = j;
   }
-  const totalHead = el("th","pcol-total","Total"); totalHead.rowSpan = 2;
+  const totalHead = el("th","pcol-total pcol-sort","Total" + sortArrow("total"));
+  totalHead.rowSpan = 2;
+  totalHead.addEventListener("click", () => clickColumnSort("total"));
   rowPage.appendChild(totalHead);
   shown.forEach(t => {
-    const th = el("th","", t.label);
+    const th = el("th","pcol-sort", t.label + sortArrow(t.id));
     /* The type is what fits in the column; the page row above already says
        where it is, so the full title is left for a hover rather than
        crowding the header. */
     th.title = t.pageTitle + " \u2014 " + t.title;
+    th.addEventListener("click", () => clickColumnSort(t.id));
     rowTask.appendChild(th);
   });
   syncProgressHeaderOffset();
 
-  roster.forEach(st => {
-    const row = rows.find(r => r.username === st.username) || null;
-    const data = row ? row.data : null;
+  sorted.forEach(st => {
+    const m = marks[st.username];
     const tr = el("tr");
     const name = el("td","pcol-name");
     name.appendChild(el("b","", st.display_name));
     name.appendChild(el("span","", st.username));
-    name.addEventListener("click", () => {
-      const at = roster.findIndex(x => x.username === st.username);
-      if (at >= 0){ idx = at; tab("work"); showStudent(at); }
-    });
+    name.addEventListener("click", () => openStudentPreview(st));
     tr.appendChild(name);
-    let gotSum = 0, maxSum = 0;
     shown.forEach(t => {
-      const sc = scoreTask(t.block, data ? data[t.id] : undefined);
-      gotSum += sc.got; maxSum += sc.max;
+      const sc = m.perTask[t.id];
       const td = el("td","progresscell");
-      if (!attempted(data, t.id)) td.appendChild(el("span","none","\u2013"));
+      if (!attempted(m.data, t.id)) td.appendChild(el("span","none","\u2013"));
       else{
         const cls = sc.max === 0 ? "none" : sc.got === sc.max ? "yes" : sc.got > 0 ? "part" : "no";
         const mark = el("span", cls + " score", sc.got + "/" + sc.max);
@@ -590,23 +661,17 @@ function paintProgress(){
       tr.appendChild(td);
     });
     const total = el("td","pcol-total");
-    total.appendChild(el("b","", gotSum + "/" + maxSum));
+    total.appendChild(el("b","", m.total.got + "/" + m.total.max));
     tr.appendChild(total);
     tbody.appendChild(tr);
   });
 }
 
-/* One task, one student, on its own: what clicking a mark opens. The same
-   lesson.html view the "View work" tab already uses, jumped to the right
-   page and told which task to point at, with no feedback carried in, since
-   this is about seeing the work, not marking it.
-
-   Built the way author.html's openFullPreview is, rather than through
-   openModal: that one wraps anything past a single child in a scrolling
-   middle, which is right for a form and wrong for an iframe meant to fill
-   the whole thing. */
-function openTaskPreview(st, t){
-  const row = rows.find(r => r.username === st.username) || null;
+/* What a student's work looks like with nothing else on the page: no
+   comments, no marking. Both work pop-ups hand this the same shape and get
+   the same read-only frame back, from the same hub_inspect key the "View
+   work" tab's own frame uses. */
+function setInspectPayload(st, row){
   const payload = {
     lesson: lessonId, idx: 0, json: OFFLINE ? undefined : lessonJson,
     list: [{ name: st.display_name, username: st.username,
@@ -614,25 +679,78 @@ function openTaskPreview(st, t){
   };
   try{ localStorage.setItem("hub_inspect", JSON.stringify(payload)); }
   catch(e){ delete payload.json; localStorage.setItem("hub_inspect", JSON.stringify(payload)); }
+}
+/* The shape behind both work pop-ups: a full-screen frame with its own
+   close button, closable by Escape or by clicking outside it, and an
+   optional bar along the bottom for whatever the caller wants there.
 
+   Built the way author.html's openFullPreview is, rather than through
+   openModal: that one wraps anything past a single child in a scrolling
+   middle, which is right for a form and wrong for an iframe meant to fill
+   the whole thing. */
+/* Closes whichever of these is currently open, if one is. Each call to
+   openWorkPreview builds its own back and its own Escape listener rather
+   than sharing mBack, so without this a second click before the first has
+   closed leaves one stuck behind the other with no way to reach either's
+   close button, and the first's listener leaking silently besides. */
+let shutWorkPreview = null;
+function openWorkPreview(src, frameTitle, buildFoot){
+  if (shutWorkPreview) shutWorkPreview();
   const back = el("div","modal-back");
   const box = el("div","modal wide fullprev");
   const x = el("button","btn-ghost iconbtn modal-x","\u2715");
   x.title = "Close";
-  const shut = () => { back.remove(); document.removeEventListener("keydown", esc); };
+  const shut = () => {
+    back.remove();
+    document.removeEventListener("keydown", esc);
+    shutWorkPreview = null;
+  };
+  shutWorkPreview = shut;
   function esc(e){ if (e.key === "Escape") shut(); }
   x.addEventListener("click", shut);
   box.appendChild(x);
   const frame = document.createElement("iframe");
   frame.className = "fullprev-frame";
-  frame.title = t.label + " \u00b7 " + st.display_name + " \u00b7 " + t.pageTitle;
-  frame.src = "lesson.html?id=" + encodeURIComponent(lessonId) +
-    "&view=1&embed=1&step=" + t.pageIndex + "&highlight=" + encodeURIComponent(t.id);
+  frame.title = frameTitle;
+  frame.src = src;
   box.appendChild(frame);
+  if (buildFoot) box.appendChild(buildFoot(shut));
   back.appendChild(box);
   back.addEventListener("mousedown", (e) => { if (e.target === back) shut(); });
   document.addEventListener("keydown", esc);
   document.body.appendChild(back);
+}
+/* One task, one student, on its own: what clicking a mark opens. The same
+   lesson.html view the "View work" tab already uses, jumped to the right
+   page and told which task to point at. */
+function openTaskPreview(st, t){
+  setInspectPayload(st, rows.find(r => r.username === st.username) || null);
+  openWorkPreview(
+    "lesson.html?id=" + encodeURIComponent(lessonId) +
+      "&view=1&embed=1&step=" + t.pageIndex + "&highlight=" + encodeURIComponent(t.id),
+    t.label + " \u00b7 " + st.display_name + " \u00b7 " + t.pageTitle);
+}
+/* A whole student's work, on its own: what clicking a name in the markbook
+   opens, on their summary screen since that is the one page that is never
+   any particular task. "Add feedback" is the way out of it into the real
+   marking screen, on the page and at the scroll position it was last left
+   at, the same as switching to any other student there does. */
+function openStudentPreview(st){
+  setInspectPayload(st, rows.find(r => r.username === st.username) || null);
+  openWorkPreview(
+    "lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&embed=1&summary=1",
+    st.display_name + "\u2019s work",
+    (shut) => {
+      const foot = el("div","fullprev-foot");
+      const btn = el("button","btn-primary","Add feedback");
+      btn.addEventListener("click", () => {
+        shut();
+        const at = roster.findIndex(x => x.username === st.username);
+        if (at >= 0){ idx = at; tab("work"); showStudent(at); }
+      });
+      foot.appendChild(btn);
+      return foot;
+    });
 }
 
 /* ---------------- one student's work ---------------- */
@@ -652,16 +770,31 @@ function frameGo(url){
   }catch(e){}
   frame.src = url;
 }
+/* Two students sharing a display name are still two different rows in the
+   picker, so whichever shares it is given as much of their username as
+   tells them apart: a letter first, and a second only if the first one
+   still leaves them alike. Beyond that they are left alike; a class where
+   two students match on both name and the start of their username is not
+   one this is meant to solve on its own. */
+function pickerDisambig(st, group){
+  if (group.length < 2) return "";
+  let n = 1;
+  while (n < 2 && new Set(group.map(x => (x.username || "").slice(0, n))).size < group.length) n++;
+  return " (" + (st.username || "").slice(0, n) + ")";
+}
 function paintPicker(){
   const sel = $("stuPick");
   if (!sel) return;             // a single hand-in has nobody to page between
   sel.innerHTML = "";
+  const byName = {};
+  roster.forEach(st => { (byName[st.display_name] = byName[st.display_name] || []).push(st); });
   roster.forEach((st, i) => {
     const o = document.createElement("option");
     o.value = String(i);
     const row = rows.find(r => r.username === st.username);
     const has = PRACTICE ? programsOf(row).length : !!row;
-    o.textContent = st.display_name + (has ? "" : (PRACTICE ? "  \u00b7 no programs" : "  \u00b7 nothing saved"));
+    o.textContent = st.display_name + pickerDisambig(st, byName[st.display_name]) +
+      (has ? "" : (PRACTICE ? "  \u00b7 no programs" : "  \u00b7 nothing saved"));
     sel.appendChild(o);
   });
   sel.value = String(idx);
@@ -714,7 +847,7 @@ function showStudent(i, step){
     /* the same distance down as well as the same page, so the question being
        read down the class stays where the eye already is */
     (lastScroll > 0 ? "&scroll=" + lastScroll : ""));
-  $("fbWho").textContent = st.display_name + (row ? "" : ", nothing saved yet");
+  $("fbWho").textContent = st.display_name + " · " + st.username + (row ? "" : ", nothing saved yet");
   /* a practical assessment is marked by hand, so the boxes appear */
   paintMarking(st.username);
   loadFeedback(row);
@@ -762,7 +895,7 @@ function showPrograms(i){
       programs: progs, notes: progNotes, open: openProg }));
   }catch(e){}
   frameGo("sandbox.html?view=1&embed=1");
-  $("fbWho").textContent = st.display_name + (progs.length ? "" : ", no programs yet");
+  $("fbWho").textContent = st.display_name + " · " + st.username + (progs.length ? "" : ", no programs yet");
   $("markWrap").hidden = true;
   paintProgPick();
   loadProgFeedback();
