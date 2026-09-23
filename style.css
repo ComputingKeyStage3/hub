@@ -619,6 +619,7 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .st-strength b{color:var(--mint); margin-right:8px}
 .st-target b{color:var(--amber); margin-right:8px}
 /* the summary screen's tally of checklist ticks and quiz marks */
+.ach-headline{font-weight:700; color:var(--text)}
 .ach-num{font-family:var(--display); font-size:28px; color:var(--amber); margin-right:7px}
 .ach-of{color:var(--muted)}
 .ach-also{font-weight:700; margin:16px 0 4px; color:var(--muted)}
@@ -1771,13 +1772,14 @@ body.workpage .grow{flex:1}
 .progresscell .score:hover{text-decoration:underline}
 /* the eye that hides one column's marks without taking the column away,
    so the same button is still there, in the same place, to bring it back */
-.eye-toggle{margin-left:6px; padding:0; width:16px; height:16px; min-width:0;
-  border:none; background:transparent; color:inherit; opacity:.5; font-size:11px;
-  line-height:16px; vertical-align:middle; position:relative; cursor:pointer}
-.eye-toggle:hover{opacity:.9}
-.eye-toggle.off{opacity:.85}
-.eye-toggle.off::after{content:""; position:absolute; left:1px; right:1px; top:50%;
-  height:1.6px; background:currentColor; transform:rotate(-45deg)}
+.eye-toggle{margin-left:8px; padding:0; width:26px; height:26px; min-width:0;
+  border:1.5px solid var(--line-2); border-radius:50%; background:var(--panel);
+  color:inherit; opacity:.65; font-size:14px; line-height:23px; vertical-align:middle;
+  position:relative; cursor:pointer}
+.eye-toggle:hover{opacity:1; border-color:var(--amber)}
+.eye-toggle.off{opacity:1; border-color:var(--amber)}
+.eye-toggle.off::after{content:""; position:absolute; left:5px; right:5px; top:50%;
+  height:1.8px; background:currentColor; transform:rotate(-45deg)}
 /* pushed to the far right of the filter row, whatever else is in it */
 .progress-full-btn{margin-left:auto}
 /* how well the class did, one task type at a time */

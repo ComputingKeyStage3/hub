@@ -775,7 +775,13 @@ async function dbLesson(){
   return { ok:true, json: async () => d.lesson };
 }
 const token = localStorage.getItem("hub_token") || "";
-const group = localStorage.getItem("hub_group") || "";
+/* A real student's own tab has no reason to say which class it is in the
+   address, so this is normally read from what signing in cached. The
+   teacher console's work pop-ups are a second student nobody signed in
+   as, previewing a specific class's copy of the lesson, and have no such
+   cache to read; &group= on the address is how they say which class the
+   release settings should be looked up for. */
+const group = qs.get("group") || localStorage.getItem("hub_group") || "";
 const RELEASE_KEY = "hub_rel_" + lessonId;
 
 try{
@@ -1048,6 +1054,11 @@ const handedOver = handedLesson();
         hideLoader();                       // otherwise the work stays behind it
         sendStrengthAndTarget();            // fills the marking boxes straight away
         if (summaryParam !== null){
+          /* The Progress tab's own total already leaves out anything still
+             locked for this class; the achievement card on this same
+             screen has to agree with it, which it can only do once this
+             has actually been asked for. */
+          if (!lesson.assessment) await fetchRelease();
           if (lesson.assessment) renderAssessmentComplete(false);
           else showLessonComplete(true);
           return;
@@ -6241,6 +6252,33 @@ function paintStatus(elm, state){
 const ACH_LABEL = { quiz:"Quiz", mc:"Multiple choice", order:"Put in order",
                      blanks:"Fill the gaps", short:"Short answer",
                      ide:"Coding task", web:"Coding task" };
+/* The words after the number, so "9 of 9" reads as what it actually is:
+   ticked checklist points, not an unexplained score "on coding task". Kept
+   apart from the number itself so pluralising the noun is one word here
+   rather than a paragraph of string-splitting where it is used. */
+const ACH_PHRASE = {
+  "Quiz": (m) => " of " + m + " quiz question" + (m === 1 ? "" : "s") + " right",
+  "Multiple choice": (m) => " of " + m + " multiple choice question" + (m === 1 ? "" : "s") + " right",
+  "Put in order": (m) => " of " + m + " ordering task" + (m === 1 ? "" : "s") + " right",
+  "Fill the gaps": (m) => " of " + m + " gap" + (m === 1 ? "" : "s") + " filled in correctly",
+  "Short answer": (m) => " of " + m + " short answer" + (m === 1 ? "" : "s") + " right",
+  "Coding task": (m) => " of " + m + " checklist point" + (m === 1 ? "" : "s") + " ticked off"
+};
+/* Whether a task has been touched at all, read off the same live value
+   lessonTaskScore marks. A live quiz or "put in order" get() is always a
+   fully-shaped value, chosen or not, so max &gt; 0 alone cannot tell attempted
+   from untouched the way a saved row's absence can; each type needs its own
+   idea of what "nothing yet" looks like. Put in order has none once shuffled
+   that is not itself a full arrangement, so it is counted as attempted
+   either way rather than guessed at. */
+function lessonTaskAttempted(b, v){
+  if (b.type === "quiz") return !!(v && Array.isArray(v.checked) && v.checked.some(Boolean));
+  if (b.type === "mc") return v !== null && v !== undefined;
+  if (b.type === "blanks") return Array.isArray(v) && v.some(x => x !== null && x !== undefined && x !== "");
+  if (b.type === "short") return typeof v === "string" && v.trim() !== "";
+  if (b.type === "ide" || b.type === "web") return !!(v && v.ran);
+  return true;
+}
 function lessonTaskScore(b, v){
   if (b.type === "quiz"){
     const n = (b.questions || []).length;
@@ -6280,35 +6318,78 @@ function lessonTaskScore(b, v){
    ones inside an extension: "You also completed" on the summary screen is
    only ever about the second group, and never about a page nobody has
    opened, which is why this reads the live fields map rather than the
-   lesson JSON alone. */
+   lesson JSON alone.
+
+   A page still locked for this class is left out entirely, the same as
+   the Progress tab leaves it out of its own total: it is not that nothing
+   was scored there, it is that nobody could have reached it, and counting
+   its tasks as zero would mark a student down for a page that was never
+   theirs to try. */
 function achievementTotals(){
   const main = {}, ext = {};
+  const mainList = [];      // one entry per ordinary task, for the headline
   const add = (bucket, label, sc) => {
     const b = bucket[label] || (bucket[label] = { got: 0, max: 0 });
     b.got += sc.got; b.max += sc.max;
   };
-  const walk = (blocks, isExt) => (blocks || []).forEach(b => {
-    if (b.type === "extension"){
-      /* "Finished early?" is the one honest sign anything in here was
-         opened at all: a live quiz's get() is a fully-shaped object with
-         nothing chosen the moment the page is built, so asking whether it
-         looks attempted the way work.html asks of saved data would say
-         yes to every extension in the lesson, opened or not. */
-      const opened = fields[b.id] ? !!fields[b.id].get() : false;
-      if (opened) walk(b.blocks, true);
-      return;
-    }
-    if (b.type === "page" || b.type === "group"){ walk(b.blocks, isExt); return; }
-    const label = ACH_LABEL[b.type];
-    if (!label || !fields[b.id]) return;
-    let v;
-    try{ v = fields[b.id].get(); }catch(e){ return; }
-    const sc = lessonTaskScore(b, v);
-    if (!sc || !sc.max) return;
-    add(isExt ? ext : main, label, sc);
+  ((lesson && lesson.blocks) || []).forEach((page, pageIndex) => {
+    if (lockedSet && lockedSet.has(pageIndex)) return;
+    const walk = (blocks, isExt) => (blocks || []).forEach(b => {
+      if (b.type === "extension"){
+        /* "Finished early?" is the one honest sign anything in here was
+           opened at all: a live quiz's get() is a fully-shaped object with
+           nothing chosen the moment the page is built, so asking whether it
+           looks attempted the way work.html asks of saved data would say
+           yes to every extension in the lesson, opened or not. */
+        const opened = fields[b.id] ? !!fields[b.id].get() : false;
+        if (opened) walk(b.blocks, true);
+        return;
+      }
+      if (b.type === "page" || b.type === "group"){ walk(b.blocks, isExt); return; }
+      const label = ACH_LABEL[b.type];
+      if (!label || !fields[b.id]) return;
+      let v;
+      try{ v = fields[b.id].get(); }catch(e){ return; }
+      const sc = lessonTaskScore(b, v);
+      if (!sc || !sc.max) return;
+      if (isExt){ add(ext, label, sc); return; }
+      add(main, label, sc);
+      mainList.push({ label: label, title: stripTags(b.prompt || b.title) || label,
+                       got: sc.got, max: sc.max, attempted: lessonTaskAttempted(b, v) });
+    });
+    walk([page], false);
   });
-  walk((lesson && lesson.blocks) || [], false);
-  return { main: main, ext: ext };
+  return { main: main, ext: ext, mainList: mainList };
+}
+/* The one line above the tally, picked to match how it actually went
+   rather than a flat "well done" that means nothing at a low mark, or
+   nothing at all at zero. Encouragement here means saying something true
+   about the attempt, not saying something nice regardless of it. */
+function achievementHeadline(mainList){
+  const totalMax = mainList.reduce((s, x) => s + x.max, 0);
+  if (!totalMax) return "";
+  const totalGot = mainList.reduce((s, x) => s + x.got, 0);
+  const attempted = mainList.filter(x => x.attempted);
+  const fullMarks = mainList.filter(x => x.max > 0 && x.got === x.max);
+  const typeList = (list) => {
+    const names = [...new Set(list.map(x => x.label.toLowerCase()))];
+    if (names.length < 2) return names[0] || "";
+    return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  };
+  if (totalGot === 0){
+    if (!attempted.length) return "Nothing marked here yet. Have a go at the tasks in this lesson.";
+    return "You had a go at the " + typeList(attempted) + ". Have another look and see what you can pick up.";
+  }
+  if (totalGot === totalMax) return "Everything ticked off. Well done.";
+  /* The full-marks call-out is worth most exactly when the rest of the
+     mark is not: at a low score it says something genuinely good rather
+     than only what still needs work, but at a decent score it would be
+     fussing over one task when "good progress" already says enough. */
+  if (totalGot / totalMax < 0.5){
+    if (fullMarks.length) return "Full marks on “" + fullMarks[0].title + "”! There is more to pick up on the rest.";
+    return "A start on the " + typeList(attempted) + ", with more still to pick up.";
+  }
+  return "Good progress, with a bit more still to pick up.";
 }
 /* A number that counts up to what it is rather than simply appearing:
    still plain, still simple, but noticed. Driven by rAF rather than a CSS
@@ -6330,10 +6411,11 @@ function achievementLines(totals){
   const box = el("div");
   Object.keys(totals).forEach(label => {
     const t = totals[label];
+    const tail = (ACH_PHRASE[label] || (m => " of " + m + " on " + label.toLowerCase()))(t.max);
     const row = el("p","ach-row");
     const num = el("b","ach-num");
     row.appendChild(num);
-    row.appendChild(el("span","ach-of", " out of " + t.max + " on " + label.toLowerCase()));
+    row.appendChild(el("span","ach-of", tail));
     box.appendChild(row);
     countUp(num, t.got, 700);
   });
@@ -6346,6 +6428,8 @@ function achievementCard(){
   if (!Object.keys(totals.main).length) return null;
   const card = el("div","st-card ach-card");
   card.appendChild(el("h2","sect-head","What you got done"));
+  const headline = achievementHeadline(totals.mainList);
+  if (headline) card.appendChild(el("p","ach-headline", headline));
   card.appendChild(achievementLines(totals.main));
   if (Object.keys(totals.ext).length){
     card.appendChild(el("p","ach-also","You also completed…"));
@@ -6393,9 +6477,20 @@ function showLessonComplete(revisit, justFinished){
   layout.appendChild(heroCol);
   if (fb || ach){
     const cards = el("div","done-cards");
-    if (ach){ ach.classList.add("flyin","in"); cards.appendChild(ach); }
-    if (fb){ fb.classList.add("flyin","in"); cards.appendChild(fb); }
+    if (ach){ ach.classList.add("flyin"); cards.appendChild(ach); }
+    if (fb){ fb.classList.add("flyin"); cards.appendChild(fb); }
     layout.appendChild(cards);
+    /* Revisiting shows both straight away; arriving for the first time
+       lets the tick have its moment before anything slides in after it,
+       the achievement card first since it is the one about what they just
+       did, the same beat renderAssessmentComplete uses for its own cards. */
+    if (!justFinished){
+      if (ach) ach.classList.add("in");
+      if (fb) fb.classList.add("in");
+    } else {
+      if (ach) setTimeout(() => ach.classList.add("in"), 500);
+      if (fb) setTimeout(() => fb.classList.add("in"), 1000);
+    }
   }
   box.appendChild(layout);
 

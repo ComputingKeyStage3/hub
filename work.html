@@ -603,7 +603,9 @@ function openProgressFullscreen(){
      the same button asks to leave rather than to open a second one. */
   if (shutProgressFullscreen) return shutProgressFullscreen();
   const pane = $("progressPane");
-  const parts = [$("progressFilters"), $("progressMsg"), document.querySelector(".progresswrap"), $("progressStats")]
+  /* The stats stay behind: they are a summary of the table, not part of
+     it, and a wall of numbers is not what a full screen view is for. */
+  const parts = [$("progressFilters"), $("progressMsg"), document.querySelector(".progresswrap")]
     .filter(Boolean);
   const back = el("div","modal-back");
   const box = el("div","modal wide fullprev progress-full");
@@ -704,11 +706,15 @@ function paintProgress(){
   table.appendChild(thead); table.appendChild(tbody);
   const rowPage = el("tr"), rowTask = el("tr");
   thead.appendChild(rowPage); thead.appendChild(rowTask);
-  const nameHead = el("th","pcol-name pcol-sort","Student" + sortArrow(progressSort.key === "displayName" ? "displayName" : "username"));
-  nameHead.rowSpan = 2;
-  nameHead.title = "Sort by username or by name";
-  nameHead.addEventListener("click", clickNameSort);
-  rowPage.appendChild(nameHead);
+  /* The page-name strip runs above the whole table, Student and Total
+     included, rather than stopping short of them: a rowspan there used to
+     make both columns as tall as the page row and the task row put
+     together, which is taller than either needs to be on its own. A blank
+     cell here, matching height with everything else in this row, is all
+     Student and Total need from it; their own header, the same height as
+     every task column's, lives in the row below like the rest. */
+  const nameBlank = el("th","pcol-name pcol-page");
+  rowPage.appendChild(nameBlank);
   /* Columns for the same page sit under one heading between them, so a page
      with two checklists on it reads as one page with two columns rather
      than two unrelated columns that happen to be neighbours. An extension
@@ -724,16 +730,19 @@ function paintProgress(){
     rowPage.appendChild(pageHead);
     i = j;
   }
-  const totalHead = el("th","pcol-total pcol-sort","Total" + sortArrow("total"));
-  totalHead.rowSpan = 2;
-  totalHead.addEventListener("click", () => clickColumnSort("total"));
-  rowPage.appendChild(totalHead);
+  const totalBlank = el("th","pcol-total pcol-page");
+  rowPage.appendChild(totalBlank);
+
+  const nameHead = el("th","pcol-name pcol-sort","Student" + sortArrow(progressSort.key === "displayName" ? "displayName" : "username"));
+  nameHead.title = "Sort by username or by name";
+  nameHead.addEventListener("click", clickNameSort);
+  rowTask.appendChild(nameHead);
   shown.forEach(t => {
     const th = el("th","pcol-sort");
     /* The type is what fits in the column; the page row above already says
        where it is, so the full title is left for a hover rather than
        crowding the header. */
-    th.title = t.pageTitle + " \u2014 " + t.title;
+    th.title = t.pageTitle + " \u00b7 " + t.title;
     th.appendChild(el("span","", t.label + sortArrow(t.id)));
     th.addEventListener("click", () => clickColumnSort(t.id));
     const hidden = progressHiddenCols.has(t.id);
@@ -747,6 +756,9 @@ function paintProgress(){
     th.appendChild(eye);
     rowTask.appendChild(th);
   });
+  const totalHead = el("th","pcol-total pcol-sort","Total" + sortArrow("total"));
+  totalHead.addEventListener("click", () => clickColumnSort("total"));
+  rowTask.appendChild(totalHead);
   syncProgressHeaderOffset();
 
   sorted.forEach(st => {
@@ -928,18 +940,22 @@ function addFeedbackFoot(st, pageIndex){
 function openTaskPreview(st, t){
   setInspectPayload(st, rows.find(r => r.username === st.username) || null);
   openWorkPreview(
-    "lesson.html?id=" + encodeURIComponent(lessonId) +
+    "lesson.html?id=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(cls) +
       "&view=1&embed=1&step=" + t.pageIndex + "&highlight=" + encodeURIComponent(t.id),
     t.label + " \u00b7 " + st.display_name + " \u00b7 " + t.pageTitle,
     addFeedbackFoot(st, t.pageIndex));
 }
 /* A whole student's work, on its own: what clicking a name in the markbook
    opens, on their summary screen since that is the one page that is never
-   any particular task. */
+   any particular task. &group= is what lets that screen's achievement
+   card ask the same question the Progress tab already asked: which pages
+   are actually released to this class, so its own total never counts a
+   page nobody here could have reached. */
 function openStudentPreview(st){
   setInspectPayload(st, rows.find(r => r.username === st.username) || null);
   openWorkPreview(
-    "lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1&embed=1&summary=1",
+    "lesson.html?id=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(cls) +
+      "&view=1&embed=1&summary=1",
     st.display_name + "\u2019s work",
     addFeedbackFoot(st));
 }
@@ -1038,7 +1054,7 @@ function showStudent(i, step){
      page, so it is asked for by name. */
   const pages = ((lessonJson && lessonJson.blocks) || []).length;
   const onSummary = !allPages && step !== undefined && step >= pages;
-  frameGo("lesson.html?id=" + encodeURIComponent(lessonId) +
+  frameGo("lesson.html?id=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(cls) +
     "&view=1&embed=1" + (allPages ? "&all=1" : "") +
     (onSummary ? "&summary=1" : "") +
     (step !== undefined && !allPages && !onSummary ? "&step=" + step : "") +
