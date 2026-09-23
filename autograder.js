@@ -559,14 +559,15 @@
     }
   }
 
-  /* A teacher can write their own words for a line the student has not met
-     yet, in place of the wording built in here. Only for a plain miss: a
-     "broken" result means the check itself is set up wrong, and hiding that
-     behind a friendly sentence would leave a lesson quietly not working. */
+  /* A line the student has not met yet says only what the teacher wrote
+     under it, and nothing at all when they wrote nothing: the wording built
+     in above ("Only 2 lines so far, 4 are needed") is not shown to a student
+     any more. Only for a plain miss: a "broken" result
+     means the check itself is set up wrong, and hiding that would leave a
+     lesson quietly not working. */
   function ownWords(check, res){
     if (!res || res.ok || res.broken) return res;
-    const own = String((check && check.hint) || "").trim();
-    if (own) res.note = own;
+    res.note = String((check && check.hint) || "").trim();
     return res;
   }
 

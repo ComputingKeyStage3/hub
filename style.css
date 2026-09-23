@@ -3468,13 +3468,18 @@ body > .loadscreen{ animation:none }
    function" ran together. A little room and a background of its own make it
    read as a thing being named rather than part of the sentence. The grey
    matches what the lesson builder shows while it is being written. */
-.prose code, .q-ask code, .pg-t code, .brief code, .kw-word code, .modal-text code{
+.prose code, .q-ask code, .pg-t code, .brief code, .kw-word code, .modal-text code,
+.check-text code{
   font-family:var(--mono); font-size:12pt; background:var(--panel-2);
   border:1px solid var(--line); border-radius:5px;
   padding:1px 5px; margin:0 3px;
 }
+/* a checklist line is set smaller than a paragraph, and 12pt code in it
+   stood taller than the words either side */
+.check-text code{font-size:.92em; padding:0 4px; margin:0 2px}
 html[data-bg=dark] .prose code, html[data-bg=dark] .q-ask code,
-html[data-bg=dark] .pg-t code, html[data-bg=dark] .brief code{
+html[data-bg=dark] .pg-t code, html[data-bg=dark] .brief code,
+html[data-bg=dark] .check-text code{
   background:#2A303B; border-color:#3D434F;
 }
 

@@ -3639,7 +3639,7 @@ function checklistPopup(block, isWeb){
             c.label = plainWords(html);
             saveDraft();
           },
-          { rows:1, lists:false, code:false, pictures:false,
+          { rows:1, lists:false, code:"inline", pictures:false,
             placeholder:"What the student sees" });
         ed.classList.add("checkname");
         nameField.appendChild(ed);
@@ -3849,13 +3849,13 @@ function checklistPopup(block, isWeb){
         }
 
         /* Last, so it applies whatever kind of check this is. Left empty, the
-           built-in wording is used. Teacher-checked lines never reach here:
+           line says nothing under it. Teacher-checked lines never reach here:
            they have nothing to fail at, so there is nothing to say about it. */
         const hrow = el("div","bfield wide");
         hrow.appendChild(el("label","","What to say if they have not got it yet"));
         const hin = el("input");
         hin.value = c.hint || "";
-        hin.placeholder = "Leave empty for the usual wording";
+        hin.placeholder = "Leave empty for no hint";
         hin.addEventListener("input", () => { c.hint = hin.value; saveDraft(); });
         hrow.appendChild(hin);
         card.appendChild(hrow);

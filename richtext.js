@@ -647,7 +647,43 @@
       return false;
     }
 
-    if (o.code !== false){
+    /* Pressing it again takes the tag off: the writing inside goes back
+       where the tag was, which is what a toggle is expected to do. */
+    function toggleInline(){
+      const already = insideTag("CODE");
+      if (already){ unwrap(already); return; }
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+      const range = sel.getRangeAt(0);
+      const code = document.createElement("code");
+      /* surroundContents refuses a selection that starts inside a bold word
+         and ends outside it, so that one is lifted out and wrapped instead */
+      try{ range.surroundContents(code); }
+      catch(e){
+        try{ code.appendChild(range.extractContents()); range.insertNode(code); }catch(e2){ return; }
+        /* splitting the bold word leaves an empty <b></b> beside it */
+        [code.previousSibling, code.nextSibling].forEach(n => {
+          if (n && n.nodeType === 1 && !n.textContent && !n.querySelector("img")) n.remove();
+        });
+      }
+      const after = document.createRange();
+      after.selectNodeContents(code);
+      sel.removeAllRanges(); sel.addRange(after);
+    }
+
+    /* A box that holds one line, a checklist line, still wants a name or a
+       bit of code picked out in it, but a block would break the line in two.
+       It gets the one button, which does the one thing, with no menu. */
+    if (o.code === "inline"){
+      const codeBtn = tool("&lt;/&gt;", "Code", () => {}, "rt-code");
+      codeBtn.addEventListener("mousedown", () => { saved = save(); });
+      codeBtn.addEventListener("click", () => {
+        restore(saved);
+        toggleInline();
+        box.focus(); fire(); refreshState();
+      });
+    }
+    else if (o.code !== false){
       const codeBtn = tool("&lt;/&gt;", "Code", () => {}, "rt-code");
       const codeMenu = document.createElement("div");
       codeMenu.className = "rt-palette rt-codemenu";
@@ -667,16 +703,6 @@
           box.focus(); fire(); refreshState();
         });
         codeMenu.appendChild(b);
-      }
-      /* Pressing it again takes the tag off: the writing inside goes back
-         where the tag was, which is what a toggle is expected to do. */
-      function toggleInline(){
-        const already = insideTag("CODE");
-        if (already){ unwrap(already); return; }
-        const sel = window.getSelection();
-        if (!sel || !sel.rangeCount || sel.isCollapsed) return;
-        const code = document.createElement("code");
-        try{ sel.getRangeAt(0).surroundContents(code); }catch(e){}
       }
       function makeBlock(lang){
         const here = blockNow() || blockIn(saved ? saved.startContainer : null);
