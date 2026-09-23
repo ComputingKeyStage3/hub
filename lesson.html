@@ -3352,8 +3352,17 @@ try{
    re-run to find out. */
 function checkFlags(checklist){
   const res = checklist.results ? checklist.results() : null;
-  if (!Array.isArray(res)) return undefined;
-  return res.map(r => !!(r && r.ok));
+  if (Array.isArray(res)) return res.map(r => !!(r && r.ok));
+  /* Nothing has been run this page load yet, which is the normal state for
+     a teacher reading saved work read-only, or a student who reopened a
+     task and has not pressed Run again: results() only ever reflects a
+     run that happened in THIS visit, never one from before it. What is
+     actually ticked on screen right now is what set() just restored from
+     the save, so it is the honest answer rather than no answer at all. A
+     manual line's own tick lives in getManual, so mixing it in here as
+     well changes nothing: nothing downstream reads this array for one. */
+  return checklist.list && typeof checklist.list.ticked === "function"
+    ? checklist.list.ticked() : undefined;
 }
 
 /* Every checklist on the page, so the teacher-only lines can be turned on once
@@ -3867,6 +3876,11 @@ function rIDE(b){
       runs = Number(v.runs) || (ran ? 1 : 0);
       lastCarried = v.carried ? ta.value : null;
       if (checklist && v.manual) checklist.list.setManual(v.manual);
+      /* The ticks from the last real run, put back without running anything:
+         a teacher opening this is reading what happened, not asking it to
+         happen again. Manual ticks are set first because wrap.show leaves
+         them alone either way, but nothing here depends on the order. */
+      if (checklist && Array.isArray(v.checks)) checklist.list.show(v.checks.map(ok => ({ ok: !!ok })));
       repaint();
     }
   };
@@ -6220,6 +6234,125 @@ function paintStatus(elm, state){
                   : "Could not reach the server, press Save Work to try again";
 }
 
+/* How well one task went, the same rules work.html's Progress tab marks by,
+   so a number here is never a different opinion from the one a teacher
+   sees of the same work. Only ever called for an ordinary lesson, never an
+   assessment, which has its own scoring and its own screen. */
+const ACH_LABEL = { quiz:"Quiz", mc:"Multiple choice", order:"Put in order",
+                     blanks:"Fill the gaps", short:"Short answer",
+                     ide:"Coding task", web:"Coding task" };
+function lessonTaskScore(b, v){
+  if (b.type === "quiz"){
+    const n = (b.questions || []).length;
+    if (!n) return null;
+    const got = (v && Array.isArray(v.solved)) ? v.solved.filter(Boolean).length : 0;
+    return { got: got, max: n };
+  }
+  if (b.type === "mc") return { got: (v !== null && v !== undefined && v === b.answer) ? 1 : 0, max: 1 };
+  if (b.type === "order"){
+    if (!Array.isArray(b.items)) return null;
+    const ok = Array.isArray(v) && v.length === b.items.length && v.every((x, i) => x === i);
+    return { got: ok ? 1 : 0, max: 1 };
+  }
+  if (b.type === "blanks"){
+    const accepted = [];
+    String(b.text || "").replace(/\[\[(.*?)\]\]/g, (_, g) => { accepted.push(g.split("|")); return ""; });
+    if (!accepted.length) return null;
+    let got = 0;
+    accepted.forEach((set, i) => {
+      const given = (v && v[i]) ? String(v[i]) : "";
+      if (set.map(normAns).includes(normAns(given))) got++;
+    });
+    return { got: got, max: accepted.length };
+  }
+  if (b.type === "short")
+    return { got: (window.shortAnswer && window.shortAnswer.mark(b, v).ok) ? 1 : 0, max: 1 };
+  if ((b.type === "ide" || b.type === "web") && Array.isArray(b.checks) && b.checks.length){
+    const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
+    const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
+    let got = 0;
+    b.checks.forEach((c, i) => { if (c && c.manual ? manual[i] === true : !!flags[i]) got++; });
+    return { got: got, max: b.checks.length };
+  }
+  return null;
+}
+/* Every scored task in the lesson, split into the ordinary ones and the
+   ones inside an extension: "You also completed" on the summary screen is
+   only ever about the second group, and never about a page nobody has
+   opened, which is why this reads the live fields map rather than the
+   lesson JSON alone. */
+function achievementTotals(){
+  const main = {}, ext = {};
+  const add = (bucket, label, sc) => {
+    const b = bucket[label] || (bucket[label] = { got: 0, max: 0 });
+    b.got += sc.got; b.max += sc.max;
+  };
+  const walk = (blocks, isExt) => (blocks || []).forEach(b => {
+    if (b.type === "extension"){
+      /* "Finished early?" is the one honest sign anything in here was
+         opened at all: a live quiz's get() is a fully-shaped object with
+         nothing chosen the moment the page is built, so asking whether it
+         looks attempted the way work.html asks of saved data would say
+         yes to every extension in the lesson, opened or not. */
+      const opened = fields[b.id] ? !!fields[b.id].get() : false;
+      if (opened) walk(b.blocks, true);
+      return;
+    }
+    if (b.type === "page" || b.type === "group"){ walk(b.blocks, isExt); return; }
+    const label = ACH_LABEL[b.type];
+    if (!label || !fields[b.id]) return;
+    let v;
+    try{ v = fields[b.id].get(); }catch(e){ return; }
+    const sc = lessonTaskScore(b, v);
+    if (!sc || !sc.max) return;
+    add(isExt ? ext : main, label, sc);
+  });
+  walk((lesson && lesson.blocks) || [], false);
+  return { main: main, ext: ext };
+}
+/* A number that counts up to what it is rather than simply appearing:
+   still plain, still simple, but noticed. Driven by rAF rather than a CSS
+   animation, so it plays at a school where Windows' own reduced-motion
+   setting has already turned every CSS animation off across the estate;
+   a handful of digits changing over well under a second is not the kind
+   of motion that setting exists to spare anyone from. */
+function countUp(target, to, ms){
+  if (!to){ target.textContent = "0"; return; }
+  const start = performance.now();
+  function tick(now){
+    const p = Math.min(1, (now - start) / ms);
+    target.textContent = String(Math.round(to * p));
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+function achievementLines(totals){
+  const box = el("div");
+  Object.keys(totals).forEach(label => {
+    const t = totals[label];
+    const row = el("p","ach-row");
+    const num = el("b","ach-num");
+    row.appendChild(num);
+    row.appendChild(el("span","ach-of", " out of " + t.max + " on " + label.toLowerCase()));
+    box.appendChild(row);
+    countUp(num, t.got, 700);
+  });
+  return box;
+}
+/* Left out entirely when there is nothing quantifiable in the lesson, the
+   same as the Progress tab leaves a lesson like that off its own count. */
+function achievementCard(){
+  const totals = achievementTotals();
+  if (!Object.keys(totals.main).length) return null;
+  const card = el("div","st-card ach-card");
+  card.appendChild(el("h2","sect-head","What you got done"));
+  card.appendChild(achievementLines(totals.main));
+  if (Object.keys(totals.ext).length){
+    card.appendChild(el("p","ach-also","You also completed…"));
+    card.appendChild(achievementLines(totals.ext));
+  }
+  return card;
+}
 function showLessonComplete(revisit, justFinished){
   const words = doneWords();
   const box = doneShell(words);
@@ -6249,17 +6382,19 @@ function showLessonComplete(revisit, justFinished){
     hero.appendChild(back);
   }
 
-  /* With feedback there are two columns, as an assessment has. Without, the
-     score sits on its own in the middle. */
+  /* With feedback, or an achievement card, or both, there are two columns,
+     as an assessment has. With neither, the score sits on its own in the
+     middle. */
   const fb = feedbackCard(teacherNote);
-  const layout = el("div","done-layout" + (fb ? "" : " alone"));
+  const ach = achievementCard();
+  const layout = el("div","done-layout" + (fb || ach ? "" : " alone"));
   const heroCol = el("div","done-hero-col");
   heroCol.appendChild(hero);
   layout.appendChild(heroCol);
-  if (fb){
+  if (fb || ach){
     const cards = el("div","done-cards");
-    fb.classList.add("flyin","in");
-    cards.appendChild(fb);
+    if (ach){ ach.classList.add("flyin","in"); cards.appendChild(ach); }
+    if (fb){ fb.classList.add("flyin","in"); cards.appendChild(fb); }
     layout.appendChild(cards);
   }
   box.appendChild(layout);

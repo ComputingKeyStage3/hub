@@ -618,6 +618,10 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .st-card p{font-size:17.5px; margin:0 0 10px; line-height:1.55}
 .st-strength b{color:var(--mint); margin-right:8px}
 .st-target b{color:var(--amber); margin-right:8px}
+/* the summary screen's tally of checklist ticks and quiz marks */
+.ach-num{font-family:var(--display); font-size:28px; color:var(--amber); margin-right:7px}
+.ach-of{color:var(--muted)}
+.ach-also{font-weight:700; margin:16px 0 4px; color:var(--muted)}
 
 .resp-sub{color:var(--muted); font-size:15.5px; margin:0 0 18px}
 .resp-task{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin:0 0 16px}
@@ -1765,6 +1769,26 @@ body.workpage .grow{flex:1}
 /* a mark that opens the work it was given for */
 .progresscell .score{cursor:pointer}
 .progresscell .score:hover{text-decoration:underline}
+/* the eye that hides one column's marks without taking the column away,
+   so the same button is still there, in the same place, to bring it back */
+.eye-toggle{margin-left:6px; padding:0; width:16px; height:16px; min-width:0;
+  border:none; background:transparent; color:inherit; opacity:.5; font-size:11px;
+  line-height:16px; vertical-align:middle; position:relative; cursor:pointer}
+.eye-toggle:hover{opacity:.9}
+.eye-toggle.off{opacity:.85}
+.eye-toggle.off::after{content:""; position:absolute; left:1px; right:1px; top:50%;
+  height:1.6px; background:currentColor; transform:rotate(-45deg)}
+/* pushed to the far right of the filter row, whatever else is in it */
+.progress-full-btn{margin-left:auto}
+/* how well the class did, one task type at a time */
+.progress-types{background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
+  padding:10px 16px; flex:1 1 260px}
+.progress-types b{display:block; font-size:12.5px; color:var(--muted); margin:0 0 8px}
+.progress-typeavgs{display:flex; flex-wrap:wrap; gap:8px}
+.typeavg{font-size:13px; font-weight:700; padding:4px 10px; border-radius:999px; background:var(--panel)}
+.typeavg.yes{color:var(--mint); border:1.5px solid var(--mint-dim)}
+.typeavg.part{color:var(--amber-dark); border:1.5px solid var(--amber)}
+.typeavg.no{color:var(--red); border:1.5px solid var(--red)}
 
 /* --- looking at work --- */
 .worksplit{flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 340px;

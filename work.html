@@ -38,6 +38,7 @@
   <div class="progresswrap">
     <table class="progresstable" id="progressTable"></table>
   </div>
+  <div class="mbstats" id="progressStats"></div>
 </div>
 
 <!-- ================= viewing work ================= -->
@@ -551,6 +552,9 @@ async function fetchLocks(lesson){
    because un-ticking the one you picked already means that. */
 let progressPicked = new Set();
 let lockedPages = new Set();   // filled by fetchLocks in boot() and refreshWork()
+let progressShowExt = false;   // extension tasks are left out until asked for
+let progressHiddenCols = new Set();   // task ids a teacher has hidden by eye, for presenting the class
+let shutProgressFullscreen = null;   // set while the full-screen markbook is open
 /* What the markbook is sorted by. "username"/"displayName" are the two
    ways to read the name column; anything else is a task id, or "total". */
 let progressSort = { key: "username", dir: 1 };
@@ -587,20 +591,68 @@ function syncProgressHeaderOffset(){
     Array.from(rowTask.children).forEach(th => { th.style.top = h + "px"; });
   });
 }
+/* The whole markbook, bigger: the filters, the table and the stats really
+   are the same three elements, just moved into a full-screen pop-up and
+   back again on the way out, rather than redrawn from scratch a second
+   time in two places that could then disagree. getElementById finds them
+   by id wherever in the document they currently sit, so paintProgress
+   keeps working on whichever of the two copies is real without knowing
+   there even is a pop-up. */
+function openProgressFullscreen(){
+  /* Already open: the button just moved inside it, so a second press on
+     the same button asks to leave rather than to open a second one. */
+  if (shutProgressFullscreen) return shutProgressFullscreen();
+  const pane = $("progressPane");
+  const parts = [$("progressFilters"), $("progressMsg"), document.querySelector(".progresswrap"), $("progressStats")]
+    .filter(Boolean);
+  const back = el("div","modal-back");
+  const box = el("div","modal wide fullprev progress-full");
+  const x = el("button","btn-ghost iconbtn modal-x","✕");
+  x.title = "Close";
+  const shut = () => {
+    parts.forEach(p => pane.appendChild(p));
+    back.remove();
+    document.removeEventListener("keydown", esc);
+    shutProgressFullscreen = null;
+  };
+  shutProgressFullscreen = shut;
+  function esc(e){ if (e.key === "Escape") shut(); }
+  x.addEventListener("click", shut);
+  box.appendChild(x);
+  parts.forEach(p => box.appendChild(p));
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) shut(); });
+  document.addEventListener("keydown", esc);
+  document.body.appendChild(back);
+}
 function paintProgress(){
   const filters = $("progressFilters"), table = $("progressTable"), msg = $("progressMsg");
   if (!filters || !table) return;
   /* A locked page is one the class cannot reach yet, so there is nothing
      behind its tasks worth asking about: a column of dashes for a page
      nobody could have opened would read as a class that has not tried,
-     not as a page that is not open yet. */
+     not as a page that is not open yet. Extension tasks are left out on
+     the same principle by default: they are nobody's, until asked for. */
   const allTasks = quantifiableTasks();
-  const tasks = allTasks.filter(t => !lockedPages.has(t.pageIndex));
+  const openTasks = allTasks.filter(t => !lockedPages.has(t.pageIndex));
+  const hasExt = openTasks.some(t => t.extension);
+  const tasks = openTasks.filter(t => progressShowExt || !t.extension);
   filters.innerHTML = ""; table.innerHTML = "";
+  if (hasExt){
+    const ext = el("button","btn-primary", progressShowExt ? "Hide Extension Tasks" : "Include Extension Tasks");
+    ext.addEventListener("click", () => { progressShowExt = !progressShowExt; paintProgress(); });
+    filters.appendChild(ext);
+  }
+  const full = el("button","btn-ghost iconbtn progress-full-btn","⛶");
+  full.title = "Show the markbook full screen";
+  full.addEventListener("click", openProgressFullscreen);
   if (!tasks.length){
-    msg.textContent = allTasks.length
-      ? "Every page with a scored task on it is still locked for this class."
-      : "Nothing in this lesson can be scored automatically yet.";
+    filters.appendChild(full);
+    msg.textContent = !openTasks.length
+      ? (allTasks.length ? "Every page with a scored task on it is still locked for this class."
+                         : "Nothing in this lesson can be scored automatically yet.")
+      : "Every scored task left is inside an extension. Include Extension Tasks to see them.";
+    $("progressStats").innerHTML = "";
     return;
   }
   msg.textContent = "";
@@ -613,6 +665,7 @@ function paintProgress(){
     });
     filters.appendChild(pill);
   });
+  filters.appendChild(full);
   const shown = progressPicked.size ? tasks.filter(t => progressPicked.has(t.label)) : tasks;
 
   /* Every mark, for every student, worked out once rather than once per
@@ -676,12 +729,22 @@ function paintProgress(){
   totalHead.addEventListener("click", () => clickColumnSort("total"));
   rowPage.appendChild(totalHead);
   shown.forEach(t => {
-    const th = el("th","pcol-sort", t.label + sortArrow(t.id));
+    const th = el("th","pcol-sort");
     /* The type is what fits in the column; the page row above already says
        where it is, so the full title is left for a hover rather than
        crowding the header. */
     th.title = t.pageTitle + " \u2014 " + t.title;
+    th.appendChild(el("span","", t.label + sortArrow(t.id)));
     th.addEventListener("click", () => clickColumnSort(t.id));
+    const hidden = progressHiddenCols.has(t.id);
+    const eye = el("button","eye-toggle" + (hidden ? " off" : ""), "\u{1F441}");
+    eye.title = hidden ? "Show this column's marks again" : "Hide this column's marks";
+    eye.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (hidden) progressHiddenCols.delete(t.id); else progressHiddenCols.add(t.id);
+      paintProgress();
+    });
+    th.appendChild(eye);
     rowTask.appendChild(th);
   });
   syncProgressHeaderOffset();
@@ -697,7 +760,11 @@ function paintProgress(){
     shown.forEach(t => {
       const sc = m.perTask[t.id];
       const td = el("td","progresscell");
-      if (!attempted(m.data, t.id)) td.appendChild(el("span","none","\u2013"));
+      /* Hidden by eye rather than by filter: the mark still counts in the
+         total, it is only the one cell that is not for showing right now,
+         a projector in front of the class being the usual reason. */
+      if (progressHiddenCols.has(t.id)) td.appendChild(el("span","none","\u2022\u2022\u2022"));
+      else if (!attempted(m.data, t.id)) td.appendChild(el("span","none","\u2013"));
       else{
         const cls = sc.max === 0 ? "none" : sc.got === sc.max ? "yes" : sc.got > 0 ? "part" : "no";
         const mark = el("span", cls + " score", sc.got + "/" + sc.max);
@@ -712,6 +779,76 @@ function paintProgress(){
     tr.appendChild(total);
     tbody.appendChild(tr);
   });
+  paintProgressStats(shown, marks);
+}
+
+/* The cheap, whole-lesson numbers underneath the markbook. Nothing here
+   costs more than adding up marks paintProgress had to work out anyway, so
+   it never has a different idea of a mark than the table above it, and it
+   moves with the same pills, the same Include Extension Tasks and the
+   same locked pages, though not with the eye icons: what a mark counts
+   for does not change because it is not being shown right now. */
+function paintProgressStats(shown, marks){
+  const box = $("progressStats");
+  if (!box) return;
+  box.innerHTML = "";
+  const totals = roster.map(st => marks[st.username].total).filter(t => t.max > 0);
+  if (!totals.length) return;
+  const pctOf = (t) => Math.round(100 * t.got / t.max);
+  const pctClass = (p) => p >= 80 ? "yes" : p >= 50 ? "part" : "no";
+  const stat = (big, small, cls) => {
+    const c = el("div","mbstat");
+    c.appendChild(el("b", cls || "", big));
+    c.appendChild(el("span","", small));
+    return c;
+  };
+
+  const pcts = totals.map(pctOf);
+  const avg = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+  const bands = { high: pcts.filter(p => p >= 80).length,
+                  mid: pcts.filter(p => p >= 50 && p < 80).length,
+                  low: pcts.filter(p => p < 50).length };
+  const attemptedCount = roster.filter(st => shown.some(t => attempted(marks[st.username].data, t.id))).length;
+  const fullCount = totals.filter(t => t.got === t.max).length;
+  const strugglingCount = totals.filter(t => t.got < t.max * 0.5).length;
+
+  box.appendChild(stat(avg + "%", "Class average", pctClass(avg)));
+  box.appendChild(stat(bands.high + " / " + bands.mid + " / " + bands.low, "80%+ · 50–79% · under 50%"));
+  box.appendChild(stat(attemptedCount + " of " + roster.length, "Attempted something"));
+  box.appendChild(stat(String(fullCount), "Got full marks", fullCount ? "yes" : ""));
+  box.appendChild(stat(String(strugglingCount), "Scored under half", strugglingCount ? "no" : ""));
+
+  /* One average per task type, however many columns of it there are, so
+     two checklists on different pages still read as one Coding task
+     figure; the weakest single column is kept apart from that, because
+     two checklists miles apart in how the class did would average into a
+     figure that points at neither of them. */
+  const byLabel = {};
+  let weakest = null;
+  shown.forEach(t => {
+    const b = byLabel[t.label] || (byLabel[t.label] = { got:0, max:0 });
+    let got = 0, max = 0;
+    roster.forEach(st => { const sc = marks[st.username].perTask[t.id]; got += sc.got; max += sc.max; });
+    b.got += got; b.max += max;
+    if (max){
+      const p = Math.round(100 * got / max);
+      if (!weakest || p < weakest.pct) weakest = { t, pct: p };
+    }
+  });
+  if (weakest) box.appendChild(stat(weakest.pct + "%",
+    "Weakest: " + weakest.t.label + " · " + weakest.t.pageTitle, pctClass(weakest.pct)));
+
+  const typesRow = el("div","progress-types");
+  typesRow.appendChild(el("b","","By task type"));
+  const list = el("div","progress-typeavgs");
+  Object.keys(byLabel).forEach(label => {
+    const b = byLabel[label];
+    if (!b.max) return;
+    const p = Math.round(100 * b.got / b.max);
+    list.appendChild(el("span","typeavg " + pctClass(p), label + " " + p + "%"));
+  });
+  typesRow.appendChild(list);
+  box.appendChild(typesRow);
 }
 
 /* What a student's work looks like with nothing else on the page: no
