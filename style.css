@@ -4686,6 +4686,26 @@ html[data-bank=yes] .build-preview{display:none}
   .speccode{min-width:46px}
 }
 
+/* ---------- unit-wide progress ---------- */
+.progress-spark{width:100%; max-width:560px; height:90px; display:block; margin:0 0 22px}
+.spark-line{fill:none; stroke:var(--line-2); stroke-width:2}
+.spark-dot{stroke:var(--panel); stroke-width:2}
+.spark-dot.yes{fill:var(--mint)}
+.spark-dot.part{fill:var(--amber)}
+.spark-dot.no{fill:var(--red)}
+.needs-support,.unit-lesson-rows{border-top:1px solid var(--line)}
+.support-row{display:flex; justify-content:space-between; align-items:center; gap:14px;
+  padding:10px 12px; border-bottom:1px solid var(--line)}
+.unit-lesson-row{display:flex; flex-wrap:wrap; align-items:center; gap:14px;
+  padding:10px 12px; border-bottom:1px solid var(--line)}
+.unit-lesson-row .covername{flex:1; min-width:160px}
+.unit-lesson-row .coverbar{flex:1; min-width:90px; max-width:200px}
+
+@media (max-width:640px){
+  .unit-lesson-row{gap:8px}
+  .unit-lesson-row .coverbar{max-width:none}
+}
+
 /* ---------- the two buttons at the top of the builder ----------
    Lesson builder and Task builder, where the title used to be. The one you
    are on is filled in, the other reads as a link, so the pair says where

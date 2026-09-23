@@ -13,6 +13,7 @@
 <script src="xlsx.js"></script>
 <script src="menus.js"></script>
 <script src="dragline.js"></script>
+<script src="progressmath.js"></script>
 <script src="teacher.js"></script>
 <script src="settings.js"></script>
 <script src="changelog.js"></script>
@@ -295,6 +296,7 @@ setTimeout(function(){
     <div class="bigcards">
       <button class="classtile" id="openLessons"><b>&#128218; Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
       <button class="classtile" id="openStudents"><b>&#128101; Students</b><span>Add, edit and reset logins</span></button>
+      <button class="classtile" id="openProgress"><b>&#128200; Progress</b><span>How a unit is going, lesson by lesson</span></button>
       <button class="classtile" id="openCover" hidden><b>&#128202; Specification coverage</b><span>How the class is doing, point by point</span></button>
     </div>
   </div>
@@ -323,6 +325,18 @@ setTimeout(function(){
     <div class="loading mid" id="stuWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Loading the students</span></div>
     <table class="stutable" id="stuTable"></table>
     <p class="hint" id="stuMsg" style="margin-top:12px"></p>
+  </div>
+
+  <!-- ============ unit-wide progress ============ -->
+  <div id="progressView" hidden>
+    <button class="crumb" id="backClass4">&larr; <span class="bk"></span></button>
+    <button class="btn-ghost iconbtn refresh" id="refProgress" title="Refresh">&#8635;</button>
+    <h2 style="margin:14px 0 6px">Progress</h2>
+    <div class="toolrow">
+      <select class="sel" id="progressUnitSelect" style="max-width:280px"></select>
+    </div>
+    <div class="loading mid" id="progressWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Adding up the marks</span></div>
+    <div id="progressBody"></div>
   </div>
 
   <!-- ============ lessons + release ============ -->
@@ -558,6 +572,7 @@ function paintCrumbs(){
   if (v === "classView") return crumbs([top, home, { name: cls }]);
   if (v === "studentsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Students" }]);
   if (v === "coverView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Specification coverage" }]);
+  if (v === "progressView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Progress" }]);
   if (v === "unitsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units" }]);
   if (v === "keepView") return crumbs([top, home, { name:"Backups and devices" }]);
   if (v === "partsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
@@ -581,7 +596,7 @@ function crumbName(id){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView","practiceView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView","practiceView","progressView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
@@ -662,6 +677,7 @@ try{
       else if (st.view === "partsView"){ namePartsUnit(); paintParts(); }
       else if (st.view === "lessonsView"){ nameLessonShelf(); paintLessonGrid(); }
       else if (st.view === "studentsView") loadStudents();
+      else if (st.view === "progressView") openProgressView();
       else if (st.view === "classView"){ $("clsName").textContent = cls; }
     }catch(err){}
     goingBack = false;
@@ -3172,6 +3188,227 @@ function paintCoverage(){
     box.appendChild(row);
   });
 }
+/* ---------------- unit-wide progress ----------------
+   How a unit is going across every lesson in it, not just one at a time.
+   Nothing before this fetched more than one lesson's work in a single
+   screen; this fetches every lesson in the chosen unit that this class has,
+   the same way work.html's own Progress tab fetches one, added up in the
+   browser rather than in the database. For a typical unit and class that
+   is a few hundred KB and under two hundred row reads, once, when a teacher
+   actually opens this tab, cached here so flicking back to a unit already
+   looked at costs nothing more. Nothing here writes or stores anything new. */
+let progUnitCache = new Map();   // "unit\u0000class" -> { at, result }
+on("openProgress", "click", () => { unit = ""; openProgressView(); });
+on("backClass4", "click", () => openClass(cls));
+on("refProgress", "click", () => openProgressView(true));
+on("progressUnitSelect", "change", () => {
+  unit = $("progressUnitSelect").value;
+  if (unit) loadUnitProgress(); else { $("progressBody").innerHTML = ""; $("progressWait").hidden = true; }
+});
+
+async function openProgressView(force){
+  show("progressView");
+  try{ await loadCatalogue(force); }
+  catch(e){ $("progressBody").innerHTML = ""; $("progressBody").appendChild(el("p","hint", e.message)); return; }
+  paintProgressUnitSelect();
+  if (unit) await loadUnitProgress(force);
+  else{
+    $("progressWait").hidden = true;
+    $("progressBody").innerHTML = "";
+    $("progressBody").appendChild(el("p","hint", "Pick a unit above to see how it is going."));
+  }
+}
+/* The units this class has lessons in, same list and same order as the
+   Units & lessons tile offers, so a unit called the same thing in both
+   places is always the same unit. */
+function paintProgressUnitSelect(){
+  const sel = $("progressUnitSelect");
+  const mine = classLessons();
+  const names = [];
+  mine.forEach(l => { const u = l.unit || ""; if (u && names.indexOf(u) < 0) names.push(u); });
+  const order = (cat.units || []).map(u => u.name);
+  names.sort((a, b) => (order.indexOf(a) - order.indexOf(b)) || a.localeCompare(b));
+  sel.innerHTML = "";
+  const opt0 = el("option","", "Pick a unit…"); opt0.value = ""; sel.appendChild(opt0);
+  names.forEach(n => { const o = el("option","", n); o.value = n; sel.appendChild(o); });
+  sel.value = names.indexOf(unit) >= 0 ? unit : "";
+  if (sel.value !== unit) unit = sel.value;
+  if (!names.length){
+    $("progressBody").innerHTML = "";
+    $("progressBody").appendChild(el("p","hint", cls + " has no lessons filed against a unit yet."));
+  }
+}
+async function fetchClassRoster(){
+  const r = await fetch(API + "/api/teacher/students?group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "Could not load the class.");
+  return (d.students || []).slice().sort((a, b) => (a.username || "").localeCompare(b.username || ""));
+}
+async function loadUnitProgress(force){
+  const key = unit + "\u0000" + cls;
+  $("progressWait").hidden = false;
+  $("progressBody").innerHTML = "";
+  const cached = !force && progUnitCache.get(key);
+  if (cached && Date.now() - cached.at < 30000){ paintUnitProgress(cached.result); return; }
+  const lessonsInUnit = classLessonsIn(unit).slice().sort((a, b) => (a.position || 0) - (b.position || 0));
+  try{
+    const roster = await fetchClassRoster();
+    const per = await Promise.all(lessonsInUnit.map(async (l) => {
+      const [lessonR, workR] = await Promise.all([
+        fetch(API + "/api/catalog?lesson=" + encodeURIComponent(l.lesson_id), { headers: H(), cache: "no-store" }),
+        fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(l.lesson_id) +
+              "&group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" })
+      ]);
+      if (!lessonR.ok || !workR.ok) return null;
+      const lessonD = await lessonR.json(), workD = await workR.json();
+      if (!lessonD.lesson) return null;
+      /* An assessment is marked into the results table, not saved into work
+         the way an ordinary lesson's tasks are, so work.data is empty for
+         it here. Scoring it anyway would read as the whole class getting
+         nothing, which is worse than not scoring it: its marks already have
+         a home, on Specification coverage. */
+      let mr;
+      if (lessonD.lesson.assessment){
+        mr = { tasks: [], gotSum: 0, maxSum: 0, pct: null, byUsername: {}, byLabel: {}, isAssessment: true };
+      } else {
+        const locks = await window.progressMath.fetchLockedPages(API, l.lesson_id, cls, lessonD.lesson);
+        mr = window.progressMath.markRoster(lessonD.lesson, roster, workD.rows || [], locks);
+      }
+      return { id: l.lesson_id, title: titleOf(l.lesson_id), mr: mr };
+    }));
+    const result = { roster: roster, lessons: per.filter(Boolean) };
+    progUnitCache.set(key, { at: Date.now(), result: result });
+    $("progressWait").hidden = true;
+    paintUnitProgress(result);
+  }catch(e){
+    $("progressWait").hidden = true;
+    $("progressBody").appendChild(el("p","hint", e.message || "Could not load progress for this unit."));
+  }
+}
+function pctClass2(p){ return p >= 80 ? "yes" : p >= 50 ? "part" : "no"; }
+/* A small inline sparkline, one point per lesson that has anything scoreable
+   in it. Plain SVG rather than a charting library: there is only ever a
+   handful of points, and a line and some dots is all a trend needs. */
+function sparkline(points){
+  const w = 560, h = 90, pad = 10;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+  svg.setAttribute("class", "progress-spark");
+  if (points.length < 2){
+    return svg;   // one point makes no line worth drawing
+  }
+  const xAt = (i) => pad + (w - 2 * pad) * (i / (points.length - 1));
+  const yAt = (p) => pad + (h - 2 * pad) * (1 - p / 100);
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  line.setAttribute("points", points.map((p, i) => xAt(i) + "," + yAt(p.pct)).join(" "));
+  line.setAttribute("class", "spark-line");
+  svg.appendChild(line);
+  points.forEach((p, i) => {
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", xAt(i)); c.setAttribute("cy", yAt(p.pct)); c.setAttribute("r", 4.5);
+    c.setAttribute("class", "spark-dot " + pctClass2(p.pct));
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = p.title + ": " + p.pct + "%";
+    c.appendChild(title);
+    svg.appendChild(c);
+  });
+  return svg;
+}
+function paintUnitProgress(result){
+  const box = $("progressBody");
+  box.innerHTML = "";
+  const scored = result.lessons.filter(l => l.mr.maxSum > 0);
+  if (!scored.length){
+    box.appendChild(el("p","hint",
+      "Nothing in " + unit + " can be scored automatically yet, or none of it has been handed in."));
+  } else {
+    box.appendChild(el("p","unit-head","Class average, lesson by lesson"));
+    box.appendChild(sparkline(scored.map(l => ({ title: l.title, pct: l.mr.pct }))));
+
+    /* Which task type has lagged across the whole unit, not just one lesson
+       of it: the same figures paintProgressStats shows for one lesson, added
+       across every lesson the class has had in this unit. */
+    const byLabel = {};
+    scored.forEach(l => Object.keys(l.mr.byLabel).forEach(label => {
+      const b = byLabel[label] || (byLabel[label] = { got:0, max:0 });
+      b.got += l.mr.byLabel[label].got; b.max += l.mr.byLabel[label].max;
+    }));
+    const typesRow = el("div","progress-types");
+    typesRow.appendChild(el("b","","By task type, across the unit"));
+    const list = el("div","progress-typeavgs");
+    let weakest = null;
+    Object.keys(byLabel).forEach(label => {
+      const b = byLabel[label];
+      if (!b.max) return;
+      const p = Math.round(100 * b.got / b.max);
+      list.appendChild(el("span","typeavg " + pctClass2(p), label + " " + p + "%"));
+      if (!weakest || p < weakest.pct) weakest = { label, pct: p };
+    });
+    typesRow.appendChild(list);
+    box.appendChild(typesRow);
+
+    /* Below half more than once in this unit is a much stronger signal than
+       one bad lesson: it is the difference between a student who had an off
+       day and one who is quietly falling behind on this unit's ideas. */
+    const belowCount = {};   // username -> { count, of, name }
+    scored.forEach(l => Object.keys(l.mr.byUsername).forEach(username => {
+      const m = l.mr.byUsername[username];
+      if (!m.max) return;
+      const at = belowCount[username] || (belowCount[username] = { count: 0, of: 0 });
+      at.of++;
+      if (m.got < m.max * 0.5) at.count++;
+    }));
+    const stNameOf = (u) => { const st = result.roster.find(x => x.username === u); return st ? st.display_name : u; };
+    const needSupport = Object.keys(belowCount)
+      .map(u => ({ username: u, name: stNameOf(u), ...belowCount[u] }))
+      .filter(x => x.count >= 2)
+      .sort((a, b) => b.count - a.count);
+    box.appendChild(el("p","unit-head","Needs support"));
+    if (!needSupport.length)
+      box.appendChild(el("p","hint","Nobody has scored under half in more than one lesson of this unit."));
+    else{
+      const wrap = el("div","needs-support");
+      needSupport.forEach(x => {
+        const row = el("div","support-row");
+        const name = el("div","covername");
+        name.appendChild(el("span","", x.name));
+        row.appendChild(name);
+        row.appendChild(el("span","covernum", "Under half in " + x.count + " of " + x.of + " lessons"));
+        wrap.appendChild(row);
+      });
+      box.appendChild(wrap);
+    }
+  }
+
+  /* Every lesson in the unit, whether or not it had anything to score, so a
+     teacher can drop into any of them: the markbook for a specific lesson,
+     or the plain view of a class's work. */
+  box.appendChild(el("p","unit-head","Lessons in this unit"));
+  const rows = el("div","unit-lesson-rows");
+  result.lessons.forEach(l => {
+    const row = el("div","unit-lesson-row");
+    const name = el("div","covername");
+    name.appendChild(el("span","", l.title));
+    if (!l.mr.maxSum) name.appendChild(el("b","",
+      l.mr.isAssessment ? "An assessment: see Specification coverage" : "Nothing scored automatically here"));
+    row.appendChild(name);
+    if (l.mr.maxSum){
+      const bar = el("div","coverbar");
+      const fill = el("div","coverfill");
+      fill.style.width = l.mr.pct + "%";
+      fill.dataset.band = l.mr.pct >= 70 ? "good" : l.mr.pct >= 40 ? "mid" : "low";
+      bar.appendChild(fill);
+      row.appendChild(bar);
+      row.appendChild(el("span","covernum", l.mr.pct + "%"));
+    }
+    const open = el("button","btn-ghost", "Open markbook");
+    open.addEventListener("click", () => openWorkPage(l.id, "progress"));
+    row.appendChild(open);
+    rows.appendChild(row);
+  });
+  box.appendChild(rows);
+}
+
 on("backClasses", "click", () => { refreshGroups(); show("classesView"); });
 on("openClasses", "click", toClasses);
 on("backHome", "click", toHome);
@@ -4898,8 +5135,9 @@ function exportMarkbook(){
 
 /* Looking at a class's work happens on its own page, where there is room
    for the progress markbook and the feedback panel. */
-function openWorkPage(id){
-  window.open("work.html?lesson=" + encodeURIComponent(id) + "&group=" + encodeURIComponent(cls), "_blank");
+function openWorkPage(id, tab){
+  window.open("work.html?lesson=" + encodeURIComponent(id) + "&group=" + encodeURIComponent(cls) +
+              (tab ? "&tab=" + tab : ""), "_blank");
 }
 
 /* ---------- student work: view on screen or print to PDF ---------- */
