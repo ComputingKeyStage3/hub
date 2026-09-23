@@ -815,7 +815,9 @@ function compile(){
      home page group by, and neither of those has the specification. */
   if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
-  if (lesson.linger) out.linger = true;
+  /* On unless a teacher turned it off, so only the off ones are written
+     down and every lesson saved before the default changed has it on. */
+  if (lesson.linger === false) out.linger = false;
   /* Kept in the lesson itself as well as in the catalogue, so reopening it
      anywhere still knows what it is a version of. */
   if (lesson.versionOf){
@@ -902,7 +904,7 @@ function compileOne(b, id, target){
     (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
     push({ type:"page", id, title: b.title || "Tasks", task: b.task || "",
            startLocked: b.startLocked !== false,
-           autosave: b.autosave === true ? true : undefined,
+           extension: b.extension === true ? true : undefined,
            /* On unless it was turned off, so only the off ones are written
               down and every lesson made before this setting existed keeps it. */
            taskbar: b.taskbar === false ? false : undefined,
@@ -2497,20 +2499,26 @@ function card(b, i, arr){
       R("Subtitle", "task", { rows:2 });
       /* The task bar is on unless a teacher turns it off, because a page with
          several tasks on it is easier to get about with one than without.
-         Saving is off unless a teacher asks for it: every page left on would
-         be a write to the database per student per page, and 810 students
-         getting through a dozen pages is nearly ten thousand of them in an
-         hour. */
+
+         Saving on Continue used to be a setting here too. It went once the
+         lesson's own Autosave was on by default: that already sends the work
+         while they are on the page, and Continue now sends anything still
+         waiting, so a page had nothing left to decide.
+
+         An extension page is off unless asked for. It changes nothing a
+         student sees on the way through; it only moves the page's tasks out
+         of the Progress tab's main columns and into "You also completed" on
+         the tally, where finishing early belongs. */
       toggleRow([["taskbar","Task bar", true],
-                 ["autosave","Save their work on Continue", false]], "This page",
+                 ["extension","Extension page", false]], "This page",
         ["The task bar is the line of small icons down the left of the page, one "
          + "for each task, that a student can press to get straight to that task. "
          + "It is on by default, and it is not shown on a phone or where the page "
          + "holds only one task.",
-         "Saving is off by default. With it on, the first time a student goes "
-         + "forward from this page their work is sent to you, so a lesson that "
-         + "runs out of time still has it. It happens once per page, and they "
-         + "can press Save Work themselves whenever they like."]);
+         "An extension page is for students who finish early. Its tasks are left "
+         + "out of the Progress tab until Include Extension Tasks is pressed, and on "
+         + "a student's tally at the end they are counted under You also completed "
+         + "rather than against what they got done."]);
     }
 
     const inner = el("div","pagekids");
@@ -4176,21 +4184,19 @@ on("optionsBtn", "click", () => {
     const row = el("div","brow");
     const tog = el("button","btn-ghost bmini2","");
     const paint = () => {
-      tog.textContent = "Autosave: " + (lesson.linger ? "on" : "off");
-      tog.classList.toggle("right", !!lesson.linger);
+      tog.textContent = "Autosave: " + (lesson.linger !== false ? "on" : "off");
+      tog.classList.toggle("right", lesson.linger !== false);
     };
     tog.addEventListener("click", () => {
-      lesson.linger = !lesson.linger; paint(); saveDraft(); schedulePreview(); });
+      lesson.linger = lesson.linger === false; paint(); saveDraft(); schedulePreview(); });
     paint();
     row.appendChild(tog);
     row.appendChild(helpDot(
-      ["Still being tested, so it is off by default. Work reaches you when a "
-       + "student presses Continue, Finish or Save Work, which leaves whatever "
-       + "they are in the middle of unsaved. With this on their work is also "
-       + "sent half a minute after they stop typing, and at least every three "
-       + "minutes while they keep going, so a task that takes twenty minutes is "
-       + "not twenty minutes at risk. Worth having on for lessons with long "
-       + "writing or coding in them."]));
+      ["On by default. Their work is sent half a minute after they stop typing, "
+       + "at least every three minutes while they keep going, and again as they "
+       + "press Continue if anything is still waiting, so a task that takes "
+       + "twenty minutes is not twenty minutes at risk. Turned off, work only "
+       + "reaches you when a student presses Finish or Save Work."]));
     w4.appendChild(row); box.appendChild(w4);
 
     box.appendChild(versionField());
@@ -7632,7 +7638,7 @@ function fromCompiled(data, meta){
                 point: data.point || "",
                 assessment: !!data.assessment && !data.practical, practical: !!data.practical,
                 homework: !!data.homework,
-                linger: !!data.linger,
+                linger: data.linger !== false,
                 versionOf: data.versionOf || "", versionName: data.versionName || "",
                 versionNote: data.versionNote || "", versionCode: data.versionCode || "",
                 marking: data.marking || "score", outOf: data.outOf || 20, rubric: data.rubric || [],
@@ -7658,7 +7664,7 @@ function fromCompiled(data, meta){
        quietly unlocked every page in it. */
     if (b.type === "page") return { type:"page", title:b.title || "", task:b.task || "",
                                     startLocked: b.startLocked !== false,
-                                    autosave: b.autosave === true,
+                                    extension: b.extension === true,
                                     taskbar: b.taskbar !== false,
                                     passHash: b.passHash || undefined,
                                     blocks:(b.blocks || []).map(back) };

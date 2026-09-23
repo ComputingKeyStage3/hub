@@ -460,7 +460,12 @@ function quantifiableTasks(){
       const t = taskInfo(b);
       if (t){ t.pageIndex = pageIndex; t.pageTitle = title; t.extension = ext; out.push(t); }
     });
-    walk([page], pageTitle, false);
+    /* A whole page a teacher marked as an extension page is treated the same
+       as an extension container: out of the markbook until asked for, and
+       under its own "Extension:" heading when it is in. */
+    if (page.type === "page" && page.extension === true)
+      walk(page.blocks, "Extension: " + pageTitle, true);
+    else walk([page], pageTitle, false);
   });
   return out;
 }

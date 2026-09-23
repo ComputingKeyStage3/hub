@@ -1510,53 +1510,31 @@ async function tryContinue(){
        Asked here rather than on the page itself, because the question is
        "may I move on yet", not "can I do this task". */
     if (OFFLINE && !(await passGate(target))) return;
-    const leaving = step;                  // showStep is about to move it on
     hideWaitModal(); showStep(target);
     /* After the move, so the position stored with the work is the page they
        have arrived at: coming back to the lesson should carry on, not repeat
        the page they just finished. */
-    autosaveOnLeaving(leaving);
+    lingerFlush();
   }
   else { showWaitModal(); startCooldown(); }
 }
 
 /* ---------- saving as they leave a page ----------
-   A teacher can set any page to send the work off as the student goes forward
-   from it, so a lesson that runs out of time still has what was done in it.
-
-   Only the first time they leave that page, and only when they actually got
-   through: a locked page ahead means they are still on this one. Pressing
-   Continue again after wandering back would be another write per student, and
-   810 of them a dozen pages deep is thousands of writes an hour for work that
-   has mostly not changed. Whatever they type afterwards is theirs to save, or
-   goes with the save at the end.
+   Continue sends whatever the autosave below is still waiting to send, so
+   the half minute it gives a student to stop typing is not lost on the one
+   press most likely to end a lesson. Nothing waiting, nothing sent: a
+   student clicking through pages they have not touched costs no writes,
+   which is what the old per-page setting was trying to protect.
 
    Nothing waits on this. The next page is already on screen; the button in the
    corner says what is happening, which is where a student looks for it. */
-const autosavedSteps = new Set();
-function autosaveOnLeaving(i){
-  if (OFFLINE || spectate || bypassed) return;
-  if (!token || !apiReady || !restoreDone) return;
-  const st = steps[i];
-  if (!st || !st.autosave) return;
-  if (autosavedSteps.has(i)) return;
-  autosavedSteps.add(i);            // before the await, so a fast second press does nothing
-  save();                           // into this browser first, as a manual save does
-  paintSaveButtons("saving");
-  submitWork().then(state => {
-    /* A save that never reached the server has not happened, so the page is
-       allowed to try again next time they go forward from it. */
-    if (state !== "done") autosavedSteps.delete(i); else noteSaved(true);
-    paintSaveButtons(state === "done" ? "saved" : "idle");
-  }).catch(() => {
-    autosavedSteps.delete(i);
-    paintSaveButtons("idle");
-  });
+function lingerFlush(){
+  if (lingerIdleTimer || lingerCeilingTimer) lingerSave();
 }
 
 /* ---------- saving while they stay on one page ----------
-   Saving on Continue covers the moment a student goes forward, which leaves
-   the page they are sitting on now unsaved. That is fine where a page takes
+   Saving only on Continue would cover the moment a student goes forward and
+   leave the page they are sitting on now unsaved. That is fine where a page takes
    two minutes and bad where it takes twenty-five, which is the shape of most
    coding tasks: the longer the work, the more of it is at risk, so the pages
    that most need saving are exactly the ones Continue does least for.
@@ -1610,7 +1588,7 @@ function lingerSave(){
 function lingerTouch(){
   if (OFFLINE || spectate || bypassed) return;
   if (!token || !apiReady || !restoreDone) return;
-  if (!lesson || !lesson.linger) return;
+  if (!lesson || lesson.linger === false) return;
   clearTimeout(lingerIdleTimer);
   lingerIdleTimer = setTimeout(lingerSave, LINGER_IDLE_MS);
   if (lingerCeilingTimer) return;
@@ -2994,10 +2972,6 @@ function renderBlock(b, i){
   }
   final = applyLock(b, final);
   final.qid = b.id;                 // so the marked work can find this question
-  /* A page a teacher has set to save as they leave it. Kept on the step
-     rather than looked up from lesson.blocks later, because a block that
-     fails to build is never pushed and the two lists drift apart. */
-  final.autosave = b.type === "page" && b.autosave === true;
   final.section.hidden = true;
   $("blocks").appendChild(final.section);
   steps.push(final);
@@ -3509,6 +3483,64 @@ function attachChecklist(section, checks, runner, blockId){
   return { list, refresh, mark, results: () => last };
 }
 
+/* The bubble that explains a word in a code box. It sits on <body>, fixed,
+   the same as the suggestions box, because .ide-codewrap clips what is in it:
+   kept inside, a word on one of the last lines opened a bubble below the
+   bottom of the box that nobody could see. Placed from the box the text is
+   in, so the sums are the ones it always used, only in page coordinates. */
+const ideTips = new Set();
+function ideTipHideAll(){ ideTips.forEach(t => { t.hidden = true; }); }
+/* Fixed means it no longer moves with the page, so anything that scrolls
+   puts it away rather than leave it pointing at the wrong line. */
+document.addEventListener("scroll", ideTipHideAll, true);
+window.addEventListener("resize", ideTipHideAll);
+function ideTipMake(){
+  const tip = el("div","ide-tip"); tip.hidden = true;
+  document.body.appendChild(tip);
+  ideTips.add(tip);
+  return tip;
+}
+function ideTipPlace(tip, box, ta, start){
+  const before = ta.value.slice(0, start);
+  const line = before.split("\n").length - 1;
+  const col = start - (before.lastIndexOf("\n") + 1);
+  const size = parseFloat((window.getComputedStyle ? getComputedStyle(ta).fontSize : "") || "14") || 14;
+  const r = box.getBoundingClientRect();
+  const lineTop = r.top + line * size * 1.55 + 12 - (ta.scrollTop || 0);
+  const under = lineTop + size * 1.55 + 4;
+  tip.style.top = under + "px";
+  tip.style.left = (r.left + Math.max(6, col * size * 0.6 - 12 - (ta.scrollLeft || 0))) + "px";
+  tip.hidden = false;
+  /* Measured once it is showing: turned up over the line if there is no room
+     under it, and kept inside the window on the right. */
+  const h = tip.offsetHeight, w = tip.offsetWidth;
+  if (under + h > window.innerHeight - 8 && lineTop - h - 4 > 8)
+    tip.style.top = (lineTop - h - 4) + "px";
+  const left = parseFloat(tip.style.left);
+  tip.style.left = Math.max(8, Math.min(left, window.innerWidth - w - 8)) + "px";
+}
+/* A click opens the bubble only once it is clear it was a single click and
+   nothing is selected. Highlighting a word, or its line, is getting ready to
+   copy or retype it, and a bubble over the top is in the way; the first click
+   of a double click would otherwise flash one up before the second took it
+   away. */
+function ideTipWire(ta, tip, showTip){
+  let pending = null;
+  ta.addEventListener("click", (e) => {
+    clearTimeout(pending);
+    if (e.detail > 1){ tip.hidden = true; return; }
+    pending = setTimeout(showTip, 220);
+  });
+  ta.addEventListener("mousedown", () => { clearTimeout(pending); tip.hidden = true; });
+  ta.addEventListener("keyup", (e) => {
+    if (e.key === "Escape"){ tip.hidden = true; return; }
+    if (e.key && e.key.indexOf("Arrow") === 0) showTip(); else tip.hidden = true;
+  });
+  ta.addEventListener("scroll", () => { tip.hidden = true; });
+  ta.addEventListener("blur", () => { clearTimeout(pending); setTimeout(() => { tip.hidden = true; }, 120); });
+  tip.addEventListener("mousedown", (e) => { e.preventDefault(); tip.hidden = true; });
+}
+
 function rIDE(b){
   const canRun = b.run !== false;           // teachers can turn running off
   const canEdit = b.edit !== false;         // and can make the code read-only
@@ -3540,16 +3572,12 @@ function rIDE(b){
      typing behaviour all come from pyedit.js, so the builder's Starter code
      box is the same editor rather than a plain box that looks nothing like
      what the student will open. */
-  /* How tall the code box starts. Up to five lines it is the same height as
-     the console beside it, which is what makes the pair read as a pair: a two
-     line program in a box built for twenty is mostly empty. Past five lines it
-     grows with the starter, keeping two lines of room under the last one so
-     there is somewhere to carry on, and stops at the height it has always had.
+  /* How tall the code box starts: the starter code and two lines of room
+     under it, so there is always somewhere to carry on. See --ed-rows below.
 
      The sums are left to CSS rather than worked out in pixels here, so the box
-     follows the text size a student picks in the cog and the shorter boxes a
-     phone uses. A height the teacher set by hand still wins: they were looking
-     at the task when they chose it. */
+     follows the text size a student picks in the cog. A height written into
+     the lesson by hand only counts where there is no starter to measure. */
   /* The box holds code carried in from an earlier task for as long as it
      still reads exactly as it was handed over. Declared here because the
      editor built just below reads it the moment anyone types; what it is for
@@ -3560,7 +3588,7 @@ function rIDE(b){
   const ed = window.pyEdit.attach({
     value: b.starter || "",
     readOnly: !!(b.readOnly || !canEdit),
-    height: b.height || 0,
+    height: String(b.starter || "").trim() ? 0 : (b.height || 0),
     help: PY_HELP,
     tips: wantTips,
     autocomplete: b.autocomplete !== false,
@@ -3570,13 +3598,14 @@ function rIDE(b){
   });
   const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
         probs = ed.probs, repaint = ed.repaint;
-  /* Ten lines and over is the height it has always had, said outright
-     rather than left to the sum, which reaches it a line later. */
-  if (!b.height && starterRows > 5)
-    editor.style.setProperty("--ed-rows", starterRows >= 10
-      ? "var(--ed-box-max)"
-      : "clamp(var(--ed-box), calc(" + (starterRows + 2) +
-        " * var(--ed-row) + var(--ed-pad)), var(--ed-box-max))");
+  /* With starter code the box is always exactly two lines taller than it,
+     however short or long it is: a floor made a two line program sit in a
+     box of mostly nothing, and a ceiling hid the end of a long one behind a
+     scroll so the room to carry on was out of sight. Only an empty starter
+     keeps the stylesheet's height, since two lines of nothing is no box. */
+  if (String(b.starter || "").trim())
+    editor.style.setProperty("--ed-rows",
+      "calc(" + (starterRows + 2) + " * var(--ed-row) + var(--ed-pad))");
   if (b.key) codeKeys[b.key] = b.id;
   pane.appendChild(editor);
   pane.appendChild(probs);
@@ -3899,8 +3928,7 @@ function rIDE(b){
   /* Clicking a word explains it. The colouring sits under the typing area, so
      the word is worked out from where the cursor landed rather than from the
      thing that was clicked. */
-  const tip = el("div","ide-tip"); tip.hidden = true;
-  codeWrap.appendChild(tip);
+  const tip = ideTipMake();
   function wordAt(text, pos){
     if (pos < 0 || pos > text.length) return null;
     const isWord = (ch) => /[A-Za-z_0-9]/.test(ch);
@@ -3914,29 +3942,16 @@ function rIDE(b){
     /* Not on top of the suggestions box: one bubble at a time, and the one
        they are steering with the arrow keys wins. */
     if (!wantTips || (window.pyEdit.suggesting && window.pyEdit.suggesting())){ tip.hidden = true; return; }
+    if (ta.selectionStart !== ta.selectionEnd){ tip.hidden = true; return; }
     const text = ta.value;
     const found = wordAt(text, ta.selectionStart);
     if (!found || !Object.prototype.hasOwnProperty.call(PY_HELP, found.word)){ tip.hidden = true; return; }
     tip.innerHTML = "";
     tip.appendChild(el("b","", found.word + "()".slice(0, PY_FN.has(found.word) ? 2 : 0)));
     tip.appendChild(tel("span","", PY_HELP[found.word]));
-    // place it just under the line the word is on
-    const before = text.slice(0, found.start);
-    const line = before.split("\n").length - 1;
-    const col = found.start - (before.lastIndexOf("\n") + 1);
-    const size = parseFloat((window.getComputedStyle ? getComputedStyle(ta).fontSize : "") || "14") || 14;
-    tip.style.top = ((line + 1) * size * 1.55 + 16 - (ta.scrollTop || 0)) + "px";
-    tip.style.left = Math.max(6, Math.min(col * size * 0.6 - 12 - (ta.scrollLeft || 0), 260)) + "px";
-    tip.hidden = false;
+    ideTipPlace(tip, codeWrap, ta, found.start);   // just under the line the word is on
   }
-  ta.addEventListener("click", showTip);
-  ta.addEventListener("keyup", (e) => {
-    if (e.key === "Escape"){ tip.hidden = true; return; }
-    if (e.key && e.key.indexOf("Arrow") === 0) showTip(); else tip.hidden = true;
-  });
-  ta.addEventListener("scroll", () => { tip.hidden = true; });
-  ta.addEventListener("blur", () => { setTimeout(() => { tip.hidden = true; }, 120); });
-  tip.addEventListener("mousedown", (e) => { e.preventDefault(); tip.hidden = true; });
+  ideTipWire(ta, tip, showTip);
 
   return { section:s,
            onShow: carryIn,
@@ -4216,8 +4231,7 @@ function rWeb(b){
   ta.addEventListener("focus", () => { window.webPageCode = htmlNow; });
 
   /* ---------- word explanations ---------- */
-  const tip = el("div","ide-tip"); tip.hidden = true;
-  codeWrap.appendChild(tip);
+  const tip = ideTipMake();
   function wordAt(text, pos){
     if (pos < 0 || pos > text.length) return null;
     const isWord = (ch) => /[A-Za-z_$0-9-]/.test(ch);
@@ -4231,27 +4245,16 @@ function rWeb(b){
     /* Not on top of the suggestions box: one bubble at a time, and the one
        they are steering with the arrow keys wins. */
     if (!wantTips || (window.pyEdit.suggesting && window.pyEdit.suggesting())){ tip.hidden = true; return; }
+    if (ta.selectionStart !== ta.selectionEnd){ tip.hidden = true; return; }
     const found = wordAt(ta.value, ta.selectionStart);
     const dict = (window.WEB_HELP && window.WEB_HELP[kindOf[current] || "html"]) || {};
     if (!found || !Object.prototype.hasOwnProperty.call(dict, found.word)){ tip.hidden = true; return; }
     tip.innerHTML = "";
     tip.appendChild(tel("b","", (kindOf[current] === "html") ? "<" + found.word + ">" : found.word));
     tip.appendChild(tel("span","", dict[found.word]));
-    const before = ta.value.slice(0, found.start);
-    const line = before.split("\n").length - 1;
-    const col = found.start - (before.lastIndexOf("\n") + 1);
-    const size = parseFloat((window.getComputedStyle ? getComputedStyle(ta).fontSize : "") || "14") || 14;
-    tip.style.top = ((line + 1) * size * 1.55 + 16 - (ta.scrollTop || 0)) + "px";
-    tip.style.left = Math.max(6, Math.min(col * size * 0.6 - 12 - (ta.scrollLeft || 0), 260)) + "px";
-    tip.hidden = false;
+    ideTipPlace(tip, codeWrap, ta, found.start);
   }
-  ta.addEventListener("click", showTip);
-  ta.addEventListener("keyup", (e) => {
-    if (e.key === "Escape"){ tip.hidden = true; return; }
-    if (e.key && e.key.indexOf("Arrow") === 0) showTip(); else tip.hidden = true;
-  });
-  ta.addEventListener("scroll", () => { tip.hidden = true; });
-  tip.addEventListener("mousedown", (e) => { e.preventDefault(); tip.hidden = true; });
+  ideTipWire(ta, tip, showTip);
 
   /* ---------- running ---------- */
   /* runs is counted for the same reason as in the Python task: a checklist
@@ -6352,12 +6355,19 @@ function achievementTotals(){
       try{ v = fields[b.id].get(); }catch(e){ return; }
       const sc = lessonTaskScore(b, v);
       if (!sc || !sc.max) return;
+      /* A page a teacher marked as an extension page has no "Finished
+         early?" box to say it was opened, and every page is built from the
+         start, so a task on one counts only once it has visibly been had a
+         go at. An ordering task starts as a list in some order whether
+         anyone touched it or not, so for that one only getting it right
+         shows it was tried. */
+      if (isExt === "page" && !(lessonTaskAttempted(b, v) && (b.type !== "order" || sc.got > 0))) return;
       if (isExt){ add(ext, label, sc); return; }
       add(main, label, sc);
       mainList.push({ label: label, title: stripTags(b.prompt || b.title) || label,
                        got: sc.got, max: sc.max, attempted: lessonTaskAttempted(b, v) });
     });
-    walk([page], false);
+    walk([page], page.type === "page" && page.extension === true ? "page" : false);
   });
   return { main: main, ext: ext, mainList: mainList };
 }
