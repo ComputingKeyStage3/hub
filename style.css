@@ -619,7 +619,11 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:13p
 .st-strength b{color:var(--mint); margin-right:8px}
 .st-target b{color:var(--amber); margin-right:8px}
 /* the summary screen's tally of checklist ticks and quiz marks */
-.ach-headline{font-weight:700; color:var(--text)}
+.ach-headline{font-family:var(--display); font-size:19.5px; font-weight:700; color:var(--text)}
+/* smaller than the usual card heading: it is a label for the list under
+   it now, not the first thing on the card */
+.ach-card h2.ach-subhead{font-size:13px; text-transform:uppercase; letter-spacing:.04em;
+  font-family:var(--body); font-weight:800; color:var(--muted); margin:14px 0 6px}
 .ach-num{font-family:var(--display); font-size:28px; color:var(--amber); margin-right:7px}
 .ach-of{color:var(--muted)}
 .ach-also{font-weight:700; margin:16px 0 4px; color:var(--muted)}

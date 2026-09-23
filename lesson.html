@@ -6427,9 +6427,12 @@ function achievementCard(){
   const totals = achievementTotals();
   if (!Object.keys(totals.main).length) return null;
   const card = el("div","st-card ach-card");
-  card.appendChild(el("h2","sect-head","What you got done"));
+  /* The line about how it went is what is worth reading first; "What you
+     got done" is only there to introduce the list under it, so it follows
+     rather than leads, and reads as a label rather than a headline. */
   const headline = achievementHeadline(totals.mainList);
   if (headline) card.appendChild(el("p","ach-headline", headline));
+  card.appendChild(el("h2","sect-head ach-subhead","What you got done"));
   card.appendChild(achievementLines(totals.main));
   if (Object.keys(totals.ext).length){
     card.appendChild(el("p","ach-also","You also completed…"));
@@ -6480,16 +6483,23 @@ function showLessonComplete(revisit, justFinished){
     if (ach){ ach.classList.add("flyin"); cards.appendChild(ach); }
     if (fb){ fb.classList.add("flyin"); cards.appendChild(fb); }
     layout.appendChild(cards);
-    /* Revisiting shows both straight away; arriving for the first time
-       lets the tick have its moment before anything slides in after it,
-       the achievement card first since it is the one about what they just
-       did, the same beat renderAssessmentComplete uses for its own cards. */
+    /* Revisiting shows both straight away. Arriving for the first time,
+       the tick gets the middle of the screen to itself for a moment
+       first: "staged" is the same class renderAssessmentComplete puts on
+       its own two-column layout, which is what actually holds the tick
+       centred rather than merely hoping a delay before .flyin looks like
+       it was. Removing it is the hero sliding left to make room, and only
+       then do the cards themselves slide in from the right behind it. */
     if (!justFinished){
       if (ach) ach.classList.add("in");
       if (fb) fb.classList.add("in");
     } else {
-      if (ach) setTimeout(() => ach.classList.add("in"), 500);
-      if (fb) setTimeout(() => fb.classList.add("in"), 1000);
+      layout.classList.add("staged");
+      setTimeout(() => {
+        layout.classList.remove("staged");
+        if (ach) setTimeout(() => ach.classList.add("in"), 500);
+        if (fb) setTimeout(() => fb.classList.add("in"), 1000);
+      }, 950);
     }
   }
   box.appendChild(layout);
