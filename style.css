@@ -221,6 +221,11 @@ body.bypassed .btn-continue:disabled{background:var(--amber); color:var(--amber-
 .prose b{color:var(--text); font-weight:600}
 
 textarea.answer{min-height:118px; font-size:17px; line-height:1.5}
+/* A written answer sets its own height in lines (ta.rows, from the builder).
+   The minimum above would otherwise hold a one or two line box at nearly
+   five. Spelt out for the choice panel too, whose own minimum sits further
+   down and would win on order. */
+textarea.answer.answer-rows, .choice-panel textarea.answer.answer-rows{min-height:0}
 /* A short answer is one line, the way a form asks for one. Held back from
    the full width so it reads as a short answer rather than an essay. */
 input.answer{font-size:17px; line-height:1.5; flex:1 1 260px; max-width:520px}
@@ -1056,14 +1061,14 @@ html.builder .loadscreen{z-index:90}
 /* ---------- how tall the two boxes are ----------
    The code box and the console are a pair, side by side, and they start the
    same height: --ed-box is that height, and it is the console's own smallest.
-   A Python task whose starter runs past five lines sets --ed-rows on its
-   editor to grow it with the code, up to --ed-box-max, which is the height
-   every code box used to have. The line and the padding are the editor's own,
-   repeated here as numbers a sum can use.
+   A Python task with starter code sets --ed-rows on its editor to the
+   starter's own lines and two more, however many that comes to. The line
+   and the padding are the editor's own, repeated here as numbers a sum can
+   use.
 
    Only the Python task. A web task has a preview beside it rather than a
    console, and that is a different size and a different shape. */
-.ide{ --ed-box:150px; --ed-box-max:260px;
+.ide{ --ed-box:150px;
       --ed-row:calc(var(--ed-size) * 1.55); --ed-pad:24px }
 .ide-editor{display:flex; height:260px; overflow:hidden; background:var(--ed-bg)}
 /* The student's own code box, and only that one. The builder's Starter code
@@ -1278,10 +1283,22 @@ html.builder .loadscreen{z-index:90}
 /* IDE: read-only tag, no-console layout, word tooltips */
 .ide-tag{font-size:12.5px; font-weight:800; color:var(--ed-gut); border:1px solid var(--ed-line);
   border-radius:999px; padding:3px 10px}
+/* The same tag as a button, only ever drawn for a teacher: pressing it lets
+   them type in code the lesson has locked. Amber while it is unlocked, so a
+   teacher can see at a glance that the box is not how a student has it. */
+.ide-tagbtn{background:none; font-family:var(--body); cursor:pointer}
+.ide-tagbtn:hover{color:var(--amber); border-color:var(--amber)}
+.ide-tagbtn.on{color:var(--amber); border-color:var(--amber)}
 .ide-wrap.no-console{grid-template-columns:minmax(0,1fr)}
 .t-help{text-decoration:underline dotted currentColor; text-underline-offset:3px; text-decoration-thickness:1px}
-.ide-tip{position:absolute; z-index:30; max-width:290px; padding:10px 13px; border-radius:10px;
-  background:var(--panel); border:1.5px solid var(--amber); box-shadow:0 6px 18px rgba(0,0,0,.22);
+/* On <body> and fixed, like the suggestions box below, so a word near the
+   bottom of a code box opens its bubble over the page rather than inside a box
+   that clips it. See-through so the code under it can still be read: the solid
+   line first for a browser without color-mix. */
+.ide-tip{position:fixed; z-index:200; max-width:290px; padding:10px 13px; border-radius:10px;
+  background:var(--panel); background:color-mix(in srgb, var(--panel) 82%, transparent);
+  -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+  border:1.5px solid var(--amber); box-shadow:0 6px 18px rgba(0,0,0,.22);
   font-family:var(--body); font-size:14px; line-height:1.45; color:var(--text); cursor:pointer}
 .ide-tip b{display:block; font-family:var(--mono); font-size:13.5px; color:var(--amber-dark); margin-bottom:3px}
 
@@ -1578,7 +1595,6 @@ pre, code{overflow-wrap:anywhere}
   /* the code editor stacks: code above, output below */
   .ide-wrap{grid-template-columns:minmax(0,1fr)}
   .ide-editor{height:260px}
-  .ide{--ed-box-max:260px}
   .web-preview{height:300px}
 
   /* a page of tasks keeps its shape but tightens up */
@@ -1619,7 +1635,6 @@ pre, code{overflow-wrap:anywhere}
   /* editors: bigger touch targets, smaller chrome */
   .ide-bar{flex-wrap:wrap; gap:6px}
   .ide-editor{height:220px}
-  .ide{--ed-box-max:220px}
   .ide-gutter{width:34px}
   .web-preview{height:260px}
   .ide-small, .ide-tab, .web-file{padding:7px 10px}
@@ -3153,6 +3168,18 @@ html[data-build=compact] .buildbar .subtabs button{
   background:var(--panel); font-family:var(--body); font-size:16px; font-weight:700;
   color:var(--text); cursor:pointer; text-align:left}
 .modepick-item:hover{border-color:var(--amber); color:var(--amber)}
+/* Hiding the rest of a page: the levels in the pop-up, each with a line
+   saying what it asks of a student, and the one in force picked out. */
+.gatepick{display:flex; flex-direction:column; gap:3px}
+.gatepick span{font-size:14px; font-weight:500; color:var(--muted); line-height:1.4}
+.gatepick.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 8%, transparent)}
+.gatepick.on b{color:var(--amber)}
+.gatepass{margin-top:14px}
+.gatepass .stepper{align-items:center}
+.gateunit{font-weight:700; color:var(--muted); margin-left:4px}
+/* The eye on a task's card, lit while a level is set. */
+.gatebtn svg{display:block; margin:auto}
+.gatebtn.on{border-color:var(--amber); color:var(--amber)}
 /* the real year and unit pickers, borrowed by the Save pop-up */
 .savepickers{display:flex; flex-direction:column; gap:8px}
 .savepickers select{width:100%}
@@ -4396,9 +4423,9 @@ html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.c
   color:var(--amber-dark); background:var(--ed-bar); border-top:1px solid var(--ed-line)}
 
 /* ---- adding a file beside main.py ----
-   The two endings are chosen the same way the two kinds of program are, one
+   The three endings are chosen the same way the two kinds of program are, one
    step smaller, with the upload half underneath. */
-.sb-kinds-row{grid-template-columns:1fr 1fr}
+.sb-kinds-row{grid-template-columns:repeat(3, minmax(0, 1fr))}
 .sb-kind-small{grid-template-columns:1fr; padding:12px 14px; gap:2px}
 .sb-kind-small b{font-family:var(--mono); font-size:16px; color:var(--amber-dark)}
 .sb-kind.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 8%, transparent)}

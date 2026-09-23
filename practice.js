@@ -42,11 +42,13 @@
   const MAX_CODE = 10000;
   const MAX_NAME = 40;
   /* The files a Python program has beside main.py: another .py to import, or
-     a .txt to read with open(). Two of them, because that is what the storage
-     was worked out for. A picture renamed .txt would sail through any check
-     of the name, so the size cap is what actually holds the line: 20,000
-     characters is about 3,000 words, more than any KS3 exercise needs.
-     Python beside it is held to the same 10,000 as main.py. */
+     a .txt or .csv to read with open(). A .csv is only text with commas in it,
+     so it is kept, capped and shown exactly the way a .txt is. Two of them,
+     because that is what the storage was worked out for. A picture renamed
+     .txt would sail through any check of the name, so the size cap is what
+     actually holds the line: 20,000 characters is about 3,000 words, more
+     than any KS3 exercise needs. Python beside it is held to the same 10,000
+     as main.py. */
   const MAX_FILES = 2;
   const MAX_FILE_CHARS = 20000;
   const MAIN = "main.py";
@@ -57,10 +59,25 @@
      leaves takes their sandbox with them, because deleting a student
      already deletes their work. */
   const SLOT = "__practice_sandbox";
-  const KEY = "hub_sandbox";
 
-  const token = () => localStorage.getItem("hub_token") || "";
-  const whoami = () => (localStorage.getItem("hub_user") || "").toLowerCase();
+  /* A teacher has a sandbox too, for trying something out before showing a
+     class. A teacher is not a row in the students table, so their programs
+     cannot sit in the work table beside a child's: they go to a route of the
+     teacher function instead, filed under the initials picked on the way into
+     the console. Everything else, the caps, the saving in two halves, the
+     five programs, is the same code as a student's. `teacherCode` is null for
+     a student and a string (possibly "" for All (Admin)) for a teacher. */
+  let teacherCode = null;
+  const asTeacher = () => teacherCode !== null;
+  const KEY = () => asTeacher() ? "hub_sandbox_teacher" : "hub_sandbox";
+
+  const auth = () => window.teacherAuth;
+  const token = () => asTeacher()
+    ? ((auth() && auth().have()) ? "teacher" : "")
+    : (localStorage.getItem("hub_token") || "");
+  const whoami = () => asTeacher()
+    ? "teacher:" + teacherCode.toLowerCase()
+    : (localStorage.getItem("hub_user") || "").toLowerCase();
 
   function blank(){ return { user: whoami(), programs: [], notes: {}, pending: false, saved: 0 }; }
 
@@ -69,7 +86,7 @@
      belonging to somebody else have appeared on a screen here before. */
   function readLocal(){
     let d = null;
-    try{ d = JSON.parse(localStorage.getItem(KEY) || "null"); }catch(e){ d = null; }
+    try{ d = JSON.parse(localStorage.getItem(KEY()) || "null"); }catch(e){ d = null; }
     if (!d || !Array.isArray(d.programs)) return blank();
     if (!OFFLINE && String(d.user || "") !== whoami()) return blank();
     return { user: d.user || "", programs: d.programs.map(tidy).filter(Boolean),
@@ -77,7 +94,7 @@
              pending: !!d.pending, saved: d.saved || 0 };
   }
   function writeLocal(d){
-    try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){ /* a full browser: the server still has it */ }
+    try{ localStorage.setItem(KEY(), JSON.stringify(d)); }catch(e){ /* a full browser: the server still has it */ }
   }
 
   /* Anything read back, from either side, is checked rather than trusted: a
@@ -135,15 +152,17 @@
     return out;
   }
   const isCode = (name) => /\.py$/i.test(String(name || ""));
+  const isCsv = (name) => /\.csv$/i.test(String(name || ""));
 
   /* What a file may be called, before it is written into Python's own little
      filesystem: no folders, nothing but letters, numbers and the quiet
      punctuation, and one of the two endings. The name a browser hands over
      comes from the child's own computer and is not to be trusted with a path.
 
-     `want` forces the ending where the student has chosen one. Left out, a
-     name ending .py stays Python and everything else becomes text, which is
-     what uploading a file off their computer should do.
+     `want` forces the ending where the student has chosen one: "py", "txt"
+     or "csv". Left out, a name ending .py stays Python, one ending .csv stays
+     a .csv, and everything else becomes text, which is what uploading a file
+     off their computer should do.
 
      The ending is always put back in lower case. Python cares about the
      difference between DATA.TXT and data.txt, and a child typing the name
@@ -152,7 +171,8 @@
     let name = String(raw || "").split(/[\\/]/).pop().trim();
     name = name.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^[._-]+/, "").slice(0, 40);
     if (!name) return "";
-    const ending = want ? (want === "py" ? ".py" : ".txt") : (isCode(name) ? ".py" : ".txt");
+    const kind = want || (isCode(name) ? "py" : isCsv(name) ? "csv" : "txt");
+    const ending = kind === "py" ? ".py" : kind === "csv" ? ".csv" : ".txt";
     return name.replace(/\.[^.]*$/, "") + ending;
   }
   function newId(){
@@ -180,6 +200,17 @@
      by the browser, and five full programs is not far off it. */
   async function pushUp(programs, leaving){
     if (OFFLINE || !API || !token()) return false;
+    if (asTeacher()){
+      const topts = {
+        method: "POST",
+        headers: auth().json(),
+        body: JSON.stringify({ who: teacherCode, programs: programs })
+      };
+      if (leaving) topts.keepalive = true;
+      const tr = await fetch(API + "/api/teacher/sandbox", topts);
+      if (!tr.ok) throw new Error("Could not save just now.");
+      return true;
+    }
     const opts = {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
@@ -193,6 +224,16 @@
 
   async function pullDown(){
     if (OFFLINE || !API || !token()) return null;
+    if (asTeacher()){
+      const tr = await fetch(API + "/api/teacher/sandbox?who=" + encodeURIComponent(teacherCode), {
+        headers: auth().headers(), cache: "no-store"
+      });
+      if (!tr.ok) throw new Error("Could not load your programs.");
+      const td = await tr.json();
+      const mine = (td && Array.isArray(td.programs)) ? td.programs : [];
+      /* Nobody marks a teacher's programs, so there are never any notes. */
+      return { programs: capped(mine.map(tidy).filter(Boolean)), notes: {} };
+    }
     const r = await fetch(API + "/api/work?lesson=" + encodeURIComponent(SLOT), {
       headers: { Authorization: "Bearer " + token() }, cache: "no-store"
     });
@@ -312,7 +353,13 @@
        telling it already failed? The page turns these into words. */
     waiting(){ return !!state.pending; },
     stuck(){ return stuck; },
-    newId, fileName, isCode, MAIN, SLOT
+
+    /* Turns this into a teacher's sandbox, filed under their initials. Must
+       be called before anything else is asked of the store, because it
+       changes which copy in this browser is read and where saves are sent. */
+    useTeacher(code){ teacherCode = String(code || "").slice(0, 20); state = blank(); },
+    isTeacher: asTeacher,
+    newId, fileName, isCode, isCsv, MAIN, SLOT
   };
 
   /* Compared whole rather than field by field. The field list was written

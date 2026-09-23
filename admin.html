@@ -152,7 +152,7 @@ setTimeout(function(){
     <div class="bigcards">
       <button class="classtile" id="openHub"><b>&#128218; Lesson hub</b><span id="hubCount">All units and lessons</span></button>
       <button class="classtile" id="openClasses"><b>&#128101; Classes</b><span id="clsCount">Publish, pace and mark</span></button>
-      <button class="classtile" id="openPractice" hidden><b>&#9654; Practice</b><span>Sandbox programs, by student</span></button>
+      <button class="classtile" id="openPractice" hidden><b>&#9654; Practice</b><span>Your own sandbox, and students' programs</span></button>
     </div>
   </div>
 
@@ -164,6 +164,18 @@ setTimeout(function(){
   <div id="practiceView" hidden>
     <button class="crumb" id="backHome2">&larr; Home</button>
     <h2 style="margin:14px 0 4px">Practice</h2>
+    <!-- A sandbox of the teacher's own, for trying something before showing a
+         class. Five programs, the same as a student, kept under the initials
+         picked on the way in. -->
+    <div class="lessons">
+      <div class="lessonCard pracCard">
+        <button class="pracOpen" id="pracMine" type="button">
+          <span class="body"><b>My sandbox</b><span>Your own Python and web programs, up to five. Students cannot see them.</span></span>
+          <span class="go">&rarr;</span>
+        </button>
+      </div>
+    </div>
+    <h3 style="margin:22px 0 4px">Students' programs</h3>
     <p class="hint">Find a student by their username or their name, then open their sandbox programs.</p>
     <div class="toolrow">
       <span class="searchbox"><span class="searchicon">&#128269;</span><input id="pracSearch" placeholder="Search by username or name"></span>
@@ -3177,6 +3189,9 @@ function toPractice(){
    stays where it starts: out of the way. */
 if (!OFFLINE){ const tile = $("openPractice"); if (tile) tile.hidden = false; }
 on("openPractice", "click", toPractice);
+/* In a tab of its own, the same as a student's programs open: the console
+   stays where it was, and the sandbox is a page a teacher may want beside it. */
+on("pracMine", "click", () => { window.open("sandbox.html?teacher=1", "_blank"); });
 on("backHome2", "click", toHome);
 on("pracGo", "click", () => searchStudents());
 on("pracSearch", "keydown", (e) => { if (e.key === "Enter") searchStudents(); });

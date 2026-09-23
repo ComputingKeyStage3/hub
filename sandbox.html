@@ -10,6 +10,7 @@
 <script src="pyhub.js"></script>
 <script src="webhub.js"></script>
 <script src="pyedit.js"></script>
+<script src="teacher.js"></script>
 <script src="practice.js"></script>
 <script src="settings.js"></script>
 </head>
@@ -63,7 +64,7 @@
         <span class="sb-kind-ico">&#9654;</span>
         <b>Python</b>
         <span>Write and run Python, with a console and turtle drawing. You can
-          upload a text file for your program to read.</span>
+          upload a text or CSV file for your program to read.</span>
       </button>
       <button class="sb-kind" id="kindWeb">
         <span class="sb-kind-ico">&#8249;&#8250;</span>
@@ -113,6 +114,10 @@
           <b>.txt</b>
           <span>Writing, for your program to read with open().</span>
         </button>
+        <button class="sb-kind sb-kind-small" id="nfCsv">
+          <b>.csv</b>
+          <span>A table of data, for your program to read.</span>
+        </button>
       </div>
       <div class="field"><label for="nfName">What should it be called?</label>
         <input type="text" id="nfName" autocomplete="off" spellcheck="false"></div>
@@ -121,7 +126,7 @@
 
       <div class="sb-drop" id="nfDrop">
         <b>Or upload one</b>
-        <span>Drag a .py or .txt file here</span>
+        <span>Drag a .py, .txt or .csv file here</span>
         <button class="btn-ghost" id="nfBrowse">Browse my computer</button>
       </div>
     </div>
@@ -145,6 +150,22 @@ const MAX = store.MAX_PROGRAMS;
    the buttons that make, rename or delete a program are not drawn. */
 const VIEW = new URLSearchParams(location.search).get("view") !== null;
 const EMBED = new URLSearchParams(location.search).get("embed") !== null;
+
+/* ---------- a teacher's own sandbox ----------
+   The console's Practice tab opens this with ?teacher=1. It is the same page
+   a student has, writing to a sandbox of the teacher's own, filed under the
+   initials picked on the way into the console. `?view` wins if both are
+   given, because a page that only reads can never write to the wrong place. */
+const MINE_AS_TEACHER = !VIEW && new URLSearchParams(location.search).get("teacher") !== null;
+function teacherInitials(){
+  try{ return localStorage.getItem("hub_me") || ""; }catch(e){ return ""; }
+}
+if (MINE_AS_TEACHER) store.useTeacher(teacherInitials());
+/* Where the back link and the sandbox's own address go, which differ for a
+   teacher: their way home is the console, not a student's home page. */
+const HOME = MINE_AS_TEACHER ? "admin.html" : "index.html?tab=practice";
+const HERE = MINE_AS_TEACHER ? "sandbox.html?teacher=1" : "sandbox.html";
+const hereWith = (extra) => HERE + (HERE.indexOf("?") >= 0 ? "&" : "?") + extra;
 let viewing = null;         // { name, username, programs, notes }
 let notes = {};             // program id -> what the teacher wrote
 
@@ -161,11 +182,12 @@ function on(id, ev, fn){
   e.addEventListener(ev, fn);
 }
 
-/* Something to press Run on straight away. A child opening a new program and
-   finding an empty box has been handed a blank page to fill; one line that
-   works is something to change. */
+/* What a new program opens with. A web page starts with something to press
+   Run on, because an empty page shows nothing at all. A Python program
+   starts empty: the line that used to be there was deleted first thing by
+   almost everyone, so it was one more thing to clear before starting. */
 const STARTERS = {
-  python: '# Change this and press Run.\nprint("Hello")\n',
+  python: '',
   html: '<h1>My page</h1>\n<p>Change this and press Run.</p>\n',
   css: 'h1 {\n  color: teal;\n}\n',
   js: ''
@@ -406,12 +428,12 @@ function showList(push){
   $("holder").innerHTML = "";
   $("crumb").textContent = VIEW && viewing ? viewing.name + " · Sandbox" : "Sandbox";
   $("backLink").hidden = VIEW;
-  $("backLink").textContent = "← Practice";
-  $("backLink").href = "index.html?tab=practice";
+  $("backLink").textContent = MINE_AS_TEACHER ? "← Console" : "← Practice";
+  $("backLink").href = HOME;
   paintList();
   paintFeedback(null);
   tellOutside();
-  if (push !== false) go("sandbox.html");
+  if (push !== false) go(HERE);
 }
 
 function openProgram(id, push){
@@ -423,11 +445,11 @@ function openProgram(id, push){
   $("crumb").textContent = p.name || "Program";
   $("backLink").hidden = false;
   $("backLink").textContent = "← Sandbox";
-  $("backLink").href = "sandbox.html";
+  $("backLink").href = HERE;
   paintFeedback(p);
   drawEditor(p);
   tellOutside();
-  if (push !== false) go("sandbox.html?open=" + encodeURIComponent(id));
+  if (push !== false) go(hereWith("open=" + encodeURIComponent(id)));
 }
 
 function go(url){
@@ -665,7 +687,7 @@ function pythonEditor(p){
     const add = el("button","web-add", full ? "That is all " + store.MAX_FILES : "+ New file");
     add.type = "button";
     add.disabled = full;
-    add.title = full ? "Delete one to add another" : "Another .py or .txt beside your program";
+    add.title = full ? "Delete one to add another" : "Another .py, .txt or .csv beside your program";
     add.addEventListener("click", () => askNewFile(addFile));
     fileTabs.appendChild(add);
   }
@@ -878,19 +900,21 @@ function askNewFile(take){
   $("nfName").select();
 }
 function shutNewFile(){ $("newFileModal").hidden = true; takeFile = null; }
+const SUGGESTED = { py: "helper.py", txt: "data.txt", csv: "data.csv" };
 function pickKind(kind){
   newKind = kind;
   $("nfPy").classList.toggle("on", kind === "py");
   $("nfTxt").classList.toggle("on", kind === "txt");
+  $("nfCsv").classList.toggle("on", kind === "csv");
   /* A name they have already typed is theirs; only the suggestion changes. */
   const box = $("nfName");
-  const suggestion = kind === "py" ? "helper.py" : "data.txt";
-  if (!box.value.trim() || box.value === "helper.py" || box.value === "data.txt")
-    box.value = suggestion;
-  $("nfDrop").querySelector("span").textContent = "Drag a .py or .txt file here";
+  const typed = box.value.trim();
+  if (!typed || Object.keys(SUGGESTED).some(k => SUGGESTED[k] === typed))
+    box.value = SUGGESTED[kind];
 }
 on("nfPy", "click", () => pickKind("py"));
 on("nfTxt", "click", () => pickKind("txt"));
+on("nfCsv", "click", () => pickKind("csv"));
 on("nfX", "click", shutNewFile);
 on("nfCancel", "click", shutNewFile);
 on("newFileModal", "mousedown", (e) => { if (e.target === $("newFileModal")) shutNewFile(); });
@@ -907,7 +931,7 @@ on("nfGo", "click", () => {
 /* ---- bringing one in from their computer ---- */
 const dropPicker = document.createElement("input");
 dropPicker.type = "file";
-dropPicker.accept = ".txt,.py,text/plain";
+dropPicker.accept = ".txt,.py,.csv,text/plain,text/csv";
 dropPicker.className = "sb-picker";
 document.body.appendChild(dropPicker);
 on("nfBrowse", "click", () => dropPicker.click());
@@ -954,7 +978,7 @@ function readIn(file){
     return;
   }
   const reader = new FileReader();
-  reader.onerror = () => { $("nfMsg").textContent = "That file could not be read. Try saving it again as a .txt."; };
+  reader.onerror = () => { $("nfMsg").textContent = "That file could not be read. Try saving it again as a .txt or .csv."; };
   reader.onload = () => {
     if (!takeFile) return;
     const trouble = takeFile(name, String(reader.result || ""));
@@ -1124,7 +1148,7 @@ function webEditor(p){
 }
 
 /* ---------- starting up ---------- */
-on("goSignIn", "click", () => { location.href = "index.html"; });
+on("goSignIn", "click", () => { location.href = MINE_AS_TEACHER ? "admin.html" : "index.html"; });
 
 /* The notes belonging to these programs, out of the store, by id. */
 function noteMap(list){
@@ -1135,7 +1159,18 @@ function noteMap(list){
 
 async function start(){
   if (VIEW) return startViewing();
-  const signedIn = OFFLINE || !!localStorage.getItem("hub_token");
+  const signedIn = OFFLINE || (MINE_AS_TEACHER
+    ? !!(window.teacherAuth && window.teacherAuth.have())
+    : !!localStorage.getItem("hub_token"));
+  if (MINE_AS_TEACHER){
+    /* A teacher's sign-in is the console's, so that is where to send them,
+       and the line under the list is a reassurance meant for a child. */
+    const foot = document.querySelector(".sb-foot");
+    if (foot) foot.textContent = "Your own programs, for trying things out. Students cannot see them.";
+    const why = $("needIn").querySelector(".modal-text");
+    if (why) why.textContent = "Your programs are kept with your console sign-in. Sign in to the console, then open the sandbox again from Practice.";
+    $("goSignIn").textContent = "Go to the console";
+  }
   $("needIn").hidden = signedIn;
   if (!signedIn) return;
 

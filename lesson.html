@@ -477,7 +477,15 @@ function snapshot(){
    would be a lie. Comparing snapshots cannot answer this, since each one
    stamps the time. */
 let typedAt = 0;
+/* The pages holding work back until a task above it is done, each asking to
+   be told when anything on the lesson moves. Told before anything else in
+   markDirty, and before it gives up on a page that does not save, so the
+   builder's preview opens up exactly as a student's page would. A coding
+   task's checklist ticks itself long after the click that pressed Run, and
+   this is the one thing that hears about it. */
+const holdWatchers = new Set();
 function markDirty(){
+  holdWatchers.forEach(fn => { try{ fn(); }catch(e){} });
   if (spectate || !restoreDone) return;
   if (!unsavedTyping) paintSaveButtons("idle");   // they stand out again
   unsavedTyping = true;
@@ -2596,6 +2604,103 @@ function buildBlock(b, i){
    finished, so nothing was ever brought into view. */
 const FINISHABLE = ["quiz","mc","blanks","binary","binadd","label","caesar","password"];
 
+/* ---------- holding back the rest of a page ----------
+   A teacher can set a task that can be marked to keep everything below it
+   on its page out of sight until the student has done enough of it:
+
+     attempted   had a go, whether or not any of it is right
+     partial     at least one thing right: a gap, a checklist line
+     full        all of it right
+
+   A quiz has a third level of its own, its pass mark, which rQuiz answers
+   itself; a quiz set to Attempted comes through here like anything else.
+
+   Marked with lessonTaskScore, the same rules as the Progress tab and the
+   achievement tally, so "right" here is never a different opinion from
+   the mark a teacher sees. Nothing is locked by any of this: Continue
+   still works, and the page says in its own words what opens it.
+
+   Once open it stays open for the rest of the visit. A short answer typed
+   right and then carried on past would otherwise hide the rest of the page
+   in the middle of a sentence. */
+const GATE_LEVELS = ["attempted", "partial", "full"];
+function taskGate(b){
+  if (!b || !GATE_LEVELS.includes(b.gate)) return null;
+  let opened = false;
+  const value = () => {
+    const f = fields[b.id];
+    try{ return f && f.get ? f.get() : undefined; }catch(e){ return undefined; }
+  };
+  function reached(){
+    const v = value();
+    const sc = gateScore(b, v);
+    if (b.gate === "attempted") return gateAttempted(b, v) || !!(sc && sc.got > 0);
+    /* Nothing in it can be got right, so there is nothing to wait for. */
+    if (!sc || !sc.max) return true;
+    return b.gate === "partial" ? sc.got >= 1 : sc.got >= sc.max;
+  }
+  return {
+    on: () => true,
+    passed: () => opened || (opened = reached()),
+    words: () => "There is more on this page. " + gateWords(b),
+    watch: (fn) => { holdWatchers.add(fn); }
+  };
+}
+/* A checklist line a teacher ticks by hand is not the student's to finish,
+   so Full on a coding task asks for every line the code can tick itself,
+   and counts the teacher's ticks only once they are there. */
+function gateScore(b, v){
+  if ((b.type === "ide" || b.type === "web") && Array.isArray(b.checks) && b.checks.length){
+    const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
+    const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
+    let got = 0, own = 0, ownGot = 0;
+    b.checks.forEach((c, i) => {
+      const byHand = !!(c && c.manual);
+      const ticked = byHand ? manual[i] === true : !!flags[i];
+      if (ticked) got++;
+      if (!byHand){ own++; if (ticked) ownGot++; }
+    });
+    return b.gate === "full" ? { got: ownGot, max: own } : { got: got, max: b.checks.length };
+  }
+  return lessonTaskScore(b, v);
+}
+/* Whether they have done anything at all. lessonTaskAttempted has no way
+   to tell a list still in the order it was dealt from one somebody has
+   sorted, or a coding task's starter from their own code, and here those
+   are the whole question. */
+function gateAttempted(b, v){
+  if (b.type === "order")
+    return Array.isArray(v) && v.join(",") !== orderStart(b).join(",");
+  if (b.type === "ide"){
+    if (!v || typeof v !== "object") return false;
+    /* Code carried in from an earlier task is not theirs until they change it. */
+    const changed = !v.carried && String(v.code || "").trim() !== String(b.starter || "").trim();
+    return changed || !!v.ran;
+  }
+  if (b.type === "web"){
+    /* The page runs a web task by itself when it opens, so having run says
+       nothing about the student. Their own typing does. */
+    if (!v || typeof v !== "object") return false;
+    return ["html","css","js"].some(k => String(v[k] || "") !== String(b[k] || ""))
+        || Object.keys(v.extra || {}).length > 0;
+  }
+  return lessonTaskAttempted(b, v);
+}
+function gateWords(b){
+  const code = b.type === "ide" || b.type === "web";
+  if (b.gate === "attempted")
+    return b.type === "quiz" ? "Answer a question in the quiz above to open it."
+                             : "Have a go at the task above to open it.";
+  if (b.gate === "partial"){
+    if (code) return "Tick off at least one thing on the checklist above to open it.";
+    if (b.type === "blanks") return "Get at least one gap above right to open it.";
+    return "Get the task above right to open it.";
+  }
+  if (code) return "Tick off everything on the checklist above to open it.";
+  if (b.type === "blanks") return "Get every gap above right to open it.";
+  return "Get the task above right to open it.";
+}
+
 /* A page: several activities stacked together, one Continue at the end.
    This is how a Trinket-style page works, explanation, code, then questions. */
 function rPage(b){
@@ -2622,6 +2727,15 @@ function rPage(b){
       built.check = () => ({ ok:true });
       /* A task nobody has to do must not hold the page shut either. */
       built.hold = null;
+    }
+    /* A level the teacher set on this task by name: Attempted, Partial or
+       Full. After the line above on purpose. Every coding task is compiled
+       as one nobody has to do, because Run never blocks, and that must not
+       cancel a hold a teacher asked for on that very task. A quiz already
+       holding the page to its pass mark keeps that. */
+    if (!(built.hold && built.hold.on())){
+      const gate = taskGate(child);
+      if (gate) built.hold = gate;
     }
     const item = el("div","pg-item");
     item.dataset.blockId = child.id;
@@ -2671,7 +2785,11 @@ function rPage(b){
   holdNote.hidden = true;
   function refreshHold(){
     let shut = -1;
-    for (let i = 0; i < items.length; i++){
+    /* A teacher reading a student's work, or printing it, needs all of it.
+       Hiding what came after an unfinished quiz hid the very answers they
+       had opened the page to mark. */
+    const holdsOff = viewParam !== null || pdfParam !== null || allParam !== null;
+    for (let i = 0; i < items.length && !holdsOff; i++){
       const h = items[i].built.hold;
       if (!h || !h.on() || h.passed()) continue;
       /* Nothing below it is nothing to hold back, and a line promising more
@@ -3128,7 +3246,13 @@ function rQuestion(b){
        words that could never be enough. undefined still means eight, for
        older lessons. */
     const min = q.minWords === undefined ? 8 : Math.max(0, Number(q.minWords) || 0);
-    const ta = el("textarea","answer"); ta.rows = 5; ta.placeholder = "Type your answer here…";
+    const ta = el("textarea","answer"); ta.placeholder = "Type your answer here…";
+    /* As many lines as the teacher asked for, four when they did not. The
+       stylesheet's minimum is for every other answer box on the site and is
+       taller than one or two lines, so it is lifted here and the rows decide. */
+    const lines = Math.round(Number(b.lines));
+    ta.rows = lines >= 1 ? Math.min(30, lines) : 4;
+    ta.classList.add("answer-rows");
     const counter = el("p","counter");
     function tick(){
       if (!min){ counter.hidden = true; counter.textContent = ""; return; }
@@ -3541,6 +3665,48 @@ function ideTipWire(ta, tip, showTip){
   tip.addEventListener("mousedown", (e) => { e.preventDefault(); tip.hidden = true; });
 }
 
+/* The "Read only" tag on a coding task whose code the teacher locked. For a
+   student it is a label and nothing else, ever. A teacher looking at the
+   lesson (the builder's preview, or a student's work on the marking screen)
+   can press it to type in the box anyway, "Editing", and press it again to
+   lock it back. Nothing typed then is kept: a page a teacher is looking at
+   never saves, which is what makes it safe to let them try something.
+
+   Who counts as a teacher is decided by a teacher's sign-in being in this
+   browser, not by the address. ?view= and ?builder= are only words in a
+   link, and a student can type those. Offline there is no sign-in to find,
+   so there it is the builder's own preview frame and nothing else. */
+function teacherHere(){
+  if (!spectate) return false;
+  try{ if (window.teacherAuth && window.teacherAuth.have()) return true; }catch(e){}
+  if (!OFFLINE || builderParam === null) return false;
+  try{ return window.parent !== window && /author\.html$/i.test(window.parent.location.pathname); }
+  catch(e){ return false; }
+}
+function readOnlyTag(){
+  if (!teacherHere()) return { el: el("span","ide-tag","Read only"), wire: () => {} };
+  const btn = el("button","ide-tag ide-tagbtn","Read only");
+  btn.type = "button";
+  const paint = (editing) => {
+    btn.textContent = editing ? "Editing" : "Read only";
+    btn.classList.toggle("on", editing);
+    btn.setAttribute("aria-pressed", editing ? "true" : "false");
+    btn.title = editing ? "Press to make the code read only again"
+                        : "Only teachers can do this: press to type in the code";
+  };
+  paint(false);
+  return {
+    el: btn,
+    /* Given the box once the editor exists, which is after the bar is built. */
+    wire: (ta) => btn.addEventListener("click", () => {
+      const editing = ta.readOnly;          // read only now, so this press unlocks it
+      ta.readOnly = !editing;
+      paint(editing);
+      if (editing) ta.focus();
+    })
+  };
+}
+
 function rIDE(b){
   const canRun = b.run !== false;           // teachers can turn running off
   const canEdit = b.edit !== false;         // and can make the code read-only
@@ -3559,7 +3725,8 @@ function rIDE(b){
   bar.appendChild(gearBtn);
   if (canEdit) bar.appendChild(resetBtn);
   if (canRun) bar.appendChild(runBtn);
-  if (!canEdit) bar.appendChild(el("span","ide-tag","Read only"));
+  const roTag = canEdit ? null : readOnlyTag();
+  if (roTag) bar.appendChild(roTag.el);
   pane.appendChild(bar);
 
   /* The cog: editor colours and text size, in pyedit.js so the web editor
@@ -3598,6 +3765,7 @@ function rIDE(b){
   });
   const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
         probs = ed.probs, repaint = ed.repaint;
+  if (roTag) roTag.wire(ta);
   /* With starter code the box is always exactly two lines taller than it,
      however short or long it is: a floor made a two line program sit in a
      box of mostly nothing, and a ceiling hid the end of a long one behind a
@@ -3996,7 +4164,8 @@ function rWeb(b){
   bar.appendChild(gearBtn);
   if (canEdit) bar.appendChild(resetBtn);
   if (canRun) bar.appendChild(runBtn);
-  if (!canEdit) bar.appendChild(el("span","ide-tag","Read only"));
+  const roTag = canEdit ? null : readOnlyTag();
+  if (roTag) bar.appendChild(roTag.el);
   pane.appendChild(bar);
 
   /* The same cog as the Python editor above, from pyedit.js. */
@@ -4019,6 +4188,7 @@ function rWeb(b){
   });
   const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
         probs = ed.probs, repaint = ed.repaint;
+  if (roTag) roTag.wire(ta);
   /* Which language is being coloured and suggested from follows whichever
      file is open. */
   const useLang = (name) => ed.setLang(window.pyEdit.webLang(kindOf[name] || "html"));
@@ -4717,10 +4887,14 @@ function rQuiz(b){
   const got = () => solved.filter(Boolean).length;
 
   /* How well they have to do. Written by the teacher as a percentage or a
-     number of questions; without one the quiz never blocks anything. */
+     number of questions, and only ever as the level that opens the rest of
+     the page: the builder sets it in the same pop-up as None and Attempted,
+     and a pass mark with nothing held back behind it is no longer asked
+     for. A quiz used to say "You need 7 to move on" over a page where
+     nothing was waiting, which is the pop-up on Continue in another form. */
   function needed(){
     const p = b.pass;
-    if (!p || !p.mode || p.mode === "none" || !n) return 0;
+    if (!p || p.hold !== true || !p.mode || p.mode === "none" || !n) return 0;
     if (p.mode === "count") return Math.max(1, Math.min(n, parseInt(p.value, 10) || 1));
     return Math.max(1, Math.ceil(n * (Math.min(100, parseInt(p.value, 10) || 0) / 100)));
   }
@@ -5171,19 +5345,27 @@ function rMC(b){
            brief:{ eyebrow:"Question", title:stripTags(b.prompt) || "", text:b.note || "" } };
 }
 
+/* The order a "put in order" list is dealt in: shuffled, but the same
+   shuffle every time for the same task, so a reload shows the same start.
+   Also what "has not touched it yet" looks like, which is how holding back
+   the rest of a page tells an untouched list from a sorted one. */
+function orderStart(b){
+  const out = (b.items || []).map((_, i) => i);
+  for (let i = out.length - 1; i > 0; i--){
+    const j = (strHash(b.id + ":" + i) % (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 /* Ordering (drag and drop, with arrow buttons as the keyboard fallback). */
 function rOrder(b){
   const s = el("section");
   const list = el("div","order-list");
   s.appendChild(list);
 
-  // deterministic shuffle so a reload shows the same starting order
   const items = b.items || [];
-  let arrangement = items.map((_, i) => i);
-  for (let i = arrangement.length - 1; i > 0; i--){
-    const j = (strHash(b.id + ":" + i) % (i + 1));
-    [arrangement[i], arrangement[j]] = [arrangement[j], arrangement[i]];
-  }
+  let arrangement = orderStart(b);
 
   function redraw(){
     list.innerHTML = "";
