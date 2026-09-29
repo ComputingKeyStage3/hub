@@ -2511,6 +2511,31 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .check-note{flex:1 1 100%; margin-left:29px; font-size:14px; color:var(--muted)}
 .check[data-state=broken] .check-note{color:var(--red)}
 
+/* The teacher's hint, offered under a line once they have run their code
+   enough times. Small and grey on purpose: it is there if they want it, not
+   something to read before having a go. */
+/* min-height beats the 44px every button gets on a phone: a line of small
+   text standing 44px tall pushed the next checklist line a long way down. The
+   padding keeps something decent to tap. */
+.check-hintbtn{flex:1 1 100%; margin:0 0 0 29px; padding:3px 0; min-height:0; border:0; background:none;
+  font:inherit; font-size:13px; color:var(--dim); text-decoration:underline;
+  text-underline-offset:2px; text-align:left; cursor:pointer}
+.check-hintbtn:hover{color:var(--text)}
+.check-hint{flex:1 1 100%; margin-left:29px; font-size:14px; color:var(--muted)}
+
+/* One at a time: the line saying how many are still to come. */
+.check-more{padding:4px 0 2px 29px; font-size:13px; color:var(--dim); font-style:italic}
+
+/* The All / One at a time switch, when the teacher left it to the student.
+   The score moves up beside it rather than being pushed into the middle. */
+.checklist-head{gap:10px}
+.checklist-score{margin-left:auto}
+.checklist-view{display:inline-flex; flex:none; align-self:center; gap:2px; padding:2px;
+  border:1px solid var(--line-2); border-radius:999px; background:var(--panel)}
+.checklist-viewbtn{border:0; background:none; font:inherit; font-size:12.5px; font-weight:600;
+  color:var(--muted); padding:3px 10px; min-height:30px; border-radius:999px; cursor:pointer; white-space:nowrap}
+.checklist-viewbtn.on{background:var(--amber); color:var(--amber-ink)}
+
 .checklist[data-all-done=yes]{border-color:var(--mint)}
 
 /* A teacher can style the wording of a line, and a ticked line still has to

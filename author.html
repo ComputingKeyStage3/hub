@@ -991,6 +991,7 @@ function compileOne(b, id, target){
                              .map(c => Object.assign({}, c,
                                c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
       }
+      if (b.checkMode === "one" || b.checkMode === "choose") blk.checkMode = b.checkMode;
       if (b.title) blk.title = b.title;              // headings stay optional
       if (b.task) blk.task = b.task;
       if (b.turtle) blk.turtle = true;
@@ -1045,6 +1046,7 @@ function compileOne(b, id, target){
                              .map(c => Object.assign({}, c,
                                c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
       }
+      if (b.checkMode === "one" || b.checkMode === "choose") blk.checkMode = b.checkMode;
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
       if (b.expect) blk.expect = b.expect;
@@ -3693,6 +3695,33 @@ function checklistPopup(block, isWeb){
     box.appendChild(el("p","modal-text",
       "Each line becomes something the student can tick off. Keep the wording plain, " +
       "it is what they read when they are stuck."));
+
+    /* How the whole list is shown. All together is how it has always been, so
+       it is what a lesson with nothing written down gets. */
+    const modeRow = el("div","bfield");
+    modeRow.appendChild(el("label","","How students see it"));
+    const modeBtns = el("div","brow");
+    const modeNow = () => (block.checkMode === "one" || block.checkMode === "choose") ? block.checkMode : "all";
+    const MODES = [["all","All together","Every line on show at once"],
+                   ["one","One at a time","The next line appears once the one before it is ticked"],
+                   ["choose","Students decide","A switch on the checklist lets each student pick"]];
+    function paintModes(){
+      modeBtns.innerHTML = "";
+      MODES.forEach(m => {
+        const b = el("button","btn-ghost bmini2" + (modeNow() === m[0] ? " right" : ""), m[1]);
+        b.type = "button";
+        b.title = m[2];
+        b.setAttribute("aria-pressed", modeNow() === m[0] ? "true" : "false");
+        b.addEventListener("click", () => {
+          if (m[0] === "all") delete block.checkMode; else block.checkMode = m[0];
+          saveDraft(); paintModes();
+        });
+        modeBtns.appendChild(b);
+      });
+    }
+    paintModes();
+    modeRow.appendChild(modeBtns);
+    box.appendChild(modeRow);
     const list = el("div");
     box.appendChild(list);
 
@@ -3987,14 +4016,37 @@ function checklistPopup(block, isWeb){
 
         /* Last, so it applies whatever kind of check this is. Left empty, the
            line says nothing under it. Teacher-checked lines never reach here:
-           they have nothing to fail at, so there is nothing to say about it. */
-        const hrow = el("div","bfield wide");
-        hrow.appendChild(el("label","","What to say if they have not got it yet"));
+           they have nothing to fail at, so there is nothing to say about it.
+           The student sees "Need a hint?" under a line they have not got yet,
+           once they have run their code this many times, and the hint only
+           when they press it. */
+        const hrow = el("div","checkrow");
+        const hfield = el("div","bfield checkfield grow");
+        hfield.appendChild(el("label","","Hint"));
         const hin = el("input");
         hin.value = c.hint || "";
         hin.placeholder = "Leave empty for no hint";
         hin.addEventListener("input", () => { c.hint = hin.value; saveDraft(); });
-        hrow.appendChild(hin);
+        hfield.appendChild(hin);
+        hrow.appendChild(hfield);
+        const afield = el("div","bfield checkfield");
+        afield.appendChild(el("label","","Offer it after this many runs"));
+        const apair = el("div","countpair");
+        const anum = el("input");
+        anum.type = "number"; anum.min = "0"; anum.max = "99";
+        anum.value = c.hintAfter === undefined || c.hintAfter === "" ? "1" : String(c.hintAfter);
+        anum.title = "0 offers it straight away";
+        /* One is what nearly everyone wants, so only a different number is
+           written into the lesson. */
+        anum.addEventListener("input", () => {
+          const n = parseInt(anum.value, 10);
+          if (isNaN(n) || n === 1) delete c.hintAfter;
+          else c.hintAfter = Math.max(0, n);
+          saveDraft();
+        });
+        apair.appendChild(anum);
+        afield.appendChild(apair);
+        hrow.appendChild(afield);
         card.appendChild(hrow);
 
         list.appendChild(card);

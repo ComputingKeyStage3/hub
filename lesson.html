@@ -3535,7 +3535,10 @@ function cheerChecklist(over, holder, list, fresh, reveal){
   }, CHEER_WAIT);
 }
 
-function attachChecklist(section, checks, runner, blockId){
+/* `opts.mode` is the teacher's choice of all at once, one at a time, or up to
+   the student; `opts.runs` says how many times Run has been pressed, which is
+   what puts a hint on offer. */
+function attachChecklist(section, checks, runner, blockId, opts){
   if (!checks || !checks.length || !window.buildChecklist) return null;
   let last = null;                    // what the checks said the last time they ran
   /* What was ticked when Run was last pressed. A program that stops to ask a
@@ -3549,8 +3552,13 @@ function attachChecklist(section, checks, runner, blockId){
      first is still working through its tick must not have the older results
      painted back over it when that tick lands. */
   let showing = 0;
-  const list = window.buildChecklist(checks);
+  const runsNow = (opts && typeof opts.runs === "function") ? opts.runs : () => 0;
+  const list = window.buildChecklist(checks, { mode: opts && opts.mode });
   allChecklists.push(list);
+  /* Reading a student's work, or printing it, is reading all of it. The same
+     test the page uses before holding anything back behind a quiz. */
+  if (list.showEverything)
+    list.showEverything(viewParam !== null || pdfParam !== null || allParam !== null);
   /* Lines a teacher has to judge by eye can only be ticked by a teacher, and
      only while they are looking at the work rather than while it is being
      done. The tick is sent up to the marking screen the same way changed marks
@@ -3583,6 +3591,7 @@ function attachChecklist(section, checks, runner, blockId){
     }
     if (!Array.isArray(results)) return false;
     last = results;
+    if (list.setRuns) list.setRuns(runsNow());
     const mine = ++showing;
     /* Worked out from the results rather than from the list, because the list
        is about to be drawn without these lines on it. A line a teacher has to
@@ -3928,7 +3937,8 @@ function rIDE(b){
   /* the teacher's checklist, if this task has one. Declared before run()
      so it can tick itself off when the code has finished. */
   const checklist = attachChecklist(s, b.checks,
-    () => window.runPythonChecks(b.checks, ta.value, lastOut, runs), b.id);
+    () => window.runPythonChecks(b.checks, ta.value, lastOut, runs), b.id,
+    { mode: b.checkMode, runs: () => runs });
 
   async function run(cheer){
     cheerNext = !!cheer;
@@ -4082,6 +4092,7 @@ function rIDE(b){
       ran = !!v.ran;
       /* older work has no count, so a run it remembers counts as one */
       runs = Number(v.runs) || (ran ? 1 : 0);
+      if (checklist && checklist.list.setRuns) checklist.list.setRuns(runs);
       lastCarried = v.carried ? ta.value : null;
       if (checklist && v.manual) checklist.list.setManual(v.manual);
       /* The ticks from the last real run, put back without running anything:
@@ -4466,7 +4477,8 @@ function rWeb(b){
   /* the teacher's checklist, run against all three files. Declared before
      run() so it can tick itself off once the page has been built. */
   const checklist = attachChecklist(s, b.checks,
-    () => window.runWebChecks(b.checks, codeNow(), runs), b.id);
+    () => window.runWebChecks(b.checks, codeNow(), runs), b.id,
+    { mode: b.checkMode, runs: () => runs });
 
   /* `cheer` is true only when a student pressed Run. The page runs this by
      itself when the task opens and again when saved work is put back, and
@@ -4544,6 +4556,7 @@ function rWeb(b){
         }
         ran = !!v.ran;
         runs = Number(v.runs) || (ran ? 1 : 0);
+        if (checklist && checklist.list.setRuns) checklist.list.setRuns(runs);
         if (checklist && v.manual) checklist.list.setManual(v.manual);
       }
       if (!code.hasOwnProperty(current)) current = order[0];
