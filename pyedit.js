@@ -650,8 +650,12 @@ function attach(opts){
        screen before anyone has said what they are after. A language can say
        otherwise for a place where the symbol is the whole question, which is
        the dot after a toolbox: random. has one short answer and it is worth
-       showing. Ctrl and space asks for the list without typing anything. */
-    if (!typed && !res.now && !force){ acHide(); return; }
+       showing. Ctrl and space asks for the list without typing anything.
+
+       Two letters, not one. A single letter is usually a whole name, the x
+       of a for loop, and one letter matches anything that contains it:
+       typing x offered max and except. */
+    if (typed.length < 2 && !res.now && !force){ acHide(); return; }
     const list = matches(res.items, typed);
     /* One suggestion, and they have already typed it: there is nothing left
        to offer. */
@@ -697,6 +701,10 @@ function attach(opts){
     acHide();
   });
   ta.addEventListener("blur", acHide);
+  /* Clicking somewhere else in the code moves the caret away from the word
+     the box was offering to finish, and the editor keeps focus, so blur never
+     fires. Clicking is the natural way to say "not now" and the box stayed. */
+  ta.addEventListener("pointerdown", acHide);
   ta.addEventListener("keydown", (e) => {
     /* While the box is open it gets the keys it needs first, and everything
        else closes it. */
