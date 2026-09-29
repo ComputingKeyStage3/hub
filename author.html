@@ -992,6 +992,8 @@ function compileOne(b, id, target){
                                c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
       }
       if (b.checkMode === "one" || b.checkMode === "choose") blk.checkMode = b.checkMode;
+      /* the finished program students can run beside the checklist */
+      if (String(b.model || "").trim()) blk.model = b.model;
       if (b.title) blk.title = b.title;              // headings stay optional
       if (b.task) blk.task = b.task;
       if (b.turtle) blk.turtle = true;
@@ -1047,6 +1049,18 @@ function compileOne(b, id, target){
                                c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
       }
       if (b.checkMode === "one" || b.checkMode === "choose") blk.checkMode = b.checkMode;
+      /* The finished page, kept under the builder's own three keys while it is
+         being written because the field helper edits one key each. Only the
+         files the task has are kept: a stylesheet written for it and then
+         switched off would still be styling a page the student cannot match. */
+      {
+        const model = {};
+        blk.files.forEach(k => {
+          const v = b["model" + k.charAt(0).toUpperCase() + k.slice(1)];
+          if (String(v || "").trim()) model[k] = v;
+        });
+        if (Object.keys(model).length) blk.model = model;
+      }
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
       if (b.expect) blk.expect = b.expect;
@@ -2392,6 +2406,15 @@ function card(b, i, arr){
     if (b.files.indexOf("html") >= 0) F("Starting HTML", "html", { area:true, rows:6, mono:true });
     if (b.files.indexOf("css") >= 0) F("Starting CSS", "css", { area:true, rows:5, mono:true });
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
+    /* The finished page, shown to students to the right of the checklist with
+       its code hidden. The same files as the task, so it can only be built
+       out of what the student has to build theirs out of. */
+    const modelHelp = "The page as it should look once it is done. Students get a Try it button "
+      + "to the right of the checklist and can open it as often as they like, but they never "
+      + "see its code. Leave these empty and there is no Try it button.";
+    if (b.files.indexOf("html") >= 0) F("Finished HTML (optional)", "modelHtml", { area:true, rows:5, mono:true, help: modelHelp });
+    if (b.files.indexOf("css") >= 0) F("Finished CSS (optional)", "modelCss", { area:true, rows:4, mono:true, help: modelHelp });
+    if (b.files.indexOf("js") >= 0) F("Finished JavaScript (optional)", "modelJs", { area:true, rows:4, mono:true, help: modelHelp });
     toggleRow([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true],
                ["autocomplete","Autocomplete", true],
@@ -2443,6 +2466,12 @@ function card(b, i, arr){
          will never see. */
       if (!b.startFrom) PY("Starter code", "starter");
     }
+    PY("Finished program (optional)", "model", { help: [
+      "The program as it should work once it is done. Students get a Try it button to the "
+      + "right of the checklist and can run it as often as they like, before they start or "
+      + "while they are writing their own, but they never see its code.",
+      "It runs in its own console, so nothing it prints ticks off their checklist. Leave it "
+      + "empty and there is no Try it button."] });
     toggleRow([["turtle","Turtle canvas", false],
                ["run","Running", true],
                ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true],
@@ -7917,6 +7946,17 @@ function fromCompiled(data, meta){
       }
       return { type:"caesar", title:b.title || "", task:b.task || "",
                prompt:b.prompt || "", message: message, shift: shift };
+    }
+    /* A web task's finished page is saved as one { html, css, js } and edited
+       as three boxes, one key each, so it is spread back out here. Left as it
+       was, the boxes opened empty and the next save threw the page away. */
+    if (b.type === "web" && b.model && typeof b.model === "object"){
+      const copy = JSON.parse(JSON.stringify(b));
+      delete copy.id; delete copy.model;
+      if (b.model.html) copy.modelHtml = b.model.html;
+      if (b.model.css) copy.modelCss = b.model.css;
+      if (b.model.js) copy.modelJs = b.model.js;
+      return copy;
     }
     const copy = JSON.parse(JSON.stringify(b));
     delete copy.id;

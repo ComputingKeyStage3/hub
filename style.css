@@ -2542,7 +2542,45 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   color:var(--muted); padding:3px 10px; min-height:30px; border-radius:999px; cursor:pointer; white-space:nowrap}
 .checklist-viewbtn.on{background:var(--amber); color:var(--amber-ink)}
 
+/* One at a time: how far through, beside the word Checklist. A short piece
+   of the bar for every line: green once it is right, blue for the one they
+   are on. Kept small so it reads as part of the heading. The heading may wrap
+   on a narrow phone, with the All / One at a time switch going underneath. */
+.checklist-head{flex-wrap:wrap; justify-content:flex-start; align-items:center}
+.checklist-progress{display:inline-flex; align-items:center; align-self:center; gap:6px}
+.checklist-progress-text{font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap}
+.checklist-steps{display:inline-flex; gap:3px}
+.checklist-step{width:12px; height:4px; border-radius:999px; background:var(--line-2);
+  transition:background-color .3s ease}
+.checklist-step.now{background:var(--amber)}
+.checklist-step.done{background:var(--mint)}
+@media (prefers-reduced-motion:reduce){ .checklist-step{transition:none} }
+
 .checklist[data-all-done=yes]{border-color:var(--mint)}
+
+/* The finished program, to the right of the checklist. A narrow column for
+   Python, where it is a console; half the row for a web task, because a page
+   squeezed into a third of the width is not what the student is building.
+   Stacked under the checklist on anything narrower than a tablet, where two
+   columns would leave neither wide enough to read. */
+.ide-top{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,340px); gap:10px;
+  align-items:start; margin:0 0 10px}
+.ide.web .ide-top{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.ide .ide-top.alone{grid-template-columns:minmax(0,1fr)}
+.ide-top > .checklist-wrap{margin:0}
+@media (max-width:760px){
+  .ide .ide-top, .ide.web .ide-top{grid-template-columns:minmax(0,1fr)}
+}
+.ide-model{background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
+  padding:9px 12px; min-width:0}
+.ide-model-head{display:flex; align-items:center; gap:10px; margin-bottom:4px}
+.ide-model-head b{font-size:14px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim)}
+.ide-model-run{margin-left:auto; flex:none}
+.ide-model-lead{margin:0; font-size:13.5px; line-height:1.4; color:var(--muted)}
+.ide-model-con{margin-top:8px; border-radius:8px; max-height:260px}
+.ide-model .ide-canvaswrap{margin-top:8px; border-radius:8px; border-bottom:0}
+.ide-model .ide-model-frame{margin-top:8px; height:280px; min-height:0;
+  border:1px solid var(--line); border-radius:8px}
 
 /* A teacher can style the wording of a line, and a ticked line still has to
    read as finished. Strikethrough carries down to the styled words on its

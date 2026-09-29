@@ -3716,6 +3716,188 @@ function readOnlyTag(){
   };
 }
 
+/* Playing back what a Python program did.
+   Python runs at full speed and hands back a list of what happened in order:
+   text printed, waits asked for, turtle drawing. Nothing can appear on the
+   page while Python is running, because there is one thread and Python is
+   using it. So the waiting is done out here instead, between the pieces,
+   where the browser is free to paint. That is the difference between a
+   program printing hello, pausing, then asking a question, and the same
+   program showing an empty console for two seconds and then all three at
+   once with the question already asked.
+
+   One player per console. The coding task and the finished program beside
+   it each have their own, so pressing Run on one never cuts the other off. */
+function pyPlayer(out){
+  let playRun = 0;      // bumped to abandon a playback that is still in flight
+  let shownSteps = 0;   // how much of the timeline they have already sat through
+  const pause = (secs) => new Promise(go => setTimeout(go, Math.max(0, secs) * 1000));
+  return {
+    async play(events){
+      const mine = ++playRun;
+      const list = events || [];
+      out.textContent = "";
+      for (let i = 0; i < list.length; i++){
+        const ev = list[i];
+        if (ev[0] === "out"){
+          out.textContent += ev[1];
+          out.scrollTop = out.scrollHeight;
+        } else if (ev[0] === "wait"){
+          /* Answering a question runs the whole program again from the top, so
+             the part already sat through must not be waited out a second time.
+             This counts steps rather than letters printed: a turtle program can
+             draw its way through several waits without printing anything, and
+             counting letters skipped every one of those waits. */
+          if (i >= shownSteps) await pause(ev[1]);
+        } else if (ev[0] === "draw"){
+          if (window.hubDraw) window.hubDraw.apply(null, [ev[1]].concat(ev[2] || []));
+        } else if (ev[0] === "clear"){
+          if (window.hubTurtleClear) window.hubTurtleClear();
+        }
+        if (playRun !== mine) return false;   // Run or Clear was pressed meanwhile
+      }
+      shownSteps = list.length;
+      return true;
+    },
+    /* a new run from the top: every wait is worth sitting through again */
+    fresh(){ shownSteps = 0; },
+    /* and Clear: whatever is still arriving from the last run is dropped */
+    stop(){ playRun++; shownSteps = 0; }
+  };
+}
+
+/* ---------- the finished program ----------
+   A teacher can give a coding task the program as it should end up. It sits
+   to the right of the checklist, and a student runs it to see what they are
+   making, before they start or halfway through, without its code ever being
+   drawn on the page. It has its own console, its own answers to input() and
+   its own canvas, and it saves nothing: nothing it prints can tick a
+   checklist line off or count as one of the student's runs.
+
+   Hidden from the page, not secret. It arrives with the lesson, the same as
+   the starter code does, so someone digging in the browser's own tools could
+   still find it. What it stops is the answer being read off the screen,
+   which is the thing that actually happens in a lesson. */
+function modelShell(heading){
+  const card = el("div","ide-model");
+  const head = el("div","ide-model-head");
+  head.appendChild(el("b","", heading));
+  const go = el("button","btn-primary ide-run ide-model-run","▶ Try it");
+  go.type = "button";
+  head.appendChild(go);
+  card.appendChild(head);
+  card.appendChild(el("p","ide-model-lead",
+    "Try out what you are making. You can use it as often as you like, but its code stays hidden."));
+  return { card, go };
+}
+
+/* The checklist and the finished program side by side, in one row at the top
+   of the task. Without a checklist the program has the row to itself. */
+function besideChecklist(section, card){
+  if (!card) return;
+  const top = el("div","ide-top");
+  const list = Array.prototype.find.call(section.children, n => n.classList.contains("checklist-wrap"));
+  if (list){ section.insertBefore(top, list); top.appendChild(list); }
+  else { top.classList.add("alone"); section.insertBefore(top, section.firstChild); }
+  top.appendChild(card);
+}
+
+function pyModel(b){
+  const src = String(b.model || "");
+  if (!src.trim()) return null;
+  const { card, go } = modelShell("Finished program");
+  /* Nothing under the heading until it has been run once, so a card that
+     has not been tried is no taller than it needs to be beside the list. */
+  let cwrap = null, canvas = null;
+  if (b.turtle){
+    cwrap = el("div","ide-canvaswrap"); cwrap.hidden = true;
+    canvas = el("canvas","ide-canvas");
+    canvas.width = 480; canvas.height = 360;
+    cwrap.appendChild(canvas);
+    card.appendChild(cwrap);
+  }
+  const con = el("div","ide-console ide-model-con"); con.hidden = true;
+  const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
+  const askRow = el("div","ide-ask"); askRow.hidden = true;
+  const askText = el("span","ide-askprompt");
+  const askIn = el("input","ide-askin");
+  askIn.type = "text"; askIn.autocomplete = "off"; askIn.spellcheck = false;
+  askRow.appendChild(askText); askRow.appendChild(askIn);
+  con.appendChild(out); con.appendChild(askRow);
+  card.appendChild(con);
+
+  const player = pyPlayer(out);
+  let answers = [];
+  async function execute(){
+    /* The turtle draws on whichever canvas was attached last, and the
+       student's own task attaches its canvas every time they press Run. */
+    if (window.hubTurtleAttach) window.hubTurtleAttach(canvas);
+    const py = await ensureHubPython(out);
+    await loadPyImports(py, src, out);
+    py.globals.set("_hub_next_inputs", answers.join("\u0000"));
+    py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
+    py.globals.set("_hub_src", src);
+    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
+    if (!await player.play(res.events)) return;       // pressed again meanwhile
+    out.classList.toggle("has-error", res.status === "done" && !res.ok);
+    if (res.status === "input"){
+      askText.textContent = res.prompt || ">";
+      askRow.hidden = false; askIn.value = ""; askIn.focus();
+      return;
+    }
+    askRow.hidden = true;
+    if (!res.out) out.textContent = "(this program does not print anything)";
+  }
+  async function attempt(){
+    try{ await execute(); }
+    catch(e){
+      askRow.hidden = true;
+      out.textContent = "The finished program could not start here: " + (e.message || "unknown problem") + ".";
+    }
+  }
+  go.addEventListener("click", async () => {
+    con.hidden = false;
+    if (cwrap) cwrap.hidden = false;
+    answers = [];
+    player.fresh();
+    out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
+    go.disabled = true;
+    const label = go.textContent;
+    go.textContent = "Running…";
+    try{ await attempt(); }
+    finally{ go.disabled = false; go.textContent = label; }
+  });
+  askIn.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    answers.push(askIn.value);
+    askRow.hidden = true;
+    attempt();
+  });
+  return card;
+}
+
+function webModel(b){
+  const m = b.model || {};
+  const html = m.html || "", css = m.css || "", js = m.js || "";
+  if (!(html + css + js).trim()) return null;
+  const { card, go } = modelShell("Finished page");
+  /* The same sandbox the student's own preview is in. Anything it logs is
+     posted up the same way, and the task's console only listens to its own
+     frame, so none of it lands among the student's messages. */
+  const frame = el("iframe","web-preview ide-model-frame");
+  frame.setAttribute("sandbox","allow-scripts allow-forms allow-modals");
+  frame.title = "The finished page";
+  frame.hidden = true;
+  card.appendChild(frame);
+  go.addEventListener("click", () => {
+    frame.hidden = false;
+    /* Built afresh every press, so it starts again from the top the way the
+       student's own page does when they press Run. */
+    frame.srcdoc = window.webAssemble ? window.webAssemble(html, css, js) : html;
+  });
+  return card;
+}
+
 function rIDE(b){
   const canRun = b.run !== false;           // teachers can turn running off
   const canEdit = b.edit !== false;         // and can make the code read-only
@@ -3861,49 +4043,12 @@ function rIDE(b){
      whether they ever ran it. Kept with the work so it survives a reload. */
   let ran = false, runs = 0, lastOut = "", answers = [];
 
-  /* Playing back what the program did.
-     Python runs at full speed and hands back a list of what happened in order:
-     text printed, waits asked for, turtle drawing. Nothing can appear on the
-     page while Python is running, because there is one thread and Python is
-     using it. So the waiting is done out here instead, between the pieces,
-     where the browser is free to paint. That is the difference between a
-     program printing hello, pausing, then asking a question, and the same
-     program showing an empty console for two seconds and then all three at
-     once with the question already asked. */
   /* Whether this run was started by a student pressing Run, which is the only
      kind worth making anything of. Put back down as soon as the program
      finishes, so answering an input does not cheer a second time. */
   let cheerNext = false;
 
-  let playRun = 0;      // bumped to abandon a playback that is still in flight
-  let shownSteps = 0;   // how much of the timeline they have already sat through
-  const pause = (secs) => new Promise(go => setTimeout(go, Math.max(0, secs) * 1000));
-  async function playback(events){
-    const mine = ++playRun;
-    const list = events || [];
-    out.textContent = "";
-    for (let i = 0; i < list.length; i++){
-      const ev = list[i];
-      if (ev[0] === "out"){
-        out.textContent += ev[1];
-        out.scrollTop = out.scrollHeight;
-      } else if (ev[0] === "wait"){
-        /* Answering a question runs the whole program again from the top, so
-           the part already sat through must not be waited out a second time.
-           This counts steps rather than letters printed: a turtle program can
-           draw its way through several waits without printing anything, and
-           counting letters skipped every one of those waits. */
-        if (i >= shownSteps) await pause(ev[1]);
-      } else if (ev[0] === "draw"){
-        if (window.hubDraw) window.hubDraw.apply(null, [ev[1]].concat(ev[2] || []));
-      } else if (ev[0] === "clear"){
-        if (window.hubTurtleClear) window.hubTurtleClear();
-      }
-      if (playRun !== mine) return false;   // Run or Clear was pressed meanwhile
-    }
-    shownSteps = list.length;
-    return true;
-  }
+  const player = pyPlayer(out);
 
   async function execute(){
     const py = await ensureHubPython(out);
@@ -3913,7 +4058,7 @@ function rIDE(b){
     py.globals.set("_hub_src", ta.value);
     const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
     lastOut = res.out || "";
-    if (!await playback(res.events)) return true;   // something newer is running now
+    if (!await player.play(res.events)) return true;   // something newer is running now
     out.classList.toggle("has-error", res.status === "done" && !res.ok);
     if (res.status === "input"){
       askText.textContent = res.prompt || ">";
@@ -3939,6 +4084,7 @@ function rIDE(b){
   const checklist = attachChecklist(s, b.checks,
     () => window.runPythonChecks(b.checks, ta.value, lastOut, runs), b.id,
     { mode: b.checkMode, runs: () => runs });
+  besideChecklist(s, pyModel(b));
 
   async function run(cheer){
     cheerNext = !!cheer;
@@ -3948,7 +4094,7 @@ function rIDE(b){
     runBtn.textContent = "Running\u2026";
     note.hidden = true;
     answers = [];
-    shownSteps = 0;
+    player.fresh();
     out.textContent = "";
     showTab("console");
     try{
@@ -3982,8 +4128,7 @@ function rIDE(b){
   });
   runBtn.addEventListener("click", () => run(true));
   clearBtn.addEventListener("click", () => {
-    playRun++;          // stops anything still arriving from the run before
-    shownSteps = 0;
+    player.stop();      // stops anything still arriving from the run before
     out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
   });
   resetBtn.addEventListener("click", () => {
@@ -4479,6 +4624,7 @@ function rWeb(b){
   const checklist = attachChecklist(s, b.checks,
     () => window.runWebChecks(b.checks, codeNow(), runs), b.id,
     { mode: b.checkMode, runs: () => runs });
+  besideChecklist(s, webModel(b));
 
   /* `cheer` is true only when a student pressed Run. The page runs this by
      itself when the task opens and again when saved work is put back, and
