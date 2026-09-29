@@ -2406,15 +2406,15 @@ function card(b, i, arr){
     if (b.files.indexOf("html") >= 0) F("Starting HTML", "html", { area:true, rows:6, mono:true });
     if (b.files.indexOf("css") >= 0) F("Starting CSS", "css", { area:true, rows:5, mono:true });
     if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
-    /* The finished page, shown to students to the right of the checklist with
-       its code hidden. The same files as the task, so it can only be built
-       out of what the student has to build theirs out of. */
-    const modelHelp = "The page as it should look once it is done. Students get a Try it button "
-      + "to the right of the checklist and can open it as often as they like, but they never "
-      + "see its code. Leave these empty and there is no Try it button.";
-    if (b.files.indexOf("html") >= 0) F("Finished HTML (optional)", "modelHtml", { area:true, rows:5, mono:true, help: modelHelp });
-    if (b.files.indexOf("css") >= 0) F("Finished CSS (optional)", "modelCss", { area:true, rows:4, mono:true, help: modelHelp });
-    if (b.files.indexOf("js") >= 0) F("Finished JavaScript (optional)", "modelJs", { area:true, rows:4, mono:true, help: modelHelp });
+    /* The model page, opened by students from beside the checklist with its
+       code hidden. The same files as the task, so it can only be built out
+       of what the student has to build theirs out of. */
+    const modelHelp = "The page as it should look once it is done. Students get a Model Program "
+      + "button beside the checklist that opens it in a pop-up, as often as they like, but they "
+      + "never see its code. Leave these empty and there is no Model Program button.";
+    if (b.files.indexOf("html") >= 0) F("Model HTML (optional)", "modelHtml", { area:true, rows:5, mono:true, help: modelHelp });
+    if (b.files.indexOf("css") >= 0) F("Model CSS (optional)", "modelCss", { area:true, rows:4, mono:true, help: modelHelp });
+    if (b.files.indexOf("js") >= 0) F("Model JavaScript (optional)", "modelJs", { area:true, rows:4, mono:true, help: modelHelp });
     toggleRow([["run","Running", true], ["edit","Editing", true],
                ["help","Help", true], ["tooltips","Tooltips", true],
                ["autocomplete","Autocomplete", true],
@@ -2466,12 +2466,12 @@ function card(b, i, arr){
          will never see. */
       if (!b.startFrom) PY("Starter code", "starter");
     }
-    PY("Finished program (optional)", "model", { help: [
-      "The program as it should work once it is done. Students get a Try it button to the "
-      + "right of the checklist and can run it as often as they like, before they start or "
-      + "while they are writing their own, but they never see its code.",
+    PY("Model program (optional)", "model", { help: [
+      "The program as it should work once it is done. Students get a Model Program button "
+      + "beside the checklist that runs it in a pop-up, as often as they like, before they "
+      + "start or while they are writing their own, but they never see its code.",
       "It runs in its own console, so nothing it prints ticks off their checklist. Leave it "
-      + "empty and there is no Try it button."] });
+      + "empty and there is no Model Program button."] });
     toggleRow([["turtle","Turtle canvas", false],
                ["run","Running", true],
                ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true],

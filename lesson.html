@@ -3766,33 +3766,87 @@ function pyPlayer(out){
   };
 }
 
-/* ---------- the finished program ----------
-   A teacher can give a coding task the program as it should end up. It sits
-   to the right of the checklist, and a student runs it to see what they are
-   making, before they start or halfway through, without its code ever being
-   drawn on the page. It has its own console, its own answers to input() and
-   its own canvas, and it saves nothing: nothing it prints can tick a
-   checklist line off or count as one of the student's runs.
+/* ---------- the model program ----------
+   A teacher can give a coding task the program as it should end up. A small
+   card beside the checklist opens it in a pop-up, and a student runs it to
+   see what they are making, before they start or halfway through, without
+   its code ever being drawn on the page. It has its own console, its own
+   answers to input() and its own canvas, and it saves nothing: nothing it
+   prints can tick a checklist line off or count as one of the student's runs.
+
+   In a pop-up rather than on the page because running it on the page put a
+   console or a whole web page between the checklist and the code, and the
+   card had to be wide enough to hold one, which left it mostly empty space
+   the rest of the time.
 
    Hidden from the page, not secret. It arrives with the lesson, the same as
    the starter code does, so someone digging in the browser's own tools could
    still find it. What it stops is the answer being read off the screen,
    which is the thing that actually happens in a lesson. */
-function modelShell(heading){
+function modelShell(){
   const card = el("div","ide-model");
-  const head = el("div","ide-model-head");
-  head.appendChild(el("b","", heading));
-  const go = el("button","btn-primary ide-run ide-model-run","▶ Try it");
+  const words = el("div","ide-model-words");
+  words.appendChild(el("b","ide-model-title","Model Program"));
+  words.appendChild(el("span","ide-model-lead","Try out what your finished program should look like."));
+  card.appendChild(words);
+  const go = el("button","btn-primary ide-run ide-model-run","Try it");
   go.type = "button";
-  head.appendChild(go);
-  card.appendChild(head);
-  card.appendChild(el("p","ide-model-lead",
-    "Try out what you are making. You can use it as often as you like, but its code stays hidden."));
+  card.appendChild(go);
   return { card, go };
 }
 
-/* The checklist and the finished program side by side, in one row at the top
-   of the task. Without a checklist the program has the row to itself. */
+/* The pop-up the model runs in. `body` is kept by the caller and moved in
+   each time, so a console or canvas is built once, not once per opening.
+   The pop-up is outside the task's section, so it copies the editor colours
+   and text size from it: those hang off .ide, and without them the console
+   came out in the site's colours rather than the student's chosen ones. */
+function modelPopup(from, body, opts){
+  const back = el("div","modal-back no-print");
+  const box = el("div","modal model-pop" + (opts.web ? " web" : ""));
+  box.setAttribute("role","dialog"); box.setAttribute("aria-modal","true");
+  const xBtn = el("button","btn-ghost iconbtn modal-x","✕");
+  xBtn.type = "button"; xBtn.title = "Close";
+  box.appendChild(xBtn);
+  box.appendChild(el("h2","","Model Program"));
+  box.appendChild(el("p","model-pop-lead",
+    "Try out what your finished program should look like. You can run it as often as you like, but you will not see its code."));
+  const again = el("button","btn-primary ide-run model-pop-again", opts.again);
+  again.type = "button";
+  const bar = el("div","model-pop-bar");
+  bar.appendChild(again);
+  box.appendChild(bar);
+  const task = from.closest(".ide");
+  const shell = el("div","ide model-pop-body");
+  if (task){
+    if (task.dataset.idetheme) shell.dataset.idetheme = task.dataset.idetheme;
+    if (task.dataset.idesize) shell.dataset.idesize = task.dataset.idesize;
+  }
+  shell.appendChild(body);
+  box.appendChild(shell);
+  const stay = el("button","btn-ghost modal-stay","Back to my code");
+  stay.type = "button";
+  box.appendChild(stay);
+  scrollBody(box);
+  back.appendChild(box);
+
+  function close(){
+    document.removeEventListener("keydown", onKey);
+    if (opts.onClose) opts.onClose();
+    back.remove();
+    from.focus();
+  }
+  function onKey(e){ if (e.key === "Escape") close(); }
+  xBtn.addEventListener("click", close);
+  stay.addEventListener("click", close);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(back);
+  return { again };
+}
+
+/* The checklist and the model program's card side by side, in one row at the
+   top of the task. Without a checklist the card sits above the code on its
+   own, only as wide as what is in it. */
 function besideChecklist(section, card){
   if (!card) return;
   const top = el("div","ide-top");
@@ -3805,18 +3859,17 @@ function besideChecklist(section, card){
 function pyModel(b){
   const src = String(b.model || "");
   if (!src.trim()) return null;
-  const { card, go } = modelShell("Finished program");
-  /* Nothing under the heading until it has been run once, so a card that
-     has not been tried is no taller than it needs to be beside the list. */
-  let cwrap = null, canvas = null;
+  const { card, go } = modelShell();
+  const body = el("div","model-pop-run");
+  let canvas = null;
   if (b.turtle){
-    cwrap = el("div","ide-canvaswrap"); cwrap.hidden = true;
+    const cwrap = el("div","ide-canvaswrap");
     canvas = el("canvas","ide-canvas");
     canvas.width = 480; canvas.height = 360;
     cwrap.appendChild(canvas);
-    card.appendChild(cwrap);
+    body.appendChild(cwrap);
   }
-  const con = el("div","ide-console ide-model-con"); con.hidden = true;
+  const con = el("div","ide-console ide-model-con");
   const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
   const askRow = el("div","ide-ask"); askRow.hidden = true;
   const askText = el("span","ide-askprompt");
@@ -3824,7 +3877,7 @@ function pyModel(b){
   askIn.type = "text"; askIn.autocomplete = "off"; askIn.spellcheck = false;
   askRow.appendChild(askText); askRow.appendChild(askIn);
   con.appendChild(out); con.appendChild(askRow);
-  card.appendChild(con);
+  body.appendChild(con);
 
   const player = pyPlayer(out);
   let answers = [];
@@ -3852,20 +3905,31 @@ function pyModel(b){
     try{ await execute(); }
     catch(e){
       askRow.hidden = true;
-      out.textContent = "The finished program could not start here: " + (e.message || "unknown problem") + ".";
+      out.textContent = "The model program could not start here: " + (e.message || "unknown problem") + ".";
     }
   }
-  go.addEventListener("click", async () => {
-    con.hidden = false;
-    if (cwrap) cwrap.hidden = false;
+  let again = null;           // Run again, in whichever pop-up is open
+  async function start(){
     answers = [];
     player.fresh();
     out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
-    go.disabled = true;
-    const label = go.textContent;
-    go.textContent = "Running…";
+    const btn = again;
+    btn.disabled = true;
+    btn.textContent = "Running…";
     try{ await attempt(); }
-    finally{ go.disabled = false; go.textContent = label; }
+    finally{ btn.disabled = false; btn.textContent = "▶ Run again"; }
+  }
+  /* Opening it runs it: pressing Try it and then having to find a second Run
+     button inside was one press more than seeing what it does needs. */
+  go.addEventListener("click", () => {
+    again = modelPopup(go, body, {
+      again: "▶ Run again",
+      /* whatever is still printing is dropped rather than left running
+         unseen and landing in the console the next time it is opened */
+      onClose(){ player.stop(); askRow.hidden = true; }
+    }).again;
+    again.addEventListener("click", start);
+    start();
   });
   askIn.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
@@ -3880,20 +3944,23 @@ function webModel(b){
   const m = b.model || {};
   const html = m.html || "", css = m.css || "", js = m.js || "";
   if (!(html + css + js).trim()) return null;
-  const { card, go } = modelShell("Finished page");
+  const { card, go } = modelShell();
   /* The same sandbox the student's own preview is in. Anything it logs is
      posted up the same way, and the task's console only listens to its own
      frame, so none of it lands among the student's messages. */
   const frame = el("iframe","web-preview ide-model-frame");
   frame.setAttribute("sandbox","allow-scripts allow-forms allow-modals");
-  frame.title = "The finished page";
-  frame.hidden = true;
-  card.appendChild(frame);
+  frame.title = "The model page";
+  /* Built afresh every time, so it starts again from the top the way the
+     student's own page does when they press Run. */
+  const load = () => { frame.srcdoc = window.webAssemble ? window.webAssemble(html, css, js) : html; };
   go.addEventListener("click", () => {
-    frame.hidden = false;
-    /* Built afresh every press, so it starts again from the top the way the
-       student's own page does when they press Run. */
-    frame.srcdoc = window.webAssemble ? window.webAssemble(html, css, js) : html;
+    const pop = modelPopup(go, frame, { web: true, again: "↻ Start again",
+      /* an empty frame stops anything the page was still doing, a timer or a
+         sound, once nobody can see it */
+      onClose(){ frame.srcdoc = ""; } });
+    pop.again.addEventListener("click", load);
+    load();
   });
   return card;
 }

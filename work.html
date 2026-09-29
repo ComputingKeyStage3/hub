@@ -94,6 +94,7 @@
 <script src="menus.js"></script>
 <script src="settings.js"></script>
 <script src="shortmatch.js"></script>
+<script src="progressmath.js"></script>
 <script>
 /* Puts everything except the cross and the closing buttons into a part that
    scrolls on its own, so a long pop-up can be read on a small screen without
@@ -234,6 +235,10 @@ async function boot(){
       document.title = "Student work \u00b7 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
     }
     if (!PRACTICE) paintProgress();
+    /* Never held up for this: it is a second fetch on top of the ones the
+       markbook already needed, and the table above it is worth showing
+       whether or not it ever arrives. */
+    if (!PRACTICE) loadComparison().then(() => { if (!PRACTICE) paintProgress(); });
     /* Opened on one student, from a class list or the username search: start
        on them rather than on whoever is first alphabetically. */
     const asked = (qs.get("student") || "").toLowerCase();
@@ -243,7 +248,10 @@ async function boot(){
     }
     paintPicker();
     $("loadPane").hidden = true;
-    tab("work");            // looking at work is the usual reason to be here
+    /* admin.html's unit-wide progress screen sends a teacher here already
+       wanting the markbook, not the student's work, when they have drilled
+       down from a specific lesson in the trend. */
+    tab(qs.get("tab") === "progress" ? "progress" : "work");
   }catch(e){
     workStopped(e.message);
   }
@@ -418,138 +426,22 @@ on("tabWork", "click", () => tab("work"));
    opened rather than counted) and marks each leaf the same way the lesson
    page, the assessment mark and the admin markbook already do, so a total
    here is never a second opinion on a score shown somewhere else. */
-const TASK_LABEL = { quiz:"Quiz", mc:"Multiple choice", order:"Put in order",
-                     blanks:"Fill the gaps", short:"Short answer",
-                     ide:"Coding task", web:"Coding task" };
-function plainText(html){ return String(html || "").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
-function normAns(x){ return String(x || "").toLowerCase().trim().replace(/\s+/g," ").replace(/[.,!?;:'"]+$/g,""); }
-
-function taskInfo(b){
-  const label = TASK_LABEL[b.type];
-  if (!label) return null;
-  if (b.type === "quiz" && !(b.questions || []).length) return null;
-  if ((b.type === "ide" || b.type === "web") && !(Array.isArray(b.checks) && b.checks.length)) return null;
-  if (b.type === "blanks" && !/\[\[.*?\]\]/.test(String(b.text || ""))) return null;
-  return { id: b.id, type: b.type, label: label,
-           title: plainText(b.prompt || b.title) || label, block: b };
-}
-/* Pages, groups and extensions are not tasks themselves, they hold tasks;
-   an assessment has no pages at all, so a top-level block is already the
-   leaf. Every task is stamped with the page it came from (its index in
-   lesson.blocks, which is exactly what lesson.html's own step= reads, and
-   its title) so a lesson with several checklists reads as several page
-   columns rather than one column nobody can tell apart from the others.
-
-   A task inside an extension is stamped with the extension's own title
-   instead of its page's, and marked extension: true, so it comes out under
-   its own "Extension:" heading rather than looking like ordinary work on
-   the page it happens to sit on. It keeps the page's index, not the
-   extension's own: there is no such thing as "step=" for an extension on
-   its own, it opens with the page around it. */
-function quantifiableTasks(){
-  const out = [];
-  (((lessonJson && lessonJson.blocks) || [])).forEach((page, pageIndex) => {
-    const isPage = page.type === "page" || page.type === "extension" || page.type === "group";
-    const pageTitle = (isPage ? page.title : plainText(page.prompt || page.title)) || "Page " + (pageIndex + 1);
-    const walk = (blocks, title, ext) => (blocks || []).forEach(b => {
-      if (b.type === "extension"){
-        walk(b.blocks, "Extension: " + (b.title || "Extension tasks"), true);
-        return;
-      }
-      if (b.type === "page" || b.type === "group"){ walk(b.blocks, title, ext); return; }
-      const t = taskInfo(b);
-      if (t){ t.pageIndex = pageIndex; t.pageTitle = title; t.extension = ext; out.push(t); }
-    });
-    /* A whole page a teacher marked as an extension page is treated the same
-       as an extension container: out of the markbook until asked for, and
-       under its own "Extension:" heading when it is in. */
-    if (page.type === "page" && page.extension === true)
-      walk(page.blocks, "Extension: " + pageTitle, true);
-    else walk([page], pageTitle, false);
-  });
-  return out;
-}
-/* { got, max } for one task. Marked the same way as markQuestion() in the
-   console and computeAssessment() in the lesson page, so a total here never
-   disagrees with a mark shown anywhere else. */
-function scoreTask(b, v){
-  if (b.type === "quiz"){
-    const n = (b.questions || []).length;
-    const got = (v && Array.isArray(v.solved)) ? v.solved.filter(Boolean).length : 0;
-    return { got: got, max: n };
-  }
-  if (b.type === "mc") return { got: (v !== null && v !== undefined && v === b.answer) ? 1 : 0, max: 1 };
-  if (b.type === "order"){
-    const ok = Array.isArray(v) && Array.isArray(b.items) && v.length === b.items.length &&
-               v.every((x, i) => x === i);
-    return { got: ok ? 1 : 0, max: 1 };
-  }
-  if (b.type === "blanks"){
-    const accepted = [];
-    String(b.text || "").replace(/\[\[(.*?)\]\]/g, (_, g) => { accepted.push(g.split("|")); return ""; });
-    let got = 0;
-    accepted.forEach((set, i) => {
-      const given = (v && v[i]) ? String(v[i]) : "";
-      if (set.map(normAns).includes(normAns(given))) got++;
-    });
-    return { got: got, max: accepted.length };
-  }
-  if (b.type === "short")
-    return { got: (window.shortAnswer && window.shortAnswer.mark(b, v).ok) ? 1 : 0, max: 1 };
-  /* a checklist: every line counts once, whether a run ticked it or a
-     teacher did, the same as the checklist's own "done of counted" score */
-  const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
-  const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
-  let got = 0;
-  b.checks.forEach((c, i) => { if (c && c.manual ? manual[i] === true : !!flags[i]) got++; });
-  return { got: got, max: b.checks.length };
-}
-function attempted(data, id){
-  if (!data) return false;
-  const v = data[id];
-  if (v === null || v === undefined || v === "") return false;
-  if (Array.isArray(v)) return v.some(x => x !== null && x !== undefined && x !== "");
-  if (typeof v === "object") return Object.keys(v).length > 0;
-  if (typeof v === "boolean") return v;
-  return true;
-}
+/* quantifiableTasks, scoreTask and attempted now live in progressmath.js,
+   shared with admin.html's unit-wide progress: the same lesson marked the
+   same way wherever it is looked at. */
+const TASK_LABEL = window.progressMath.TASK_LABEL;
+function quantifiableTasks(){ return window.progressMath.quantifiableTasks(lessonJson); }
+const scoreTask = window.progressMath.scoreTask;
+const attempted = window.progressMath.attempted;
 
 /* The pages this class cannot reach yet, so the markbook never asks about a
    task nobody has been able to attempt. Worked out exactly the way Manage
    does in the console, down to the same default when nobody has set locks
    by hand, because a page this reads as open has to be one the console
-   agrees is open. */
-function defaultLocks(lesson){
-  const out = new Set();
-  if (!lesson || lesson.assessment) return out;
-  const b = lesson.blocks || [];
-  out.add(b.length);          // the summary page
-  const said = b.some(x => x.startLocked !== undefined);
-  if (said){ b.forEach((x, i) => { if (x.startLocked) out.add(i); }); return out; }
-  let firstDo = -1;
-  for (let i = 0; i < b.length; i++){
-    const t = b[i].type;
-    if (t !== "text" && t !== "picture"){ firstDo = i; break; }
-  }
-  if (firstDo === -1) return out;
-  for (let i = firstDo + 1; i < b.length; i++) out.add(i);
-  return out;
-}
-async function fetchLocks(lesson){
-  try{
-    const r = await fetch(API + "/api/release?lesson=" + encodeURIComponent(lessonId) +
-      "&group=" + encodeURIComponent(cls) + "&t=" + Date.now(), { cache: "no-store" });
-    const d = await r.json();
-    if (d.managed === false) return defaultLocks(lesson);
-    if (Array.isArray(d.locks)) return new Set(d.locks);
-    if (typeof d.released === "number"){
-      const s = new Set();
-      for (let i = d.released; i < ((lesson && lesson.blocks) || []).length; i++) s.add(i);
-      return s;
-    }
-    return new Set();
-  }catch(e){ return new Set(); }  // shown as though nothing were locked, rather than not shown at all
-}
+   agrees is open. Shared with admin.html's unit-wide progress and the
+   comparison against a sibling lesson below, in progressmath.js. */
+function defaultLocks(lesson){ return window.progressMath.defaultLocks(lesson); }
+function fetchLocks(lesson){ return window.progressMath.fetchLockedPages(API, lessonId, cls, lesson); }
 
 /* Task types picked out by the filter pills. Empty means no filter at all,
    which is why every pill opens unpicked: ticking one narrows the columns
@@ -560,6 +452,9 @@ let lockedPages = new Set();   // filled by fetchLocks in boot() and refreshWork
 let progressShowExt = false;   // extension tasks are left out until asked for
 let progressHiddenCols = new Set();   // task ids a teacher has hidden by eye, for presenting the class
 let shutProgressFullscreen = null;   // set while the full-screen markbook is open
+let unitSiblings = null;   // null = not looked up yet; otherwise {before:[...]} in teaching order
+let siblingCache = new Map();   // lesson id -> the result of markRoster against it, once fetched
+let comparisonPrev = null;   // {title, pct} for the lesson before this one, false once known there isn't one
 /* What the markbook is sorted by. "username"/"displayName" are the two
    ways to read the name column; anything else is a task id, or "total". */
 let progressSort = { key: "username", dir: 1 };
@@ -799,6 +694,62 @@ function paintProgress(){
   paintProgressStats(shown, marks);
 }
 
+/* ---------------- comparing against the rest of the unit ----------------
+   Whether this lesson is ahead of, level with, or behind the one before it
+   in the same unit. Reuses the same catalogue and per-lesson work fetch
+   admin.html's unit-wide progress makes, aimed at one sibling lesson rather
+   than a whole unit of them, so the cost of asking is the same as opening
+   this markbook once more; nothing here is written anywhere. Run once in
+   the background after boot, never blocking the markbook that is already
+   on screen. */
+async function fetchUnitSiblings(){
+  if (unitSiblings !== null || PRACTICE || !lessonJson) return;
+  try{
+    const r = await fetch(API + "/api/catalog", { headers: H(), cache: "no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "");
+    const mine = (d.lessons || []).find(l => l.lesson_id === lessonId);
+    const unit = mine ? (mine.unit || "") : "";
+    if (!unit || !mine){ unitSiblings = { before: [] }; return; }
+    const assigned = new Set((d.assignments || [])
+      .filter(a => String(a.group_name || "").toLowerCase() === cls.toLowerCase())
+      .map(a => a.lesson_id));
+    const before = (d.lessons || [])
+      .filter(l => l.unit === unit && l.lesson_id !== lessonId && assigned.has(l.lesson_id) &&
+                   (l.position || 0) < (mine.position || 0))
+      .sort((a, b) => (b.position || 0) - (a.position || 0));   // nearest first
+    unitSiblings = { before: before };
+  }catch(e){ unitSiblings = { before: [] }; }
+}
+/* One sibling lesson's class average, worked out the same way this lesson's
+   own is: its own JSON for what counts as a task, its own work rows for
+   what the class did with them. */
+async function siblingProgress(sib){
+  if (siblingCache.has(sib.lesson_id)) return siblingCache.get(sib.lesson_id);
+  let result = null;
+  try{
+    const [lessonR, workR] = await Promise.all([
+      fetch(API + "/api/catalog?lesson=" + encodeURIComponent(sib.lesson_id), { headers: H(), cache: "no-store" }),
+      fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(sib.lesson_id) +
+            "&group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" })
+    ]);
+    const lessonD = await lessonR.json(), workD = await workR.json();
+    if (lessonR.ok && workR.ok){
+      const locks = await window.progressMath.fetchLockedPages(API, sib.lesson_id, cls, lessonD.lesson);
+      result = window.progressMath.markRoster(lessonD.lesson, roster, workD.rows || [], locks);
+    }
+  }catch(e){}
+  siblingCache.set(sib.lesson_id, result);
+  return result;
+}
+async function loadComparison(){
+  await fetchUnitSiblings();
+  const prev = unitSiblings.before[0];
+  if (!prev){ comparisonPrev = false; return; }
+  const res = await siblingProgress(prev);
+  comparisonPrev = (res && res.pct !== null) ? { title: prev.title || prev.lesson_id, pct: res.pct } : false;
+}
+
 /* The cheap, whole-lesson numbers underneath the markbook. Nothing here
    costs more than adding up marks paintProgress had to work out anyway, so
    it never has a different idea of a mark than the table above it, and it
@@ -830,6 +781,16 @@ function paintProgressStats(shown, marks){
   const strugglingCount = totals.filter(t => t.got < t.max * 0.5).length;
 
   box.appendChild(stat(avg + "%", "Class average", pctClass(avg)));
+  /* Against the lesson before this one in the same unit, once it is known:
+     fetched in the background by loadComparison and repainted in when it
+     arrives, so the rest of the stats are never held up waiting for it. */
+  if (comparisonPrev){
+    const diff = avg - comparisonPrev.pct;
+    const arrow = diff > 0 ? "↑" : diff < 0 ? "↓" : "→";
+    box.appendChild(stat(arrow + " " + Math.abs(diff) + "%",
+      "vs " + comparisonPrev.title + " (" + comparisonPrev.pct + "%)",
+      diff > 0 ? "yes" : diff < 0 ? "no" : ""));
+  }
   box.appendChild(stat(bands.high + " / " + bands.mid + " / " + bands.low, "80%+ · 50–79% · under 50%"));
   box.appendChild(stat(attemptedCount + " of " + roster.length, "Attempted something"));
   box.appendChild(stat(String(fullCount), "Got full marks", fullCount ? "yes" : ""));
