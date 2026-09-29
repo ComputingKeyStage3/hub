@@ -790,9 +790,6 @@
     const title = document.createElement("b");
     title.textContent = "Checklist";
     head.appendChild(title);
-    const score = document.createElement("span");
-    score.className = "checklist-score";
-    head.appendChild(score);
     /* Only where the teacher left it to them. A switch that is always there
        would be one more thing to press past on every coding task. */
     const viewBtns = [];
@@ -847,8 +844,11 @@
       ? column("manual", "Your teacher will check " + (manualCount === 1 ? "this one" : "these") + " after the lesson.")
       : null;
 
-    /* Kept in the order they were written, so results line up by position. */
+    /* Kept in the order they were written, so results line up by position.
+       Each line the page ticks itself carries its number, which is what its
+       circle shows until it is ticked. */
     const items = [];
+    let autoNum = 0;
     all.forEach(c => {
       const li = document.createElement("li");
       li.className = "check" + (isManual(c) ? " check-manual" : "");
@@ -874,7 +874,9 @@
       const hint = String((c && c.hint) || "").trim();
       const after = parseInt(c && c.hintAfter, 10);
       const it = { li, mark, note, manual: isManual(c), hint,
-                   hintAfter: isNaN(after) ? 1 : Math.max(0, after), hintOpen: false };
+                   num: isManual(c) ? 0 : ++autoNum,
+                   hintAfter: isNaN(after) ? 1 : Math.max(0, after), hintOpen: false,
+                   shownAt: null };
       if (hint && !it.manual){
         const offer = document.createElement("button");
         offer.type = "button";
@@ -899,10 +901,13 @@
     function paintHint(it){
       if (!it.offer) return;
       /* Not ticked yet, which before the first run is every line: that is
-         what lets a hint set to 0 runs be on offer from the start. */
+         what lets a hint set to 0 runs be on offer from the start. Runs are
+         counted from when the line was first on screen, not from the start of
+         the task: one at a time, a line that turned up on the fourth run would
+         otherwise arrive with its hint already offered. */
       const st = it.li.dataset.state;
       const stuck = st !== "yes" && st !== "broken";
-      const due = stuck && runs >= it.hintAfter;
+      const due = stuck && it.shownAt !== null && runs - it.shownAt >= it.hintAfter;
       it.offer.hidden = !due || it.hintOpen;
       it.said.hidden = !due || !it.hintOpen;
     }
@@ -912,9 +917,19 @@
        found ticked when its turn comes. A teacher reading the work always sees
        the whole list. Teacher-checked lines are never held back. */
     let everything = false;
-    const more = document.createElement("li");
-    more.className = "check-more";
-    if (autoList) autoList.appendChild(more);
+    /* The circle: the line's number, a tick once it is right and ! for a check
+       the teacher needs to look at. A teacher's own lines have no number. */
+    function paintMark(it){
+      const st = it.li.dataset.state;
+      let said;
+      if (it.manual) said = st === "yes" ? "✓" : "○";
+      else if (st === "yes") said = "✓";
+      else if (st === "broken") said = "!";
+      else said = String(it.num);
+      it.mark.textContent = said;
+      /* two digits from the tenth line on */
+      it.mark.classList.toggle("wide", said.length > 1);
+    }
     function layout(){
       viewBtns.forEach(b => {
         const on = b.dataset.view === view;
@@ -922,17 +937,16 @@
         b.setAttribute("aria-pressed", on ? "true" : "false");
       });
       const oneByOne = view === "one" && !everything && !manualOn;
-      let reached = false, hidden = 0;
+      let reached = false;
       items.forEach(it => {
+        paintMark(it);
         if (it.manual) return;
         const hide = oneByOne && reached;
         it.li.hidden = hide;
-        if (hide) hidden++;
+        if (!hide && it.shownAt === null) it.shownAt = runs;
         if (it.li.dataset.state !== "yes") reached = true;
       });
-      more.hidden = !hidden;
-      more.textContent = hidden === 1 ? "1 more to come after this one"
-                                      : hidden + " more to come after this one";
+      items.forEach(paintHint);
     }
 
     /* A teacher looking at the work can tick these; a student cannot. */
@@ -943,7 +957,6 @@
         if (!manualOn) return;
         const now = it.li.dataset.state === "yes";
         it.li.dataset.state = now ? "" : "yes";
-        it.mark.textContent = now ? "○" : "✓";
         tally();
         if (typeof wrap.onManual === "function") wrap.onManual(wrap.getManual());
       });
@@ -955,9 +968,7 @@
         counted++;
         if (it.li.dataset.state === "yes") done++;
       });
-      score.textContent = done + " of " + counted;
       wrap.dataset.allDone = done === counted ? "yes" : "no";
-      items.forEach(paintHint);
       layout();
       return done === counted;
     }
@@ -974,7 +985,6 @@
         if (!it || it.manual) return;         // a teacher's tick is not overwritten
         if (held && held.indexOf(i) >= 0) return;
         it.li.dataset.state = r.broken ? "broken" : r.ok ? "yes" : "no";
-        it.mark.textContent = r.broken ? "!" : r.ok ? "✓" : "○";
         /* Only a check that is set up wrong says anything under the line
            straight away. The teacher's hint waits behind "Need a hint?". */
         it.note.textContent = r.broken ? (r.note || "") : "";
@@ -985,7 +995,6 @@
       items.forEach(it => {
         if (it.manual) return;
         it.li.dataset.state = "";
-        it.mark.textContent = "○";
         it.note.textContent = "";
       });
       tally();
@@ -1034,7 +1043,6 @@
         if (!it.manual) return;
         const on = !!flags[i];
         it.li.dataset.state = on ? "yes" : "";
-        it.mark.textContent = on ? "✓" : "○";
       });
       tally();
     };
