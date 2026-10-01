@@ -2784,6 +2784,8 @@ function rPage(b){
   const kids = [];
   const items = [];      // each task on this page, so we can move on to the next
   const extras = [];     // extension containers, held back until the rest is done
+  const waiting = [];    // the ones a teacher asked to wait for the page
+  const finishers = [];  // what each of those is waiting on, one per task
   const slots = pageSlot(s);
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
@@ -2797,6 +2799,7 @@ function rPage(b){
       /* not hidden any more: the "Finished early?" question has to be reachable
          whether or not the rest of the page is finished */
       extras.push(built);
+      if (child.waitForPage === true && built.waitFor) waiting.push(built);
       return;
     }
     if (child.required === false){
@@ -2825,7 +2828,23 @@ function rPage(b){
     slots.place(item, child);
     kids.push(built);
     items.push({ item, built, type: child.type, name: bb.title || "" });
+    /* What finished means for an extension waiting on the page. A choice is
+       left out: it offers a level to pick, and the one picked is the
+       student's, so no single task in it is theirs to have done. A quiz the
+       teacher gave a pass mark is done at that mark, the way it already
+       opens the page below it; anything else has to be got completely right,
+       whatever level it holds the page at, because "attempted" is how far
+       down the page somebody may read, not whether they have finished. */
+    if (child.type !== "choice"){
+      const done = (child.type === "quiz" && built.hold && built.hold.on())
+        ? built.hold : taskGate(Object.assign({}, child, { gate:"full" }));
+      if (done) finishers.push(done);
+    }
   });
+  /* A teacher reading the work, or printing it, needs every extension open to
+     them, the same reason holds are lifted for them further down. */
+  const marking = viewParam !== null || pdfParam !== null || allParam !== null;
+  waiting.forEach(x => x.waitFor(() => marking ? 0 : finishers.filter(f => !f.passed()).length));
 
   /* When a task is definitely finished, and there is another below it on the
      same page, bring that one into view.
@@ -2860,6 +2879,10 @@ function rPage(b){
   const holdNote = el("p","pg-hold");
   holdNote.hidden = true;
   function refreshHold(){
+    /* A quiz finishing does not go through markDirty, so the count an
+       extension is waiting on is taken again here as well, on the same click
+       that opens the page below a quiz. */
+    waiting.forEach(x => x.recount());
     let shut = -1;
     /* A teacher reading a student's work, or printing it, needs all of it.
        Hiding what came after an unfinished quiz hid the very answers they
@@ -3050,6 +3073,12 @@ function rExtension(b){
   gate.appendChild(cb);
   gate.appendChild(el("span","ext-gate-text","Finished early?"));
   s.appendChild(gate);
+  /* Only when a teacher has asked for these to wait for the rest of the page.
+     The box stays in sight, so a student can see there is more to come, and
+     this says how much is left before it can be ticked. */
+  const waitNote = el("p","ext-wait");
+  waitNote.hidden = true;
+  s.appendChild(waitNote);
 
   const inner = el("div","ext-body");
   const kids = [];
@@ -3097,10 +3126,28 @@ function rExtension(b){
     markDirty();
   });
   /* remembered, so ticking it and coming back later does not shut it again */
-  fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; paint(); } };
+  fields[b.id] = { get:() => cb.checked, set:(v) => { cb.checked = !!v; paint(); paintWait(); } };
   paint();
 
+  /* What is still to do on the page, as a number. Only the page can see the
+     tasks beside this one, so it hands the count in through waitFor(). A box
+     already ticked stays ticked: somebody who opened these on an earlier
+     visit has not stopped being finished because a teacher changed the
+     setting since. */
+  let tasksLeft = null;
+  function paintWait(){
+    const left = tasksLeft && !cb.checked ? tasksLeft() : 0;
+    cb.disabled = left > 0;
+    gate.classList.toggle("waiting", left > 0);
+    waitNote.hidden = left === 0;
+    if (left > 0) waitNote.textContent = left === 1
+      ? "There is 1 task above still to finish before you can open this."
+      : "There are " + left + " tasks above still to finish before you can open this.";
+  }
+
   return { section:s,
+           waitFor: (count) => { tasksLeft = count; holdWatchers.add(paintWait); paintWait(); },
+           recount: paintWait,
            onShow: () => kids.forEach(k => { if (k.onShow) k.onShow(); }),
            check:() => ({ ok:true }),
            brief:{ eyebrow:"Extension", title:b.title || "Extension tasks", text:b.task || "" } };

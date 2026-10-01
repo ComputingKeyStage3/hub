@@ -3856,6 +3856,11 @@ html[data-bg=dark] kbd{background:#2A303B; border-color:#4A515F}
 /* the heading sits above the way in, and is on the page whether it is open or not */
 .extension .ext-title{display:block; font-size:15px; color:var(--amber); margin-bottom:6px}
 .ext-gate{margin-top:0}
+/* waiting for the rest of the page: still in sight, plainly not ready */
+.ext-gate.waiting{cursor:default; color:var(--muted)}
+.ext-gate.waiting input{cursor:default}
+.ext-wait{margin:6px 0 0; color:var(--muted); font-size:14px}
+.ext-wait[hidden]{display:none}
 
 /* the teacher code box: the letters are hidden as they are typed, so a code
    read out at the front of the room is not also displayed to the back of it */
