@@ -1218,6 +1218,13 @@ html.builder .loadscreen{z-index:90}
 .pagekids .bcard{background:var(--panel-2)}
 .qsub{border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:0 0 10px; background:var(--panel-2)}
 .qsub-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:9px}
+/* A checklist line in a practical with its two sentences side by side, and
+   one above the other once there is no room for two boxes to be written in. */
+.checkst-head{margin-top:18px; align-items:center}
+.checkst-line{margin:0 0 8px; font-weight:700; font-size:14px; line-height:1.4}
+.checkst-pair{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.checkst-pair .bfield{margin:0}
+@media (max-width:640px){ .checkst-pair{grid-template-columns:1fr} }
 .bhelp.warn{color:var(--amber-dark); font-weight:700}
 
 /* a page of tasks on the student side */
@@ -2763,6 +2770,9 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
 .bankwords{display:flex; flex-direction:column; gap:2px; min-width:0}
 .bankwords b{font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--amber-dark)}
 .bankwords span{font-size:14.5px; line-height:1.45; color:var(--text)}
+.bankmet{font-style:normal; margin-left:8px; padding:1px 7px; border-radius:999px; font-size:11px;
+  letter-spacing:.04em; background:var(--panel-2); border:1px solid var(--line); color:var(--dim)}
+.bankmet.done{color:var(--mint); background:var(--mint-dim); border-color:var(--mint)}
 .bankpreview{padding:11px 13px; margin:0 0 6px; background:var(--panel-2);
   border:1px solid var(--line); border-radius:10px; font-size:15px; line-height:1.5}
 

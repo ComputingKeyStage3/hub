@@ -828,17 +828,27 @@ function compile(){
   }
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
   if (lesson.zeroStrength) out.zeroStrength = lesson.zeroStrength;
+  /* A practice assessment is a practical that is handed out as a lesson:
+     written feedback, no grade. It is saved without practical or assessment
+     on it, because those two words are what make the lesson page, the hub
+     and the marking screen treat it as a test, and every one of them should
+     see an ordinary lesson. Its own word is what brings it back into the
+     builder as a practical. */
+  const practiceRun = !!(lesson.practical && lesson.practice);
   if (lesson.practical){
+    /* Kept on a practice one too, so switching back to graded finds the
+       rubric where it was left rather than empty. */
     out.marking = lesson.marking || "rubric";
     if (out.marking === "score") out.outOf = lesson.outOf || 20;
     else out.rubric = (lesson.rubric || []).filter(g => g.name);
   }
-  if (lesson.practical){
+  if (practiceRun) out.practiceAssessment = true;
+  else if (lesson.practical){
     out.practical = true;
     out.assessment = true;      // students and teachers treat it as an assessment
   }
   if (lesson.assessment || lesson.practical){
-    out.assessment = true;
+    if (!practiceRun) out.assessment = true;
     const topics = {};
     Object.keys(lesson.topics || {}).forEach(k => {
       const t = lesson.topics[k];
@@ -3418,6 +3428,18 @@ function setMode(assess, practical){
      hand against a rubric, so there would be nothing to mark these with. */
   $("palExtensionBtn").hidden = !!assess || !!practical;
   $("palAssess").hidden = !assess;
+  /* Response tasks are handed out from the screen a graded assessment ends
+     on. A practice one ends like a lesson, so nothing would ever give them
+     out, and a tab for writing them would be a promise nobody keeps. */
+  const practiceRun = !!practical && !!lesson.practice;
+  $("tabResponses").hidden = practiceRun;
+  if (practiceRun && assessTab === "responses"){ assessTab = "targets"; respEditing = null; }
+  ["tabQuestions","tabTargets","tabResponses"].forEach(id => {
+    const e = $(id);
+    if (e) e.classList.toggle("on", (id === "tabQuestions" && assessTab === "questions") ||
+                                    (id === "tabTargets" && assessTab === "targets") ||
+                                    (id === "tabResponses" && assessTab === "responses"));
+  });
 
   saveDraft(); render(); schedulePreview();
   if (typeof paintBuildBar === "function") paintBuildBar();
@@ -4129,15 +4151,31 @@ function markingSetup(into){
   card.appendChild(head);
   const body = el("div","bbody");
 
+  /* Practice sits beside the two ways of grading rather than as a switch of
+     its own, because it is the third answer to the same question. Choosing
+     it leaves lesson.marking alone, so going back to graded finds the rubric
+     or the total as it was. */
   const row = el("div","brow");
-  [["rubric","A grade from a rubric"],["score","A mark out of a total"]].forEach(pair => {
-    const b = el("button","btn-ghost bmini2" + (lesson.marking === pair[0] ? " right" : ""), pair[1]);
-    b.addEventListener("click", () => { lesson.marking = pair[0]; saveDraft(); render(); schedulePreview(); });
+  [["rubric","A grade from a rubric"],["score","A mark out of a total"],["practice","Practice, no grade"]].forEach(pair => {
+    const chosen = pair[0] === "practice" ? !!lesson.practice
+                                          : !lesson.practice && lesson.marking === pair[0];
+    const b = el("button","btn-ghost bmini2" + (chosen ? " right" : ""), pair[1]);
+    b.addEventListener("click", () => {
+      if (pair[0] === "practice") lesson.practice = true;
+      else { lesson.practice = false; lesson.marking = pair[0]; }
+      $("tabResponses").hidden = !!lesson.practice;
+      paintBuildBar();
+      saveDraft(); render(); schedulePreview();
+    });
     row.appendChild(b);
   });
   body.appendChild(row);
 
-  if (lesson.marking === "score"){
+  if (lesson.practice){
+    body.appendChild(el("p","bhelp",
+      "Students get this as an ordinary lesson, not an assessment. You still write them a " +
+      "Strength and a Target, but nothing is graded."));
+  } else if (lesson.marking === "score"){
     const w = el("div","bfield");
     w.appendChild(el("label","","Total mark"));
     const st = el("div","stepper");
@@ -4191,6 +4229,7 @@ function paintTargets(into){
     into.appendChild(el("p","hint", lesson.practical
       ? "No topics yet, press \u201c+ New topic\u201d."
       : "No topics yet, press \u201c+ New topic\u201d, or tag some questions."));
+    if (lesson.practical) checklistSentences(into);
     extremeSentences(into);       // these two stand on their own
     return;
   }
@@ -4223,7 +4262,67 @@ function paintTargets(into){
     card2.appendChild(body);
     into.appendChild(card2);
   });
+  if (lesson.practical) checklistSentences(into);
   extremeSentences(into);
+}
+
+/* A practical is mostly a program, and the checklist beside it already says
+   what a good one does, so each line of it can carry a Strength and a Target
+   of its own for the marking bank. They are written onto the checklist line
+   itself rather than into a list kept beside the lesson: a line that is
+   reworded, moved or deleted takes its sentences with it, and a coding task
+   copied into another lesson brings them along. Compiling copies a check
+   whole, so nothing else has to know they are there. */
+function checklistSentences(into){
+  const tasks = [];
+  const walk = (blocks) => (blocks || []).forEach(b => {
+    if (!b) return;
+    if ((b.type === "ide" || b.type === "web") && Array.isArray(b.checks)
+        && b.checks.some(c => String(c.label || "").trim())) tasks.push(b);
+    if (Array.isArray(b.blocks)) walk(b.blocks);
+    if (b.type === "choice") (b.options || []).forEach(o => walk(o.blocks));
+  });
+  walk(lesson.blocks);
+
+  const head = el("div","brow checkst-head");
+  head.appendChild(el("b","", "From the checklists"));
+  head.appendChild(helpDot("Write what to say when a student has done this line, and what to say when they have not. " +
+                           "Both turn up in the bank when you are marking, with the lines each student got done listed first."));
+  into.appendChild(head);
+  if (!tasks.length){
+    into.appendChild(el("p","hint","Add a checklist to a coding task and its lines will appear here."));
+    return;
+  }
+  tasks.forEach((b, n) => {
+    const card2 = el("div","bcard");
+    const top = el("div","bhead");
+    const name = plainWords(b.title || b.task || "") || ("Coding task " + (n + 1));
+    top.appendChild(el("b","btype", name));
+    card2.appendChild(top);
+    const body = el("div","bbody");
+    b.checks.forEach(c => {
+      const label = String(c.label || "").trim();
+      if (!label) return;
+      const line = el("div","qsub checkst");
+      line.appendChild(el("p","checkst-line", label));
+      const pair = el("div","checkst-pair");
+      [["strength","Strength, when it is done"],["target","Target, when it is not"]].forEach(f => {
+        const w = el("div","bfield");
+        w.appendChild(el("label","", f[1]));
+        const inp = el("textarea"); inp.rows = 2; inp.value = c[f[0]] || "";
+        inp.addEventListener("input", () => {
+          if (inp.value.trim()) c[f[0]] = inp.value; else delete c[f[0]];
+          saveDraft();
+        });
+        w.appendChild(inp);
+        pair.appendChild(w);
+      });
+      line.appendChild(pair);
+      body.appendChild(line);
+    });
+    card2.appendChild(body);
+    into.appendChild(card2);
+  });
 }
 
 /* The two sentences that belong to the whole assessment rather than to any
@@ -7558,7 +7657,8 @@ async function downloadForFolder(){
      others. */
   const entry = Object.assign(
     { id: id, title: lesson.title, description: lesson.intro || "" },
-    (lesson.assessment || lesson.practical) ? { assessment: true } : {},
+    /* a practice one is listed as the lesson it is to a student */
+    (lesson.assessment || (lesson.practical && !lesson.practice)) ? { assessment: true } : {},
     lesson.homework ? { homework: true } : {},
     lesson.versionOf ? { versionOf: lesson.versionOf, versionName: lesson.versionName || "",
                          versionNote: lesson.versionNote || "", versionCode: lesson.versionCode || "" } : {},
@@ -7857,8 +7957,14 @@ function fromCompiled(data, meta){
                    the plain palette and the task builder stopped knowing what
                    the lesson was about. */
                 point: data.point || "",
-                assessment: !!data.assessment && !data.practical, practical: !!data.practical,
+                assessment: !!data.assessment && !data.practical,
+                practical: !!data.practical || !!data.practiceAssessment,
+                practice: !!data.practiceAssessment,
                 homework: !!data.homework,
+                /* The two sentences for everything wrong and everything right
+                   were saved but never read back, so reopening an assessment
+                   emptied both boxes and the next save threw them away. */
+                perfectTarget: data.perfectTarget || "", zeroStrength: data.zeroStrength || "",
                 linger: data.linger !== false,
                 versionOf: data.versionOf || "", versionName: data.versionName || "",
                 versionNote: data.versionNote || "", versionCode: data.versionCode || "",
@@ -8083,7 +8189,8 @@ function paintBuildBar(){
      kind: it is not part of the lesson at all. */
   const chip = $("modeChip");
   if (chip) chip.hidden = bankOpen;
-  $("modeChipName").textContent = practical ? "Practical assessment"
+  $("modeChipName").textContent = practical && lesson.practice ? "Practice assessment"
+    : practical ? "Practical assessment"
     : assess ? "Assessment"
     : lesson.homework ? "Home learning" : "Lesson";
 }
