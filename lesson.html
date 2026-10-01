@@ -455,6 +455,15 @@ function inlineHtml(s){
     .replace(/<\/?(p|div|h[1-6]|ul|ol|li|br|blockquote)[^>]*>/gi, " ")
     .replace(/\s+/g, " ").trim();
 }
+/* A question can carry a code box, and a heading cannot: inlineHtml folds
+   every line of the code into one. So the words before the first box are the
+   question, and the box onwards is drawn underneath it, where its lines and
+   indents survive. */
+function splitAtCode(html){
+  const s = String(html || "");
+  const at = s.search(/<pre[\s>]/i);
+  return at < 0 ? { ask: s, code: "" } : { ask: s.slice(0, at), code: s.slice(at) };
+}
 
 /* ---------- autosave into this browser ----------
    No network, so we can save immediately on every change. A short debounce
@@ -5844,6 +5853,8 @@ function rShort(b){
      question, and drop onto two when the screen is too narrow for both. */
   const row = el("div","short-row");
   row.appendChild(ans);
+  const asked = splitAtCode(b.prompt);
+  if (asked.code) s.appendChild(el("div","short-code", asked.code));
   s.appendChild(row);
 
   /* In an assessment everything is marked at the end. In a lesson the student
@@ -5894,7 +5905,8 @@ function rShort(b){
   fields[b.id] = { get:() => ans.value, set:(v) => { ans.value = v || ""; } };
   return { section:s,
            check:() => ans.value.trim() ? { ok:true } : { ok:false, message:"Write an answer" },
-           brief:{ eyebrow:"Short answer", title:inlineHtml(b.prompt) || "", text:b.note || "" } };
+           brief:{ eyebrow:"Short answer", text:b.note || "",
+                   title:inlineHtml(asked.ask) || (asked.code ? "Look at the code below." : "") } };
 }
 
 /* ---------- marking ---------- */
@@ -6470,7 +6482,9 @@ function renderResponses(container, targetTopic, statusEl){
       const built = R(b);
       const bb = (typeof built.brief === "function") ? built.brief() : built.brief;
       const task = el("div","resp-task");
-      task.appendChild(el("p","resp-q", stripTags(b.prompt || b.title || bb.title)));
+      /* a short answer draws its own code box, so only its words go up here */
+      task.appendChild(el("p","resp-q", stripTags(b.type === "short" ? bb.title
+                                                   : (b.prompt || b.title || bb.title))));
       if (b.note) task.appendChild(el("p","resp-note", stripTags(b.note)));
       built.section.hidden = false;
       task.appendChild(built.section);
@@ -7528,7 +7542,10 @@ function buildPdf(){
       return out;
     }
     if (b.type === "short"){
-      out.push({ t: "ask", text: pdfText(b.prompt) || "Short answer" });
+      /* the code printed as code, the way the lesson page draws it */
+      const asked = splitAtCode(b.prompt);
+      out.push({ t: "ask", text: pdfText(asked.ask) || "Short answer" });
+      if (asked.code) proseParts(asked.code).forEach(part => out.push(part));
       out.push(label("Their answer"));
       out.push(answerBox(String(v || "").trim(), "Not answered"));
       if (b.model) out.push({ t: "text", face: "small", text: "A good answer mentions: " + b.model });

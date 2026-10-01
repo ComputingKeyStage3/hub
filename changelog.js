@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.2", text:"A short answer question can hold a code box. The code is shown under the question with its lines and indents kept, instead of squashed onto one line, and prints as code on the hand-in." },
   { v:"11.1.9", text:"Extension tasks have a new Wait for the page setting. With it on, Finished early? cannot be ticked until the other tasks on the page are done, and the student is told how many are left. A Choose your challenge does not count." },
   { v:"11.1.8", text:"Checklist lines about variables now count a variable wherever it is used, not only where it is set, so print(name, age, colour) counts as three variables on that line. A count on \"this line\" has to be met on one line, and a count of variables means different ones." },
   { v:"11.1.7", text:"The builder's preview, and the one in its own tab, now keeps up with changes without starting the page again. Answers, code, options picked and where you had scrolled to all stay put, and the page no longer goes blank while it updates." },
