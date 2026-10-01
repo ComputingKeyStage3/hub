@@ -6596,6 +6596,7 @@ function bankPreviewLesson(){
   page.startLocked = false;
   return { title: bankTask.title || "Task preview", blocks: [page] };
 }
+let bankPreviewOf = null;     // the task the panel was last showing
 function refreshBankPreview(){
   const frame = $("bankPrev");
   if (!frame) return;
@@ -6605,9 +6606,13 @@ function refreshBankPreview(){
     return;
   }
   try{
-    localStorage.setItem("hub_preview", JSON.stringify(bankPreviewLesson()));
-    try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){}
-    frame.src = "lesson.html?id=__preview&builder=1&t=" + Date.now();
+    /* Another task is a fresh start; the same one being edited keeps what
+       has been typed into it, as the lesson's preview does. */
+    const fresh = bankPreviewOf !== bankTask;
+    bankPreviewOf = bankTask;
+    writePreview(bankPreviewLesson(), bankTask);
+    if (fresh){ try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){} }
+    reloadPreview(frame, fresh);
     $("bankPrevMsg").textContent = "up to date";
   }catch(e){ $("bankPrevMsg").textContent = e.message; }
 }
@@ -6840,11 +6845,13 @@ on("prevPop", "click", () => popOutPreview(compile, "prevMsg"));
 function popOutPreview(make, msgId){
   try{
     localStorage.setItem("hub_preview", JSON.stringify(make()));
+    /* preview.html, not the lesson page: it is what keeps up with the builder
+       without starting the page again each time. */
     /* Which page the preview is on is deliberately left alone. It lives in
        this tab's sessionStorage, which the panel's frame shares and the new
        tab does not, so clearing it here would only throw the panel back to
        page one. */
-    window.open("lesson.html?id=__preview&builder=1&t=" + Date.now(), "_blank", "noopener");
+    window.open("preview.html?t=" + Date.now(), "_blank", "noopener");
   }catch(e){ const m = $(msgId); if (m) m.textContent = e.message; }
 }
 /* The pop-up is given the address, not the panel's own frame, so shutting it
@@ -6871,46 +6878,39 @@ function openFullPreview(src){
 
 function refreshPreview(){
   try{
+    const fresh = previewReset;
     if (previewReset){ try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){} previewReset = false; }
-    localStorage.setItem("hub_preview", JSON.stringify(compile()));
-    const frame = $("prev");
-    /* Where the preview had been scrolled to. It is reloaded from scratch on
-       every change, so without this a teacher editing the foot of a long page
-       was thrown back to the top of it after each keystroke. */
-    const keep = previewScroll(frame);
-    frame.src = "lesson.html?id=__preview&builder=1&t=" + Date.now();
-    frame.addEventListener("load", function once(){
-      frame.removeEventListener("load", once);
-      /* The lesson draws itself after load, so the place to scroll to does not
-         exist yet on the first go. Trying again shortly after catches it. */
-      putPreviewScroll(frame, keep);
-      setTimeout(() => putPreviewScroll(frame, keep), 120);
-      setTimeout(() => putPreviewScroll(frame, keep), 400);
-    });
+    writePreview(compile(), "lesson", fresh);
+    reloadPreview($("prev"), fresh);
     $("prevMsg").textContent = "up to date";
   }catch(e){ $("prevMsg").textContent = e.message; }
 }
 
-/* The lesson scrolls inside .stage on a wide screen and scrolls the page
-   itself on a narrow one, so both are worth remembering. */
-function previewScroll(frame){
-  try{
-    const d = frame.contentDocument;
-    if (!d) return null;
-    const stage = d.querySelector(".stage");
-    return { stage: stage ? stage.scrollTop : 0,
-             page: frame.contentWindow ? frame.contentWindow.scrollY : 0 };
-  }catch(e){ return null; }         // a preview from another origin cannot be read
+/* A preview in its own tab only hears that hub_preview changed, so the note
+   that this is a different lesson or task from last time, and should start
+   again rather than carry the last one's answers over, goes beside it and is
+   written first. */
+let previewSource = null;
+function writePreview(json, source, fresh){
+  if (fresh || source !== previewSource){
+    previewSource = source;
+    localStorage.setItem("hub_preview_fresh", String(Date.now()));
+  }
+  localStorage.setItem("hub_preview", JSON.stringify(json));
 }
-function putPreviewScroll(frame, keep){
-  if (!keep || (!keep.stage && !keep.page)) return;
-  try{
-    const d = frame.contentDocument;
-    if (!d) return;
-    const stage = d.querySelector(".stage");
-    if (stage && keep.stage) stage.scrollTop = keep.stage;
-    if (keep.page && frame.contentWindow) frame.contentWindow.scrollTo(0, keep.page);
-  }catch(e){}
+/* The panel holds preview.html, which reloads the lesson inside it out of
+   sight and carries the work on the page across (see there). It is loaded
+   once and asked to refresh after that; setting the frame's address on every
+   change, as this used to, is exactly the blank flash and the lost answers
+   it exists to avoid. */
+function reloadPreview(frame, fresh){
+  if (!frame) return;
+  if (!/^preview\.html/.test(frame.getAttribute("src") || "")){
+    frame.src = "preview.html";
+    return;
+  }
+  try{ frame.contentWindow.postMessage({ hubPreviewRefresh: true, fresh: !!fresh }, location.origin); }
+  catch(e){ frame.src = "preview.html?t=" + Date.now(); }
 }
 on("prevBtn", "click", refreshPreview);
 /* the same preview, with the room to see it properly */
@@ -7292,6 +7292,7 @@ function importLessonFile(){
       lesson.code = "";
       openPageRef = null; viewAll = false;
       pointTasksFor = null; palAllFor = null;
+      previewReset = true;      // another lesson's answers mean nothing here
       tidyIntoPages();
       startFolded();
       showTitle(); paintPickers();
@@ -7694,6 +7695,7 @@ on("delLesson", "click", () => {
             dirty = false;
             showTitle(); paintPickers();
             $("delLesson").hidden = true;
+            previewReset = true;
             render(); refreshPreview();
             say("Deleted", "The lesson has been removed from the site.");
           }catch(e){ msg.textContent = e.message; }

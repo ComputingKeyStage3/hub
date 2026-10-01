@@ -1010,37 +1010,20 @@ const handedOver = handedLesson();
             }
           }
         }catch(e){}
-        /* A preview opened in its own tab keeps up with the builder on its own.
-           Writing to localStorage raises a storage event in every other tab of
-           the same site, and never in the tab that did the writing, so this
-           follows the builder without the panel inside it reacting to itself.
-
-           The place on the page is carried across the reload the same way the
-           page number is, or every keystroke would throw the teacher back to
-           the top of what they were looking at. */
-        window.addEventListener("storage", (e) => {
-          if (e.key !== "hub_preview") return;
-          try{
-            const st = $("stage");
-            sessionStorage.setItem("hub_preview_scroll", String(st ? st.scrollTop : 0));
-          }catch(err){}
-          location.reload();
-        });
-        try{
-          const y = parseInt(sessionStorage.getItem("hub_preview_scroll") || "", 10);
-          if (!isNaN(y) && y > 0){
-            /* after the page has been drawn, or there is nothing to scroll yet */
-            const put = () => { const st = $("stage"); if (st) st.scrollTop = y; };
-            setTimeout(put, 80); setTimeout(put, 300);
-          }
-        }catch(e){}
+        /* preview.html around this reloads it on every change in the builder,
+           and hands over what the last copy had in it. */
+        window.hubPreviewState = previewState;
+        const carried = previewCarried();
+        if (carried) putPreviewWork(carried);
         if (!steps.length){
           $("briefTitle").textContent = "Nothing to preview yet";
           $("briefText").textContent = "Add a task on the left and it appears here.";
           $("dock").classList.add("gone");
+          previewReady(null);
           return;
         }
         showStep(Math.min(Math.max(stepParam !== null ? parseInt(stepParam, 10) : step, 0), steps.length - 1));
+        previewReady(carried);
         return;
       }
       if (document.body.classList) document.body.classList.add("spectating");
@@ -1210,7 +1193,100 @@ const handedOver = handedLesson();
     $("blocks").innerHTML = "";
     $("blocks").appendChild(box);
     $("dock").classList.add("gone");
+    if (builderParam !== null) previewReady(null);
   });
+
+/* ---------- carrying the builder's preview across a change ----------
+   Every change in the builder reloads this page, and a teacher testing a
+   page should not have to answer it all again each time. So the work on it
+   is handed to the next copy by preview.html, the same way a student's saved
+   work comes back to them: through each task's own set().
+
+   Ids are where a task is, unless it came from the bank, so a task put in
+   above another moves the ids of everything after it, and matching on the id
+   alone handed the work to whichever task had slid into its place, or more
+   often to nothing. So each task is known by what it is as well: its type
+   and its heading. A value only ever goes to a task of the same type, since
+   a quiz's answers put into a written answer would be nonsense and some
+   tasks throw. In order of how sure the match is:
+     the same id and the same heading;
+     the same heading somewhere else, which is a task that has moved;
+     the same id with a new heading, which is a task being retitled. */
+function previewTasks(){
+  const tasks = {};
+  const walk = (list) => (list || []).forEach(b => {
+    if (!b) return;
+    if (b.id) tasks[b.id] = { type: b.type,
+      sig: b.type + "|" + stripTags(b.title || "") + "|" + stripTags(b.task || b.prompt || "") };
+    walk(b.blocks);
+    (b.options || []).forEach(o => walk(o && o.blocks));
+  });
+  walk(lesson && lesson.blocks);
+  return tasks;
+}
+function previewState(){
+  const data = {};
+  Object.entries(fields).forEach(([id, f]) => { try{ data[id] = f.get(); }catch(e){} });
+  const st = $("stage");
+  return { step, tasks: previewTasks(), data,
+           stage: st ? st.scrollTop : 0, page: window.scrollY || 0 };
+}
+function previewCarried(){
+  try{
+    if (window.parent === window || typeof window.parent.hubPreviewTake !== "function") return null;
+    return window.parent.hubPreviewTake(window) || null;
+  }catch(e){ return null; }
+}
+function putPreviewWork(carried){
+  const now = previewTasks(), was = carried.tasks || {}, data = carried.data || {};
+  const oldIds = Object.keys(data).filter(id => was[id]);
+  const newIds = Object.keys(fields).filter(id => now[id]);
+  const used = new Set(), given = new Set();
+  const give = (to, from) => {
+    used.add(from); given.add(to);
+    try{ fields[to].set(data[from]); }catch(e){}
+  };
+  newIds.forEach(id => {
+    if (was[id] && was[id].sig === now[id].sig) give(id, id);
+  });
+  newIds.forEach(id => {
+    if (given.has(id)) return;
+    const from = oldIds.find(o => !used.has(o) && was[o].sig === now[id].sig);
+    if (from) give(id, from);
+  });
+  newIds.forEach(id => {
+    if (given.has(id) || used.has(id) || !was[id] || was[id].type !== now[id].type) return;
+    give(id, id);
+  });
+}
+/* Tells preview.html this copy can be swapped in. Not until it is scrolled
+   to where the last one was, and the pictures on the page have arrived to
+   give it its height: swapped in any sooner, the teacher sees it jump. Only
+   scrolled back if it is still the same page; a page picked in the builder
+   starts at its top. */
+function previewReady(carried){
+  const want = carried && carried.step === step ? carried : null;
+  const put = () => {
+    if (!want) return;
+    const st = $("stage");
+    if (st && want.stage) st.scrollTo({ top: want.stage, behavior: "instant" });
+    if (want.page) window.scrollTo({ top: want.page, behavior: "instant" });
+  };
+  const tell = () => {
+    try{ window.parent.postMessage({ hubPreviewReady: true }, location.origin); }catch(e){}
+  };
+  if (window.parent === window) return;
+  put();
+  const sec = steps[step] && steps[step].section;
+  const waiting = sec ? Array.from(sec.querySelectorAll("img")).filter(i => !i.complete) : [];
+  const arrived = Promise.all(waiting.map(i => new Promise(done => {
+    i.addEventListener("load", done, { once:true });
+    i.addEventListener("error", done, { once:true });
+  })));
+  /* Timers, not animation frames: a frame out of sight may be given none. */
+  Promise.race([arrived, new Promise(done => setTimeout(done, 800))])
+    .then(() => setTimeout(() => { put(); tell(); }, 50));
+}
 
 async function loadSaved(){
   if (spectate){
@@ -3689,7 +3765,8 @@ function teacherHere(){
   if (!spectate) return false;
   try{ if (window.teacherAuth && window.teacherAuth.have()) return true; }catch(e){}
   if (!OFFLINE || builderParam === null) return false;
-  try{ return window.parent !== window && /author\.html$/i.test(window.parent.location.pathname); }
+  /* the top, not the parent: preview.html sits between the two */
+  try{ return window.top !== window && /author\.html$/i.test(window.top.location.pathname); }
   catch(e){ return false; }
 }
 function readOnlyTag(){

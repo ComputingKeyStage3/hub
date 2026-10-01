@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson preview</title>
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;}catch(e){}</script>
+<link rel="stylesheet" href="style.css">
+<style>
+  html, body{height:100%; overflow:hidden}
+  .pv-frame{position:absolute; inset:0; width:100%; height:100%; border:0; display:block; background:var(--bg)}
+  /* Laid out and drawn into while it waits, so scrolling it to the right place
+     works, but not on screen until it has got there. */
+  .pv-frame.coming{visibility:hidden}
+</style>
+</head>
+<body>
+<script>
+/* The builder's live preview, both the panel beside the builder and the one
+   opened in its own tab, is this page with the lesson page inside it.
+
+   It used to be the lesson page itself, reloaded on every change. That threw
+   away everything done on it: the option picked, the quiz answered, the code
+   typed, how far down the page the teacher had got. And for a moment it was
+   blank. So a change is loaded into a second frame out of sight, handed what
+   the first one had in it, scrolled to the same place, and only then swapped
+   in. The teacher sees the page change and nothing else. */
+const LESSON = "lesson.html?id=__preview&builder=1";
+let shown = null;       // the frame on screen
+let coming = null;      // the one being got ready behind it, if any
+let carry = null;       // what the coming frame is to be handed
+let giveUp = null;
+
+function makeFrame(){
+  const f = document.createElement("iframe");
+  f.className = "pv-frame coming";
+  f.title = "Lesson preview";
+  f.src = LESSON + "&t=" + Date.now();
+  return f;
+}
+/* What is on the page now. The lesson page answers this itself, because only
+   it knows what each task holds; a frame still loading, or one that broke
+   while drawing, has nothing worth keeping. */
+function stateOf(frame){
+  try{
+    const w = frame && frame.contentWindow;
+    return w && typeof w.hubPreviewState === "function" ? w.hubPreviewState() : null;
+  }catch(e){ return null; }
+}
+function load(fresh){
+  /* A second change before the last one has finished loading. The one on
+     screen is still the one the teacher has been working in, so carry from
+     that, not from the half-built frame being thrown away. */
+  if (coming){ coming.remove(); coming = null; }
+  carry = fresh ? null : stateOf(shown);
+  coming = makeFrame();
+  document.body.appendChild(coming);
+  /* A lesson page that never says it is ready (an older copy cached, or one
+     that stopped part way) is swapped in anyway once it has loaded, rather
+     than leaving the preview stuck on the old version for ever. */
+  const mine = coming;
+  clearTimeout(giveUp);
+  mine.addEventListener("load", () => {
+    giveUp = setTimeout(() => { if (coming === mine) swap(); }, 2500);
+  });
+}
+function swap(){
+  if (!coming) return;
+  clearTimeout(giveUp);
+  const old = shown;
+  shown = coming; coming = null; carry = null;
+  shown.classList.remove("coming");
+  if (old) old.remove();
+}
+/* Asked by the lesson page in the coming frame as it is drawing, and only
+   that one: the frame on screen asking would be a page handing its own work
+   back to itself. */
+window.hubPreviewTake = function(win){
+  return (coming && coming.contentWindow === win) ? carry : null;
+};
+window.addEventListener("message", (e) => {
+  if (e.origin !== location.origin || !e.data) return;
+  if (e.data.hubPreviewReady){
+    if (coming && e.source === coming.contentWindow) swap();
+  } else if (e.data.hubPreviewRefresh){
+    /* From the builder this panel sits inside. */
+    load(!!e.data.fresh);
+  }
+});
+/* In a tab of its own this follows the builder through localStorage, which
+   raises an event in every other tab of the site and never in the one that
+   wrote it, so the panel inside the builder does not hear it and does not
+   load twice. The builder notes the moment it opened a different lesson or
+   task, and that change starts again from the top rather than carrying one
+   lesson's answers into another. */
+let freshSeen = localStorage.getItem("hub_preview_fresh") || "";
+window.addEventListener("storage", (e) => {
+  if (e.key !== "hub_preview") return;
+  const fresh = localStorage.getItem("hub_preview_fresh") || "";
+  load(fresh !== freshSeen);
+  freshSeen = fresh;
+});
+load(true);
+</script>
+</body>
+</html>

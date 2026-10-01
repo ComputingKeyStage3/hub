@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.1.7", text:"The builder's preview, and the one in its own tab, now keeps up with changes without starting the page again. Answers, code, options picked and where you had scrolled to all stay put, and the page no longer goes blank while it updates." },
   { v:"11.1.6", text:"The finished version of a coding task is now called the Model Program. Beside the checklist it is a small card with a Try it button, no taller than the checklist, and the program or page opens in a pop-up instead of on the page. Without a checklist the card sits above the code, only as wide as it needs to be. The menu for adding a table in a formatting box no longer runs wide on a small phone." },
   { v:"11.1.5",text:"A Python or web task can now be given a finished version. Students see a Try it button to the right of the checklist and can run the finished program, or open the finished page, as often as they like without ever seeing its code. Nothing it does ticks off their checklist." },
   { v:"11.1.4", text:"Need a hint? no longer appears while a run's ticks are still being shown: it waits until the tick on a line has finished, and a line that has just gone green loses its hint straight away. One at a time, the checklist heading now says how many are done, 2 of 5 done, with a small bar beside it showing each line." },
