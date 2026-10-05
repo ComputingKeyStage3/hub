@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.3.5", text:"Open Evening page: fits on one screen 1000 pixels tall, with the code beside the program. The quiz is now easy multiple choice about Prince Henry's, taking the letter or the answer, with stray dots and commas ignored. Secret Codes is now Secret Messages." },
   { v:"11.3.4", text:"Open Evening page: the settings for each program are in a Make it yours pop-up. Closing it with something changed but not added puts the change in anyway and shows what happened in the code, so Run always runs what was set." },
   { v:"11.3.3", text:"Open Evening page: turtle art comes first, Get to Know Me waits for Enter between each thing it works out, Secret Codes can crack a code with the same number that made it, and the code challenges have gone." },
   { v:"11.3.2", text:"A page for Open Evening, openevening.html, with four Python programs for visitors to run and change without signing in: a quiz, Get to Know Me, turtle art and secret codes. Nothing else on the site links to it." },
