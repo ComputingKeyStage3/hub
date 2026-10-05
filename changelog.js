@@ -9,6 +9,10 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.3.4", text:"Open Evening page: the settings for each program are in a Make it yours pop-up. Closing it with something changed but not added puts the change in anyway and shows what happened in the code, so Run always runs what was set." },
+  { v:"11.3.3", text:"Open Evening page: turtle art comes first, Get to Know Me waits for Enter between each thing it works out, Secret Codes can crack a code with the same number that made it, and the code challenges have gone." },
+  { v:"11.3.2", text:"A page for Open Evening, openevening.html, with four Python programs for visitors to run and change without signing in: a quiz, Get to Know Me, turtle art and secret codes. Nothing else on the site links to it." },
+  { v:"11.3.1", text:"Tables can be laid out how you want. Each column can be narrow, medium, wide or extra wide, each row can be up to six lines tall for longer answers, and the first column can be made into headings down the side." },
   { v:"11.3", text:"A practical assessment can be set as Practice, no grade. Students get it as an ordinary lesson and you give a Strength and a Target with no grade. Each checklist line in a practical can also have its own Strength and Target, which turn up in the marking bank with the lines that student got done first." },
   { v:"11.2.1",text:"In the builder's preview, changing the starter code of a coding task now shows straight away. Only what you have typed or done in the preview is kept when it updates." },
   { v:"11.2", text:"A short answer question can hold a code box. The code is shown under the question with its lines and indents kept, instead of squashed onto one line, and prints as code on the hand-in." },
