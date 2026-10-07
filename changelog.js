@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.6", text:"Practice practicals: the level a student reached is worked out from their checklists in View Work, and the Strength and Target start from it. Students see them under STAR feedback on their home page, with no grade or mark. The summary page has no title bar, saves as students work, keeps Show Rubric along the bottom, and a response can be the same levels again, starting where the student got to. The eye button now works on practicals in the builder." },
   { v:"11.5.2", text:"The Level unlocked card now waits for students to press Okay, so they can read what comes next. Practicals are labelled Practical rather than Assessment on students' home pages." },
   { v:"11.5.1", text:"In the Helpful IDE, running code that ends with an if, else or while with nothing under it now says to write a line underneath, instead of telling students to push the if line in." },
   { v:"11.5", text:"Assessments can be locked for marking, per class, from Manage or the lesson's box: students can see their work and mark but cannot change it until you unlock it. The Helpful IDE now checks code when Run is pressed rather than while students type, and shows the mistake inside the console, and the checklist ticks nothing off while a mistake is showing. A finished practical no longer has View my work or Back to Home buttons." },
