@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.6.1", text:"While an assessment is locked for marking, its response tasks wait until you unlock it instead of showing and failing to save, and Save Work says Locked for marking instead of Try again." },
   { v:"11.6", text:"Practice practicals: the level a student reached is worked out from their checklists in View Work, and the Strength and Target start from it. Students see them under STAR feedback on their home page, with no grade or mark. The summary page has no title bar, saves as students work, keeps Show Rubric along the bottom, and a response can be the same levels again, starting where the student got to. The eye button now works on practicals in the builder." },
   { v:"11.5.2", text:"The Level unlocked card now waits for students to press Okay, so they can read what comes next. Practicals are labelled Practical rather than Assessment on students' home pages." },
   { v:"11.5.1", text:"In the Helpful IDE, running code that ends with an if, else or while with nothing under it now says to write a line underneath, instead of telling students to push the if line in." },
