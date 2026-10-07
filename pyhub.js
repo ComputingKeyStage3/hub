@@ -462,8 +462,36 @@ def _hub_guard(frame, event, arg):
         raise HubTooLong("Your program was still running after " + str(int(_limit[0])) + " seconds. Is there a loop that never ends?")
     return _hub_guard
 
+# What went wrong, as data rather than as words, for the Helpful IDE in
+# pyedit.js to explain. The printed message stays exactly as it was, so an
+# editor that never asks for this sees no difference.
+_hub_err = [None]
+
+def _hub_where(err):
+    # The last line of the student's own program the error passed through.
+    # Lines inside Python itself are no use to a child, and the guard and
+    # the input() above are not theirs either.
+    import traceback
+    line = None
+    for fr in traceback.extract_tb(err.__traceback__):
+        if fr.filename == "your program":
+            line = fr.lineno
+    return line
+
+def _hub_note(err, kind):
+    try:
+        syntax = kind == "syntax"
+        _hub_err[0] = {"type": type(err).__name__, "msg": str(getattr(err, "msg", "") if syntax else err),
+                       "kind": kind,
+                       "line": getattr(err, "lineno", None) if syntax else _hub_where(err),
+                       "offset": getattr(err, "offset", None) if syntax else None,
+                       "name": getattr(err, "name", None) if isinstance(err, NameError) else None}
+    except Exception:
+        _hub_err[0] = None
+
 def _hub_run(source, seconds=10.0):
     global _hub_queue
+    _hub_err[0] = None
     del _events[:]
     del _pending[:]
     _sleep_left[0] = _SLEEP_TOTAL
@@ -488,6 +516,7 @@ def _hub_run(source, seconds=10.0):
                            "events": _events, "prompt": ask.prompt})
     except HubTooLong as stop:
         ok = False
+        _hub_note(stop, "slow")
         print("")
         print("--- stopped ---")
         print(str(stop))
@@ -497,6 +526,7 @@ def _hub_run(source, seconds=10.0):
         print(str(stop))
     except ModuleNotFoundError as miss:
         ok = False
+        _hub_note(miss, "run")
         name = str(getattr(miss, "name", "") or "").split(".")[0]
         print("There is no module called " + (name or "that") + " here.")
         if name in _NO_MODULE:
@@ -510,15 +540,18 @@ def _hub_run(source, seconds=10.0):
         # in the practice sandbox, where they upload the file themselves, the
         # answer is nearly always a capital letter in the name.
         ok = False
+        _hub_note(miss, "run")
         print("There is no file called " + str(getattr(miss, "filename", "") or "that") + " here.")
         print("Check the name matches exactly, including capital letters.")
     except SyntaxError as err:
         ok = False
+        _hub_note(err, "syntax")
         print("There is a typo in your code on line " + str(err.lineno) + ":")
         print("  " + (err.text or "").rstrip())
         print(str(err.msg))
-    except Exception:
+    except Exception as err:
         ok = False
+        _hub_note(err, "run")
         import traceback
         lines = traceback.format_exc().splitlines()
         keep = [l for l in lines if "your program" in l or not l.strip().startswith("File")]
@@ -528,7 +561,7 @@ def _hub_run(source, seconds=10.0):
         sys.stdout, sys.stderr = old_out, old_err
     _flush_text()
     return json.dumps({"status": "done", "out": _hub_text(),
-                       "events": _events, "ok": ok})
+                       "events": _events, "ok": ok, "err": _hub_err[0]})
 `;
 
   /* ---------- starting Python ----------

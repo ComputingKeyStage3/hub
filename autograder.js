@@ -984,7 +984,17 @@
         offer.hidden = true;
         const said = document.createElement("span");
         said.className = "check-hint";
-        said.textContent = hint;
+        /* Code in a hint is written between backticks, the same way the
+           Helpful IDE marks it, and is drawn as code so a student can see
+           exactly what to type. */
+        hint.split("`").forEach((part, k) => {
+          if (!part) return;
+          if (k % 2){
+            const code = document.createElement("code");
+            code.textContent = part;
+            said.appendChild(code);
+          } else said.appendChild(document.createTextNode(part));
+        });
         said.hidden = true;
         offer.addEventListener("click", () => { it.hintOpen = true; paintHint(it); });
         li.appendChild(offer); li.appendChild(said);
