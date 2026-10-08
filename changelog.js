@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.7.3", text:"The Teacher view bar, for jumping between levels, now shows in the builder's preview and in the preview popped out into its own tab, including for teachers who sign in with an authenticator code." },
   { v:"11.7.2", text:"On a practical built in levels, the extension task stays out of sight until every level is done. Strengths for a student who finished every level now say so, and the Target points at the extension." },
   { v:"11.7.1", text:"Previewing a lesson or viewing a student's work, a teacher can jump between levels or show everything on a page with the Teacher view bar. It is for looking only: students never see it, and nothing it opens is saved to their work." },
   { v:"11.7", text:"Once a student has a Strength or Target, their original work is read only: Back to my work becomes View my original work and Finish becomes STAR Feedback. Assessments of every kind now open only from Assessments & STAR Feedback, which is grouped by unit with the newest one open, and shows assessments still to do. Targets there are red, as on the summary. The bottom bar on a summary is the right height again." },
