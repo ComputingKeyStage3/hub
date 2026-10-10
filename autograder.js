@@ -972,7 +972,7 @@
          once they have run their code as many times as the teacher asked. */
       const hint = String((c && c.hint) || "").trim();
       const after = parseInt(c && c.hintAfter, 10);
-      const it = { li, mark, note, manual: isManual(c), hint,
+      const it = { li, mark, note, text, manual: isManual(c), hint,
                    num: isManual(c) ? 0 : ++autoNum,
                    hintAfter: isNaN(after) ? 1 : Math.max(0, after), hintOpen: false,
                    shownAt: null };
@@ -1045,7 +1045,7 @@
         b.classList.toggle("on", on);
         b.setAttribute("aria-pressed", on ? "true" : "false");
       });
-      const oneByOne = view === "one" && !everything && !manualOn;
+      const oneByOne = view === "one" && !everything && !manualOn && !teacherOn;
       let reached = false;
       items.forEach(it => {
         paintMark(it);
@@ -1071,6 +1071,44 @@
       });
     });
 
+    /* A teacher ticking a line off for the student during the lesson, when
+       the student has done what it asks but the check has not seen it. Only
+       ever turned on by the teacher's code on the lesson page. A line the code
+       ticked itself is left alone, and so is one only a teacher marks
+       afterwards, which has its own ticking above. `teacherTicks` is by
+       position in the list, the same as everything else saved with it. */
+    let teacherOn = false;
+    const teacherTicks = {};
+    function paintTeacher(it, i){
+      const on = !!teacherTicks[i];
+      it.li.classList.toggle("by-teacher", on);
+      if (it.byTeacher) it.byTeacher.hidden = !on;
+      if (on) it.li.dataset.state = "yes";
+      if (teacherOn) it.li.title = on ? "Click to untick" : "Click to tick this off for the student";
+    }
+    items.forEach((it, i) => {
+      if (it.manual) return;
+      const said = document.createElement("span");
+      said.className = "check-byteacher";
+      said.textContent = "Ticked by your teacher";
+      said.hidden = true;
+      it.text.appendChild(said);
+      it.byTeacher = said;
+      it.li.addEventListener("click", (e) => {
+        if (!teacherOn) return;
+        /* Need a hint? is a button on the same line, and pressing it is
+           not asking for a tick. */
+        if (e.target && e.target.closest && e.target.closest("button")) return;
+        const ticked = it.li.dataset.state === "yes";
+        if (ticked && !teacherTicks[i]) return;     // the code ticked this one itself
+        if (teacherTicks[i]){ delete teacherTicks[i]; it.li.dataset.state = "no"; }
+        else teacherTicks[i] = true;
+        paintTeacher(it, i);
+        tally();
+        if (typeof wrap.onTeacher === "function") wrap.onTeacher(wrap.getTeacher());
+      });
+    });
+
     function tally(){
       let done = 0, counted = 0;
       items.forEach(it => {
@@ -1092,6 +1130,7 @@
       (results || []).forEach((r, i) => {
         const it = items[i];
         if (!it || it.manual) return;         // a teacher's tick is not overwritten
+        if (teacherTicks[i]){ paintTeacher(it, i); return; }   // nor one given in the lesson
         if (held && held.indexOf(i) >= 0) return;
         it.li.dataset.state = r.broken ? "broken" : r.ok ? "yes" : "no";
         /* Only a check that is set up wrong says anything under the line
@@ -1101,8 +1140,8 @@
       return tally();
     };
     wrap.reset = function(){
-      items.forEach(it => {
-        if (it.manual) return;
+      items.forEach((it, i) => {
+        if (it.manual || teacherTicks[i]) return;
         it.li.dataset.state = "";
         it.note.textContent = "";
       });
@@ -1154,6 +1193,37 @@
         it.li.dataset.state = on ? "yes" : "";
       });
       tally();
+    };
+    /* The lines a teacher ticked during the lesson, saved with the work so
+       they stay ticked, and look teacher-ticked, wherever it is opened. */
+    wrap.getTeacher = function(){
+      const out = {};
+      Object.keys(teacherTicks).forEach(k => { out[k] = true; });
+      return out;
+    };
+    wrap.setTeacher = function(flags){
+      Object.keys(teacherTicks).forEach(k => { delete teacherTicks[k]; });
+      Object.keys(flags || {}).forEach(k => {
+        const it = items[+k];
+        if (it && !it.manual && flags[k]) teacherTicks[+k] = true;
+      });
+      items.forEach((it, i) => { if (!it.manual) paintTeacher(it, i); });
+      tally();
+    };
+    /* The student's own code has now done what the line asks, so the tick is
+       theirs: it goes green like any other, and the teacher's mark comes off. */
+    wrap.clearTeacher = function(i){
+      if (!teacherTicks[i]) return;
+      delete teacherTicks[i];
+      if (items[i]) paintTeacher(items[i], i);
+    };
+    wrap.allowTeacherTick = function(on){
+      teacherOn = !!on;
+      wrap.classList.toggle("teacher-ticking", teacherOn);
+      items.forEach((it, i) => {
+        if (!it.manual) it.li.title = teacherOn ? (teacherTicks[i] ? "Click to untick" : "Click to tick this off for the student") : "";
+      });
+      layout();
     };
     wrap.allowManual = function(on){
       manualOn = !!on;

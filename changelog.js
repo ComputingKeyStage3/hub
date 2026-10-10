@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.8", text:"Teachers can tick a checklist line off for a student. In a lesson or practical, type the teacher ticking code in the teacher pop-up, click the lines to tick them, then press Finished ticking: any level they earn opens with its level-up for the student. In View Work, click any checklist line to tick or untick it while marking, and the Strength and Target update to match, keeping anything you have written yourself. Lines a teacher ticked show a blue tick and the words Ticked by your teacher. Ticks given while marking are saved with the feedback." },
   { v:"11.7.3", text:"The Teacher view bar, for jumping between levels, now shows in the builder's preview and in the preview popped out into its own tab, including for teachers who sign in with an authenticator code." },
   { v:"11.7.2", text:"On a practical built in levels, the extension task stays out of sight until every level is done. Strengths for a student who finished every level now say so, and the Target points at the extension." },
   { v:"11.7.1", text:"Previewing a lesson or viewing a student's work, a teacher can jump between levels or show everything on a page with the Teacher view bar. It is for looking only: students never see it, and nothing it opens is saved to their work." },
