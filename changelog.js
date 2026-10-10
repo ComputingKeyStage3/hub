@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.9.2", text:"The pretend student in Preview is now called Example Student, and the line under the top bar has gone. The first time you open a Preview, a short pop-up says what the page is. Press Okay and it will not show again, for any lesson. The question mark at the top right brings it back." },
   { v:"11.9.1", text:"Finishing a level, by running code or by a teacher ticking the checklist, now plays the level-up once rather than twice when Okay is pressed quickly. The task bar down the side now moves on to the new level as it opens, instead of showing the finished level as a dot." },
   { v:"11.9", text:"Lessons in the Lesson Hub have a Preview button where Versions was. It opens the lesson as a pretend student sees it, on their home page and in the lesson, and in View Work as you mark it, so you can try giving a Strength and Target and see how it reaches them. Nothing in a preview reaches a class. Edit now asks in one short list: the original, any of its versions, or a new version. Give to classes and Delete ask which version when there is more than one." },
   { v:"11.8.1", text:"A pasted screenshot can be opened full screen with the button in its top right corner, by the student after pasting it and by a teacher in View Work. Press Esc or click anywhere to close it." },
