@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.9.4", text:"Pages in a practical assessment can now be locked, from the padlock in the builder and from Manage, the same as a lesson. Home learning never locks a page, so the padlocks are gone from it. New: a Year 7 Scratch maze game practical, with a Strength and Target bank to tick from." },
   { v:"11.9.3", text:"The lesson builder preview shows again, in the panel and in its own tab. The new Preview page had hidden it by mistake." },
   { v:"11.9.2", text:"The pretend student in Preview is now called Example Student, and the line under the top bar has gone. The first time you open a Preview, a short pop-up says what the page is. Press Okay and it will not show again, for any lesson. The question mark at the top right brings it back." },
   { v:"11.9.1", text:"Finishing a level, by running code or by a teacher ticking the checklist, now plays the level-up once rather than twice when Okay is pressed quickly. The task bar down the side now moves on to the new level as it opens, instead of showing the finished level as a dot." },

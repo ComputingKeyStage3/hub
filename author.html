@@ -2083,8 +2083,10 @@ function card(b, i, arr){
   const tools = el("span","btools");
   /* A page in the task builder is a shape to fill in, not a page of a
      lesson: there is nothing for it to be locked against and no class to
-     release it to. Those buttons appear when it is put into a lesson. */
-  if (b.type === "page" && b !== bankRoot){
+     release it to. Those buttons appear when it is put into a lesson.
+     Home learning has none either: it is done at home, where there is no
+     teacher to open a page, so lesson.html never locks one. */
+  if (b.type === "page" && b !== bankRoot && !lesson.homework){
     const isFirst = lesson.blocks.indexOf(b) === 0;
     if (isFirst) b.startLocked = false;     // students must be able to begin
     const locked = b.startLocked !== false;
@@ -5041,6 +5043,7 @@ function askPasscode(b){
 /* Every locked page that has not got a passcode yet, by its number. */
 function pagesMissingPasscode(){
   const out = [];
+  if (lesson.homework) return out;        // nothing locks in home learning
   lesson.blocks.forEach((b, i) => {
     if (b.type !== "page" || i === 0) return;
     if (b.startLocked !== false && !b.passHash) out.push(i + 1);
@@ -7867,7 +7870,7 @@ async function downloadForFolder(){
        the passcodes down. */
     const gates = [];
     lesson.blocks.forEach((blk, i) => {
-      if (blk.type === "page" && i > 0 && blk.startLocked !== false && blk.passCode)
+      if (!lesson.homework && blk.type === "page" && i > 0 && blk.startLocked !== false && blk.passCode)
         gates.push("Page " + (i + 1) + ": " + blk.passCode);
     });
     if (gates.length){
