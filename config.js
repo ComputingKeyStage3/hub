@@ -45,7 +45,14 @@ window.HUB = {
   try{
     while (w.parent && w.parent !== w){
       w = w.parent;
-      if (w.hubSandbox && typeof w.hubSandbox.enter === "function"){ w.hubSandbox.enter(window); return; }
+      if (w.hubSandbox && typeof w.hubSandbox.enter === "function"){
+        /* Said before entering rather than by it: the lesson page reads this
+           to open every page, and that should hold even where entering the
+           sandbox went wrong. */
+        window.hubInPreview = true;
+        w.hubSandbox.enter(window);
+        return;
+      }
     }
   }catch(e){ /* a page above on another site: not the preview */ }
 })();
