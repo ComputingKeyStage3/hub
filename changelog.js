@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.1.9", text:"A checklist line switched from Teacher back to Checked automatically now keeps the check it shows, instead of showing every student \"!\" and never ticking. Lessons saved like that are put right when they are opened and saved again. On a web task, Add another condition now makes one that works." },
   { v:"12.1.8", text:"In a response task, checklist lines ticked off there that were not already ticked in the lesson turn into a gold star that gently twinkles, so what the response added stands out." },
   { v:"12.1.7", text:"A link among the response tasks shows its heading and instructions above the button, rather than the button's words twice. A reminders choice there no longer shows its question twice." },
   { v:"12.1.6", text:"In Mark work, a practical whose questions all come from its checklist skips the questions and fills in the Strength and Target from the ticks. Revise Strength and Target asks them if you want to." },
