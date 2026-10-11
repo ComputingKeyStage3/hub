@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.1.4", text:"In View work, a screenshot opened full screen stays full screen when you move to another student, showing theirs. Save and Save and next stay at the bottom of the Feedback column however far down it is scrolled. From your bank sits closer to its box." },
   { v:"12.1.3", text:"View work has a Save and next button beside Save, which saves the feedback and opens the next student. Ctrl + Enter does the same from anywhere on the page." },
   { v:"12.1.2", text:"After the marking questions, the Strength is shown in full first, with Edit Strength or Looks good, and the Target comes after. A Strength is built from the two furthest things the student did, not three." },
   { v:"12.1.1", text:"A student with nothing saved in a practical is taken to have been away. Mark work fills in \"You have tried hard in lessons this half term.\" and a Target saying they missed the practical, and the markbook spreadsheet does the same. Anything you have written is kept. A practical can word its own pair in the builder, under Strength and Target." },
