@@ -9,6 +9,8 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.1.3", text:"View work has a Save and next button beside Save, which saves the feedback and opens the next student. Ctrl + Enter does the same from anywhere on the page." },
+  { v:"12.1.2", text:"After the marking questions, the Strength is shown in full first, with Edit Strength or Looks good, and the Target comes after. A Strength is built from the two furthest things the student did, not three." },
   { v:"12.1.1", text:"A student with nothing saved in a practical is taken to have been away. Mark work fills in \"You have tried hard in lessons this half term.\" and a Target saying they missed the practical, and the markbook spreadsheet does the same. Anything you have written is kept. A practical can word its own pair in the builder, under Strength and Target." },
   { v:"12.1", text:"Rubrics go from the lowest level to the highest, left to right for students and top to bottom in the builder. Older lessons are turned round for you. A screenshot task can compare with an earlier screenshot, showing Original and Updated tabs once there is one to compare with. Students see the level they reached as a sentence, with what it asks for underneath. A Strength now opens with a word of praise instead of naming the level. Ctrl + V works in a screenshot task among the response tasks, and reminder buttons put in a response task now show." },
   { v:"12.0.2", text:"Marking questions no longer stop at the first No. The next question on that level is asked to check. A second No stops there, and a Yes asks the rest of that level, so what the student did manage still goes into their Strength." },
