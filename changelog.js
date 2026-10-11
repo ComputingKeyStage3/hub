@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"11.9.5", text:"Pasting a screenshot with Ctrl + V works again. It had stopped working whenever the screenshot box was on a page. The box also has a Paste screenshot button, and Browse pictures, which opens the Pictures folder in Chrome and Edge. The Year 7 Scratch practical is now a Driving Game rather than a maze game." },
   { v:"11.9.4", text:"Pages in a practical assessment can now be locked, from the padlock in the builder and from Manage, the same as a lesson. Home learning never locks a page, so the padlocks are gone from it. New: a Year 7 Scratch maze game practical, with a Strength and Target bank to tick from." },
   { v:"11.9.3", text:"The lesson builder preview shows again, in the panel and in its own tab. The new Preview page had hidden it by mistake." },
   { v:"11.9.2", text:"The pretend student in Preview is now called Example Student, and the line under the top bar has gone. The first time you open a Preview, a short pop-up says what the page is. Press Okay and it will not show again, for any lesson. The question mark at the top right brings it back." },
