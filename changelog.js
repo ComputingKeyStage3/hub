@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.0", text:"Marking a practical starts with questions. Where a lesson has Strengths and Targets, you answer Yes or No to each strength, and the first No becomes the target, which you can change. The boxes are filled in for you, and From your bank is still there. View work is called Mark work on a practical. The screenshot task shows two numbered steps, and Paste screenshot pastes straight after Allow is pressed. Screenshots are kept sharper. Scroll the mouse wheel to zoom a full screen picture, which in Mark work now fills only the work, not the whole screen." },
   { v:"11.9.5", text:"Pasting a screenshot with Ctrl + V works again. It had stopped working whenever the screenshot box was on a page. The box also has a Paste screenshot button, and Browse pictures, which opens the Pictures folder in Chrome and Edge. The Year 7 Scratch practical is now a Driving Game rather than a maze game." },
   { v:"11.9.4", text:"Pages in a practical assessment can now be locked, from the padlock in the builder and from Manage, the same as a lesson. Home learning never locks a page, so the padlocks are gone from it. New: a Year 7 Scratch maze game practical, with a Strength and Target bank to tick from." },
   { v:"11.9.3", text:"The lesson builder preview shows again, in the panel and in its own tab. The new Preview page had hidden it by mistake." },
