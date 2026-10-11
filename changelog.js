@@ -9,6 +9,8 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.1.7", text:"A link among the response tasks shows its heading and instructions above the button, rather than the button's words twice. A reminders choice there no longer shows its question twice." },
+  { v:"12.1.6", text:"In Mark work, a practical whose questions all come from its checklist skips the questions and fills in the Strength and Target from the ticks. Revise Strength and Target asks them if you want to." },
   { v:"12.1.5", text:"In Preview, every page of a lesson or practical is open, whatever is locked for your classes, so Continue always moves on." },
   { v:"12.1.4", text:"In View work, a screenshot opened full screen stays full screen when you move to another student, showing theirs. Save and Save and next stay at the bottom of the Feedback column however far down it is scrolled. From your bank sits closer to its box." },
   { v:"12.1.3", text:"View work has a Save and next button beside Save, which saves the feedback and opens the next student. Ctrl + Enter does the same from anywhere on the page." },
