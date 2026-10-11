@@ -1026,6 +1026,10 @@
        found ticked when its turn comes. A teacher reading the work always sees
        the whole list. Teacher-checked lines are never held back. */
     let everything = false;
+    /* Which lines were already ticked in the lesson task a response task
+       stands in for, by position. Null on every other list, which is never
+       gold. */
+    let carried = null;
     /* The circle: the line's number, a tick once it is right and ! for a check
        the teacher needs to look at. A teacher's own lines have no number. */
     function paintMark(it){
@@ -1038,6 +1042,12 @@
       it.mark.textContent = said;
       /* two digits from the tenth line on */
       it.mark.classList.toggle("wide", said.length > 1);
+      /* On a response task, a line ticked here that was not already ticked
+         in the lesson is gold, so the student and the teacher reading it can
+         both see what the response added. A teacher's own tick keeps its own
+         colour, because "Ticked by your teacher" is what it has to say. */
+      const i = items.indexOf(it);
+      it.li.classList.toggle("new-tick", !!carried && st === "yes" && !carried[i] && !teacherTicks[i]);
     }
     function layout(){
       viewBtns.forEach(b => {
@@ -1216,6 +1226,14 @@
       if (!teacherTicks[i]) return;
       delete teacherTicks[i];
       if (items[i]) paintTeacher(items[i], i);
+    };
+    /* Given once, as a response task is built, with what the lesson task
+       had ticked. Kept apart from the ticks themselves, which the response's
+       own saved work replaces straight afterwards. */
+    wrap.setCarried = function(flags){
+      carried = {};
+      (flags || []).forEach((on, i) => { if (on) carried[i] = true; });
+      layout();
     };
     wrap.allowTeacherTick = function(on){
       teacherOn = !!on;
