@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.3.2", text:"Moving a class with their work now says so plainly if their work did not go with them, instead of saying no students had any work." },
   { v:"12.3.1", text:"Moving a class to another version of a lesson can now take their work with them, so a class who did a lesson before it was changed is marked against the version they actually did." },
   { v:"12.3", text:"Assessments now open on a welcome page with reminders, then show every question on one page, with a bar along the top for each question. Finish lists any questions left empty and asks before handing in, and a teacher code on the summary lets a student back in." },
   { v:"12.2.4", text:"Tables and Label a picture now count in an assessment: one mark per box or label, in the score, the Strength and Target and the review. They can be given a topic tag, and their Check buttons are hidden during the test." },
