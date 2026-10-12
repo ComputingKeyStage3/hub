@@ -9,6 +9,9 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.3", text:"Assessments now open on a welcome page with reminders, then show every question on one page, with a bar along the top for each question. Finish lists any questions left empty and asks before handing in, and a teacher code on the summary lets a student back in." },
+  { v:"12.2.4", text:"Tables and Label a picture now count in an assessment: one mark per box or label, in the score, the Strength and Target and the review. They can be given a topic tag, and their Check buttons are hidden during the test." },
+  { v:"12.2.3", text:"Importing a lesson into a version now fills that version. Before, the import turned it into a lesson of its own, saved beside the original instead of under it." },
   { v:"12.2.2", text:"In a Python console, a long question asked by input() now wraps onto the next line, and the box to type the answer sits underneath it at full width. Before, the box was squeezed off the edge, so students could not see what they typed." },
   { v:"12.2.1", text:"Assessments do the same when they are handed in: checklist lines the code already meets are ticked without Run, so they count in the score and the Strength and Target." },
   { v:"12.2", text:"When a lesson is finished, coding tasks tick off the checklist lines their code already does, even if the student never pressed Run, so a print() they wrote counts in the ticks, the marking and the Strength and Target. Lines about the output or the number of runs still need Run." },

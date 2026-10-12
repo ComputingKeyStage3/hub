@@ -1145,7 +1145,8 @@ function compileOne(b, id, target){
            is not a clue */
         words: (b.spots || []).map(sp => sp.answer).filter(Boolean)
                  .sort(() => Math.random() - 0.5),
-        spots: (b.spots || []).filter(sp => sp.answer) }));
+        spots: (b.spots || []).filter(sp => sp.answer),
+        topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "binary")
       push(keepArrays({ type:"binary", id, title: b.title || "", task: b.task || "",
         mode: b.mode || "toDenary", bits: Number(b.bits) || 8, count: Number(b.count) || 4,
@@ -1249,7 +1250,8 @@ function compileOne(b, id, target){
         widths: widths.some(Boolean) ? widths : undefined,
         lines: lines.some(n => n > 1) ? lines : undefined,
         sideHead: b.sideHead ? true : undefined,
-        point: b.point || "", code: b.code || "", strand: b.strand || "" }));
+        point: b.point || "", code: b.code || "", strand: b.strand || "",
+        topic: lesson.assessment ? b.topic : "" }));
     }
     /* An exam question carries its specification point and the wording of
        that point with it. The lesson page has no way of reaching the
@@ -3076,6 +3078,9 @@ function card(b, i, arr){
       paintSpots();
     }
     body.appendChild(w);
+    /* Each label is a mark in an assessment, so it needs a topic for the
+       Strength and Target the same as any other question. */
+    if (lesson.assessment) F("Topic tag", "topic");
   }
   if (b.type === "binary" || b.type === "binadd"){
     F("Heading (optional)", "title");
@@ -3307,6 +3312,8 @@ function card(b, i, arr){
       : "No boxes yet, so there is nothing for them to fill in."));
     w.appendChild(add);
     body.appendChild(w);
+    /* Each box with an answer is a mark in an assessment. */
+    if (lesson.assessment) F("Topic tag", "topic");
     if (specLevel()) specPicker(body, b);
   }
   if (b.type === "exam"){
@@ -7674,12 +7681,23 @@ function importLessonFile(){
       const check = blocksFromImport(data);          // throws if there is nothing usable
       const made = fromCompiled(data, {});
       made.blocks = check.blocks;
+      /* Importing into a version fills that version. The way to version a
+         lesson from a file is to make the version first and import into it,
+         and taking the file's empty versionOf here turned it into a lesson of
+         its own, saved beside the original instead of under it. */
+      const intoVersion = lesson.versionOf ? {
+        versionOf: lesson.versionOf, versionName: lesson.versionName,
+        versionNote: lesson.versionNote, versionCode: lesson.versionCode,
+        savedAs: lesson.savedAs, code: lesson.code } : null;
       lesson = made;
-      /* lesson.savedAs is what Save writes over. Cleared, so an imported
-         lesson is saved as a new one rather than on top of whatever was
-         open when it came in. */
-      lesson.savedAs = null;
-      lesson.code = "";
+      if (intoVersion) Object.assign(lesson, intoVersion);
+      else {
+        /* lesson.savedAs is what Save writes over. Cleared, so an imported
+           lesson is saved as a new one rather than on top of whatever was
+           open when it came in. */
+        lesson.savedAs = null;
+        lesson.code = "";
+      }
       openPageRef = null; viewAll = false;
       pointTasksFor = null; palAllFor = null;
       previewReset = true;      // another lesson's answers mean nothing here
@@ -7690,7 +7708,8 @@ function importLessonFile(){
       render(); schedulePreview();
       dirty = true;
       closeModal();
-      say("Lesson imported", "“" + (lesson.title || "Untitled lesson") + "” is open here."
+      say("Lesson imported", "“" + (lesson.title || "Untitled lesson") + "” is open here"
+          + (intoVersion ? " as the “" + (lesson.versionName || "Version") + "” version of “" + parentTitle() + "”." : ".")
           + saidDropped(check.dropped)
           + " Nothing is on the site until you press Save.");
     }
@@ -7701,6 +7720,9 @@ function importLessonFile(){
     box.appendChild(el("h2","","Replace what is open?"));
     box.appendChild(el("p","modal-text",
       "Importing a lesson puts it in place of “" + (lesson.title || "the lesson") + "”. "
+      + (lesson.versionOf
+          ? "It stays the “" + (lesson.versionName || "Version") + "” version of “" + parentTitle() + "”, and Save writes over that version. "
+          : "")
       + "Anything here that has not been saved goes with it."));
     const yes = el("button","btn-primary modal-cta","Import anyway");
     yes.addEventListener("click", () => { closeModal(); start(); });
