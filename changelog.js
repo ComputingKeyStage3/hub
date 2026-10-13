@@ -9,6 +9,10 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.5", text:"New task: Click the right spot. Students click a place on a picture, and anywhere inside the ring you set counts as right. Multiple choice answers and Put in order items can now hold pictures, such as Scratch blocks, and pictures in a question now show on the page." },
+  { v:"12.4.2", text:"A short answer whose answer is a number now tells a student to type just a number, rather than to use one word." },
+  { v:"12.4.1", text:"A short answer now shows a red line under the box when more words are typed than its first accepted answer has, saying how many words to use. Short answers have a Subheading in the builder for a reminder such as \"Answer with just 1 word.\"" },
+  { v:"12.4", text:"An assessment can now be given a mark with no STAR feedback: switch it off in Lesson options. Students get their score and extension tasks for everyone at the bottom of the summary, and the builder's tabs become Questions and Extension tasks. The code that lets a student back into an assessment has changed." },
   { v:"12.3.2", text:"Moving a class with their work now says so plainly if their work did not go with them, instead of saying no students had any work." },
   { v:"12.3.1", text:"Moving a class to another version of a lesson can now take their work with them, so a class who did a lesson before it was changed is marked against the version they actually did." },
   { v:"12.3", text:"Assessments now open on a welcome page with reminders, then show every question on one page, with a bar along the top for each question. Finish lists any questions left empty and asks before handing in, and a teacher code on the summary lets a student back in." },

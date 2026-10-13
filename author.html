@@ -119,6 +119,8 @@
   <button class="on" id="tabQuestions">Questions</button>
   <button id="tabTargets">Strength &amp; Target</button>
   <button id="tabResponses">Response tasks</button>
+  <!-- Instead of the two above, for an assessment with STAR feedback off -->
+  <button id="tabExtension" hidden>Extension tasks</button>
 </div>
 
 <div class="build">
@@ -193,6 +195,7 @@
           <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
           <button class="pal" data-add="table"><b>Table</b><span>They fill in the blank cells</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
+          <button class="pal" data-add="hotspot"><b>Click the right spot</b><span>They click a place on a picture</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="media">
@@ -272,6 +275,7 @@
           <button class="pal" data-add="table"><b>Table</b><span>They fill in the blank cells</span></button>
           <button class="pal" data-add="short"><b>Short answer</b><span>Matched to the answers you set</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
+          <button class="pal" data-add="hotspot"><b>Click the right spot</b><span>They click a place on a picture</span></button>
           <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
         </div>
       </div>
@@ -597,6 +601,7 @@ const BLANK = {
   keywords: () => ({ type:"keywords", title:"Keywords", task:"Write what each one means in your own words.",
                      words:[{ word:"", hint:"" }, { word:"", hint:"" }] }),
   label:    () => ({ type:"label", title:"", task:"", image:"", spots:[] }),
+  hotspot:  () => ({ type:"hotspot", title:"", task:"", image:"", x:50, y:50, r:8 }),
   binary:   () => ({ type:"binary", title:"", task:"", mode:"toDenary", bits:8, count:4,
                      showPlace:true, numbers:"" }),
   binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
@@ -688,7 +693,7 @@ const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
                 short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
-                table:"Table" };
+                table:"Table", hotspot:"Click the right spot" };
 
 /* The lesson page hashes what a student types and compares it with this, so
    the answer is never sitting in the lesson file for anyone to read. Same
@@ -792,6 +797,17 @@ function migrate(arr){
 function inline(s){
   return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
 }
+/* One answer from a formatting box, as one line of html: a picture, bold,
+   code and so on survive, the paragraph round it does not. Empty means
+   nothing typed and no picture, and is dropped. Plain text, from a lesson
+   written before answers could hold pictures, comes through as it was. */
+function optionHtml(x){
+  let h = String(x == null ? "" : x);
+  if (/<[a-z]/i.test(h) && window.cleanRichText) h = window.cleanRichText(h);
+  h = h.replace(/<\/?(p|div)[^>]*>/gi, " ").replace(/(<br\s*\/?>\s*)+$/i, "").replace(/\s+/g, " ").trim();
+  const words = h.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+  return words || /<img/i.test(h) ? h : "";
+}
 function keepArrays(o){
   Object.keys(o).forEach(k => {
     const v = o[k];
@@ -830,6 +846,11 @@ function compile(){
     out.versionCode = lesson.versionCode || "";
   }
   if (lesson.perfectTarget) out.perfectTarget = lesson.perfectTarget;
+  /* Only the off ones are written down, and only on a standard assessment:
+     every assessment saved before this had STAR feedback. The topics and
+     response tasks are still saved with it, so turning it back on finds
+     them where they were. */
+  if (starOff()) out.star = false;
   /* For a student with nothing saved in a practical. Only written when
      the teacher wrote one; otherwise the site's own wording stands. */
   if (lesson.practical && String(lesson.absentStrength || "").trim()) out.absentStrength = lesson.absentStrength.trim();
@@ -1147,6 +1168,16 @@ function compileOne(b, id, target){
                  .sort(() => Math.random() - 0.5),
         spots: (b.spots || []).filter(sp => sp.answer),
         topic: lesson.assessment ? b.topic : "" }));
+    else if (b.type === "hotspot"){
+      /* The spot and the size of the circle are percentages of the picture,
+         and ratio keeps the circle round on a picture that is not square. */
+      const pct = (n, d) => Math.round(Math.min(100, Math.max(0, Number(n) || d)) * 10) / 10;
+      push(keepArrays({ type:"hotspot", id, title: b.title || "", task: b.task || "",
+        image: b.image || "", alt: b.alt || "",
+        x: pct(b.x, 50), y: pct(b.y, 50), r: Math.max(1, Math.min(50, Number(b.r) || 8)),
+        ratio: Number(b.ratio) > 0 ? Math.round(Number(b.ratio) * 10000) / 10000 : undefined,
+        topic: lesson.assessment ? b.topic : "" }));
+    }
     else if (b.type === "binary")
       push(keepArrays({ type:"binary", id, title: b.title || "", task: b.task || "",
         mode: b.mode || "toDenary", bits: Number(b.bits) || 8, count: Number(b.count) || 4,
@@ -1205,8 +1236,10 @@ function compileOne(b, id, target){
     else if (b.type === "link")
       push(keepArrays({ type:"link", id, url: b.url || "", title: b.title || "Open this",   // the button needs words
              heading: b.heading || "", task: b.task || "", confirm: b.confirm === true }));
+    /* An option written in a formatting box is kept as a line: its
+       paragraph wrapper goes, so it sits beside its radio button. */
     else if (b.type === "mc")
-      push(keepArrays({ type:"mc", id, prompt: b.prompt || "", options: (b.options || []).filter(x => x !== ""),
+      push(keepArrays({ type:"mc", id, prompt: b.prompt || "", options: (b.options || []).map(optionHtml).filter(Boolean),
         answer: Number(b.answer) || 0, topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "blanks")
       push(keepArrays({ type:"blanks", id, prompt: b.prompt || "", text: b.text || "",
@@ -1214,10 +1247,11 @@ function compileOne(b, id, target){
         topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "order")
       push(keepArrays({ type:"order", id, prompt: b.prompt || "",
-        items: (b.items || []).filter(x => x !== ""), topic: lesson.assessment ? b.topic : "" }));
+        items: (b.items || []).map(optionHtml).filter(Boolean), topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "short")
       push(keepArrays({ type:"short", id, prompt: b.prompt || "",
         answers: (b.answers || []).map(x => String(x).trim()).filter(Boolean),
+        note: b.note || "",
         model: b.model || "", topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "table"){
       /* Every row squared off to the width of the headings, and a cell
@@ -1522,6 +1556,14 @@ function renderNow(){
     $("palAssess").hidden = !lesson.assessment || anyTask;
   }
   const list = $("list"); list.innerHTML = "";
+  /* With STAR feedback off the follow-up is one list for everyone, so the
+     tab opens straight onto it. Set here rather than only when the tab is
+     pressed, because several things clear respEditing on their way past. */
+  if (assessTab === "extension" && starOff()){
+    if (!lesson.extensions) lesson.extensions = [];
+    respEditing = "__ext";
+    $("palLesson").hidden = false; $("palAssess").hidden = true;
+  }
   /* an assessment is three pages: its questions, its feedback, its follow-up */
   if ((lesson.assessment || lesson.practical) && assessTab === "targets" && !respEditing){
     $("palLesson").hidden = true; $("palAssess").hidden = true;
@@ -1536,9 +1578,14 @@ function renderNow(){
                    : (lesson.topics[respEditing] && lesson.topics[respEditing].label) || respEditing;
     head.appendChild(el("h2","", respEditing === "__ext" ? "Extension tasks"
                                                         : "Response tasks \u2022 " + niceName));
-    const back = el("button","btn-ghost bmini2","Back to the list");
-    back.addEventListener("click", () => { respEditing = null; render(); schedulePreview(); });
-    head.appendChild(back);
+    if (assessTab === "extension"){
+      head.appendChild(el("p","hint",
+        "Everyone gets these at the bottom of their summary, behind a Finished early? tick box."));
+    } else {
+      const back = el("button","btn-ghost bmini2","Back to the list");
+      back.addEventListener("click", () => { respEditing = null; render(); schedulePreview(); });
+      head.appendChild(back);
+    }
     list.appendChild(head);
     const arr = respEditing === "__ext" ? (lesson.extensions || [])
                                         : (lesson.responses[respEditing] || []);
@@ -2311,15 +2358,26 @@ function card(b, i, arr){
   }
   /* onChange fires whenever a line is typed in, added or removed, for the
      lists that have something to put right once a teacher has touched them. */
-  function listField(label, key, help, onChange){
+  function listField(label, key, help, onChange, rich){
     const changed = () => { if (onChange) onChange(); };
     const w = el("div","bfield");
     w.appendChild(el("label","", label));
     b[key].forEach((val, k) => {
       const row = el("div","brow");
-      const input = el("input"); input.value = val;
-      input.addEventListener("input", () => { b[key][k] = input.value; changed(); saveDraft(); schedulePreview(); });
-      row.appendChild(input);
+      if (rich){
+        /* An answer can be a picture: a Scratch block pasted in, say, or
+           words with bold or code in them. Its formatting bar only shows
+           while it is being written in, or a list of four would be four
+           bars. */
+        const ed = window.richText(val || "", (html) => { b[key][k] = html; changed(); saveDraft(); schedulePreview(); },
+                                   { rows: 1, upload: pasteUpload, imageSrc: (id) => pictureSrc({ imgId: id }) });
+        ed.classList.add("rt-option");
+        row.appendChild(ed);
+      } else {
+        const input = el("input"); input.value = val;
+        input.addEventListener("input", () => { b[key][k] = input.value; changed(); saveDraft(); schedulePreview(); });
+        row.appendChild(input);
+      }
       if (b.answer !== undefined){
         const pick = el("button","btn-ghost bmini" + (Number(b.answer) === k ? " right" : ""), "\u2713");
         pick.title = "This is the correct answer";
@@ -2892,20 +2950,23 @@ function card(b, i, arr){
   }
   if (b.type === "mc"){
     R("Question", "prompt", { rows:2 });
-    listField("Options (tick the right one)", "options");
-    if (lesson.assessment) F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
+    listField("Options (tick the right one)", "options",
+      "Each option can hold a picture as well as words: paste one in, a screenshot of a Scratch block for example.",
+      null, true);
+    if (topicTags()) F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
   }
   if (b.type === "blanks"){
     F("Instruction (optional)", "prompt");
     F("Sentence with gaps", "text", { area:true, rows:3,
       help:"Put the answers in double brackets: The [[cat]] sat on the [[mat]]." });
     F("Extra wrong words for the dropdowns", "distractors");
-    if (lesson.assessment) F("Topic tag", "topic");
+    if (topicTags()) F("Topic tag", "topic");
   }
   if (b.type === "order"){
     F("Instruction (optional)", "prompt");
-    listField("Items in the CORRECT order", "items", "Students see them shuffled.");
-    if (lesson.assessment) F("Topic tag", "topic");
+    listField("Items in the CORRECT order", "items",
+      "Students see them shuffled. Each item can hold a picture as well as words: paste one in.", null, true);
+    if (topicTags()) F("Topic tag", "topic");
   }
   if (b.type === "ide" || b.type === "web"){          // once Python or web has been chosen
     const isWeb = b.type === "web";
@@ -3080,7 +3141,59 @@ function card(b, i, arr){
     body.appendChild(w);
     /* Each label is a mark in an assessment, so it needs a topic for the
        Strength and Target the same as any other question. */
-    if (lesson.assessment) F("Topic tag", "topic");
+    if (topicTags()) F("Topic tag", "topic");
+  }
+  if (b.type === "hotspot"){
+    F("Heading (optional)", "title");
+    F("Instruction (optional)", "task", { area:true, rows:2 });
+    F("Picture address", "image", { help:"Paste a link to the picture, or the address of one in the site's images folder." });
+    F("What the picture shows (optional)", "alt", { help:"Read out by a screen reader. Do not give the answer away." });
+    const w = el("div","bfield");
+    const head = el("div","brow");
+    head.appendChild(el("label","","The right spot"));
+    head.appendChild(helpDot("Click on the picture to put the right spot there. Anywhere inside the ring counts as right."));
+    w.appendChild(head);
+    if (!b.image) w.appendChild(el("p","hint","Paste a picture address above to start."));
+    else {
+      const holder = el("div","hotspot-pic hotspot-edit");
+      const img = el("img"); img.src = b.image; img.draggable = false;
+      holder.appendChild(img);
+      const ring = el("div","hotspot-ring");
+      const dot = el("div","hotspot-pin");
+      holder.appendChild(ring); holder.appendChild(dot);
+      const paint = () => {
+        ring.style.left = dot.style.left = (Number(b.x) || 0) + "%";
+        ring.style.top = dot.style.top = (Number(b.y) || 0) + "%";
+        ring.style.width = (2 * (Number(b.r) || 8)) + "%";
+      };
+      /* The circle is a share of the picture's width, so how tall it is on
+         the picture depends on the picture's shape, measured here. */
+      img.addEventListener("load", () => {
+        if (img.naturalWidth){
+          const ratio = Math.round(img.naturalHeight / img.naturalWidth * 10000) / 10000;
+          if (ratio !== b.ratio){ b.ratio = ratio; saveDraft(); }
+        }
+      });
+      holder.addEventListener("click", (e) => {
+        const r = img.getBoundingClientRect();
+        if (!r.width) return;
+        b.x = Math.round((e.clientX - r.left) / r.width * 1000) / 10;
+        b.y = Math.round((e.clientY - r.top) / r.height * 1000) / 10;
+        paint(); saveDraft(); schedulePreview();
+      });
+      paint();
+      w.appendChild(holder);
+      const size = el("div","brow");
+      size.appendChild(el("span","bhelp","How big the ring is"));
+      const range = el("input");
+      range.type = "range"; range.min = "2"; range.max = "30"; range.step = "0.5";
+      range.value = String(Number(b.r) || 8);
+      range.addEventListener("input", () => { b.r = Number(range.value); paint(); saveDraft(); schedulePreview(); });
+      size.appendChild(range);
+      w.appendChild(size);
+    }
+    body.appendChild(w);
+    if (topicTags()) F("Topic tag", "topic");
   }
   if (b.type === "binary" || b.type === "binadd"){
     F("Heading (optional)", "title");
@@ -3160,11 +3273,17 @@ function card(b, i, arr){
   }
   if (b.type === "short"){
     R("Question", "prompt", { rows:2 });
+    /* Under the question, where a reminder such as "Answer with just 1
+       word." is seen before anything is typed. */
+    R("Subheading (optional)", "note", { rows:2 });
     if (!Array.isArray(b.answers)) b.answers = [""];
     listField("Accepted answers", "answers",
       "The student has to type one of these. Capitals, extra spaces and stray " +
       "punctuation are ignored, so add a line only for answers that are really " +
-      "different, such as CPU and central processing unit.",
+      "different, such as CPU and central processing unit. The first one sets " +
+      "the word limit: a student who types more words than it has is told to " +
+      "keep their answer that long. Where it is a number, they are told to " +
+      "type just a number.",
       /* The note about the old keyword marking has been read and acted on the
          moment the list is touched, so it goes rather than sitting there for
          the rest of the afternoon. */
@@ -3172,7 +3291,7 @@ function card(b, i, arr){
     shortAnswerNotes(body, b);
     F("Model answer", "model", { area:true, rows:2,
       help:"Shown to a student who gets it wrong, and printed beside their work." });
-    if (lesson.assessment) F("Topic tag", "topic");
+    if (topicTags()) F("Topic tag", "topic");
   }
   if (b.type === "table"){
     F("Heading (optional)", "title");
@@ -3313,7 +3432,7 @@ function card(b, i, arr){
     w.appendChild(add);
     body.appendChild(w);
     /* Each box with an answer is a mark in an assessment. */
-    if (lesson.assessment) F("Topic tag", "topic");
+    if (topicTags()) F("Topic tag", "topic");
     if (specLevel()) specPicker(body, b);
   }
   if (b.type === "exam"){
@@ -3566,14 +3685,9 @@ function setMode(assess, practical){
   $("palExtensionBtn").hidden = !!assess || !!practical;
   $("palAssess").hidden = !assess;
   /* Response tasks are handed out from the screen an assessment ends on,
-     practice ones included, so every kind has the tab. */
-  $("tabResponses").hidden = false;
-  ["tabQuestions","tabTargets","tabResponses"].forEach(id => {
-    const e = $(id);
-    if (e) e.classList.toggle("on", (id === "tabQuestions" && assessTab === "questions") ||
-                                    (id === "tabTargets" && assessTab === "targets") ||
-                                    (id === "tabResponses" && assessTab === "responses"));
-  });
+     practice ones included, so every kind has the tab, unless STAR feedback
+     is off, which paintAssessTabs decides. */
+  paintAssessTabs();
 
   saveDraft(); render(); schedulePreview();
   if (typeof paintBuildBar === "function") paintBuildBar();
@@ -3601,17 +3715,36 @@ on("modeHome", "click", () => {
 function setAssessTab(which){
   assessTab = which;
   respEditing = null;
-  ["tabQuestions","tabTargets","tabResponses"].forEach(id => {
-    const on2 = (id === "tabQuestions" && which === "questions") ||
-                (id === "tabTargets" && which === "targets") ||
-                (id === "tabResponses" && which === "responses");
-    const e = $(id); if (e) e.classList.toggle("on", on2);
-  });
+  paintAssessTabs();
   render();
+}
+/* An assessment can be given a mark and nothing more: no Strength and
+   Target, no response tasks, and in their place one set of extension tasks
+   that everyone gets on the summary. Only a standard assessment has the
+   choice. A practical's feedback is what it is marked with, and a lesson
+   has no feedback of this kind to turn off. */
+function starOff(){ return !!lesson.assessment && !lesson.practical && lesson.star === false; }
+/* The Topic tag on a question is there for the Strength and Target. */
+function topicTags(){ return !!lesson.assessment && !starOff(); }
+function paintAssessTabs(){
+  const off = starOff();
+  $("tabTargets").hidden = off;
+  $("tabResponses").hidden = off;
+  $("tabExtension").hidden = !off;
+  /* A tab that has just gone cannot be the one open. */
+  if ((off && (assessTab === "targets" || assessTab === "responses")) ||
+      (!off && assessTab === "extension")){
+    assessTab = "questions"; respEditing = null;
+  }
+  [["tabQuestions","questions"],["tabTargets","targets"],
+   ["tabResponses","responses"],["tabExtension","extension"]].forEach(([id, which]) => {
+    const e = $(id); if (e) e.classList.toggle("on", assessTab === which);
+  });
 }
 on("tabQuestions", "click", () => setAssessTab("questions"));
 on("tabTargets", "click", () => setAssessTab("targets"));
 on("tabResponses", "click", () => setAssessTab("responses"));
+on("tabExtension", "click", () => setAssessTab("extension"));
 
 /* ---------- the sentences behind Strength and Target ---------- */
 
@@ -4661,7 +4794,7 @@ function paintResponseTopics(into){
 let respEditing = null;
 /* The response list a practical gives every student, whatever their target. */
 const EVERYONE = "all";
-let assessTab = "questions";   // questions | targets | responses
+let assessTab = "questions";   // questions | targets | responses, or extension with STAR feedback off
 
 /* Every section starts folded away, so the palette is the same short list
    each time it is opened. It used to remember which ones were open, which
@@ -4804,6 +4937,31 @@ on("optionsBtn", "click", () => {
        + "twenty minutes is not twenty minutes at risk. Turned off, work only "
        + "reaches you when a student presses Finish or Save Work."]));
     w4.appendChild(row); box.appendChild(w4);
+
+    /* Only a standard assessment has STAR feedback to turn off, so nothing
+       else is shown the choice. */
+    if (lesson.assessment && !lesson.practical){
+      const w5 = el("div","bfield");
+      w5.appendChild(el("label","","STAR feedback"));
+      const row5 = el("div","brow");
+      const star = el("button","btn-ghost bmini2","");
+      const paintStar = () => {
+        star.textContent = "STAR feedback: " + (lesson.star !== false ? "on" : "off");
+        star.classList.toggle("right", lesson.star !== false);
+      };
+      star.addEventListener("click", () => {
+        lesson.star = lesson.star === false;
+        paintStar(); paintAssessTabs(); saveDraft(); render(); schedulePreview();
+      });
+      paintStar();
+      row5.appendChild(star);
+      row5.appendChild(helpDot(
+        ["On: each student gets a Strength and Target from the topics their questions are tagged "
+         + "with, and response tasks chosen from their target.",
+         "Off: they get their mark and nothing more, and the same extension tasks for everyone at "
+         + "the bottom of their summary. The tabs above change to Questions and Extension tasks."]));
+      w5.appendChild(row5); box.appendChild(w5);
+    }
 
     box.appendChild(versionField());
 
@@ -8290,6 +8448,7 @@ function fromCompiled(data, meta){
                 perfectTarget: data.perfectTarget || "", zeroStrength: data.zeroStrength || "",
                 absentStrength: data.absentStrength || "", absentTarget: data.absentTarget || "",
                 linger: data.linger !== false,
+                star: data.star !== false,
                 versionOf: data.versionOf || "", versionName: data.versionName || "",
                 versionNote: data.versionNote || "", versionCode: data.versionCode || "",
                 marking: data.marking || "score", outOf: data.outOf || 20,
@@ -8381,7 +8540,7 @@ function fromCompiled(data, meta){
         ? b.keywords.reduce((all, g) => all.concat(g), []).map(x => String(x).trim()).filter(Boolean)
         : window.shortAnswer.accepted(b);
       return { type:"short", prompt:b.prompt || "", answers: answers.length ? answers : [""],
-               wasKeywords: converted, model:b.model || "", topic:b.topic || "" };
+               wasKeywords: converted, model:b.model || "", note:b.note || "", topic:b.topic || "" };
     }
     if (b.type === "blanks") return { type:"blanks", prompt:b.prompt || "", text:b.text || "",
       distractors:(b.distractors || []).join(", "), topic:b.topic || "" };
