@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.6.2", text:"Mark work: you can now put a student's code right while marking, such as a line they deleted by accident, and Save keeps it in their work. A marked practical now also brings back the ticks, comment and code changes from marking when the student opens it." },
   { v:"12.6.1", text:"Mark work: students with saved feedback say Saved in the list, and Unmarked only leaves them out of the list and of Next. Opening a marked student shows Saved and Next until something is changed. A practical marked only from its checklists fills in the Strength and Target with no list to tick." },
   { v:"12.6", text:"Marking a practical: Mark work checks every checklist again when a student's work opens, and when you press Run, so code they never ran still counts. A short list to tick, a level at a time, now writes the Strength and Target, and work further on is praised. The Yes or No questions are in Settings. Levelled work opens on the level the student reached, and the Feedback column is shorter." },
   { v:"12.5", text:"New task: Click the right spot. Students click a place on a picture, and anywhere inside the ring you set counts as right. Multiple choice answers and Put in order items can now hold pictures, such as Scratch blocks, and pictures in a question now show on the page." },
