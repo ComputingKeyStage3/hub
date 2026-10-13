@@ -195,6 +195,7 @@
           <button class="pal" data-add="order"><b>Put in order</b><span>Drag to sort</span></button>
           <button class="pal" data-add="table"><b>Table</b><span>They fill in the blank cells</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
+          <button class="pal" data-add="hotspot"><b>Click the right spot</b><span>They click a place on a picture</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="media">
@@ -274,6 +275,7 @@
           <button class="pal" data-add="table"><b>Table</b><span>They fill in the blank cells</span></button>
           <button class="pal" data-add="short"><b>Short answer</b><span>Matched to the answers you set</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
+          <button class="pal" data-add="hotspot"><b>Click the right spot</b><span>They click a place on a picture</span></button>
           <button class="pal" data-add="text"><b>Paragraph</b><span>Instructions or context</span></button>
         </div>
       </div>
@@ -599,6 +601,7 @@ const BLANK = {
   keywords: () => ({ type:"keywords", title:"Keywords", task:"Write what each one means in your own words.",
                      words:[{ word:"", hint:"" }, { word:"", hint:"" }] }),
   label:    () => ({ type:"label", title:"", task:"", image:"", spots:[] }),
+  hotspot:  () => ({ type:"hotspot", title:"", task:"", image:"", x:50, y:50, r:8 }),
   binary:   () => ({ type:"binary", title:"", task:"", mode:"toDenary", bits:8, count:4,
                      showPlace:true, numbers:"" }),
   binadd:   () => ({ type:"binadd", title:"", task:"", bits:8, count:3,
@@ -690,7 +693,7 @@ const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
                 short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
-                table:"Table" };
+                table:"Table", hotspot:"Click the right spot" };
 
 /* The lesson page hashes what a student types and compares it with this, so
    the answer is never sitting in the lesson file for anyone to read. Same
@@ -793,6 +796,17 @@ function migrate(arr){
 /* ---------------- cards -> a real lesson file ---------------- */
 function inline(s){
   return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+/* One answer from a formatting box, as one line of html: a picture, bold,
+   code and so on survive, the paragraph round it does not. Empty means
+   nothing typed and no picture, and is dropped. Plain text, from a lesson
+   written before answers could hold pictures, comes through as it was. */
+function optionHtml(x){
+  let h = String(x == null ? "" : x);
+  if (/<[a-z]/i.test(h) && window.cleanRichText) h = window.cleanRichText(h);
+  h = h.replace(/<\/?(p|div)[^>]*>/gi, " ").replace(/(<br\s*\/?>\s*)+$/i, "").replace(/\s+/g, " ").trim();
+  const words = h.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+  return words || /<img/i.test(h) ? h : "";
 }
 function keepArrays(o){
   Object.keys(o).forEach(k => {
@@ -1154,6 +1168,16 @@ function compileOne(b, id, target){
                  .sort(() => Math.random() - 0.5),
         spots: (b.spots || []).filter(sp => sp.answer),
         topic: lesson.assessment ? b.topic : "" }));
+    else if (b.type === "hotspot"){
+      /* The spot and the size of the circle are percentages of the picture,
+         and ratio keeps the circle round on a picture that is not square. */
+      const pct = (n, d) => Math.round(Math.min(100, Math.max(0, Number(n) || d)) * 10) / 10;
+      push(keepArrays({ type:"hotspot", id, title: b.title || "", task: b.task || "",
+        image: b.image || "", alt: b.alt || "",
+        x: pct(b.x, 50), y: pct(b.y, 50), r: Math.max(1, Math.min(50, Number(b.r) || 8)),
+        ratio: Number(b.ratio) > 0 ? Math.round(Number(b.ratio) * 10000) / 10000 : undefined,
+        topic: lesson.assessment ? b.topic : "" }));
+    }
     else if (b.type === "binary")
       push(keepArrays({ type:"binary", id, title: b.title || "", task: b.task || "",
         mode: b.mode || "toDenary", bits: Number(b.bits) || 8, count: Number(b.count) || 4,
@@ -1212,8 +1236,10 @@ function compileOne(b, id, target){
     else if (b.type === "link")
       push(keepArrays({ type:"link", id, url: b.url || "", title: b.title || "Open this",   // the button needs words
              heading: b.heading || "", task: b.task || "", confirm: b.confirm === true }));
+    /* An option written in a formatting box is kept as a line: its
+       paragraph wrapper goes, so it sits beside its radio button. */
     else if (b.type === "mc")
-      push(keepArrays({ type:"mc", id, prompt: b.prompt || "", options: (b.options || []).filter(x => x !== ""),
+      push(keepArrays({ type:"mc", id, prompt: b.prompt || "", options: (b.options || []).map(optionHtml).filter(Boolean),
         answer: Number(b.answer) || 0, topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "blanks")
       push(keepArrays({ type:"blanks", id, prompt: b.prompt || "", text: b.text || "",
@@ -1221,7 +1247,7 @@ function compileOne(b, id, target){
         topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "order")
       push(keepArrays({ type:"order", id, prompt: b.prompt || "",
-        items: (b.items || []).filter(x => x !== ""), topic: lesson.assessment ? b.topic : "" }));
+        items: (b.items || []).map(optionHtml).filter(Boolean), topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "short")
       push(keepArrays({ type:"short", id, prompt: b.prompt || "",
         answers: (b.answers || []).map(x => String(x).trim()).filter(Boolean),
@@ -2332,15 +2358,26 @@ function card(b, i, arr){
   }
   /* onChange fires whenever a line is typed in, added or removed, for the
      lists that have something to put right once a teacher has touched them. */
-  function listField(label, key, help, onChange){
+  function listField(label, key, help, onChange, rich){
     const changed = () => { if (onChange) onChange(); };
     const w = el("div","bfield");
     w.appendChild(el("label","", label));
     b[key].forEach((val, k) => {
       const row = el("div","brow");
-      const input = el("input"); input.value = val;
-      input.addEventListener("input", () => { b[key][k] = input.value; changed(); saveDraft(); schedulePreview(); });
-      row.appendChild(input);
+      if (rich){
+        /* An answer can be a picture: a Scratch block pasted in, say, or
+           words with bold or code in them. Its formatting bar only shows
+           while it is being written in, or a list of four would be four
+           bars. */
+        const ed = window.richText(val || "", (html) => { b[key][k] = html; changed(); saveDraft(); schedulePreview(); },
+                                   { rows: 1, upload: pasteUpload, imageSrc: (id) => pictureSrc({ imgId: id }) });
+        ed.classList.add("rt-option");
+        row.appendChild(ed);
+      } else {
+        const input = el("input"); input.value = val;
+        input.addEventListener("input", () => { b[key][k] = input.value; changed(); saveDraft(); schedulePreview(); });
+        row.appendChild(input);
+      }
       if (b.answer !== undefined){
         const pick = el("button","btn-ghost bmini" + (Number(b.answer) === k ? " right" : ""), "\u2713");
         pick.title = "This is the correct answer";
@@ -2913,7 +2950,9 @@ function card(b, i, arr){
   }
   if (b.type === "mc"){
     R("Question", "prompt", { rows:2 });
-    listField("Options (tick the right one)", "options");
+    listField("Options (tick the right one)", "options",
+      "Each option can hold a picture as well as words: paste one in, a screenshot of a Scratch block for example.",
+      null, true);
     if (topicTags()) F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
   }
   if (b.type === "blanks"){
@@ -2925,7 +2964,8 @@ function card(b, i, arr){
   }
   if (b.type === "order"){
     F("Instruction (optional)", "prompt");
-    listField("Items in the CORRECT order", "items", "Students see them shuffled.");
+    listField("Items in the CORRECT order", "items",
+      "Students see them shuffled. Each item can hold a picture as well as words: paste one in.", null, true);
     if (topicTags()) F("Topic tag", "topic");
   }
   if (b.type === "ide" || b.type === "web"){          // once Python or web has been chosen
@@ -3101,6 +3141,58 @@ function card(b, i, arr){
     body.appendChild(w);
     /* Each label is a mark in an assessment, so it needs a topic for the
        Strength and Target the same as any other question. */
+    if (topicTags()) F("Topic tag", "topic");
+  }
+  if (b.type === "hotspot"){
+    F("Heading (optional)", "title");
+    F("Instruction (optional)", "task", { area:true, rows:2 });
+    F("Picture address", "image", { help:"Paste a link to the picture, or the address of one in the site's images folder." });
+    F("What the picture shows (optional)", "alt", { help:"Read out by a screen reader. Do not give the answer away." });
+    const w = el("div","bfield");
+    const head = el("div","brow");
+    head.appendChild(el("label","","The right spot"));
+    head.appendChild(helpDot("Click on the picture to put the right spot there. Anywhere inside the ring counts as right."));
+    w.appendChild(head);
+    if (!b.image) w.appendChild(el("p","hint","Paste a picture address above to start."));
+    else {
+      const holder = el("div","hotspot-pic hotspot-edit");
+      const img = el("img"); img.src = b.image; img.draggable = false;
+      holder.appendChild(img);
+      const ring = el("div","hotspot-ring");
+      const dot = el("div","hotspot-pin");
+      holder.appendChild(ring); holder.appendChild(dot);
+      const paint = () => {
+        ring.style.left = dot.style.left = (Number(b.x) || 0) + "%";
+        ring.style.top = dot.style.top = (Number(b.y) || 0) + "%";
+        ring.style.width = (2 * (Number(b.r) || 8)) + "%";
+      };
+      /* The circle is a share of the picture's width, so how tall it is on
+         the picture depends on the picture's shape, measured here. */
+      img.addEventListener("load", () => {
+        if (img.naturalWidth){
+          const ratio = Math.round(img.naturalHeight / img.naturalWidth * 10000) / 10000;
+          if (ratio !== b.ratio){ b.ratio = ratio; saveDraft(); }
+        }
+      });
+      holder.addEventListener("click", (e) => {
+        const r = img.getBoundingClientRect();
+        if (!r.width) return;
+        b.x = Math.round((e.clientX - r.left) / r.width * 1000) / 10;
+        b.y = Math.round((e.clientY - r.top) / r.height * 1000) / 10;
+        paint(); saveDraft(); schedulePreview();
+      });
+      paint();
+      w.appendChild(holder);
+      const size = el("div","brow");
+      size.appendChild(el("span","bhelp","How big the ring is"));
+      const range = el("input");
+      range.type = "range"; range.min = "2"; range.max = "30"; range.step = "0.5";
+      range.value = String(Number(b.r) || 8);
+      range.addEventListener("input", () => { b.r = Number(range.value); paint(); saveDraft(); schedulePreview(); });
+      size.appendChild(range);
+      w.appendChild(size);
+    }
+    body.appendChild(w);
     if (topicTags()) F("Topic tag", "topic");
   }
   if (b.type === "binary" || b.type === "binadd"){
