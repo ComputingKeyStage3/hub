@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.6.9", text:"Level reached is gone: Mark work no longer shows or saves one for a practice practical, and the summary page no longer tells a student which level they reached. The summary page's tick, cards and confetti now play on school computers too." },
   { v:"12.6.8", text:"Mark work: the Student was present tick sits under Done ticking and Next level. The Strength and Target can be typed into straight away, in a box that grows to fit them, with Back and Looks good at the bottom." },
   { v:"12.6.7", text:"Mark work: the tick for Student was present but did not save their work properly now shows above the ticks for every student, and goes once anything is ticked on any level. Ticked, it goes straight to the comment. Unticked, the list is back on the level you were on." },
   { v:"12.6.6", text:"Mark work: Done ticking and Next level are the same width, so Done ticking fits in its button. A student with nothing saved has no Level reached." },
