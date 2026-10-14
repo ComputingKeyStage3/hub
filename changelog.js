@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.6.7", text:"Mark work: the tick for Student was present but did not save their work properly now shows above the ticks for every student, and goes once anything is ticked on any level. Ticked, it goes straight to the comment. Unticked, the list is back on the level you were on." },
   { v:"12.6.6", text:"Mark work: Done ticking and Next level are the same width, so Done ticking fits in its button. A student with nothing saved has no Level reached." },
   { v:"12.6.5", text:"Mark work: a student with nothing saved has a tick for Student was present but did not save their work properly. Ticked, the Strength and Target go and they get a comment instead, with a bigger box. The tick is only offered once a practical has that comment written, under its Strength and Target for nothing saved." },
   { v:"12.6.4", text:"Mark work: the student list says Marked rather than Saved, and a student whose feedback is saved shows Marked in green under the buttons." },
