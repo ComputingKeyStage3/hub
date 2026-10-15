@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.8.2", text:"Assessments: progress is always the bar on the left, with a flag pointing at the question on screen, and the choice in Settings is gone. Pressing Finish with questions still empty flags those in red on the bar instead of listing their numbers." },
   { v:"12.8.1", text:"Assessments: answered questions show in blue instead of green, so it does not look like they are right. Students can pick in Settings how their progress is shown: numbered boxes, or a bar on the left or right of the questions, which stay in the middle of the screen." },
   { v:"12.8.1", text:"A practical's Submitted page shows the screenshots handed in, under the tick, so you can see at a glance whether they show the work. A pasted screenshot is saved straight away instead of half a minute later." },
   { v:"12.8", text:"Assessments are built in pages. One page is the questions page, and only question types can go on it. Every other page can hold any task, students go through them one at a time before the questions, and nothing on them is marked. Students see the questions further apart, each in its own box, with numbered boxes beside them showing what they have answered instead of the bar along the top, and on a phone those open from the bottom bar." },
