@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.8", text:"Assessments are built in pages. One page is the questions page, and only question types can go on it. Every other page can hold any task, students go through them one at a time before the questions, and nothing on them is marked. Students see the questions further apart, each in its own box, with numbered boxes beside them showing what they have answered instead of the bar along the top, and on a phone those open from the bottom bar." },
   { v:"12.7.3", text:"Mark work: the next student's work is loaded while you mark the one in front of you, so Save and next shows it straight away instead of the loading dots." },
   { v:"12.7.2", text:"Mark work: Save and next opens the next student straight away and saves in the background. If a save does not go through, that student loses their tick, is named under the buttons, and opening them brings back what you wrote so you can save it again." },
   { v:"12.7.1", text:"Markbook: says Markbook in its title from the moment it opens, fits the screen with only the table scrolling, and has Copy all and Save for Excel beside the tabs instead of big buttons along the bottom." },
