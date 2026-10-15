@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.7.3", text:"Mark work: the next student's work is loaded while you mark the one in front of you, so Save and next shows it straight away instead of the loading dots." },
   { v:"12.7.2", text:"Mark work: Save and next opens the next student straight away and saves in the background. If a save does not go through, that student loses their tick, is named under the buttons, and opening them brings back what you wrote so you can save it again." },
   { v:"12.7.1", text:"Markbook: says Markbook in its title from the moment it opens, fits the screen with only the table scrolling, and has Copy all and Save for Excel beside the tabs instead of big buttons along the bottom." },
   { v:"12.7", text:"Practice and graded rubric practicals are now one kind, called Rubric, and every practice practical already made carries on as one. Each level has a grade range, and you choose whether students see the level or the grade range. Every markbook lists students by username, with the level, grade range and ticks for a practical or the marks and every question for a test, has the response tasks on a tab of their own, sorts by any column, and lets you pick cells to copy into a spreadsheet. Markbook in the three dots menu opens again, and two students with the same name no longer share a result. Mark work keeps what you typed and ticked for each student when you move between them without saving, until the page is reloaded or closed." },
