@@ -1401,7 +1401,7 @@ function compileOne(b, id, target){
       push(keepArrays({ type:"mc", id, prompt: b.prompt || "", options: (b.options || []).map(optionHtml).filter(Boolean),
         answer: Number(b.answer) || 0, topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "blanks")
-      push(keepArrays({ type:"blanks", id, prompt: b.prompt || "", text: b.text || "",
+      push(keepArrays({ type:"blanks", id, prompt: b.prompt || "", text: b.text || "", rich: b.rich ? true : undefined,
         distractors: (b.distractors || "").split(/\s*,\s*/).filter(Boolean),
         topic: lesson.assessment ? b.topic : "" }));
     else if (b.type === "order")
@@ -2523,6 +2523,34 @@ function card(b, i, arr){
     w.appendChild(withHelp(ed, o.help));
     body.appendChild(w);
   }
+  /* The sentence of a fill in the gaps, in a formatting box so it can have
+     new lines, bold and code in it. What is saved keeps every answer inside
+     [[ ]] as plain words, never as HTML: the marking on this page, in the
+     console and in progressmath all read the answers out of the brackets
+     and compare them as typed, so "[[<=]]" has to stay "<=" and not become
+     "&lt;=" or "<b>&lt;=</b>". Going into the box the answers are escaped
+     again, or "[[<p>]]" would turn into a paragraph. A lesson written before
+     this has plain text with no "rich" on it, and its new lines become line
+     breaks in the box; it is only saved as HTML once it has been edited. */
+  function blanksField(){
+    const w = el("div","bfield");
+    w.appendChild(el("label","", "Sentence with gaps"));
+    const raw = String(b.text || "");
+    const shown = b.rich
+      ? raw.replace(/\[\[(.*?)\]\]/g, (_, g) => "[[" + esc(g) + "]]")
+      : esc(raw).replace(/\r?\n/g, "<br>");
+    const ed = window.richText(shown, (html) => {
+      const box = document.createElement("div");
+      b.text = String(html || "").replace(/\[\[([\s\S]*?)\]\]/g, (_, g) => {
+        box.innerHTML = g.replace(/<br\s*\/?>/gi, " ");
+        return "[[" + box.textContent.replace(/\s+/g, " ").trim() + "]]";
+      });
+      b.rich = true;
+      saveDraft(); schedulePreview();
+    }, { rows: 3, upload: pasteUpload, imageSrc: (id) => pictureSrc({ imgId: id }) });
+    w.appendChild(withHelp(ed, "Put the answers in double brackets: The [[cat]] sat on the [[mat]]."));
+    body.appendChild(w);
+  }
   /* on/off buttons; each entry is [key, label, defaultOn] */
   /* Which page of an assessment holds the questions. It is moved rather
      than switched off, because an assessment always has exactly one. */
@@ -3203,8 +3231,7 @@ function card(b, i, arr){
   }
   if (b.type === "blanks"){
     F("Instruction (optional)", "prompt");
-    F("Sentence with gaps", "text", { area:true, rows:3,
-      help:"Put the answers in double brackets: The [[cat]] sat on the [[mat]]." });
+    blanksField();
     F("Extra wrong words for the dropdowns", "distractors");
     if (topicTags()) F("Topic tag", "topic");
   }
@@ -8978,7 +9005,7 @@ function fromCompiled(data, meta){
       return { type:"short", prompt:b.prompt || "", answers: answers.length ? answers : [""],
                wasKeywords: converted, model:b.model || "", note:b.note || "", topic:b.topic || "" };
     }
-    if (b.type === "blanks") return { type:"blanks", prompt:b.prompt || "", text:b.text || "",
+    if (b.type === "blanks") return { type:"blanks", prompt:b.prompt || "", text:b.text || "", rich: !!b.rich,
       distractors:(b.distractors || []).join(", "), topic:b.topic || "" };
     /* A saved cipher holds only the coded text and a hash, never the message.
        Trying all 25 shifts and hashing each one finds the shift the teacher

@@ -9,6 +9,11 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.8.8", text:"Mark work: a test opens the way the student sat it, the questions in their cards with the bar beside them, instead of one question at a time. Finish there goes to the marked summary." },
+  { v:"12.8.7", text:"Assessments: one turn of the mouse wheel, or one swipe on a phone, slides to the next question and stops with it at the top. A long question is read through first." },
+  { v:"12.8.6", text:"Code in a multiple choice option or a Put in order item has the same grey box as code everywhere else, in light and dark mode." },
+  { v:"12.8.5", text:"Fill the gaps: the sentence is written in a formatting box, so it can have new lines, bold and code in it. Gaps still go in double brackets, and older sentences keep their line breaks." },
+  { v:"12.8.4", text:"Short answers: an answer with \"Make sure your answer is only 2 words long\" under it does not count as answered until it is shortened, in the progress bar, the summary and Mark work." },
   { v:"12.8.3", text:"Click the right spot: the picture shows as soon as its address is typed (Label a picture too). The right spot can be a rectangle instead of a circle, drawn by dragging across the picture, and either shape can be moved and resized on the picture by dragging it or the dot on its edge." },
   { v:"12.8.2", text:"Assessments: progress is always the bar on the left, with a flag pointing at the question on screen, and the choice in Settings is gone. Pressing Finish with questions still empty flags those in red on the bar instead of listing their numbers." },
   { v:"12.8.1", text:"Assessments: answered questions show in blue instead of green, so it does not look like they are right. Students can pick in Settings how their progress is shown: numbered boxes, or a bar on the left or right of the questions, which stay in the middle of the screen." },
