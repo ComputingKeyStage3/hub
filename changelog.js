@@ -9,6 +9,8 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.9.2", text:"Assessments: with the questions faded, the last few questions now scroll up to the top in turn, so the bright one is always the one at the top of the screen." },
+  { v:"12.9.1", text:"Assessments: a new choice in Settings fades the questions a student is not on, so the one on screen stands out. Off unless it is turned on." },
   { v:"12.9", text:"Student voice: a standard assessment can end with Your say, five quick optional questions about the half term, turned on in Lesson options. Answers save as soon as one is picked. The markbook has moved onto the View work and Mark work page in place of Progress for assessments, with a Student voice tab." },
   { v:"12.8.8", text:"Mark work: a test opens the way the student sat it, the questions in their cards with the bar beside them, instead of one question at a time. Finish there goes to the marked summary." },
   { v:"12.8.7", text:"Assessments: one turn of the mouse wheel, or one swipe on a phone, slides to the next question and stops with it at the top. A long question is read through first." },
