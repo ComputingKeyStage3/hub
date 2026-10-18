@@ -9,6 +9,8 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.9.2", text:"Your say asks each student one question, picked at random, with faces or pictures to choose from. Picking one swaps the question for a thank you. In the markbook, Student voice shows one question at a time, and pressing an answer lists who gave it." },
+  { v:"12.9.1", text:"Assessments: the list of Reminders is no longer added before the questions. Students see only the pages you wrote, and with none the test opens on the questions." },
   { v:"12.9", text:"Student voice: a standard assessment can end with Your say, five quick optional questions about the half term, turned on in Lesson options. Answers save as soon as one is picked. The markbook has moved onto the View work and Mark work page in place of Progress for assessments, with a Student voice tab." },
   { v:"12.8.8", text:"Mark work: a test opens the way the student sat it, the questions in their cards with the bar beside them, instead of one question at a time. Finish there goes to the marked summary." },
   { v:"12.8.7", text:"Assessments: one turn of the mouse wheel, or one swipe on a phone, slides to the next question and stops with it at the top. A long question is read through first." },
