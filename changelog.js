@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"12.9.7", text:"Multiple choice questions show a code box with its lines and indents, the way short answers do, on the page, in the marked review and in the PDF. Answers of several lines keep their lines in the review too." },
   { v:"12.9.6", text:"Student Voice: the scales have four answers with no middle one, there is a Skip button in the corner, and the thank you has a tick. In the markbook the biggest answer is at the top, and students who skipped are listed." },
   { v:"12.9.5", text:"Student Voice asks each student one question, picked at random, with faces or pictures to choose from. Picking one swaps the question for a thank you. In the markbook, Student Voice shows one question at a time, and pressing an answer lists who gave it." },
   { v:"12.9.4", text:"Assessments: the list of Reminders is no longer added before the questions. Students see only the pages you wrote, and with none the test opens on the questions." },
