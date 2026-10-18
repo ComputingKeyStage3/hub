@@ -9,14 +9,12 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
-<<<<<<< HEAD
-  { v:"12.9.2", text:"Your say asks each student one question, picked at random, with faces or pictures to choose from. Picking one swaps the question for a thank you. In the markbook, Student voice shows one question at a time, and pressing an answer lists who gave it." },
-  { v:"12.9.1", text:"Assessments: the list of Reminders is no longer added before the questions. Students see only the pages you wrote, and with none the test opens on the questions." },
-=======
+  { v:"12.9.6", text:"Student Voice: the scales have four answers with no middle one, there is a Skip button in the corner, and the thank you has a tick. In the markbook the biggest answer is at the top, and students who skipped are listed." },
+  { v:"12.9.5", text:"Student Voice asks each student one question, picked at random, with faces or pictures to choose from. Picking one swaps the question for a thank you. In the markbook, Student Voice shows one question at a time, and pressing an answer lists who gave it." },
+  { v:"12.9.4", text:"Assessments: the list of Reminders is no longer added before the questions. Students see only the pages you wrote, and with none the test opens on the questions." },
   { v:"12.9.3", text:"Assessments: scrolling between questions is smooth. It no longer jolts backwards at the start of each move, turning the wheel quickly no longer skips a long question, and a light touch on a trackpad no longer jumps a whole question." },
   { v:"12.9.2", text:"Assessments: with the questions faded, the last few questions now scroll up to the top in turn, so the bright one is always the one at the top of the screen." },
   { v:"12.9.1", text:"Assessments: a new choice in Settings fades the questions a student is not on, so the one on screen stands out. Off unless it is turned on." },
->>>>>>> da8c372c64eea50b07e49fadc0b76e4fd4c3a291
   { v:"12.9", text:"Student voice: a standard assessment can end with Your say, five quick optional questions about the half term, turned on in Lesson options. Answers save as soon as one is picked. The markbook has moved onto the View work and Mark work page in place of Progress for assessments, with a Student voice tab." },
   { v:"12.8.8", text:"Mark work: a test opens the way the student sat it, the questions in their cards with the bar beside them, instead of one question at a time. Finish there goes to the marked summary." },
   { v:"12.8.7", text:"Assessments: one turn of the mouse wheel, or one swipe on a phone, slides to the next question and stops with it at the top. A long question is read through first." },
