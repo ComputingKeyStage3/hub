@@ -9,7 +9,8 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
-  { v:"13.0.3", text:"Put in order questions never start in the right order. Short lists sometimes did, so a student could get them right without moving anything." },
+  { v:"13.0.4", text:"Assessments: the choice in Settings to fade the questions a student is not on has gone. Every question is always shown the same, including for students who had it turned on." },
+  { v:"13.0.3",text:"Put in order questions never start in the right order. Short lists sometimes did, so a student could get them right without moving anything." },
   { v:"13.0.2",text:"Put in order questions give a mark for every line in the right place, instead of one mark for getting the whole list right. A list left the way it was shuffled scores nothing. The review, the PDF, the markbook and progress all count it the same way." },
   { v:"13.0.1",text:"Short answers no longer have a model answer, in the builder, the lesson, the review or the PDF, and one-line exam questions are the same. Lessons that still have one open as normal and lose it when next saved. Mark work shows the test's score at the top of the Feedback column, and a small Saved note pops up beside a mark you change, then fades." },
   { v:"13.0", text:"Mark work for tests: View work on a standard assessment is now Mark work. It shows every question marked, with Assessment and Response tabs, and a − and + beside each question to change its mark, which saves as you go. Answers cannot be changed there. In a student's review, a wrong gap, table box or label shows their answer crossed out with the right one beside it, coding questions show the code and checklist, and a mark a teacher changed says so." },
