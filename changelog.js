@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"13.0", text:"Mark work for tests: View work on a standard assessment is now Mark work. It shows every question marked, with Assessment and Response tabs, and a − and + beside each question to change its mark, which saves as you go. Answers cannot be changed there. In a student's review, a wrong gap, table box or label shows their answer crossed out with the right one beside it, coding questions show the code and checklist, and a mark a teacher changed says so." },
   { v:"12.9.7", text:"Multiple choice questions show a code box with its lines and indents, the way short answers do, on the page, in the marked review and in the PDF. Answers of several lines keep their lines in the review too." },
   { v:"12.9.6", text:"Student Voice: the scales have four answers with no middle one, there is a Skip button in the corner, and the thank you has a tick. In the markbook the biggest answer is at the top, and students who skipped are listed." },
   { v:"12.9.5", text:"Student Voice asks each student one question, picked at random, with faces or pictures to choose from. Picking one swaps the question for a thank you. In the markbook, Student Voice shows one question at a time, and pressing an answer lists who gave it." },
