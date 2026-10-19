@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"13.0.5", text:"Put in order questions start with every line in the wrong place, and never one move away from right. Before, some started with a line or two already right, and a student who moved one away and put it back scored nothing for them." },
   { v:"13.0.4", text:"Assessments: the choice in Settings to fade the questions a student is not on has gone. Every question is always shown the same, including for students who had it turned on." },
   { v:"13.0.3",text:"Put in order questions never start in the right order. Short lists sometimes did, so a student could get them right without moving anything." },
   { v:"13.0.2",text:"Put in order questions give a mark for every line in the right place, instead of one mark for getting the whole list right. A list left the way it was shuffled scores nothing. The review, the PDF, the markbook and progress all count it the same way." },
