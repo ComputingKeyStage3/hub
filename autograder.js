@@ -1140,6 +1140,16 @@
       (results || []).forEach((r, i) => {
         const it = items[i];
         if (!it || it.manual) return;         // a teacher's tick is not overwritten
+        /* A word on what decided the line, such as a Photoshop line met only
+           by a hidden layer. Information rather than a tick, so it is drawn
+           even on a line held back from changing. */
+        const flag = (r && r.flag && !teacherTicks[i]) ? String(r.flag) : "";
+        if (flag && !it.flag){
+          it.flag = document.createElement("span");
+          it.flag.className = "check-flag";
+          it.text.appendChild(it.flag);
+        }
+        if (it.flag){ it.flag.textContent = flag; it.flag.hidden = !flag; }
         if (teacherTicks[i]){ paintTeacher(it, i); return; }   // nor one given in the lesson
         if (held && held.indexOf(i) >= 0) return;
         it.li.dataset.state = r.broken ? "broken" : r.ok ? "yes" : "no";
@@ -1154,6 +1164,7 @@
         if (it.manual || teacherTicks[i]) return;
         it.li.dataset.state = "";
         it.note.textContent = "";
+        if (it.flag) it.flag.hidden = true;
       });
       tally();
     };
