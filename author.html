@@ -251,6 +251,7 @@
         <button class="pal-head" type="button">Handing work in</button>
         <div class="palbody" hidden>
           <button class="pal" data-add="image"><b>Screenshot</b><span>They paste a picture</span></button>
+          <button class="pal" data-add="photoshop"><b>Photoshop work</b><span>They choose their .psd file</span></button>
           <button class="pal" data-add="pastelink"><b>Paste a link</b><span>They hand in a link</span></button>
         </div>
       </div>
@@ -591,6 +592,10 @@ const BLANK = {
   choice:   () => ({ type:"choice", title:"", task:"", prompt:"Choose one",
                      options:[{ label:"", blocks:[] }, { label:"", blocks:[] }] }),
   image:    () => ({ type:"image", title:"Add your screenshot", task:"Take a screenshot and paste it here." }),
+  /* A Screenshot task set to take a Photoshop file, so the lesson page, the
+     PDF and View Work treat it as the screenshot it ends up as. */
+  photoshop:() => ({ type:"image", psd:true, title:"Hand in your Photoshop work",
+                     task:"Save your work in Photoshop, then choose the file here." }),
   embed:    () => ({ type:"embed", url:"", title:"Watch this", note:"Watch it all the way through.", confirm:false }),
   frame:    () => ({ type:"frame", url:"", heading:"Have a go", task:"", width:"100%", height:520, confirm:false }),
   link:     () => ({ type:"link", url:"", title:"Open this", heading:"Have a look at this site", task:"", confirm:false }),
@@ -1391,7 +1396,8 @@ function compileOne(b, id, target){
           : undefined });
     else if (b.type === "image")
       push(keepArrays({ type:"image", id, title: b.title || "", task: b.task || "",
-                        compare: b.compare === true ? true : undefined }));
+                        compare: b.compare === true ? true : undefined,
+                        psd: b.psd === true ? true : undefined }));
     else if (b.type === "embed")
       push(keepArrays({ type:"embed", id, url: toEmbed(b.url), title: b.title || "",
              note: b.note || "", confirm: b.confirm === true }));
@@ -3206,6 +3212,10 @@ function card(b, i, arr){
     toggleRow([["compare","Compare with an earlier screenshot", false]], "Options",
       "After pasting, the student can switch between this screenshot and their earlier one from the same lesson. " +
       "Nothing changes for a student who has no earlier screenshot.");
+    toggleRow([["psd","Photoshop file", false]], "What they hand in",
+      "The student chooses their .psd file instead of pasting. The picture is read from it on their computer and " +
+      "only that is saved, never the file. In View Work and Mark work, Photoshop details lists its layers, " +
+      "layer styles, masks, text and history.");
   }
   if (b.type === "frame"){
     F("Heading (optional)", "heading");

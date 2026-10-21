@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"13.1", text:"New Photoshop work task: students choose their .psd file instead of taking a screenshot. Only the picture is saved, not the file, and View Work and Mark work have a Photoshop details button listing its layers, layer styles, masks, text, fonts and save history." },
   { v:"13.0.9", text:"Link to a site can hand out a starter file: turn on A file to download and the button saves it, ready to open in Photoshop or whichever program you name." },
   { v:"13.0.8", text:"Practical assessments: once you have saved a mark, grade or feedback in Mark work, the student can no longer go back into their work from the summary." },
   { v:"13.0.7", text:"Assessments: a trackpad scrolls the questions page smoothly, the way it scrolls any other page. A mouse wheel still moves one question at a time." },
