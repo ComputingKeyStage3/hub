@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"13.2", text:"Photoshop work can have a checklist, ticked from the student's file (text, image layers, shapes, layer styles, adjustment layers, cut-outs, masks, groups) with lines you tick yourself in Mark work. Any checklist can now be hidden from the lesson and still be used for the Strength and Target. Mark work's tick list now waits for you when a practical has lines only you can tick." },
   { v:"13.1", text:"New Photoshop work task: students choose their .psd file instead of taking a screenshot. Only the picture is saved, not the file, and View Work and Mark work have a Photoshop details button listing its layers, layer styles, masks, text, fonts and save history." },
   { v:"13.0.9", text:"Link to a site can hand out a starter file: turn on A file to download and the button saves it, ready to open in Photoshop or whichever program you name." },
   { v:"13.0.8", text:"Practical assessments: once you have saved a mark, grade or feedback in Mark work, the student can no longer go back into their work from the summary." },
