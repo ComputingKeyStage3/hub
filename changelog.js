@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"13.2.2", text:"The finished screen shows Photoshop work beside a short card saying it came from a Photoshop file, its layers and when it was last saved, or that a screenshot was handed in instead. The Photoshop details button has gone: full screen shows it all." },
   { v:"13.2.1", text:"A picture from a Photoshop file now opens full screen as a Photoshop window, with the techniques, layers, file history and words down the right instead of in a pop-up. Smart objects and placed images no longer count as a technique, and the checklist no longer offers smart objects. Hidden layers still count towards the checklist, with a note on any line they decided, and Techniques shows each count without hidden layers with the full count underneath." },
   { v:"13.2", text:"Photoshop work can have a checklist, ticked from the student's file (text, image layers, shapes, layer styles, adjustment layers, cut-outs, masks, groups) with lines you tick yourself in Mark work. Any checklist can now be hidden from the lesson and still be used for the Strength and Target. Mark work's tick list now waits for you when a practical has lines only you can tick." },
   { v:"13.1", text:"New Photoshop work task: students choose their .psd file instead of taking a screenshot. Only the picture is saved, not the file, and View Work and Mark work have a Photoshop details button listing its layers, layer styles, masks, text, fonts and save history." },
