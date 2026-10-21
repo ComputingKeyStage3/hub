@@ -1400,7 +1400,8 @@ function compileOne(b, id, target){
              width: b.width || "100%", height: b.height || 520, confirm: b.confirm === true }));
     else if (b.type === "link")
       push(keepArrays({ type:"link", id, url: b.url || "", title: b.title || "Open this",   // the button needs words
-             heading: b.heading || "", task: b.task || "", confirm: b.confirm === true }));
+             heading: b.heading || "", task: b.task || "", confirm: b.confirm === true,
+             download: b.download === true, app: b.download ? (b.app || "") : "" }));
     /* An option written in a formatting box is kept as a line: its
        paragraph wrapper goes, so it sits beside its radio button. */
     else if (b.type === "mc")
@@ -3226,10 +3227,19 @@ function card(b, i, arr){
   }
   if (b.type === "link"){
     F("Heading (optional)", "heading");
-    F("Address", "url");
+    F("Address", "url",
+      { help: b.download
+          ? "A file in the site's files folder is written as files/whatever.psd."
+          : "" });
     F("Button label", "title");
     F("What to do there (optional)", "task", { area:true, rows:2 });
-    toggleRow([["confirm","Confirmation", false]]);
+    toggleRow([["download","A file to download", false], ["confirm","Confirmation", false]], "",
+      "On for a starter file a student opens in another program, a .psd for Photoshop say. "
+      + "The button saves the file instead of opening a new tab.");
+    if (b.download)
+      F("It opens in (optional)", "app",
+        { placeholder:"Photoshop",
+          help:"Named in the line under the button, so they know what should happen when they click the file." });
   }
   if (b.type === "mc"){
     R("Question", "prompt", { rows:2 });
