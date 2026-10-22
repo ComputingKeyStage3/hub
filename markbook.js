@@ -814,5 +814,14 @@
     else say("Could not build the file", "The spreadsheet builder did not load.");
   }
 
-  window.markbook = { build: build, paint: paint };
+  /* For the console's Results, which draws a markbook of its own and picks
+     and copies its cells the same way rather than with a second copy of
+     all this. */
+  async function copyTable(table){
+    mbSel = { table: table, a: [0, 0], b: [table.rows.length - 1, table.rows[0].cells.length - 1] };
+    mbPaintSel();
+    return await mbCopyOut();
+  }
+  window.markbook = { build: build, paint: paint, selectable: mbSelectable, copyTable: copyTable,
+                      dragged: () => mbMoved };
 })();
