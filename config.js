@@ -1,5 +1,5 @@
 /* =====================================================================
-   THE ONE FILE YOU EDIT TO CHANGE HOW THE SITE RUNS
+   THE ONE FILE YOU EDIT TO CHANGE HOW THE SITE RUNS 
    =====================================================================
 
    OFFLINE
