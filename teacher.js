@@ -238,10 +238,18 @@ function goFromConsole(url){
 function cameFromConsole(){
   try{ return sessionStorage.getItem(FROM) === "1"; }catch(e){ return false; }
 }
+/* How long the tab's history was when this page arrived. A page with frames
+   in it (the Preview above all) adds its own steps as the frame moves about:
+   opening the lesson from the pretend Home view is one. history.back() then
+   only stepped back inside the frame, and Console took several presses. */
+const HISTORY_AT_LOAD = history.length;
 function backToConsole(){
   let ref = "";
   try{ ref = new URL(document.referrer).origin === location.origin ? document.referrer : ""; }catch(e){}
-  if (cameFromConsole() && ref && history.length > 1){ history.back(); return; }
+  /* Back is only right while nothing has been added since this page
+     arrived. Otherwise the console is loaded fresh, and it reopens on the
+     screen it was showing, which it keeps in this tab's sessionStorage. */
+  if (cameFromConsole() && ref && history.length > 1 && history.length === HISTORY_AT_LOAD){ history.back(); return; }
   location.href = "admin.html";
 }
 /* A Console button for the left end of a page's top bar. */

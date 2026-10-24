@@ -214,7 +214,7 @@
     const when = n.now ? "Now" : n.today ? "Today" : n.tomorrow ? "Tomorrow"
                : n.date.toLocaleDateString(undefined, { weekday:"short", day:"numeric", month:"short" });
     fact.v.textContent = when + ", " + (n.period.name || "") + (n.period.start ? " at " + n.period.start : "");
-    fact.s.textContent = [n.room ? "Room " + n.room : "", n.week ? "Week " + n.week : ""].filter(Boolean).join("  ·  ");
+    fact.s.textContent = n.week ? "Week " + n.week : "";
   }
 
   /* ---------- their marks across a unit ---------- */

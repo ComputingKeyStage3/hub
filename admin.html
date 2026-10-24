@@ -191,7 +191,6 @@ setTimeout(function(){
        against the whole year group. resultsbook.js draws everything under
        the heading. -->
   <div id="resultsView" hidden>
-    <button class="crumb" id="backHome3">&larr; Home</button>
     <button class="btn-ghost iconbtn refresh" id="refResults" title="Refresh">&#8635;</button>
     <h2 style="margin:14px 0 4px">Results</h2>
     <div class="resfilters" id="resFilters"></div>
@@ -204,7 +203,6 @@ setTimeout(function(){
        will be. A username is what a teacher has in front of them when a child
        asks them to look at something, so that is what this asks for. -->
   <div id="practiceView" hidden>
-    <button class="crumb" id="backHome2">&larr; Home</button>
     <h2 style="margin:14px 0 4px">Practice</h2>
     <!-- A sandbox of the teacher's own, for trying something before showing a
          class. Five programs, the same as a student, kept under the initials
@@ -231,7 +229,6 @@ setTimeout(function(){
   </div>
 
   <div id="hubView" hidden>
-    <button class="crumb" id="hubHome">&larr; Home</button>
     <button class="btn-ghost iconbtn refresh" id="refHub" title="Refresh">&#8635;</button>
     <h2 style="margin:14px 0 4px">Lessons</h2>
     <div class="toolrow">
@@ -323,7 +320,6 @@ setTimeout(function(){
   </div>
 
   <div id="classesView" hidden>
-    <button class="crumb" id="backHome">&larr; Home</button>
     <h2 style="margin:14px 0 4px">Your classes</h2>
     <div class="toolrow">
       <button class="btn-ghost" id="timetableBtn"><span data-icon="calendar" data-size="16"></span> Timetable</button>
@@ -590,6 +586,16 @@ function crumbs(trail){
   const bar = $("crumbBar");
   if (!trail || !trail.length){ bar.hidden = true; return; }
   bar.hidden = false; bar.innerHTML = "";
+  /* Refresh is always here, at the start of the trail, on every screen, so
+     it is in the same place wherever a teacher is: a screen with nothing to
+     fetch still has one, and it draws the screen again. */
+  const ref = el("button","btn-ghost iconbtn crumb-refresh","");
+  ref.type = "button";
+  ref.title = "Refresh";
+  ref.setAttribute("aria-label", "Refresh");
+  ref.innerHTML = window.hubUI ? window.hubUI.icon("refresh", 16) : "↻";
+  ref.addEventListener("click", refreshHere);
+  bar.appendChild(ref);
   trail.forEach((step, i) => {
     if (i) bar.appendChild(el("span","crumb-sep","\u203A"));
     if (step.go){
@@ -600,6 +606,16 @@ function crumbs(trail){
       bar.appendChild(el("span","crumb-here", step.name));
     }
   });
+}
+/* What the Refresh in the trail does: the screen's own refresh where it has
+   one, which knows what to fetch again, and otherwise the screen drawn again
+   from where the console says it is. The screens' own buttons are kept
+   (they are what this presses) but not shown, so there is only ever one. */
+function refreshHere(){
+  const v = VIEWS.find(x => $(x) && !$(x).hidden);
+  const own = v && $(v).querySelector("button.refresh");
+  if (own){ own.click(); return; }
+  restoreSpot(lastSpot()).catch(() => {});
 }
 const toHome    = () => { show("homeView"); };
 const toClasses = () => { refreshGroups(); show("classesView"); paintCrumbs(); };
@@ -923,7 +939,7 @@ function fieldRow(box, label, type, value){
    page rather than left there to fail when pressed. */
 async function offlineConsole(){
   $("topbar").hidden = false;
-  ["pwBtn","keepBtn","whoBar","hubHome","hubNewYear","hubNewUnit",
+  ["pwBtn","keepBtn","whoBar","hubNewYear","hubNewUnit",
    "renameYearBtn","deleteYearBtn","renameHubUnitBtn","deleteHubUnitBtn"]
     .forEach(id => { const e = $(id); if (e) e.remove(); });
   show("hubView");
@@ -1064,6 +1080,59 @@ async function enterConsole(){
     { try{ await loadCatalogue(); }catch(e){} manageLesson(managing); }   // the catalogue has its title
   else forgetManaging();
   nudgeBackup();           // the once-a-week reminder to take a backup
+  whatsNew();
+}
+
+/* ---------- What's new ----------
+   Once per release, and only here, after the key has been accepted and the
+   teacher chosen: over the key box it would be one more thing between a
+   teacher and their class. Noted as seen the moment it is shown, so a
+   refresh, or a second tab, does not bring it back. What goes in it is
+   window.HIGHLIGHTS in changelog.js. */
+const NEWS_SEEN = "hub_news_seen";
+function whatsNew(){
+  const news = window.HIGHLIGHTS;
+  if (OFFLINE || !news || !news.v || !(news.items || []).length) return;
+  try{
+    if (localStorage.getItem(NEWS_SEEN) === news.v) return;
+    localStorage.setItem(NEWS_SEEN, news.v);
+  }catch(e){ return; }   // nowhere to remember it: better never than every time
+  const back = el("div","modal-back");
+  const box = el("div","modal narrow whatsnew");
+  box.setAttribute("role","dialog");
+  box.setAttribute("aria-modal","true");
+  box.setAttribute("aria-labelledby","whatsNewTitle");
+  const head = el("div","whatsnew-head");
+  const title = el("h2","","What's new");
+  title.id = "whatsNewTitle";
+  head.appendChild(title);
+  head.appendChild(el("span","whatsnew-v", "Version " + news.v));
+  box.appendChild(head);
+  const list = el("ul","whatsnew-list");
+  news.items.forEach(it => {
+    const li = el("li","");
+    const ic = el("span","whatsnew-ic");
+    ic.innerHTML = window.hubUI ? window.hubUI.icon(it.icon, 20) : "";
+    li.appendChild(ic);
+    li.appendChild(el("span","", it.text));
+    list.appendChild(li);
+  });
+  box.appendChild(list);
+  const acts = el("div","whatsnew-acts");
+  const more = el("button","btn-ghost","Everything that changed");
+  const ok = el("button","btn-primary","Got it");
+  const close = () => { back.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  ok.addEventListener("click", close);
+  more.addEventListener("click", () => { close(); if ($("logBtn")) $("logBtn").click(); });
+  acts.appendChild(more);
+  acts.appendChild(ok);
+  box.appendChild(acts);
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(back);
+  setTimeout(() => ok.focus(), 30);
 }
 on("whoGo", "click", async () => {
   whoCancel = false;
@@ -2279,7 +2348,6 @@ on("openHub", "click", async () => {
   try{ await loadCatalogue(); paintYears(); }
   catch(e){ $("hubYears").innerHTML = ""; $("hubYears").appendChild(el("p","hint", e.message)); }
 });
-on("hubHome", "click", toHome);
 on("refYear", "click", async () => {
   wait("hubUnits", "Loading the units", true);
   try{ await loadCatalogue(true); paintHubUnits(); }
@@ -3585,7 +3653,6 @@ on("backClasses", "click", () => { refreshGroups(); show("classesView"); });
 on("openClasses", "click", toClasses);
 on("backClassesTt", "click", toClasses);
 on("timetableBtn", "click", () => { if (window.timetable) window.timetable.open(); });
-on("backHome", "click", toHome);
 
 /* ---------- practice: find a student, open their programs ----------
    A sandbox program belongs to a child rather than to a class or a lesson,
@@ -3603,7 +3670,6 @@ on("openPractice", "click", toPractice);
 /* In a tab of its own, the same as a student's programs open: the console
    stays where it was, and the sandbox is a page a teacher may want beside it. */
 on("pracMine", "click", () => { consoleNav.go("sandbox.html?teacher=1"); });
-on("backHome2", "click", toHome);
 on("pracGo", "click", () => searchStudents());
 on("pracSearch", "keydown", (e) => { if (e.key === "Enter") searchStudents(); });
 
@@ -3640,7 +3706,6 @@ async function toResults(){
 /* Offline there are no results to read, the same as Practice. */
 if (!OFFLINE){ const tile = $("openResults"); if (tile) tile.hidden = false; }
 on("openResults", "click", toResults);
-on("backHome3", "click", toHome);
 on("refResults", "click", async () => {
   try{ await loadCatalogue(true); }catch(e){}
   toResults().then(() => window.resultsBook.refresh());

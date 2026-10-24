@@ -8,7 +8,31 @@
    Keep each line short enough to read at a glance. A teacher opening this
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
+
+/* The few things worth telling a teacher about the first time they sign in
+   after a release, shown once in the console's What's new pop-up. A handful
+   of words each: the changelog below is where the detail lives. Change `v`
+   when there is something new to show, and every teacher sees it once more;
+   leave it alone for a fix and nobody is interrupted. `icon` is a name from
+   icons.js. */
+window.HIGHLIGHTS = {
+  v: "15.4",
+  items: [
+    { icon:"calendar", text:"Your timetable on Home" },
+    { icon:"search",   text:"Jump to anything with / or Ctrl+K" },
+    { icon:"open",     text:"Slides and Word documents in lessons" },
+    { icon:"edit",     text:"Photoshop work and Photoshop help tasks" },
+    { icon:"work",     text:"Block coding with Scratch" },
+    { icon:"eye",      text:"A clearer look and a dyslexia friendly font" }
+  ]
+};
+
 window.CHANGES = [
+  { v:"15.4.7", text:"Timetables no longer ask for a room, or keep one." },
+  { v:"15.4.6", text:"The blue ring that shows where you are typing goes neatly round search boxes and the whole code box, instead of a square inside them." },
+  { v:"15.4.5", text:"Refresh is always at the start of the bar showing where you are in the console, and the back to Home buttons are gone from Lessons, Classes, Practice and Results." },
+  { v:"15.4.4", text:"A short What's new appears once after signing in to the console following an update." },
+  { v:"15.4.3", text:"Console takes you back from Preview in one press." },
   { v:"15.4.2", text:"Slides opened in a lesson that has a Word document beside it float next to the document instead of underneath it, and stay on top when dragged over it." },
   { v:"15.4.1", text:"A backup now also holds the task bank, the specification, pictures, teachers' own sandboxes and timetables, help questions and grade boundaries, and is collected a table at a time so a whole school fits." },
   { v:"15.4", text:"What and why: in Lesson options, say once what a lesson teaches, why it matters and where it can lead, with a careers link. Students see it at the start of the lesson, from Today's lesson in the top bar, and as a recap when they finish." },

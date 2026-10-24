@@ -66,7 +66,7 @@
         { id:"p4", name:"P4", start:"12:10", end:"13:10" },
         { id:"p5", name:"P5", start:"14:00", end:"15:00" }
       ],
-      slots: { A:{}, B:{} },   // slots[week][day 1-5][period id] = { cls | text, room }
+      slots: { A:{}, B:{} },   // slots[week][day 1-5][period id] = { cls | text }
       holidays: [],            // { id, name, start, end } as YYYY-MM-DD
       holidayMode: "school",   // "school": Admin's holidays; "own": the list above
       dismissed: [],           // school holidays this teacher said no to, as start|end
@@ -107,7 +107,7 @@
           const s = day[pid];
           if (!s || (!s.cls && !s.text)) return;
           (out.slots[w][d] = out.slots[w][d] || {})[pid] = {
-            cls: s.cls ? String(s.cls) : "", text: s.cls ? "" : String(s.text || ""), room: String(s.room || "") };
+            cls: s.cls ? String(s.cls) : "", text: s.cls ? "" : String(s.text || "") };
         });
       }
     });
@@ -442,40 +442,24 @@
     text.hidden = !custom;
     td.appendChild(text);
 
-    const room = el("input","tt-in tt-room");
-    room.type = "text";
-    room.placeholder = "Room";
-    room.maxLength = 12;
-    room.setAttribute("aria-label", "Room");
-    room.value = (slot && slot.room) || "";
-    room.hidden = !slot;
-    td.appendChild(room);
-
     td.classList.toggle("filled", !!slot);
     sel.addEventListener("change", () => {
       const v = sel.value;
-      const r = room.value.trim();
-      if (!v){ put(null); text.hidden = true; room.hidden = true; td.classList.remove("filled"); return; }
+      if (!v){ put(null); text.hidden = true; td.classList.remove("filled"); return; }
       if (v === "other"){
-        text.hidden = false; room.hidden = false; td.classList.add("filled");
+        text.hidden = false; td.classList.add("filled");
         text.value = text.value || "";
         text.focus();
-        if (text.value.trim()) put({ cls:"", text: text.value.trim(), room: r });
+        if (text.value.trim()) put({ cls:"", text: text.value.trim() });
         return;
       }
-      text.hidden = true; room.hidden = false; td.classList.add("filled");
-      put(v.slice(0, 2) === "c:" ? { cls: v.slice(2), text:"", room: r } : { cls:"", text: v.slice(2), room: r });
+      text.hidden = true; td.classList.add("filled");
+      put(v.slice(0, 2) === "c:" ? { cls: v.slice(2), text:"" } : { cls:"", text: v.slice(2) });
     });
     text.addEventListener("change", () => {
       const t = text.value.trim();
-      put(t ? { cls:"", text: t, room: room.value.trim() } : null);
-      if (!t){ sel.value = ""; text.hidden = true; room.hidden = true; td.classList.remove("filled"); }
-    });
-    room.addEventListener("change", () => {
-      const cur = days[day] && days[day][period.id];
-      if (!cur) return;
-      cur.room = room.value.trim();
-      save(); paintHome();
+      put(t ? { cls:"", text: t } : null);
+      if (!t){ sel.value = ""; text.hidden = true; td.classList.remove("filled"); }
     });
     return td;
   }
@@ -884,8 +868,7 @@
       if (state === "now") title.appendChild(el("span","home-chip now","Now"));
       if (state === "next") title.appendChild(el("span","home-chip next", a !== null ? "In " + until(a - mins) : "Next"));
       t.appendChild(title);
-      const sub = [(x.period.start && x.period.end) ? x.period.start + "–" + x.period.end : "", x.slot.room ? "Room " + x.slot.room : ""]
-                  .filter(Boolean).join("  ·  ");
+      const sub = (x.period.start && x.period.end) ? x.period.start + "–" + x.period.end : "";
       if (sub) t.appendChild(el("span","", sub));
       r.appendChild(t);
       if (x.slot.cls) r.appendChild(btn("View class", "btn-ghost bmini2", () => openClass(x.slot.cls)));
@@ -965,7 +948,7 @@
         if (String(x.slot.cls || "").toLowerCase() !== k) continue;
         const a = toMins(x.period.start), b = toMins(x.period.end);
         if (i === 0 && b !== null && b <= mins) continue;
-        return { date: d, period: x.period, room: x.slot.room || "", week: plan.week,
+        return { date: d, period: x.period, week: plan.week,
                  today: i === 0, now: i === 0 && a !== null && a <= mins,
                  tomorrow: i === 1 };
       }

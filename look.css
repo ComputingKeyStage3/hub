@@ -284,10 +284,24 @@ html[data-look="new"] [contenteditable]:focus-visible{
    edge rather than over the cells next to it. */
 html[data-look="new"] .tt .tt-in:focus-visible{outline-offset:-3px !important}
 /* The code editor's typing box lies transparently over the coloured code,
-   so a ring on it would sit inside the editor's frame. The frame takes it. */
+   so a ring on it would sit inside the editor's frame. The ring goes round
+   the whole code card (.ide-pane: the file's name, its buttons and the
+   code), outside it and following its corners. It used to go 3px inside
+   .ide-editor, where the code area's own background painted over it
+   everywhere but the line numbers, leaving a blue bracket down one side. */
 html[data-look="new"] .ide-code:focus-visible{outline:none !important}
-html[data-look="new"] .ide-editor:has(.ide-code:focus-visible){
-  outline:3px solid var(--amber); outline-offset:-3px;
+html[data-look="new"] .ide-pane:has(.ide-code:focus-visible){
+  outline:3px solid var(--amber); outline-offset:2px;
+}
+/* A search box is a rounded box with a borderless input inside it (the
+   Practice search, Jump to in the console's top bar), so a ring on the
+   input was a square drawn inside the curve, with the magnifier left
+   outside it. The box takes it. */
+html[data-look="new"] .searchbox input:focus-visible,
+html[data-look="new"] .jump input:focus-visible{outline:none !important}
+html[data-look="new"] .searchbox:has(input:focus-visible),
+html[data-look="new"] .jump:has(input:focus-visible){
+  outline:3px solid var(--amber); outline-offset:2px;
 }
 
 /* ---------- boxes you can see are boxes ---------- */
