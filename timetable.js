@@ -34,7 +34,12 @@
   const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
   const SHORT = ["Mon","Tue","Wed","Thu","Fri"];
   /* Things that fill a period without being a class. */
-  const OTHERS = ["PPA","Duty","Meeting","Cover"];
+  const OTHERS = ["PPA","DIRECT","Duty","Meeting","Cover"];
+  /* Lessons in Arbor that are taught but do not use the hub, so they go in
+     by name under "Not a class" rather than being matched to a class: the
+     EPQ (Extended Project Qualification) is a real class with no lessons
+     or students on this site. */
+  const OTHER_LESSONS = ["EPQ"];
 
   /* ================= dates ================= */
   const pad = (n) => String(n).padStart(2, "0");
@@ -348,6 +353,8 @@
   function gridSection(){
     const s = section("classes", "Lessons",
       "Choose the class you teach in each period. Leave a period empty when you are free.");
+    s.appendChild(arborRow());
+    if (importNote) s.appendChild(el("p","hint tt-note tt-importnote", importNote));
     if (tt.twoWeek){
       const tabs = el("div","tt-row");
       ["A","B"].forEach(w => tabs.appendChild(chip("Week " + w, editWeek === w, () => { editWeek = w; paintEditor(); })));
@@ -399,6 +406,124 @@
     s.appendChild(scroll);
     return s;
   }
+  /* ---------- importing from Arbor ----------
+     Arbor's "Timetable for ..." PDF, one page a week, read by
+     arbor-import.js. Only the teaching periods come across, P1 to P5:
+     registration, break and lunch duties and after-school clubs are in
+     columns of their own in Arbor, between the periods, and are left out
+     by where they sit; anything named as one is left out wherever it is.
+     Nothing is asked first: it replaces both weeks, and Undo puts back
+     what was there. */
+  let importNote = "";
+  const SKIP = /\b(duty|duties|club|registration|reg|tutor time|form time|detention|assembly|extra[- ]?curricular|after school)\b/i;
+  function arborRow(){
+    const row = el("div","tt-row tt-import");
+    const file = document.createElement("input");
+    file.type = "file";
+    file.accept = ".pdf,application/pdf";
+    file.hidden = true;
+    const b = el("button","btn-ghost bmini2","");
+    b.type = "button";
+    b.innerHTML = ic("upload", 16);
+    b.appendChild(el("span","", "Import from Arbor"));
+    b.addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0];
+      file.value = "";
+      if (!f) return;
+      b.disabled = true;
+      try{ await importArbor(f); }
+      catch(e){ toast(e && e.readable ? e.message : "That timetable could not be read."); }
+      finally{ b.disabled = false; }
+    });
+    row.appendChild(b);
+    row.appendChild(el("span","hint", "The two week timetable PDF from Arbor"));
+    row.appendChild(file);
+    return row;
+  }
+  async function importArbor(f){
+    if (!window.arborTimetable) throw new Error("no reader");
+    const read = await window.arborTimetable.read(await f.arrayBuffer());
+    const got = fromArbor(read.weeks);
+    if (!got.count) throw Object.assign(new Error("Nothing in that PDF fell in P1 to P5."), { readable: true });
+    const was = JSON.stringify({ slots: tt.slots, twoWeek: tt.twoWeek, anchor: tt.anchor, anchorWeek: tt.anchorWeek });
+    tt.slots.A = got.A;
+    if (got.B){ tt.slots.B = got.B; tt.twoWeek = true; }
+    if (got.anchor){ tt.anchor = got.anchor.day; tt.anchorWeek = got.anchor.week; }
+    importNote = got.unmatched.length
+      ? "Kept as written, because none of the classes has that name: " + got.unmatched.join(", ") +
+        ". Pick the class in each of those periods."
+      : "";
+    editWeek = "A";
+    save(); paintEditor(); paintHome();
+    toast("Timetable imported: " + got.count + " period" + (got.count === 1 ? "" : "s"), { action:"Undo", onAction: () => {
+      const back = JSON.parse(was);
+      Object.assign(tt, back);
+      importNote = "";
+      save(); paintEditor(); paintHome();
+    } });
+  }
+  /* Arbor's boxes onto this timetable's periods. A box goes in the period
+     its time overlaps most, if that is at least half of the box: Arbor
+     sometimes cuts a lesson at lunch into two columns, and both halves land
+     in the same period. */
+  function fromArbor(weeks){
+    let periods = sortedPeriods(tt).filter(p => /^p\s*[1-5]$/i.test(String(p.name || "").trim()));
+    if (!periods.length) periods = sortedPeriods(tt);
+    const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const names = (typeof allClasses === "function" ? allClasses().map(g => g.name) : []).concat(classList());
+    const byKey = new Map(names.map(n => [norm(n), n]));
+    const out = { A: null, B: null, anchor: null, count: 0, unmatched: [] };
+    const unmatched = new Set();
+    weeks.slice(0, 2).forEach((w, i) => {
+      const letter = w.week === "A" || w.week === "B" ? w.week : (i === 0 ? "A" : "B");
+      if (out[letter]) return;
+      const slots = {};
+      w.boxes.forEach(box => {
+        const lines = box.lines || [];
+        const head = String(lines[0] || "").trim();
+        if (!head || /^year\s*\d+\s*:/i.test(head)) return;           // a form group's registration
+        if (SKIP.test(lines.slice(0, 2).join(" "))) return;
+        const b0 = toMins(box.start), b1 = toMins(box.end);
+        let best = null, most = 0;
+        periods.forEach(p => {
+          const o = Math.min(b1, toMins(p.end)) - Math.max(b0, toMins(p.start));
+          if (o > most){ most = o; best = p; }
+        });
+        if (!best || most * 2 < b1 - b0) return;
+        /* "Computing: Year 07: 7y/Co2", wrapped over as many lines as the
+           box needed. The class is what follows the year. */
+        let lesson = null, acc = "";
+        for (const line of lines.slice(0, 4)){
+          acc = (acc + " " + line).trim();
+          const m = /^(.*?):\s*Year\s*\d+\s*:\s*(.+)$/i.exec(acc);
+          if (m){ lesson = { subject: m[1].trim(), code: m[2].trim() }; break; }
+        }
+        let slot;
+        if (lesson && OTHER_LESSONS.some(n => n.toLowerCase() === lesson.subject.toLowerCase()))
+          slot = { cls:"", text: OTHER_LESSONS.find(n => n.toLowerCase() === lesson.subject.toLowerCase()) };
+        else if (lesson){
+          const hit = byKey.get(norm(lesson.code));
+          if (hit) slot = { cls: hit, text:"" };
+          else { slot = { cls:"", text: (lesson.code + " " + lesson.subject).slice(0, 30) }; unmatched.add(lesson.code); }
+        } else {
+          const known = OTHERS.find(n => n.toLowerCase() === head.toLowerCase());
+          slot = { cls:"", text: known || head.slice(0, 30) };
+        }
+        const day = slots[box.day] = slots[box.day] || {};
+        const there = day[best.id];
+        if (there && (there.cls || !slot.cls)) return;                 // a class beats anything else
+        if (!there) out.count++;
+        day[best.id] = slot;
+      });
+      out[letter] = slots;
+      if (!out.anchor && /^\d{4}-\d\d-\d\d$/.test(w.monday || "")) out.anchor = { day: w.monday, week: letter };
+    });
+    if (!out.A){ out.A = out.B || {}; out.B = null; }
+    out.unmatched = [...unmatched].sort((a, b) => a.localeCompare(b, undefined, { numeric:true }));
+    return out;
+  }
+
   function cell(week, day, period, classes){
     const td = el("td","tt-cell");
     const days = tt.slots[week];

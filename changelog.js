@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"15.4.8", text:"Import a two week timetable from Arbor's PDF: lessons in P1 to P5 go in, and form time, duties and clubs are left out. DIRECT can be chosen for a period." },
   { v:"15.4.7", text:"Timetables no longer ask for a room, or keep one." },
   { v:"15.4.6", text:"The blue ring that shows where you are typing goes neatly round search boxes and the whole code box, instead of a square inside them." },
   { v:"15.4.5", text:"Refresh is always at the start of the bar showing where you are in the console, and the back to Home buttons are gone from Lessons, Classes, Practice and Results." },
