@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"15.4.1", text:"A backup now also holds the task bank, the specification, pictures, teachers' own sandboxes and timetables, help questions and grade boundaries, and is collected a table at a time so a whole school fits." },
   { v:"15.4", text:"What and why: in Lesson options, say once what a lesson teaches, why it matters and where it can lead, with a careers link. Students see it at the start of the lesson, from Today's lesson in the top bar, and as a recap when they finish." },
   { v:"15.3.1", text:"A Word document reads properly in dark mode: its writing had turned pale grey on the white page." },
   { v:"15.3", text:"Slides float, pin to the right or close, with no arrows on the slide itself, and a floating window can be resized from any corner. Slides follow the page a teacher matched them to. A document is docked on the right or closed. The Photoshop help is a narrow chat that types its answers." },
