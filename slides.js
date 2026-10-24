@@ -338,7 +338,13 @@ function viewer(o){
       const w = Math.min(Math.max(260, view.w || 440), innerWidth - 16);
       win.style.width = w + "px";
       const h = win.offsetHeight || w / ratioOf(deck) + 90;
-      const x = view.x === null ? innerWidth - w - 20 : view.x;
+      /* With nowhere saved, it starts against the right of the room the
+         lesson has. A document docked on the right takes that edge, and
+         starting against the window's own edge put the slides under the
+         document, out of sight. */
+      const docked = document.body.classList.contains("dc-pin-right")
+        ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dc-side")) || 0 : 0;
+      const x = view.x === null ? innerWidth - docked - w - 20 : view.x;
       const y = view.y === null ? 70 : view.y;
       win.style.left = Math.min(Math.max(4, x), innerWidth - Math.min(w, 120)) + "px";
       win.style.top = Math.min(Math.max(4, y), innerHeight - Math.min(h, 60)) + "px";

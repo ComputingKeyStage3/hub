@@ -9,6 +9,7 @@
    wants to know whether the thing they noticed is meant to be there, not a
    full account of the work. */
 window.CHANGES = [
+  { v:"15.4.2", text:"Slides opened in a lesson that has a Word document beside it float next to the document instead of underneath it, and stay on top when dragged over it." },
   { v:"15.4.1", text:"A backup now also holds the task bank, the specification, pictures, teachers' own sandboxes and timetables, help questions and grade boundaries, and is collected a table at a time so a whole school fits." },
   { v:"15.4", text:"What and why: in Lesson options, say once what a lesson teaches, why it matters and where it can lead, with a careers link. Students see it at the start of the lesson, from Today's lesson in the top bar, and as a recap when they finish." },
   { v:"15.3.1", text:"A Word document reads properly in dark mode: its writing had turned pale grey on the white page." },
@@ -16,7 +17,7 @@ window.CHANGES = [
   { v:"15.2.1", text:"Present slides is in Manage, beside Pacing for the class, on any lesson that has slides." },
   { v:"15.2", text:"The Clearer look is part of the New look. A new page in a lesson lights up as it arrives, and any page on the progress bar can be pressed, waiting like Continue if it is not open yet. Students can open their own profile from their name. Lessons and the sandbox have a Home button with the logo, the console has a menu button on small screens, the builder's pages are numbered with their titles on hover, and every icon is drawn the same way." },
   { v:"15.1.1", text:"The Clearer look keeps lesson tasks almost as wide as before, all the same width on every page. Settings has one Dyslexia friendly font switch in place of the three fonts: Lexend, with more space between letters, words and lines, bold instead of slanted words, and no words in capitals." },
-  { v:"15.1", text:"A Clearer look in Settings: text and box edges are easier to see, there is a clear ring round whatever the keyboard is on, the smallest text is a little bigger, and a lesson's tasks line up under the title in the middle of the screen." },
+  { v:"15.1", text:"The Clearer look: text and box edges are easier to see, there is a clear ring round whatever the keyboard is on, the smallest text is a little bigger, and a lesson's tasks line up under the title in the middle of the screen." },
   { v:"15.0", text:"Photoshop help is a task you add to a page, under Thinking and notes, and what it could not answer shows under that task in the builder." },
   { v:"14.9.3", text:"Preview shows the lesson on the pretend student's home page, and the document bar keeps its buttons on screen when it is narrow." },
   { v:"14.9.2", text:"Help questions on each class: what students asked the Photoshop help that it could not answer, with no names, so you can see what it needs to learn." },

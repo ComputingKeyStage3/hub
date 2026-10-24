@@ -17,6 +17,11 @@
   --text-lg:16px; --text-xl:18px; --text-2xl:20px; --text-3xl:24px; --text-4xl:28px;
   --text-5xl:34px; --text-6xl:44px; --text-7xl:56px;
   --rad-xs:4px; --rad-sm:8px; --rad-md:12px; --rad-lg:16px; --rad-pill:999px;
+  /* The progress grid's five bands, red to green. The same pale colours and
+     the same dark writing in every theme on purpose: they are read against
+     each other as a scale, and dark text on them stays readable on a dark
+     page as well as a light one. */
+  --heat-ink:#1d1d1f; --heat-0:#E8A0A0; --heat-1:#F2C29A; --heat-2:#F2DD9A; --heat-3:#C9E3A6; --heat-4:#9FD3A8;
 }
 
 
@@ -6492,15 +6497,15 @@ html[data-ui-skeletons=on] .loading.mid > span:not(.skel){display:none}
 .heat-name{position:sticky; left:0; background:var(--panel); text-align:left; font-weight:700; padding:4px 10px !important;
   white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis}
 .heat-col{min-width:40px; text-align:center; font-size:var(--text-xs); color:var(--muted); padding:4px 0 !important}
-.heat-cell{min-width:40px; height:30px; text-align:center; border-radius:var(--rad-sm); font-weight:700; font-size:var(--text-xs); color:#1d1d1f}
+.heat-cell{min-width:40px; height:30px; text-align:center; border-radius:var(--rad-sm); font-weight:700; font-size:var(--text-xs); color:var(--heat-ink)}
 .heat-avg .heat-name{color:var(--amber-dark)}
 .heat-avg .heat-cell{outline:2px solid var(--line-2)}
 .heat-cell.none{background:var(--panel-2); color:var(--dim)}
-.heat-cell.b0{background:#E8A0A0}
-.heat-cell.b1{background:#F2C29A}
-.heat-cell.b2{background:#F2DD9A}
-.heat-cell.b3{background:#C9E3A6}
-.heat-cell.b4{background:#9FD3A8}
+.heat-cell.b0{background:var(--heat-0)}
+.heat-cell.b1{background:var(--heat-1)}
+.heat-cell.b2{background:var(--heat-2)}
+.heat-cell.b3{background:var(--heat-3)}
+.heat-cell.b4{background:var(--heat-4)}
 .heat-cell.total{outline:1.5px solid var(--line-2)}
 .heat-key{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:8px; font-size:var(--text-sm); color:var(--muted)}
 .rail{width:228px}
@@ -7587,6 +7592,10 @@ body.lesson.dc-pin-right.sl-pin-right{padding-right:calc(var(--dc-side, 440px) +
    sl-win as well and would otherwise be pushed off its own edge */
 body.dc-pin-right .sl-win:not(.dc-win)[data-mode=right]{right:var(--dc-side, 440px)}
 .dc-win[data-mode=sheet]{z-index:61}
+/* Floating slides are above a docked document. Both are sl-win at 60 and
+   the document comes later on the page, so slides dragged over it went
+   underneath, out of sight. */
+.sl-win:not(.dc-win)[data-mode=float]{z-index:62}
 
 .dc-name{gap:6px}
 .dc-title{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text)}

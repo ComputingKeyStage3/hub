@@ -24,11 +24,23 @@
    Task ids are never touched. Work is saved against them, and a lesson that
    moved its ids would lose every answer handed in to it.
 
-   Used by the builder on a lesson, page or task imported as JSON, which is
-   the only place it runs on this site: lessons already in the database here
-   were written by this site's builder and need nothing converting. The import
-   cannot know where a file came from, so there it only converts a file that
-   has something in it only the original writes; see looksOriginal. */
+   On this site every lesson and bank task saved before 15.4 was written
+   the old way, so it runs in three places:
+
+     tools/convert-lessons.js   once, on every lesson and bank task in the
+                                database and in site/lessons/, converting
+                                whatever is there
+     the backend                a copy of this file, backend/api/_lessoncompat.js,
+                                converts a lesson or task as it is read, but
+                                only one that plainly is the old shape, for
+                                anything the one-off run has not reached yet
+     the builder's import       a file that has something in it only the
+                                old shape writes
+
+   The last two cannot know where a lesson came from, so they only convert
+   one with something in it only the old shape writes; see looksOriginal.
+   The copy in the backend is kept identical to this file: the dev server
+   says so when they differ. */
 (function(root){
   "use strict";
 
