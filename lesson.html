@@ -2,13 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="images/logo.svg" type="image/svg+xml">
+<link rel="icon" href="images/logo-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="images/logo-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson</title>
 <link rel="stylesheet" href="style.css">
-<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<link rel="stylesheet" href="look.css">
+<script src="icons.js"></script>
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="pyhub.js"></script>
 <script src="webhub.js"></script>
 <script src="autograder.js"></script>
+<script src="scratchhub.js"></script>
 <script src="shortmatch.js"></script>
 <script src="ordermarks.js"></script>
 <script src="voice.js"></script>
@@ -21,6 +27,9 @@
 <script src="config.js"></script>
 <script src="worklink.js"></script>
 <script src="settings.js"></script>
+<script src="slides.js"></script>
+<script src="docs.js"></script>
+<script src="helper.js"></script>
 </head>
 <body class="lesson">
 
@@ -42,12 +51,12 @@
 </div>
 
 <div class="topbar">
-  <a class="home" id="homeLink" href="index.html">&larr; Home</a>
+  <a class="home" id="homeLink" href="index.html"><img class="homelogo" src="images/logo.svg" alt="" width="20" height="20"><span>Home</span></a>
   <span class="sep">/</span>
   <div class="title" id="lessonTitle">Lesson</div>
   <span class="savetime no-print" id="saveTime"></span>
   <button class="btn-ghost iconbtn no-print" id="setBtn" title="Settings">&#9881;&#65038;</button>
-  <button class="btn-primary no-print" id="saveBtn">Save Work</button>
+  <button class="btn-primary no-print" id="saveBtn">Save work</button>
 </div>
 
 <div class="tracker" id="tracker"></div>
@@ -70,8 +79,8 @@
 
 <div class="dock" id="dock">
   <button class="btn-ghost" id="backBtn">&larr; Back</button>
-  <div class="mid"><button class="btn-ghost dock-rubric" id="rubricBtn" hidden>Show Rubric</button></div>
-  <span id="bypassDot" role="button" tabindex="0" aria-label="Teacher options">&#183;</span>
+  <div class="mid"><button class="btn-ghost dock-rubric" id="rubricBtn" hidden>Show rubric</button></div>
+  <span id="bypassDot" role="button" tabindex="-1" aria-label="Teacher options">&#183;</span>
   <span class="btn-wrap" id="btnWrap">
     <button class="btn-primary btn-continue" id="nextBtn">Continue &rarr;</button>
     <span class="tip" id="nextTip" hidden></span>
@@ -847,7 +856,7 @@ if (OFFLINE){
    screenshot or a whiteboard therefore keep the PDF instead, and there is
    a length check behind that in case some other task grows unexpectedly.
    ===================================================================== */
-const HEAVY_TASKS = ["image", "board"];
+const HEAVY_TASKS = ["image", "board", "scratch"];
 
 /* Screenshots and whiteboards can sit inside a page, so this looks all the
    way down rather than only at the top level. */
@@ -865,13 +874,13 @@ function linkPossible(){
    once that is known.
 
    It also cannot be wordy. It shares the bar with a lesson title, and on a
-   narrow phone "Save Work" wrapped onto a second line and took the height of
+   narrow phone "Save work" wrapped onto a second line and took the height of
    the whole bar down with it. There is nothing else up there to save, so on a
    small screen the second word goes. */
 const narrowBar = window.matchMedia("(max-width: 420px)");
 function topSaveLabel(){
   const tight = narrowBar.matches;
-  if (!OFFLINE) return tight ? "Save" : "Save Work";
+  if (!OFFLINE) return tight ? "Save" : "Save work";
   if (linkPossible()) return tight ? "Copy link" : "Copy my work link";
   return "Save as PDF";
 }
@@ -882,7 +891,7 @@ function paintTopSave(){
 /* A phone turned on its side crosses that width, and turned back crosses it
    again. Only ever swaps one resting wording for another: the tick, "Saving"
    and the two failure messages say something this does not know about. */
-const RESTING_LABELS = ["Save Work", "Save", "Copy my work link", "Copy link", "Save as PDF"];
+const RESTING_LABELS = ["Save work", "Save", "Copy my work link", "Copy link", "Save as PDF"];
 narrowBar.addEventListener("change", () => {
   const b = $("saveBtn");
   if (b && RESTING_LABELS.indexOf(b.textContent) >= 0) b.textContent = topSaveLabel();
@@ -1188,11 +1197,14 @@ let cooldownUntil = 0, cooldownTimer = null;
 
 function coolingDown(){ return Date.now() < cooldownUntil; }
 
-function startCooldown(){
+/* fromBar: started by pressing a page ahead on the progress bar, where the
+   cursor is, rather than on Continue, so the tip over Continue stays shut
+   until somebody points at it. */
+function startCooldown(fromBar){
   cooldownUntil = Date.now() + COOLDOWN_SECONDS * 1000;
   $("btnWrap").classList.add("cooling");
   paintTip();
-  $("nextTip").hidden = false;              // the cursor is already on the button
+  if (!fromBar) $("nextTip").hidden = false;   // the cursor is already on the button
   clearInterval(cooldownTimer);
   cooldownTimer = setInterval(paintTip, 250);
 }
@@ -1226,6 +1238,105 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
    student to the next: nothing could be drawn until it came back. Only a
    teacher looking at work ever sees this, and only where the id matches, so
    a leftover box from another lesson cannot stand in for the real one. */
+/* The lesson's slides, if it has any: a button in the top bar and a window
+   a student can float, pin beside the work or fill the screen with
+   (slides.js). Never on a page made for marking or for the PDF, where
+   there is nobody to move it about. */
+let slideViewer = null;
+function startSlides(l){
+  if (!window.hubSlides || !window.hubSlides.has(l)) return;
+  if (embedParam !== null || pdfParam !== null || allParam !== null) return;
+  const teacher = spectate || !!(window.teacherAuth && window.teacherAuth.have() && !token);
+  slideViewer = window.hubSlides.viewer({
+    deck: l.slides, lessonId, before: $("setBtn"),
+    /* the builder can tie a slide to a page; the page carries its id */
+    slideForPage: (i) => { const b = l.blocks && l.blocks[i]; return b && b.slide ? b.slide : null; },
+    present: teacher ? (at) => window.hubSlides.present(l.slides, { start: at }) : null
+  });
+}
+/* ---------- what and why ----------
+   A lesson's what and why (and where it can lead), written once in the
+   builder's Lesson options. Three places it can show, tried side by side on
+   this branch: a card at the top of the first page, a button in the top bar
+   that opens it at any point, and a recap on the finished screen. */
+function whatWhy(l){
+  if (!l || (!l.what && !l.why)) return null;
+  const link = /^https:\/\//i.test(l.careerLink || "") ? l.careerLink : "";
+  return { what: l.what || "", why: l.why || "", career: l.career || "", link };
+}
+function whatWhyCard(l, mode){
+  const ww = whatWhy(l);
+  if (!ww) return null;
+  const recap = mode === "recap";
+  const card = el("section","ww-card ww-" + mode);
+  card.setAttribute("aria-label", recap ? "What you learned" : "Today's lesson");
+  if (mode === "page") card.appendChild(el("h2","ww-head","Today’s lesson"));
+  const grid = el("div","ww-grid");
+  [[recap ? "What you learned" : "What we are learning", ww.what],
+   ["Why it matters", ww.why]].forEach(([head, words]) => {
+    if (!words) return;
+    const part = el("div","ww-part");
+    part.appendChild(el("h3","", head));
+    part.appendChild(el("p","", words));
+    grid.appendChild(part);
+  });
+  card.appendChild(grid);
+  if (ww.career){
+    const job = el("div","ww-career");
+    const words = el("div","ww-career-words");
+    words.appendChild(el("h3","","Where this can lead"));
+    words.appendChild(el("p","", ww.career));
+    job.appendChild(words);
+    if (ww.link){
+      const a = el("a","btn-ghost ww-link","Explore careers");
+      a.href = ww.link; a.target = "_blank"; a.rel = "noopener";
+      job.appendChild(a);
+    }
+    card.appendChild(job);
+  }
+  return card;
+}
+function startWhatWhy(l){
+  if (!whatWhy(l) || embedParam !== null || pdfParam !== null) return;
+  /* On the first page, above its tasks. An assessment's first screen is the
+     welcome, which has enough to say already. */
+  if (!l.assessment && steps[0]){
+    steps[0].section.insertBefore(whatWhyCard(l, "page"), steps[0].section.firstChild);
+  }
+  /* In the top bar beside Slides and Document, for whenever it is wanted. */
+  const open = el("button","btn-ghost sl-open ww-open no-print");
+  open.type = "button";
+  open.innerHTML = '<span class="ww-open-ic" aria-hidden="true">?</span><span class="sl-open-word">Today’s lesson</span>';
+  open.title = "What we are learning and why";
+  open.addEventListener("click", () => {
+    const back = el("div","modal-back");
+    const popup = el("div","modal ww-modal");
+    const x = el("button","btn-ghost iconbtn modal-x","✕");
+    x.addEventListener("click", () => back.remove());
+    popup.appendChild(x);
+    popup.appendChild(el("h2","", "Today’s lesson"));
+    popup.appendChild(whatWhyCard(l, "popup"));
+    scrollBody(popup);
+    back.appendChild(popup);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
+  });
+  const set = $("setBtn");
+  if (set && set.parentNode) set.parentNode.insertBefore(open, set);
+}
+
+/* The lesson's Word documents (docs.js): open beside the work as the lesson
+   starts, pinned right and locked there unless the teacher said otherwise. */
+let docViewer = null;
+function startDocs(l){
+  if (!window.hubDocs || !window.hubDocs.has(l)) return;
+  if (embedParam !== null || pdfParam !== null || allParam !== null) return;
+  docViewer = window.hubDocs.viewer({
+    docs: l.docs, lessonId, before: $("setBtn"),
+    docForPage: (i) => { const b = l.blocks && l.blocks[i]; return b && b.doc ? b.doc : null; }
+  });
+}
+
 function handedLesson(){
   if (OFFLINE || !spectate || viewParam === null) return null;
   try{
@@ -1259,6 +1370,9 @@ const handedOver = handedLesson();
     l.blocks.forEach(renderBlock);
     if (assessLayout()) arrangeAssessment();
     buildTracker();
+    startSlides(l);
+    startDocs(l);
+    startWhatWhy(l);
     /* Asked before anything is restored: a name change means a different
        child, and the work waiting on this machine is cleared, so restoring
        first would put the last one's answers on screen. */
@@ -1330,6 +1444,10 @@ const handedOver = handedLesson();
       recheckForMarking();
       /* before drawing: the drawing below returns early in three places, and
          the putting back waits until it has finished anyway */
+      /* Embedded, there is no "Viewing their work" strip across the top, so
+         no room is kept for one: it was an empty band above every student's
+         work in the marking screen, one page at a time or all on one. */
+      if (embedParam !== null) document.body.classList.add("embedded");
       if (embedParam !== null){ keepPlaceForParent(); reopenFullPicture(); }
       if (allParam !== null){ showEverything(); return; }
       if (keepStep !== null && keepStep >= 0 && keepStep < steps.length) step = keepStep;
@@ -1369,9 +1487,10 @@ const handedOver = handedLesson();
         ? "Viewing " + (inspectName || "a student") + "'s work, click here to go back"
         : "Teacher preview, this is what students will see \u00b7 click here to go back");
       backBit.type = "button";
+      /* Opened in the console's own tab now, where window.close does nothing,
+         so it steps back to the console rather than trying to shut itself. */
       backBit.addEventListener("click", () => {
-        if (window.close) window.close();
-        setTimeout(() => { location.href = "admin.html"; }, 150);
+        if (window.consoleNav) window.consoleNav.back(); else location.href = "admin.html";
       });
       vb.appendChild(backBit);
       if (inspectList && inspectList.length && pdfParam === null){   // show it even for one student
@@ -1402,7 +1521,15 @@ const handedOver = handedLesson();
       }
       document.body.appendChild(vb);           // position:fixed, order doesn't matter
       const home = $("homeLink");
-      if (home){ home.textContent = "\u2190 Teacher console"; home.href = "admin.html"; }
+      if (home){
+        /* Only the words change: the logo in front of them is the same way
+           out as a student's Home. */
+        home.querySelector("span").textContent = "Teacher console"; home.href = "admin.html";
+        home.addEventListener("click", (e) => {
+          if (!window.consoleNav) return;
+          e.preventDefault(); window.consoleNav.back();
+        });
+      }
       hideLoader();
       /* A link that has lost characters on its way through a chat window
          decodes to nothing. Saying so beats showing an empty lesson that
@@ -1571,7 +1698,7 @@ function putPreviewWork(carried){
     try{ fields[to].set(data[from]); }catch(e){}
   };
   newIds.forEach(id => {
-    if (was[id] && was[id].sig === now[id].sig) give(id, id);
+    if (was[id] && was[id].sig === now[id].sig && id in data) give(id, id);
   });
   newIds.forEach(id => {
     if (given.has(id)) return;
@@ -1579,7 +1706,7 @@ function putPreviewWork(carried){
     if (from) give(id, from);
   });
   newIds.forEach(id => {
-    if (given.has(id) || used.has(id) || !was[id] || was[id].type !== now[id].type) return;
+    if (given.has(id) || used.has(id) || !(id in data) || !was[id] || was[id].type !== now[id].type) return;
     give(id, id);
   });
 }
@@ -2414,6 +2541,7 @@ function buildTracker(){
     seg.appendChild(el("span","seg-n", String(i + 1)));
     seg.addEventListener("click", () => {
       if (seg.disabled) return;
+      if (seg.dataset.ahead === "1"){ tryJumpAhead(i, seg); return; }
       if (seg.dataset.shut === "1"){ showLockTip(seg, seg.dataset.why); return; }
       hideLockTip();
       leaveSummary(i);
@@ -2494,6 +2622,30 @@ function highlightBlock(id){
     setTimeout(() => item.classList.remove("justopened"), 1800);
   }, 80);
 }
+/* Inside the builder's preview the two sides follow each other: a task
+   opened in the builder is shown and flashed here, and clicking a task here
+   opens it in the builder. Only ever talks to the page it is framed by,
+   which is preview.html, passing both ways. preview.html on its own in a tab
+   is not in the builder, so that one is left out the way the tab always was. */
+if (builderParam !== null && window.parent && window.parent !== window && window.top !== window.parent){
+  document.documentElement.classList.add("inbuilder");
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const id = e.data && e.data.hubFocus;
+    if (!id) return;
+    const at = steps.findIndex(st => st && st.section &&
+      Array.from(st.section.querySelectorAll(".pg-item")).some(x => x.dataset.blockId === id));
+    if (at >= 0 && at !== step) showStep(at);
+    highlightBlock(id);
+  });
+  document.addEventListener("click", (e) => {
+    const item = e.target.closest && e.target.closest(".pg-item");
+    if (!item || !item.dataset.blockId) return;
+    /* trying the task out is not asking to edit it */
+    if (e.target.closest("input, textarea, select, button, a, [contenteditable], .ide, iframe, canvas, label")) return;
+    try{ window.parent.postMessage({ hubPick: item.dataset.blockId }, location.origin === "null" ? "*" : location.origin); }catch(err){}
+  });
+}
 function showStep(i){
   /* inside the builder's preview, keep a note of the page so a refresh comes
      back to it rather than jumping to the beginning */
@@ -2520,6 +2672,9 @@ function showStep(i){
     step = (b !== null) ? b : (nextOpen(0, +1) !== null ? nextOpen(0, +1) : 0);
   }
   steps.forEach((s, n) => { s.section.hidden = (n !== step); });
+  /* How far they have been, so only a page never reached before announces
+     itself on arrival (playArrival). Where a lesson opens counts as reached. */
+  if (step > furthestStep) furthestStep = step;
   /* Now it is on the page: anything that needs to fetch from an earlier task
      does it here, with whatever was written by the time they got this far. */
   try{ const st = steps[step]; if (st && st.onShow) st.onShow(); }catch(e){}
@@ -2559,7 +2714,10 @@ function showStep(i){
   $("briefTitle").hidden = !bt;
   $("briefText").innerHTML = bx;
   $("briefText").hidden = !bx;
-  $("brief").hidden = !bt && !bx;
+  /* A task that takes the whole page shows the title in its own bar. */
+  $("brief").hidden = (!bt && !bx) || !!steps[step].fullTask;
+  /* and meets the bar above it and the dock below it, edge to edge */
+  $("stage").classList.toggle("fullpage", !!steps[step].fullTask);
 
   $("backBtn").disabled = step === 0;
   /* A practical is marked by hand, later, so it must not promise a score
@@ -2575,6 +2733,8 @@ function showStep(i){
      had room that had already gone and ran on under the bottom bar. */
   paintRail();
   refreshGate();
+  if (slideViewer) slideViewer.page(step);
+  if (docViewer) docViewer.page(step);
 }
 function refreshGate(){
   /* Continue is never locked, and nothing is written along the bottom bar
@@ -2647,13 +2807,87 @@ async function tryContinue(){
        Asked here rather than on the page itself, because the question is
        "may I move on yet", not "can I do this task". */
     if (OFFLINE && !(await passGate(target))) return;
+    const fresh = target > furthestStep;
     hideWaitModal(); showStep(target);
+    if (fresh) playArrival();
     /* After the move, so the position stored with the work is the page they
        have arrived at: coming back to the lesson should carry on, not repeat
        the page they just finished. */
     lingerFlush();
   }
   else { showWaitModal(); startCooldown(); }
+}
+
+/* ---------- a page ahead, pressed on the progress bar ----------
+   The same question Continue asks, "is that page open yet", asked of the
+   page pressed rather than of the next one, and with the same five seconds
+   between tries, shared with Continue, so neither is a way round the other.
+   A page ahead that is still shut gets the same "Keep working on this task"
+   pop-up Continue gives. One that is open is gone to, skipping any pages in
+   between: Continue never stops anybody for unfinished work either. */
+async function tryJumpAhead(i, seg){
+  if (coolingDown()){
+    const left = Math.ceil((cooldownUntil - Date.now()) / 1000);
+    showLockTip(seg, "Please wait " + left + " second" + (left === 1 ? "" : "s") + " before trying again...");
+    return;
+  }
+  if (askingToMoveOn) return;                      // one is already in the air
+  hideLockTip();
+  askingToMoveOn = true;
+  seg.classList.add("checking");
+  $("nextBtn").classList.add("checking");
+  try{
+    if (!(bypassed || inPreview || !apiReady || !token)) await fetchRelease();
+  }
+  finally{
+    askingToMoveOn = false;
+    seg.classList.remove("checking");
+    $("nextBtn").classList.remove("checking");
+  }
+  if (isLocked(i)){ paintTracker(); showWaitModal(); startCooldown(true); return; }
+  if (OFFLINE && !(await passGate(i))) return;
+  const fresh = i > furthestStep;
+  hideWaitModal(); showStep(i);
+  if (fresh) playArrival();
+  lingerFlush();
+}
+
+/* ---------- arriving on a new page ----------
+   Continue was being pressed and the change of page missed: two pages of a
+   lesson can look alike, Continue very often does not move anybody because
+   the next page has not been opened yet, and so a page that did change
+   looked like one more press that had not worked. The first time a page is
+   reached, it rises into place, the brief with its title lights up in the
+   school's blue and fades back, and the new segment on the progress bar
+   pulses once. It rises rather than sliding in from the side, because a
+   slide sideways put a scrollbar along the bottom of the lesson while it
+   ran. A page gone back to, or opened again, does none of it: only
+   new is news.
+
+   The animations are kept in custom properties in style.css and named again
+   under prefers-reduced-motion, without the slide, because every machine in
+   the school reports that setting, and the blanket rule that stops all
+   animation would otherwise stop the one thing saying the page changed. */
+/* var, not let: showStep keeps it up to date and can run while the page is
+   still loading, before a let this far down the script would exist. */
+var furthestStep = -1;
+function playArrival(){
+  const sec = steps[step] && steps[step].section;
+  const seg = $("tracker").querySelectorAll(".seg")[step];
+  [sec, $("brief"), seg].forEach(n => {
+    if (!n) return;
+    n.classList.remove("arrived");
+    void n.offsetWidth;                            // so it plays again from the start
+    n.classList.add("arrived");
+    /* Only its own animation ending: one inside it, a tick or a counter,
+       bubbles up here too and would take the class off half way through. */
+    const done = (e) => {
+      if (e.target !== n) return;
+      n.classList.remove("arrived");
+      n.removeEventListener("animationend", done);
+    };
+    n.addEventListener("animationend", done);
+  });
 }
 
 /* ---------- saving as they leave a page ----------
@@ -2886,15 +3120,22 @@ function paintTracker(){
        cannot be one either. */
     const sealed = !roam && finished && practicalMarked();
     const canGo = done && !shut && !sealed && (finished || roam || n !== step);
+    /* A page ahead of them can be pressed too, and asks the same question
+       Continue does, "is it open yet", with the same wait between tries:
+       tryJumpAhead. So the bar is a way forward as well as back, and still
+       never a way round the teacher's pacing. */
+    const ahead = !finished && !roam && !onSummary && n > step;
+    seg.dataset.ahead = ahead ? "1" : "";
     seg.dataset.shut = shut ? "1" : "";
     seg.dataset.why = why;
     /* A shut page stays pressable so that pressing it can say why. Everything
        else out of reach is switched off as it always was. */
-    seg.disabled = !canGo && !shut;
-    seg.setAttribute("aria-disabled", canGo ? "false" : "true");
+    seg.disabled = !canGo && !shut && !ahead;
+    seg.setAttribute("aria-disabled", (canGo || ahead) ? "false" : "true");
     /* "Back to" only when it really is behind them. From the summary every
        page is somewhere to go, and for a teacher roaming so is a page ahead. */
     seg.title = canGo ? ((!onSummary && n < step) ? "Back to page " : "Go to page ") + (n + 1)
+              : ahead ? "Go to page " + (n + 1)
               : shut ? why : "Page " + (n + 1);
     seg.setAttribute("aria-label", seg.title);
   });
@@ -2987,6 +3228,9 @@ const TASK_ICON = {
   /* a target */
   hotspot:   { name:"Click the right spot",
                d:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 12h.01"/>' },
+  /* a speech bubble with a question in it */
+  helper:    { name:"Photoshop help",
+               d:'<path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.2-.8.6-.8 1.1"/><path d="M12 14h.01"/>' },
   notes:     { name:"Notes",
                d:'<path d="M6.5 3.5h7l4.5 4.5v12.5h-11.5z"/><path d="M13.5 3.5V8H18"/>' +
                  '<path d="M9 13h6M9 16.5h4"/>' },
@@ -3001,6 +3245,10 @@ const TASK_ICON = {
                d:'<path d="M8.5 8L4 12l4.5 4M15.5 8l4.5 4-4.5 4M13.6 5.5l-3.2 13"/>' },
   /* the same brackets, in a page of their own, so a lesson carrying both a
      Python task and a web one does not show the same drawing twice */
+  /* a stack of two jigsaw-notched blocks */
+  scratch:   { name:"Block coding",
+               d:'<path d="M4 5h4l1 1.5h2L12 5h8v5h-8l-1 1.5H9L8 10H4z"/>' +
+                 '<path d="M4 14h4l1 1.5h2L12 14h6v5H4z"/>' },
   web:       { name:"Web page",
                d:'<rect x="3" y="4.5" width="18" height="15" rx="2"/>' +
                  '<path d="M9.7 9.8L7.2 12l2.5 2.2M14.3 9.8l2.5 2.2-2.5 2.2"/>' },
@@ -3336,7 +3584,7 @@ async function submitWork(){
   if (spectate) return "offline";
   if (!restoreDone) return "offline";      // never send blanks over real work
   /* Writes to the database only when something actually changed since the
-     last successful write, pressing Save Work twice costs nothing. */
+     last successful write, pressing Save work twice costs nothing. */
   if (!token || !apiReady) return "offline";
   const payload = JSON.stringify(snapshot());
   const mark = typedAt;             // what they had typed when this one left
@@ -3347,6 +3595,10 @@ async function submitWork(){
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
       body: JSON.stringify({ lesson: lessonId, data: JSON.parse(payload) })
     });
+    /* 503 is the server saying the database is too busy to take this right
+       now, after queueing as long as it can. That is not the same as not
+       reaching it, and the child is told so, with a way to try again. */
+    if (r.status === 503) return "busy";
     if (r.status === 423){
       /* Locked for marking since this page opened. */
       markingLocked = true;
@@ -3365,6 +3617,256 @@ async function submitWork(){
     sendExamMarks();
     return "done";
   }catch(e){ return "failed"; }
+}
+
+/* ---------- handing in at the end: the rocket ----------
+   A whole class presses Finish within the same few seconds, and the free
+   database can only take so much a second. So each hand-in waits a random
+   nought to three seconds first, which spreads a room out a little, and
+   while it waits and while it sends, this screen is up: a bar, a rocket, and
+   a plain instruction not to sign out, because signing out is the one thing
+   that would stop the work arriving.
+
+   The screen stays until the answer comes back, however long the database
+   keeps it queued, and the summary only appears after that, so "Sent to your
+   teacher" on it is always true.
+
+   Everything that decides WHEN is timers and promises. The rocket is drawn
+   on animation frames, which a hidden tab or a paused pane stops giving, so
+   it only ever looks at the clock and never holds anything up. It is moved
+   from JavaScript rather than CSS on purpose: the school has reduced motion
+   on for every machine, and style.css turns every CSS animation off for
+   that, which would leave the rocket standing on the pad. */
+/* Three seconds, not ten. Ten was tried against the live database: it added
+   up to ten seconds for every student in an ordinary lesson and took almost
+   nothing off the worst case, because a database with a queue writes no
+   faster for having been asked later. The server's own retrying (q() in
+   the backend's _lib.js) is what stops a burst failing; this only takes the
+   edge off the first second. */
+const ROCKET_STAGGER_MS = 3000;
+const ROCKET_WORDS = ["Saving", "Almost there", "Sending your work to your teacher", "Stay patient",
+                      "Just a few more seconds"];
+const pause = (ms) => new Promise(go => setTimeout(go, ms));
+
+/* How long an attempt is given before the rocket runs out of fuel. The
+   server retries a busy hand-in for up to 35 seconds (_lib.js) and then
+   says so, and the page gives up listening at 45 (config.js). An attempt
+   still out at 35 seconds is not written off: if it arrives later, the
+   rocket picks itself up and goes. */
+const ROCKET_GIVE_UP_MS = 35000;
+
+function rocketScreen(){
+  const back = el("div", "rocket-save no-print");
+  back.setAttribute("role", "status");
+  back.setAttribute("aria-live", "polite");
+  back.innerHTML =
+    '<div class="rs-sky">' +
+      '<div class="rs-stars"></div>' +
+      '<svg class="rs-rocket" viewBox="0 0 80 190" aria-hidden="true">' +
+        '<g class="rs-flame">' +
+          '<path class="rs-flame-out" d="M26 138 Q40 200 54 138 Z"/>' +
+          '<path class="rs-flame-in" d="M32 138 Q40 176 48 138 Z"/>' +
+        '</g>' +
+        '<path class="rs-fin" d="M22 102 L6 140 L24 132 Z"/>' +
+        '<path class="rs-fin" d="M58 102 L74 140 L56 132 Z"/>' +
+        '<path class="rs-body" d="M40 4 C60 24 62 60 60 132 L20 132 C18 60 20 24 40 4 Z"/>' +
+        '<path class="rs-nose" d="M40 4 C50 14 55 26 57 38 L23 38 C25 26 30 14 40 4 Z"/>' +
+        '<circle class="rs-window" cx="40" cy="66" r="11"/>' +
+        '<circle class="rs-glint" cx="36" cy="62" r="3.5"/>' +
+        '<rect class="rs-base" x="20" y="126" width="40" height="8" rx="3"/>' +
+      '</svg>' +
+      '<div class="rs-pad"></div>' +
+    '</div>' +
+    '<div class="rs-panel">' +
+      '<div class="rs-bar"><div class="rs-fill"></div></div>' +
+      '<p class="rs-warn">Saving your work, DO NOT sign out yet!</p>' +
+      '<p class="rs-msg">Saving</p>' +
+      '<div class="rs-actions" hidden>' +
+        '<button class="btn-primary rs-again">Try again</button>' +
+        '<button class="btn-ghost rs-leave">Go to my summary</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(back);
+  const rocket = back.querySelector(".rs-rocket"), flame = back.querySelector(".rs-flame");
+  const fill = back.querySelector(".rs-fill"), msg = back.querySelector(".rs-msg");
+  const warn = back.querySelector(".rs-warn"), actions = back.querySelector(".rs-actions");
+  const sky = back.querySelector(".rs-sky"), stars = back.querySelector(".rs-stars");
+
+  /* Smoke, a few puffs rolling out from the pad. */
+  const puffs = [];
+  for (let i = 0; i < 7; i++){ const p = el("div", "rs-puff"); sky.appendChild(p); puffs.push(p); }
+
+  let t0 = performance.now();
+  let leaveAt = 0, fallAt = 0, fallFrom = null, lastLift = 0;
+  let word = 0, words = 0, frame = 0, stopped = false;
+  const startWords = () => {
+    clearInterval(words); word = 0; msg.textContent = ROCKET_WORDS[0];
+    words = setInterval(() => { word = (word + 1) % ROCKET_WORDS.length; msg.textContent = ROCKET_WORDS[word]; }, 3000);
+  };
+  startWords();
+
+  /* How far along the bar is. Nobody can know how long the database will
+     queue a hand-in, so the bar creeps towards nine tenths and waits there,
+     and only the answer arriving fills the rest. Out of fuel, it stops
+     where it was. */
+  const barAt = (now) => leaveAt ? Math.min(1, 0.9 + (now - leaveAt) / 700)
+                       : fallAt ? fallFrom.p
+                       : 0.9 * (1 - Math.exp(-(now - t0) / 6000));
+  function draw(now){
+    if (stopped) return;
+    const p = barAt(now), t = (now - t0) / 1000;
+    fill.style.width = (p * 100).toFixed(1) + "%";
+    let lift, shake, tilt, flameSize, lean = 0, slide = 0, dust = 0;
+    if (leaveAt){
+      /* Off it goes: a moment of full power shaking on the spot, then faster
+         and faster, straight up and out of the top. Quicker than this and it
+         was gone before anybody had seen it go. */
+      const s = (now - leaveAt) / 1000;
+      const climb = Math.max(0, s - 0.3);
+      lift = 60 + 950 * climb * climb;
+      shake = s < 0.3 ? 4.5 : 0; tilt = 0; flameSize = s < 0.3 ? 1.5 : 1.8;
+    } else if (fallAt){
+      /* Out of fuel. The flame coughs and dies, it hangs for a moment, drops
+         back onto the pad, and topples over on its side with a puff of dust.
+         Then it lies there until somebody presses Try again. */
+      const s = (now - fallAt) / 1000;
+      shake = 0; tilt = 0;
+      if (s < 0.8){
+        lift = fallFrom.lift; shake = 2.2;
+        const dying = 1 - s / 0.8;
+        flameSize = dying * (Math.sin(t * 90) > 0.2 ? 1 : 0.15);
+      } else if (s < 1.25){
+        const k = (s - 0.8) / 0.45;
+        lift = fallFrom.lift * (1 - k * k); flameSize = 0;
+      } else {
+        const k = Math.min(1, (s - 1.25) / 0.6);
+        /* Tips past where it will rest, then settles back. */
+        const back = 1.70158;
+        const eased = 1 + (back + 1) * Math.pow(k - 1, 3) + back * Math.pow(k - 1, 2);
+        /* It turns about a point near its base, which sits a good way above
+           the pad once it is on its side, so it also comes down the last
+           few pixels as it goes over: lying on the pad, not floating by it.
+           Measured in the browser: 36px down, 24px across. */
+        lean = 78 * eased; slide = 24 * k; flameSize = 0;
+        lift = (k < 0.5 ? 5 * Math.sin(Math.PI * k * 2) : 0) - 36 * Math.min(1, k * 1.2);
+        dust = Math.max(0, 1 - (s - 1.6) / 1.0) * (s > 1.5 ? 1 : 0);
+      }
+    } else if (p < 0.3){
+      /* Launching: the engine lights and it strains a little off the pad. */
+      const k = p / 0.3;
+      lift = 22 * k * k; shake = 1.2 * k; tilt = 0; flameSize = 0.25 + 0.85 * k;
+    } else {
+      /* Half way: hanging just above the pad, shaking with the effort. */
+      lift = 22 + 38 * Math.min(1, (p - 0.3) / 0.6); shake = 3.2; tilt = 1.6; flameSize = 1.1;
+    }
+    if (!fallAt) lastLift = lift;
+    const jx = shake ? (Math.sin(t * 47) + Math.sin(t * 31)) * shake / 2 : 0;
+    const jy = shake ? Math.sin(t * 53) * shake / 2 : 0;
+    const r = (tilt ? Math.sin(t * 23) * tilt : 0) + lean;
+    rocket.style.transform = "translate(" + (jx + slide).toFixed(2) + "px," + (jy - lift).toFixed(1) + "px) rotate(" + r.toFixed(2) + "deg)";
+    const flicker = 1 + Math.sin(t * 61) * 0.08 + Math.sin(t * 37) * 0.06;
+    flame.style.transform = "scale(" + (flameSize * 0.9 + (flameSize ? 0.1 : 0)).toFixed(2) + "," + (flameSize * flicker).toFixed(2) + ")";
+    /* The stars rush downwards once it is away, which is what flying looks like. */
+    stars.style.transform = "translateY(" + (leaveAt ? ((now - leaveAt) / 2) : 0).toFixed(0) + "px)";
+    puffs.forEach((pf, i) => {
+      const life = ((t * 0.55 + i / puffs.length) % 1);
+      const side = i % 2 ? 1 : -1;
+      const strength = leaveAt ? Math.max(0, 1 - (now - leaveAt) / 900)
+                     : fallAt ? dust
+                     : Math.min(1, p / 0.2);
+      pf.style.transform = "translate(" + (side * (10 + life * 110)).toFixed(0) + "px," + (-life * 26).toFixed(0) + "px) scale(" +
+                           (0.4 + life * 1.3).toFixed(2) + ")";
+      pf.style.opacity = ((1 - life) * 0.65 * strength).toFixed(2);
+    });
+    frame = requestAnimationFrame(draw);
+  }
+  frame = requestAnimationFrame(draw);
+
+  return {
+    /* Out of fuel: the rocket falls, and Try again comes up on this same
+       screen. Answers "again", "summary", or "done" when an attempt that was
+       still out arrives after all. `late` is that attempt, if there is one. */
+    fall(late, why){
+      fallFrom = { lift: lastLift, p: barAt(performance.now()) };
+      fallAt = performance.now();
+      clearInterval(words);
+      back.classList.add("fallen");
+      warn.textContent = why === "failed" ? "We could not reach the server." : "The server is very busy just now.";
+      msg.textContent = "Your work is safe on this computer.";
+      actions.hidden = false;
+      return new Promise(answer => {
+        let settled = false;
+        const settle = (choice) => { if (settled) return; settled = true; actions.hidden = true; answer(choice); };
+        actions.querySelector(".rs-again").onclick = () => settle("again");
+        actions.querySelector(".rs-leave").onclick = () => settle("summary");
+        if (late) late.then(r => { if (r === "done") settle("done"); });
+      });
+    },
+    /* Back on the pad with the engine lit, for another go. */
+    relaunch(){
+      fallAt = 0; fallFrom = null; t0 = performance.now();
+      back.classList.remove("fallen");
+      warn.textContent = "Saving your work, DO NOT sign out yet!";
+      actions.hidden = true;
+      startWords();
+    },
+    /* Sent: the rocket leaves, and the summary comes once it is off the top.
+       Not sent: no launch to celebrate, straight to the summary, which says
+       what happened and offers Try again. */
+    async finish(sent){
+      if (sent){
+        leaveAt = performance.now();
+        msg.textContent = "Sent to your teacher";
+        clearInterval(words);
+        await pause(1700);
+      }
+      stopped = true;
+      cancelAnimationFrame(frame);
+      clearInterval(words);
+      back.remove();
+    }
+  };
+}
+
+/* The wait, the send, and the screen over both. `send` is whatever hands the
+   work in and answers "done" when it has arrived.
+
+   An attempt that comes back busy, or has not come back in 35 seconds, makes
+   the rocket fall, and the student chooses: Try again, which waits its short
+   random moment and sends again, or Go to my summary, which is there because
+   nothing on this site traps a child on a screen (CLAUDE.md), and where the
+   summary says the work is safe and has its own Try again. */
+let rocketUp = false;
+async function rocketSave(send){
+  rocketUp = true;
+  const screen = rocketScreen();
+  let result = "failed";
+  for (;;){
+    await pause(Math.random() * ROCKET_STAGGER_MS);
+    const attempt = Promise.resolve().then(send).catch(() => "failed");
+    result = await Promise.race([attempt, pause(ROCKET_GIVE_UP_MS).then(() => "slow")]);
+    if (result === "done") break;
+    const choice = await screen.fall(result === "slow" ? attempt : null, result);
+    if (choice === "done"){
+      /* The slow one got there after all: up off its side and away. */
+      result = "done";
+      screen.relaunch();
+      await pause(600);
+      break;
+    }
+    if (choice === "summary"){ if (result === "slow") result = "busy"; break; }
+    screen.relaunch();
+  }
+  await screen.finish(result === "done");
+  rocketUp = false;
+  return result;
+}
+
+/* Only when something is actually going to a server. Offline, a teacher
+   looking round, or a lesson not yet read back from the server has nothing
+   to send, and nothing to wait for. */
+function rocketWanted(){
+  return !OFFLINE && !spectate && !!token && apiReady && restoreDone;
 }
 
 /* ---------- exam questions in an ordinary lesson ----------
@@ -3468,7 +3970,7 @@ async function manualSave(){
   }
   /* Every Save button on the page moves together, and the tick stays until
      something is typed. It used to flash Saved for two seconds and go back to
-     Save Work, which read as though the save had come undone. */
+     Save work, which read as though the save had come undone. */
   clearTimeout(flashTimer);
   btn.classList.remove("flash-ok","flash-bad");
   paintSaveButtons("saving");
@@ -3509,20 +4011,28 @@ async function tryFinish(){
   }
   finishLesson();
 }
-/* Their feedback is already waiting on the summary, and finishing again
-   would hand the work in again and, in an assessment, send its score again. */
-function backToFeedback(){
-  returnAllSections();
-  if (lesson && lesson.assessment) renderAssessmentComplete(false);
-  else showLessonComplete(true);
-}
-function finishLesson(){
-  if (workFrozen){ backToFeedback(); return; }
+  /* Their feedback is already waiting on the summary, and finishing again
+     would hand the work in again and, in an assessment, send its score again. */
+  function backToFeedback(){
+    returnAllSections();
+    if (lesson && lesson.assessment) renderAssessmentComplete(false);
+    else showLessonComplete(true);
+  }
+  async function finishLesson(){
+    if (workFrozen){ backToFeedback(); return; }
+    if (rocketUp) return;              // already on its way: a second press waits with it
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
   finished = true;
   tickWrittenCode();                 // before the save, so the ticks go with it
   save();
   sendExamMarks();                   // a lesson of exam questions still has a mark
+  /* Sent first, behind the rocket, and the summary drawn with the answer,
+     rather than the summary drawn and the work sent from it. */
+  if (rocketWanted()){
+    const sent = await rocketSave(submitWork);
+    showLessonComplete(false, true, sent);
+    return;
+  }
   showLessonComplete(false, true);   // they have just pressed Finish
 }
 
@@ -3792,6 +4302,11 @@ function tuneColours(){
     /* a formatting box is somewhere a teacher is writing, and what is in there
        is about to be saved, so it is left exactly as typed */
     if (n.closest && n.closest(".rt")) return;
+    /* A document is white paper and a slide carries its own background in
+       every theme, so their colours were picked against those and are right
+       as they are. Mirrored, the paper's own near-black became #E5E5E5 and a
+       worksheet in dark mode was pale grey on white. */
+    if (n.closest && n.closest(".dc-paper, .sl-slide")) return;
     let orig = n.dataset.colourWas;
     if (orig === undefined){
       orig = n.style.color;
@@ -3867,9 +4382,9 @@ function buildBlock(b, i){
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
               picture:rPicture, pastelink:rPasteLink, frame:rFrame, web:rWeb,
-              binary:rBinary, binadd:rBinAdd,
+              scratch:rScratch, binary:rBinary, binadd:rBinAdd,
               board:rBoardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
-              keywords:rKeywordsTask,
+              keywords:rKeywordsTask, helper:rHelperTask,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
               exam:rExamTask, table:rTableTask, hotspot:rHotspotTask,
               extension:rExtension, group:rGroup, choice:rChoice }[b.type];
@@ -3934,12 +4449,13 @@ function taskGate(b){
     watch: (fn) => { holdWatchers.add(fn); }
   };
 }
+/* The tasks marked by a checklist: Python, a web page, and block coding. */
+function isCodeTask(b){ return !!b && (b.type === "ide" || b.type === "web" || b.type === "scratch"); }
 /* A checklist line a teacher ticks by hand is not the student's to finish,
    so Full on a coding task asks for every line the code can tick itself,
    and counts the teacher's ticks only once they are there. */
 function gateScore(b, v){
-  if ((b.type === "ide" || b.type === "web" || (b.type === "image" && b.psd === true))
-      && Array.isArray(b.checks) && b.checks.length){
+  if ((isCodeTask(b) || (b.type === "image" && b.psd === true)) && Array.isArray(b.checks) && b.checks.length){
     const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
     const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
     let got = 0, own = 0, ownGot = 0;
@@ -3966,6 +4482,7 @@ function gateAttempted(b, v){
     const changed = !v.carried && String(v.code || "").trim() !== String(b.starter || "").trim();
     return changed || !!v.ran;
   }
+  if (b.type === "scratch") return !!(v && (v.changed || v.runs));
   if (b.type === "web"){
     /* The page runs a web task by itself when it opens, so having run says
        nothing about the student. Their own typing does. */
@@ -3978,7 +4495,7 @@ function gateAttempted(b, v){
 function gateWords(b){
   /* A checklist the builder hid cannot be pointed at, so a level behind
      one is asked for in the words any other task uses. */
-  const code = (b.type === "ide" || b.type === "web") && b.checksHidden !== true;
+  const code = isCodeTask(b) && b.checksHidden !== true;
   if (b.gate === "attempted")
     return b.type === "quiz" ? "Answer a question in the quiz above to open it."
                              : "Have a go at the task above to open it.";
@@ -4143,6 +4660,7 @@ function rPage(b){
   const waiting = [];    // the ones a teacher asked to wait for the page
   const finishers = [];  // what each of those is waiting on, one per task
   const slots = pageSlot(s);
+  let fullTask = false;  // holds a task that takes the whole page
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
     const built = buildBlock(child, j);
@@ -4175,7 +4693,13 @@ function rPage(b){
     const item = el("div","pg-item");
     item.dataset.blockId = child.id;
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
-    if (child.type !== "picture"){
+    /* A block coding task takes the whole page and carries the page's title
+       and its own heading in its bar, rather than under a heading here. */
+    if (built.fullTask){
+      fullTask = true;
+      if (built.setPage) built.setPage(b.title || "", b.task || "");
+    }
+    else if (child.type !== "picture"){
       if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
       if (bb.text) item.appendChild(el("p","pg-t", bb.text));
     }
@@ -4470,7 +4994,9 @@ function rPage(b){
        is one test for it rather than a flag to carry about as well. On unless
        it was turned off, which is what keeps it on every lesson written before
        the setting existed. */
-    railItems: b.taskbar === false ? null : railItems
+    /* A task taking the whole page covers where the bar would be. */
+    railItems: (b.taskbar === false || fullTask) ? null : railItems,
+    fullTask: fullTask
   };
 }
 
@@ -5060,7 +5586,7 @@ function rPython(b){
 /* ======================================================================
    BUILT-IN PYTHON IDE ,  replaces Trinket
    {"type":"ide", "task":"...", "starter":"...", "turtle":true,
-    "inputs":"Ada\n12", "expect":"Hello", "height":320, "readOnly":false}
+    "inputs":"Ada\n12", "height":320, "readOnly":false}
    Runs entirely in the browser through Pyodide. Turtle graphics, input()
    and a guard against endless loops all come from pyhub.js.
    ====================================================================== */
@@ -5120,6 +5646,13 @@ function checkFlags(checklist){
    it is known whether a teacher is looking. The blocks are drawn before that is
    worked out, so setting it at build time would always say no. */
 const allChecklists = [];
+/* Anyone the page knows to be a teacher can tick them: the marking screen's
+   own frame included, which is embedded and so never has teacherTools set,
+   and was the one place a teacher actually goes to tick them off. */
+function canTickManual(){
+  if (teacherTools) return true;
+  try{ return teacherHere(); }catch(e){ return false; }
+}
 /* The same lists as the page sees them, for what has to happen to each one
    when a teacher finishes ticking. */
 const attachedLists = [];
@@ -5136,9 +5669,10 @@ function tickWrittenCode(){
   return any;
 }
 function refreshChecklistMode(){
+  const on = canTickManual();
   allChecklists.forEach(l => {
     try{
-      l.allowManual(!!teacherTools || markingView);
+      l.allowManual(on || markingView);
       if (l.allowTeacherTick) l.allowTeacherTick(markingView || teacherTicking);
     }catch(e){}
   });
@@ -5327,10 +5861,163 @@ function cheerChecklist(over, holder, list, fresh, reveal){
   }, CHEER_WAIT);
 }
 
-/* `opts.mode` is the teacher's choice of all at once, one at a time, or up to
-   the student; `opts.runs` says how many times Run has been pressed, which is
-   what puts a hint on offer. */
-function attachChecklist(section, checks, runner, blockId, opts){
+/* A teacher reading work, or printing it, wants every line of a checklist
+   at once rather than having to step through them. */
+const CHECKS_ALL_AT_ONCE = viewParam !== null || pdfParam !== null || allParam !== null;
+
+/* ---------- the model answer program ----------
+   A teacher's finished version of a coding task. The student never sees its
+   code: a Try it button in the corner of the checklist runs it in a pop-up,
+   so they can see what they are aiming for. The code is in the lesson the
+   page is given, as everything is, so this keeps it out of sight rather than
+   out of reach of someone who goes digging. */
+function hasModel(b){
+  if (!b) return false;
+  if (b.type === "web") return ["modelHtml","modelCss","modelJs"].some(k => String(b[k] || "").trim());
+  return !!String(b.modelCode || "").trim();
+}
+function modelCorner(b){
+  const box = el("div","model-try");
+  const words = el("div","model-try-words");
+  words.appendChild(el("span","model-try-label","Model answer"));
+  words.appendChild(el("span","model-try-say","See the finished program in action."));
+  box.appendChild(words);
+  const btn = el("button","btn-primary model-try-btn","\u25B6 Try it");
+  btn.type = "button";
+  btn.title = "Run your teacher's finished program to see what yours should do";
+  btn.addEventListener("click", () => openModel(b));
+  box.appendChild(btn);
+  return box;
+}
+function openModel(b){
+  const back = el("div","modal-back");
+  const box = el("div","modal wide model-pop");
+  const close = () => { document.removeEventListener("keydown", onKey); stop(); back.remove(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  let stop = () => {};
+  const xBtn = el("button","btn-ghost iconbtn modal-x","\u2715");
+  xBtn.title = "Close";
+  xBtn.addEventListener("click", close);
+  box.appendChild(xBtn);
+  box.appendChild(el("p","modal-eyebrow","Model answer"));
+  box.appendChild(el("h2","","Try the finished program"));
+  box.appendChild(el("p","modal-text",
+    "This is a finished version of the program. Run it to see what it does. "
+    + "Try to make your program similar to this!"));
+  const again = el("button","btn-primary modal-cta","\u25B6 Run it again");
+  again.type = "button";
+  if (b.type === "web"){
+    const frame = el("iframe","web-preview model-frame");
+    frame.setAttribute("sandbox","allow-scripts allow-forms allow-modals");
+    frame.title = "The model answer";
+    const show = () => {
+      frame.srcdoc = window.webAssemble
+        ? window.webAssemble(b.modelHtml || "", b.modelCss || "", b.modelJs || "")
+        : (b.modelHtml || "");
+    };
+    box.appendChild(frame);
+    again.addEventListener("click", show);
+    show();
+  } else {
+    const shell = el("div","ide model-ide");
+    if (window.pyEdit && window.pyEdit.follow) window.pyEdit.follow(shell);
+    let canvas = null;
+    if (b.turtle){
+      const cwrap = el("div","ide-canvaswrap");
+      canvas = el("canvas","ide-canvas");
+      canvas.width = 480; canvas.height = 360;
+      cwrap.appendChild(canvas);
+      shell.appendChild(cwrap);
+    }
+    const consoleBox = el("div","ide-console");
+    const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
+    const askRow = el("div","ide-ask"); askRow.hidden = true;
+    const askText = el("span","ide-askprompt");
+    const askIn = el("input","ide-askin");
+    askIn.type = "text"; askIn.autocomplete = "off"; askIn.spellcheck = false;
+    askRow.appendChild(askText); askRow.appendChild(askIn);
+    consoleBox.appendChild(out); consoleBox.appendChild(askRow);
+    shell.appendChild(consoleBox);
+    box.appendChild(shell);
+
+    /* Run the way the task's own console runs: the whole program from the
+       top on each answer, with the answers so far fed back in, and what it
+       printed played back with its waits. */
+    let answers = [], shown = 0, runId = 0;
+    stop = () => { runId++; };
+    const pause = (secs) => new Promise(go => setTimeout(go, Math.max(0, secs) * 1000));
+    async function execute(){
+      const mine = ++runId;
+      const src = String(b.modelCode || "");
+      const py = await ensureHubPython(out);
+      await loadPyImports(py, src, out);
+      if (mine !== runId) return;
+      if (window.hubTurtleAttach) window.hubTurtleAttach(canvas);
+      py.globals.set("_hub_next_inputs", answers.join("\u0000"));
+      py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
+      py.globals.set("_hub_src", src);
+      const res = JSON.parse(py.runPython("_hub_run(_hub_src, 5.0)"));
+      out.textContent = "";
+      const list = res.events || [];
+      for (let i = 0; i < list.length; i++){
+        const ev = list[i];
+        if (ev[0] === "out") out.appendChild(document.createTextNode(ev[1]));
+        else if (ev[0] === "wait"){ out.scrollTop = out.scrollHeight; if (out.parentNode) out.parentNode.scrollTop = out.parentNode.scrollHeight; if (i >= shown) await pause(ev[1]); }
+        else if (ev[0] === "draw"){ if (window.hubDraw) window.hubDraw.apply(null, [ev[1]].concat(ev[2] || [])); }
+        else if (ev[0] === "clear"){ if (window.hubTurtleClear) window.hubTurtleClear(); }
+        if (mine !== runId) return;
+      }
+      out.scrollTop = out.scrollHeight; if (out.parentNode) out.parentNode.scrollTop = out.parentNode.scrollHeight;
+      shown = list.length;
+      out.classList.toggle("has-error", res.status === "done" && !res.ok);
+      if (res.status === "input"){
+        askText.textContent = res.prompt || ">";
+        askRow.hidden = false; askIn.value = ""; askIn.focus();
+        return;
+      }
+      askRow.hidden = true;
+      if (!res.out) out.textContent = "(the program printed nothing)";
+    }
+    async function run(){
+      answers = []; shown = 0;
+      out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
+      again.disabled = true;
+      try{ await execute(); }
+      catch(e){ out.textContent = "Python could not start here: " + String(e.message || "unknown problem").replace(/\.+$/, "") + "."; }
+      finally{ again.disabled = false; }
+    }
+    askIn.addEventListener("keydown", async (e) => {
+      if (e.key !== "Enter") return;
+      answers.push(askIn.value);
+      askRow.hidden = true;
+      try{ await execute(); }catch(err){ askRow.hidden = true; }
+    });
+    again.addEventListener("click", run);
+    run();
+  }
+  box.appendChild(again);
+  const done = el("button","btn-ghost modal-stay","Close");
+  done.type = "button";
+  done.addEventListener("click", close);
+  box.appendChild(done);
+  scrollBody(box);
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
+  document.body.appendChild(back);
+}
+
+/* `b` is the task itself, for its model answer and whether its checklist
+   starts with every line showing. */
+function attachChecklist(section, checks, runner, blockId, b){
+  const model = hasModel(b) ? modelCorner(b) : null;
+  if ((!checks || !checks.length || !window.buildChecklist) && model){
+    /* No checklist to sit in, so the model answer has the corner to itself. */
+    const alone = el("div","checklist-wrap model-alone");
+    alone.appendChild(model);
+    if (section.firstChild) section.insertBefore(alone, section.firstChild);
+    else section.appendChild(alone);
+  }
   if (!checks || !checks.length || !window.buildChecklist) return null;
   let last = null;                    // what the checks said the last time they ran
   /* What was ticked when Run was last pressed. A program that stops to ask a
@@ -5344,18 +6031,15 @@ function attachChecklist(section, checks, runner, blockId, opts){
      first is still working through its tick must not have the older results
      painted back over it when that tick lands. */
   let showing = 0;
-  const runsNow = (opts && typeof opts.runs === "function") ? opts.runs : () => 0;
-  const list = window.buildChecklist(checks, { mode: opts && opts.mode });
+  const list = window.buildChecklist(checks,
+    { showAll: CHECKS_ALL_AT_ONCE || !!(b && b.checksShowAll === true) });
+  if (model && list.corner){ list.corner.appendChild(model); list.corner.hidden = false; }
   allChecklists.push(list);
-  /* Reading a student's work, or printing it, is reading all of it. The same
-     test the page uses before holding anything back behind a quiz. */
-  if (list.showEverything)
-    list.showEverything(viewParam !== null || pdfParam !== null || allParam !== null);
   /* Lines a teacher has to judge by eye can only be ticked by a teacher, and
      only while they are looking at the work rather than while it is being
      done. The tick is sent up to the marking screen the same way changed marks
      are, so it is saved with the feedback. */
-  list.allowManual(!!teacherTools);
+  list.allowManual(canTickManual());
   /* In marking, the lines this visit found the code does, by checking it
      again on opening or by the teacher pressing Run. Sent up with the
      teacher's own ticks, so they are saved with the feedback the same way. */
@@ -5378,7 +6062,7 @@ function attachChecklist(section, checks, runner, blockId, opts){
      alike, and still run, saved and posted exactly as a shown one is,
      because the marking list and the Strength and Target are worked out
      from it. Nothing on the page points at a list nobody can see. */
-  const hidden = !!(opts && opts.hidden);
+  const hidden = !!(b && b.checksHidden === true);   // the builder can hide a checklist
   if (hidden) holder.hidden = true;
 
   /* The list is ticked off every time they run their code, so there is
@@ -5423,7 +6107,6 @@ function attachChecklist(section, checks, runner, blockId, opts){
       return { ok:true, teacher:true, label:(r && r.label) || "" };
     });
     last = results;
-    if (list.setRuns) list.setRuns(runsNow());
     const mine = ++showing;
     /* Worked out from the results rather than from the list, because the list
        is about to be drawn without these lines on it. A line a teacher has to
@@ -5448,6 +6131,33 @@ function attachChecklist(section, checks, runner, blockId, opts){
     }
     markDirty();
     return all;
+  }
+  /* ---------- ticking off as they type ----------
+     A line that only looks at the code ("uses a for loop", "has an <h1>")
+     can be answered without running anything, so it ticks itself off a
+     moment after they stop typing, with the same glow a run gives it. Lines
+     about what the program printed still wait for Run: the output they are
+     judged on is the last run's, and that does not change as they type. The
+     teacher can turn this off in the checklist pop-up. */
+  /* `cheering` is the count declared below, for the level waiting on a tick. */
+  let typing = null;
+  function typed(){
+    if (!b || b.checksLive === false) return;
+    clearTimeout(typing);
+    typing = setTimeout(() => {
+      typing = null;
+      if (cheering) return;             // a run's tick is still on its way
+      const before = list.ticked();
+      let results;
+      try{ results = runner(); }catch(e){ return; }
+      if (!Array.isArray(results)) return;
+      last = results;
+      ++showing;
+      list.show(results);
+      results.forEach((r, i) => {
+        if (r && !r.manual && r.ok && !r.broken && !before[i]) list.point(i);
+      });
+    }, 700);
   }
   /* What the page waits on before opening the next level. The checklist
      ticks itself the moment the program stops, which opens the level below
@@ -5505,7 +6215,7 @@ function attachChecklist(section, checks, runner, blockId, opts){
     }
     return true;
   }
-  return { list, refresh, mark, tickWritten, results: () => last, whenSettled, justCheered, hidden,
+  return { list, refresh, mark, typed, tickWritten, results: () => last, whenSettled, justCheered, hidden,
            /* only kept when there is something in it, so ordinary work
               is saved exactly as it was */
            teacher: () => { const t = list.getTeacher(); return Object.keys(t).length ? t : undefined; },
@@ -5626,255 +6336,6 @@ function readOnlyTag(){
   };
 }
 
-/* Playing back what a Python program did.
-   Python runs at full speed and hands back a list of what happened in order:
-   text printed, waits asked for, turtle drawing. Nothing can appear on the
-   page while Python is running, because there is one thread and Python is
-   using it. So the waiting is done out here instead, between the pieces,
-   where the browser is free to paint. That is the difference between a
-   program printing hello, pausing, then asking a question, and the same
-   program showing an empty console for two seconds and then all three at
-   once with the question already asked.
-
-   One player per console. The coding task and the finished program beside
-   it each have their own, so pressing Run on one never cuts the other off. */
-function pyPlayer(out){
-  let playRun = 0;      // bumped to abandon a playback that is still in flight
-  let shownSteps = 0;   // how much of the timeline they have already sat through
-  const pause = (secs) => new Promise(go => setTimeout(go, Math.max(0, secs) * 1000));
-  return {
-    async play(events){
-      const mine = ++playRun;
-      const list = events || [];
-      out.textContent = "";
-      for (let i = 0; i < list.length; i++){
-        const ev = list[i];
-        if (ev[0] === "out"){
-          out.textContent += ev[1];
-          out.scrollTop = out.scrollHeight;
-        } else if (ev[0] === "wait"){
-          /* Answering a question runs the whole program again from the top, so
-             the part already sat through must not be waited out a second time.
-             This counts steps rather than letters printed: a turtle program can
-             draw its way through several waits without printing anything, and
-             counting letters skipped every one of those waits. */
-          if (i >= shownSteps) await pause(ev[1]);
-        } else if (ev[0] === "draw"){
-          if (window.hubDraw) window.hubDraw.apply(null, [ev[1]].concat(ev[2] || []));
-        } else if (ev[0] === "clear"){
-          if (window.hubTurtleClear) window.hubTurtleClear();
-        }
-        if (playRun !== mine) return false;   // Run or Clear was pressed meanwhile
-      }
-      shownSteps = list.length;
-      return true;
-    },
-    /* a new run from the top: every wait is worth sitting through again */
-    fresh(){ shownSteps = 0; },
-    /* and Clear: whatever is still arriving from the last run is dropped */
-    stop(){ playRun++; shownSteps = 0; }
-  };
-}
-
-/* ---------- the model program ----------
-   A teacher can give a coding task the program as it should end up. A small
-   card beside the checklist opens it in a pop-up, and a student runs it to
-   see what they are making, before they start or halfway through, without
-   its code ever being drawn on the page. It has its own console, its own
-   answers to input() and its own canvas, and it saves nothing: nothing it
-   prints can tick a checklist line off or count as one of the student's runs.
-
-   In a pop-up rather than on the page because running it on the page put a
-   console or a whole web page between the checklist and the code, and the
-   card had to be wide enough to hold one, which left it mostly empty space
-   the rest of the time.
-
-   Hidden from the page, not secret. It arrives with the lesson, the same as
-   the starter code does, so someone digging in the browser's own tools could
-   still find it. What it stops is the answer being read off the screen,
-   which is the thing that actually happens in a lesson. */
-function modelShell(){
-  const card = el("div","ide-model");
-  const words = el("div","ide-model-words");
-  words.appendChild(el("b","ide-model-title","Model Program"));
-  words.appendChild(el("span","ide-model-lead","Try out what your finished program should look like."));
-  card.appendChild(words);
-  const go = el("button","btn-primary ide-run ide-model-run","Try it");
-  go.type = "button";
-  card.appendChild(go);
-  return { card, go };
-}
-
-/* The pop-up the model runs in. `body` is kept by the caller and moved in
-   each time, so a console or canvas is built once, not once per opening.
-   The pop-up is outside the task's section, so it copies the editor colours
-   and text size from it: those hang off .ide, and without them the console
-   came out in the site's colours rather than the student's chosen ones. */
-function modelPopup(from, body, opts){
-  const back = el("div","modal-back no-print");
-  const box = el("div","modal model-pop" + (opts.web ? " web" : ""));
-  box.setAttribute("role","dialog"); box.setAttribute("aria-modal","true");
-  const xBtn = el("button","btn-ghost iconbtn modal-x","✕");
-  xBtn.type = "button"; xBtn.title = "Close";
-  box.appendChild(xBtn);
-  box.appendChild(el("h2","","Model Program"));
-  box.appendChild(el("p","model-pop-lead",
-    "Try out what your finished program should look like. You can run it as often as you like, but you will not see its code."));
-  const again = el("button","btn-primary ide-run model-pop-again", opts.again);
-  again.type = "button";
-  const bar = el("div","model-pop-bar");
-  bar.appendChild(again);
-  box.appendChild(bar);
-  const task = from.closest(".ide");
-  const shell = el("div","ide model-pop-body");
-  if (task){
-    if (task.dataset.idetheme) shell.dataset.idetheme = task.dataset.idetheme;
-    if (task.dataset.idesize) shell.dataset.idesize = task.dataset.idesize;
-  }
-  shell.appendChild(body);
-  box.appendChild(shell);
-  const stay = el("button","btn-ghost modal-stay","Back to my code");
-  stay.type = "button";
-  box.appendChild(stay);
-  scrollBody(box);
-  back.appendChild(box);
-
-  function close(){
-    document.removeEventListener("keydown", onKey);
-    if (opts.onClose) opts.onClose();
-    back.remove();
-    from.focus();
-  }
-  function onKey(e){ if (e.key === "Escape") close(); }
-  xBtn.addEventListener("click", close);
-  stay.addEventListener("click", close);
-  back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
-  document.addEventListener("keydown", onKey);
-  document.body.appendChild(back);
-  return { again };
-}
-
-/* The checklist and the model program's card side by side, in one row at the
-   top of the task. Without a checklist the card sits above the code on its
-   own, only as wide as what is in it. */
-function besideChecklist(section, card){
-  if (!card) return;
-  const top = el("div","ide-top");
-  const list = Array.prototype.find.call(section.children, n => n.classList.contains("checklist-wrap"));
-  if (list){ section.insertBefore(top, list); top.appendChild(list); }
-  else { top.classList.add("alone"); section.insertBefore(top, section.firstChild); }
-  top.appendChild(card);
-}
-
-function pyModel(b){
-  const src = String(b.model || "");
-  if (!src.trim()) return null;
-  const { card, go } = modelShell();
-  const body = el("div","model-pop-run");
-  let canvas = null;
-  if (b.turtle){
-    const cwrap = el("div","ide-canvaswrap");
-    canvas = el("canvas","ide-canvas");
-    canvas.width = 480; canvas.height = 360;
-    cwrap.appendChild(canvas);
-    body.appendChild(cwrap);
-  }
-  const con = el("div","ide-console ide-model-con");
-  const out = el("pre","ide-out"); out.setAttribute("aria-live","polite");
-  const askRow = el("div","ide-ask"); askRow.hidden = true;
-  const askText = el("span","ide-askprompt");
-  const askIn = el("input","ide-askin");
-  askIn.type = "text"; askIn.autocomplete = "off"; askIn.spellcheck = false;
-  askRow.appendChild(askText); askRow.appendChild(askIn);
-  con.appendChild(out); con.appendChild(askRow);
-  body.appendChild(con);
-
-  const player = pyPlayer(out);
-  let answers = [];
-  async function execute(){
-    /* The turtle draws on whichever canvas was attached last, and the
-       student's own task attaches its canvas every time they press Run. */
-    if (window.hubTurtleAttach) window.hubTurtleAttach(canvas);
-    const py = await ensureHubPython(out);
-    await loadPyImports(py, src, out);
-    py.globals.set("_hub_next_inputs", answers.join("\u0000"));
-    py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
-    py.globals.set("_hub_src", src);
-    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
-    if (!await player.play(res.events)) return;       // pressed again meanwhile
-    out.classList.toggle("has-error", res.status === "done" && !res.ok);
-    if (res.status === "input"){
-      askText.textContent = res.prompt || ">";
-      askRow.hidden = false; askIn.value = ""; askIn.focus();
-      return;
-    }
-    askRow.hidden = true;
-    if (!res.out) out.textContent = "(this program does not print anything)";
-  }
-  async function attempt(){
-    try{ await execute(); }
-    catch(e){
-      askRow.hidden = true;
-      out.textContent = "The model program could not start here: " + (e.message || "unknown problem") + ".";
-    }
-  }
-  let again = null;           // Run again, in whichever pop-up is open
-  async function start(){
-    answers = [];
-    player.fresh();
-    out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
-    const btn = again;
-    btn.disabled = true;
-    btn.textContent = "Running…";
-    try{ await attempt(); }
-    finally{ btn.disabled = false; btn.textContent = "▶ Run again"; }
-  }
-  /* Opening it runs it: pressing Try it and then having to find a second Run
-     button inside was one press more than seeing what it does needs. */
-  go.addEventListener("click", () => {
-    again = modelPopup(go, body, {
-      again: "▶ Run again",
-      /* whatever is still printing is dropped rather than left running
-         unseen and landing in the console the next time it is opened */
-      onClose(){ player.stop(); askRow.hidden = true; }
-    }).again;
-    again.addEventListener("click", start);
-    start();
-  });
-  askIn.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    answers.push(askIn.value);
-    askRow.hidden = true;
-    attempt();
-  });
-  return card;
-}
-
-function webModel(b){
-  const m = b.model || {};
-  const html = m.html || "", css = m.css || "", js = m.js || "";
-  if (!(html + css + js).trim()) return null;
-  const { card, go } = modelShell();
-  /* The same sandbox the student's own preview is in. Anything it logs is
-     posted up the same way, and the task's console only listens to its own
-     frame, so none of it lands among the student's messages. */
-  const frame = el("iframe","web-preview ide-model-frame");
-  frame.setAttribute("sandbox","allow-scripts allow-forms allow-modals");
-  frame.title = "The model page";
-  /* Built afresh every time, so it starts again from the top the way the
-     student's own page does when they press Run. */
-  const load = () => { frame.srcdoc = window.webAssemble ? window.webAssemble(html, css, js) : html; };
-  go.addEventListener("click", () => {
-    const pop = modelPopup(go, frame, { web: true, again: "↻ Start again",
-      /* an empty frame stops anything the page was still doing, a timer or a
-         sound, once nobody can see it */
-      onClose(){ frame.srcdoc = ""; } });
-    pop.again.addEventListener("click", load);
-    load();
-  });
-  return card;
-}
-
 function rIDE(b){
   const canRun = b.run !== false;           // teachers can turn running off
   const canEdit = b.edit !== false;         // and can make the code read-only
@@ -5944,7 +6405,7 @@ function rIDE(b){
     checkOnRun: helpful,
     /* Once they have typed here it is their work, and nothing carries into it
        again. See carryIn below. */
-    onInput: () => { lastCarried = null; markDirty(); }
+    onInput: () => { lastCarried = null; markDirty(); if (checklist) checklist.typed(); }
   });
   const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
         probs = ed.probs, repaint = ed.repaint;
@@ -6049,12 +6510,54 @@ function rIDE(b){
      whether they ever ran it. Kept with the work so it survives a reload. */
   let ran = false, runs = 0, lastOut = "", answers = [];
 
+  /* Playing back what the program did.
+     Python runs at full speed and hands back a list of what happened in order:
+     text printed, waits asked for, turtle drawing. Nothing can appear on the
+     page while Python is running, because there is one thread and Python is
+     using it. So the waiting is done out here instead, between the pieces,
+     where the browser is free to paint. That is the difference between a
+     program printing hello, pausing, then asking a question, and the same
+     program showing an empty console for two seconds and then all three at
+     once with the question already asked. */
   /* Whether this run was started by a student pressing Run, which is the only
      kind worth making anything of. Put back down as soon as the program
      finishes, so answering an input does not cheer a second time. */
   let cheerNext = false;
 
-  const player = pyPlayer(out);
+  let playRun = 0;      // bumped to abandon a playback that is still in flight
+  let shownSteps = 0;   // how much of the timeline they have already sat through
+  const pause = (secs) => new Promise(go => setTimeout(go, Math.max(0, secs) * 1000));
+  async function playback(events){
+    const mine = ++playRun;
+    const list = events || [];
+    out.textContent = "";
+    for (let i = 0; i < list.length; i++){
+      const ev = list[i];
+      /* Added as a piece rather than by rebuilding the whole text, and only
+         scrolled before a wait and at the end: a long run of prints redrew
+         and measured the console once per print, which on a big output was
+         enough to freeze the page. */
+      if (ev[0] === "out"){
+        out.appendChild(document.createTextNode(ev[1]));
+      } else if (ev[0] === "wait"){
+        out.scrollTop = out.scrollHeight; if (out.parentNode) out.parentNode.scrollTop = out.parentNode.scrollHeight;
+        /* Answering a question runs the whole program again from the top, so
+           the part already sat through must not be waited out a second time.
+           This counts steps rather than letters printed: a turtle program can
+           draw its way through several waits without printing anything, and
+           counting letters skipped every one of those waits. */
+        if (i >= shownSteps) await pause(ev[1]);
+      } else if (ev[0] === "draw"){
+        if (window.hubDraw) window.hubDraw.apply(null, [ev[1]].concat(ev[2] || []));
+      } else if (ev[0] === "clear"){
+        if (window.hubTurtleClear) window.hubTurtleClear();
+      }
+      if (playRun !== mine) return false;   // Run or Clear was pressed meanwhile
+    }
+    out.scrollTop = out.scrollHeight; if (out.parentNode) out.parentNode.scrollTop = out.parentNode.scrollHeight;
+    shownSteps = list.length;
+    return true;
+  }
 
   async function execute(){
     const py = await ensureHubPython(out);
@@ -6062,7 +6565,7 @@ function rIDE(b){
     py.globals.set("_hub_next_inputs", answers.join("\u0000"));
     py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
     py.globals.set("_hub_src", ta.value);
-    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
+    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 5.0)"));
     /* With the Helpful IDE's card in the console, the console shows what the
        program printed and stops where the program stopped. Python's own note
        about the error, under it, said what the card says, worse, and right
@@ -6071,7 +6574,7 @@ function rIDE(b){
     const cut = cardInConsole && res.status === "done" && !res.ok && res.err && typeof res.err.at === "number";
     const shown = cut ? (res.events || []).slice(0, res.err.at) : res.events;
     lastOut = cut ? shown.filter(e => e[0] === "out").map(e => e[1]).join("") : (res.out || "");
-    if (!await player.play(shown)) return true;   // something newer is running now
+    if (!await playback(shown)) return true;   // something newer is running now
     out.classList.toggle("has-error", res.status === "done" && !res.ok && !cut);
     if (res.status === "input"){
       askText.textContent = res.prompt || ">";
@@ -6087,12 +6590,6 @@ function rIDE(b){
     ranCode = ta.value;
     if (checklist) checklist.refresh(cheerNext ? side : null);
     cheerNext = false;
-    if (b.expect && res.ok){
-      const good = lastOut.toLowerCase().includes(String(b.expect).toLowerCase());
-      note.hidden = false;
-      note.className = "ide-note " + (good ? "ok" : "no");
-      note.textContent = good ? "That's the output we were looking for \u2713" : "Not quite yet, keep going.";
-    }
     markDirty();
     return true;
   }
@@ -6111,8 +6608,7 @@ function rIDE(b){
     if (!Array.isArray(results) || !mistakeShowing() || !checklist) return results;
     const had = checklist.list.ticked();
     return results.map((r, i) => (r && r.ok && !r.manual && !had[i]) ? Object.assign({}, r, { ok:false }) : r);
-  }, b.id, { mode: b.checkMode, runs: () => runs, hidden: b.checksHidden === true });
-  besideChecklist(s, pyModel(b));
+  }, b.id, b);
   /* A response task with nothing left from the tasks it reads says so,
      rather than showing an empty space where a checklist would be. */
   if (allDone && !b.checks.length)
@@ -6140,7 +6636,7 @@ function rIDE(b){
     runBtn.textContent = "Running\u2026";
     note.hidden = true;
     answers = [];
-    player.fresh();
+    shownSteps = 0;
     out.textContent = "";
     showTab("console");
     try{
@@ -6174,7 +6670,8 @@ function rIDE(b){
   });
   runBtn.addEventListener("click", () => run(true));
   clearBtn.addEventListener("click", () => {
-    player.stop();      // stops anything still arriving from the run before
+    playRun++;          // stops anything still arriving from the run before
+    shownSteps = 0;
     out.textContent = ""; out.classList.remove("has-error"); askRow.hidden = true;
   });
   resetBtn.addEventListener("click", () => {
@@ -6302,7 +6799,6 @@ function rIDE(b){
       ran = !!v.ran;
       /* older work has no count, so a run it remembers counts as one */
       runs = Number(v.runs) || (ran ? 1 : 0);
-      if (checklist && checklist.list.setRuns) checklist.list.setRuns(runs);
       lastCarried = v.carried ? ta.value : null;
       if (checklist && v.manual) checklist.list.setManual(v.manual);
       /* ticks a teacher gave in the lesson, before the saved ticks are drawn */
@@ -6375,8 +6871,6 @@ function rIDE(b){
            check:() => {
              if (!canRun) return { ok:true };            // nothing to run, nothing to wait for
              if (!ran) return { ok:false, message:"Press Run to try your code" };
-             if (b.expect && !lastOut.toLowerCase().includes(String(b.expect).toLowerCase()))
-               return { ok:false, message:"Keep going until the output is right" };
              return { ok:true };
            },
            brief:{ eyebrow:"Code", title:b.title || "", text:b.task || "" } };
@@ -6433,7 +6927,7 @@ function rWeb(b){
     tips: wantTips,
     lang: window.pyEdit.webLang(files[0]),
     autocomplete: b.autocomplete !== false,
-    onInput: () => { code[current] = ta.value; markDirty(); }
+    onInput: () => { code[current] = ta.value; markDirty(); if (checklist) checklist.typed(); }
   });
   const editor = ed.editor, codeWrap = ed.codeWrap, ta = ed.ta,
         probs = ed.probs, repaint = ed.repaint;
@@ -6715,9 +7209,7 @@ function rWeb(b){
   /* the teacher's checklist, run against all three files. Declared before
      run() so it can tick itself off once the page has been built. */
   const checklist = attachChecklist(s, b.checks,
-    () => window.runWebChecks(b.checks, codeNow(), runs), b.id,
-    { mode: b.checkMode, runs: () => runs, hidden: b.checksHidden === true });
-  besideChecklist(s, webModel(b));
+    () => window.runWebChecks(b.checks, codeNow(), runs), b.id, b);
   /* What the files already do, ticked at the end of the lesson without Run,
      as in the Python task. Files still exactly as they started earn nothing. */
   if (checklist) writtenTickers.push(() => {
@@ -6803,7 +7295,6 @@ function rWeb(b){
         }
         ran = !!v.ran;
         runs = Number(v.runs) || (ran ? 1 : 0);
-        if (checklist && checklist.list.setRuns) checklist.list.setRuns(runs);
         if (checklist && v.manual) checklist.list.setManual(v.manual);
       /* ticks a teacher gave in the lesson, before the saved ticks are drawn */
       if (checklist && checklist.list.setTeacher) checklist.list.setTeacher(v.teacher || {});
@@ -6821,6 +7312,338 @@ function rWeb(b){
              if (!canRun) return { ok:true };
              if (!ran) return { ok:false, message:"Press Run to see your page" };
              return { ok:true };
+           },
+           brief:{ eyebrow:"Code", title:b.title || "", text:b.task || "" } };
+}
+/* ======================================================================
+   BLOCK CODING (Scratch)
+   {"type":"scratch", "title":"", "task":"", "height":600,
+    "project":{...project.json...}, "own":{ "md5.svg":"base64", ... },
+    "checks":[...]}
+   The Scratch editor, in a frame of its own (scratch/editor.html). What is
+   saved is project.json and only the pictures and sounds the student made
+   themselves; scratch/editor.js says why, and what the limits are. project
+   and own on the task are the teacher's starter, left out for a new project.
+
+   It takes the whole of the page it is on: the full width of the lesson,
+   and the height down to the bottom bar. The page's title moves into the
+   task's own bar, so the editor gets the room the title card had.
+   ====================================================================== */
+/* What the block editor is and where its source is, in a pop-up rather than
+   a new tab: a new tab in the middle of a lesson is one a child then has to
+   find their way back from. The words stay in scratch/about.html, which is
+   the licence notice the editor needs and has to stand on its own, and are
+   read out of it so there is one copy. If it cannot be read, the page opens
+   in a tab the way the link always did. */
+function showScratchAbout(){
+  const page = "scratch/about.html";
+  fetch(page, { cache:"no-cache" }).then(r => {
+    if (!r.ok) throw new Error(String(r.status));
+    return r.text();
+  }).then(html => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const main = doc.querySelector("main");
+    if (!main) throw new Error("no main");
+    const back = el("div","modal-back no-print");
+    const box = el("div","modal scratch-aboutbox");
+    const close = () => { back.remove(); document.removeEventListener("keydown", esc); };
+    const esc = (e) => { if (e.key === "Escape") close(); };
+    const x = el("button","btn-ghost iconbtn modal-x","✕");
+    x.title = "Close";
+    x.addEventListener("click", close);
+    box.appendChild(x);
+    const h1 = main.querySelector("h1");
+    box.appendChild(el("h2","", h1 ? h1.textContent : "About the block editor"));
+    if (h1) h1.remove();
+    const body = el("div","scratch-abouttext");
+    Array.from(main.childNodes).forEach(n => body.appendChild(document.importNode(n, true)));
+    /* the links were written relative to scratch/, and belong in a tab of
+       their own rather than in place of the lesson */
+    body.querySelectorAll("a[href]").forEach(a => {
+      a.href = new URL(a.getAttribute("href"), new URL(page, location.href)).href;
+      a.target = "_blank";
+      a.rel = "noopener";
+    });
+    box.appendChild(body);
+    const ok = el("button","btn-primary modal-cta","Close");
+    ok.addEventListener("click", close);
+    box.appendChild(ok);
+    scrollBody(box);
+    back.appendChild(box);
+    back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
+    document.addEventListener("keydown", esc);
+    document.body.appendChild(back);
+    ok.focus();
+  }).catch(() => { window.open(page, "_blank", "noopener"); });
+}
+function rScratch(b){
+  const s = el("section","ide scratch");
+  const bar = el("div","ide-bar scratch-bar");
+  /* The page's title and subtitle, then this task's own heading if it has
+     one. setPage() fills them in once the page holding the task is known;
+     a task that is a page of its own keeps its own heading. */
+  const named = el("div","scratch-named");
+  const nameEl = el("span","scratch-name");
+  const subEl = el("span","scratch-sub");
+  named.appendChild(nameEl); named.appendChild(subEl);
+  bar.appendChild(named);
+  function setNames(title, text){
+    nameEl.innerHTML = title || "Block coding";
+    subEl.innerHTML = text || "";
+    subEl.hidden = !text;
+  }
+  const ownHeading = [b.title, b.task].filter(Boolean);
+  setNames(b.title || "", b.task || "");
+  const getBtn = el("button","ide-small","Download");
+  getBtn.title = "Save the project as a .sb3 file, to open in Scratch somewhere else";
+  const fullBtn = el("button","ide-small","Full screen");
+  bar.appendChild(getBtn);
+  bar.appendChild(fullBtn);
+  const about = el("a","scratch-about","About");
+  about.href = "scratch/about.html";
+  about.target = "_blank";
+  about.rel = "noopener";
+  about.title = "The block editor is Scratch 3, from the Scratch Foundation";
+  about.addEventListener("click", (e) => {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;   // asked for a tab on purpose
+    e.preventDefault();
+    showScratchAbout();
+  });
+  bar.appendChild(about);
+  s.appendChild(bar);
+
+  const warn = el("p","scratch-warn");
+  warn.setAttribute("role", "alert");
+  warn.hidden = true;
+  s.appendChild(warn);
+  const box = el("div","scratch-box");
+  s.appendChild(box);
+
+  const starter = () => (b.project && typeof b.project === "object") ? b.project : null;
+  /* What was put back from their saved work, then whatever last saved
+     successfully. Never anything over the limits, so a project that has
+     grown too big leaves the last one that fitted in place. */
+  let saved = null;
+  let runs = 0;
+  let changed = false;              // anything of theirs, rather than the starter
+  let ed = null;                    // the frame, once there is one
+  let live = null;                  // the editor in it, once it has started
+
+  function projectNow(){
+    if (live){ try{ return live.project(); }catch(e){} }
+    return saved ? saved.project : starter();
+  }
+
+  /* ---------- before the editor is opened ----------
+     A student's opens on its own once the task is on screen, and so does a
+     teacher's while marking: reading the blocks is the marking, and a button
+     to press for every student paged through was one press per child for
+     nothing. The builder's preview and the PDF still show a picture of the
+     stage and what is in the project, and only start the editor when asked. */
+  const marking = viewParam !== null && pdfParam === null;
+  const opensItself = !spectate || marking;
+  function paintCard(){
+    if (ed) return;
+    box.innerHTML = "";
+    const card = el("div","scratch-card");
+    if (opensItself){
+      card.appendChild(tel("p","scratch-sum","Loading the block editor…"));
+      box.appendChild(card);
+      return;
+    }
+    const shot = saved && saved.shot;
+    if (shot){
+      const img = el("img","scratch-shot");
+      img.src = shot;
+      img.alt = "What the stage looked like when the work was saved";
+      card.appendChild(img);
+    }
+    card.appendChild(tel("p","scratch-sum",
+      window.scratchHub ? window.scratchHub.describe(saved ? saved.project : starter()) : ""));
+    const open = el("button","btn-primary","Open in the block editor");
+    open.addEventListener("click", () => mountNow());
+    card.appendChild(open);
+    box.appendChild(card);
+  }
+
+  function mountNow(){
+    if (ed || !window.scratchHub) return ed ? ed.ready : Promise.resolve(null);
+    box.innerHTML = "";
+    const mine = saved && saved.project ? saved : null;
+    ed = window.scratchHub.mount(box, {
+      project: mine ? mine.project : starter(),
+      own: mine ? mine.own : null,
+      base: b.own || null,
+      starter: starter(),
+      mode: spectate ? "view" : "student",
+      onChange: () => {
+        changed = true;
+        markDirty();
+        if (checklist) checklist.typed();
+      },
+      onRun: () => {
+        runs++;
+        markDirty();
+        if (checklist){
+          checklist.mark();
+          setTimeout(() => checklist.refresh(box), 700);
+        }
+      }
+    });
+    return ed.ready.then(hs => {
+      live = hs;
+      if (!hs){
+        box.innerHTML = "";
+        box.appendChild(tel("p","scratch-warn",
+          "The block editor could not start. Try refreshing the page, and tell your teacher if it still does not work."));
+        return null;
+      }
+      if (checklist) checklist.refresh();
+      return hs;
+    });
+  }
+
+  /* Started once it is on screen, and stopped once it is not: a project
+     with a forever loop in it would otherwise go on running behind every
+     other page of the lesson. */
+  if ("IntersectionObserver" in window){
+    new IntersectionObserver((seen) => {
+      seen.forEach(entry => {
+        if (entry.isIntersecting){ if (opensItself) mountNow(); }
+        else if (live) live.stop();
+      });
+    }).observe(box);
+  } else if (opensItself) setTimeout(mountNow, 0);
+
+  const checklist = attachChecklist(s, b.checks,
+    () => window.runScratchChecks(b.checks, projectNow(), runs), b.id, b);
+  /* attachChecklist puts the list first in the task; the bar, which now
+     carries the page's title, goes above it. */
+  s.insertBefore(bar, s.firstChild);
+
+  /* ---------- filling the page ----------
+     The width is the lesson's whole width, measured from the scrolling area
+     the task sits in, so it reaches both edges whatever is around it. The
+     height is what is left of that area below the editor's top edge, or,
+     when other work above leaves too little, the area's whole height less
+     the bar and checklist, so scrolling down to the task shows all of it. */
+  const MIN_H = 420;
+  function fit(){
+    if (s.classList.contains("scratch-full")) return;
+    const stage = s.closest(".stage");
+    if (!stage || !s.getClientRects().length) return;      // not on screen
+    const sr = stage.getBoundingClientRect();
+    const cs = getComputedStyle(stage);
+    const was = parseFloat(s.style.marginLeft) || 0;
+    const natural = s.getBoundingClientRect().left - was;
+    const left = sr.left + stage.clientLeft;
+    const ml = Math.round(left - natural) + "px";
+    const w = stage.clientWidth + "px";
+    if (s.style.marginLeft !== ml) s.style.marginLeft = ml;
+    if (s.style.width !== w) s.style.width = w;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const boxTop = box.getBoundingClientRect().top - sr.top + stage.scrollTop;
+    const secTop = s.getBoundingClientRect().top - sr.top + stage.scrollTop;
+    let h = stage.clientHeight - boxTop - padB;
+    if (h < MIN_H) h = stage.clientHeight - (boxTop - secTop) - padB;
+    const hh = Math.max(MIN_H, Math.floor(h)) + "px";
+    if (box.style.height !== hh) box.style.height = hh;
+  }
+  let fitQueued = false;
+  function fitSoon(){
+    if (fitQueued) return;
+    fitQueued = true;
+    requestAnimationFrame(() => { fitQueued = false; fit(); });
+  }
+  window.addEventListener("resize", fitSoon);
+  if ("ResizeObserver" in window){
+    const ro = new ResizeObserver(fitSoon);
+    ro.observe(s);
+    /* the area itself grows when the title card above it is hidden */
+    requestAnimationFrame(() => { const st = s.closest(".stage"); if (st) ro.observe(st); });
+  }
+
+  /* ---------- the buttons ---------- */
+  getBtn.addEventListener("click", () => {
+    const name = [lesson && lesson.title, stripTags(b.title || "")].filter(Boolean).join(" - ") || "My project";
+    Promise.resolve(live || mountNow()).then(hs => {
+      if (!hs) return;
+      hs.download(name).catch(() => {
+        warn.hidden = false;
+        warn.textContent = "The project could not be downloaded. Some of its sprites may not have finished loading: wait a moment and try again.";
+      });
+    });
+  });
+  function setFull(on){
+    s.classList.toggle("scratch-full", on);
+    fullBtn.textContent = on ? "Exit full screen" : "Full screen";
+    document.body.classList.toggle("scratch-fullpage", on);
+    if (!on) fitSoon();
+  }
+  fullBtn.addEventListener("click", () => setFull(!s.classList.contains("scratch-full")));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && s.classList.contains("scratch-full")) setFull(false);
+  });
+
+  paintCard();
+
+  fields[b.id] = {
+    get: () => {
+      if (live && changed){
+        let snap = null;
+        try{ snap = live.snapshot(); }catch(e){}
+        if (snap && snap.problem){
+          warn.hidden = false;
+          warn.textContent = snap.problem + " Until then, the last version that fitted is the one saved.";
+        } else if (snap){
+          warn.hidden = true;
+          saved = { project: snap.project, own: snap.own, shot: snap.shot || (saved && saved.shot) || "" };
+        }
+      }
+      /* Nothing of theirs yet: the starter is in the lesson already, and a
+         copy of it in every student's work would only take up room. */
+      const v = { runs: runs, changed: !!(changed && saved),
+                  checks: checklist ? checkFlags(checklist) : undefined,
+                  manual: checklist ? checklist.list.getManual() : undefined };
+      if (changed && saved){
+        v.project = saved.project;
+        v.own = saved.own || {};
+        if (saved.shot) v.shot = saved.shot;
+      }
+      return v;
+    },
+    set: (v) => {
+      if (!v || typeof v !== "object") return;
+      runs = Number(v.runs) || 0;
+      if (v.project && typeof v.project === "object"){
+        saved = { project: v.project, own: (v.own && typeof v.own === "object") ? v.own : {},
+                  shot: typeof v.shot === "string" ? v.shot : "" };
+        changed = true;
+      } else { saved = null; changed = false; }
+      if (checklist && v.manual) checklist.list.setManual(v.manual);
+      if (ed){
+        ed.ready.then(hs => {
+          if (!hs) return;
+          hs.load(saved ? saved.project : starter(), saved ? saved.own : null)
+            .then(() => { if (checklist) checklist.refresh(); });
+        });
+      } else paintCard();
+      if (checklist) checklist.refresh();
+    }
+  };
+
+  return { section:s,
+           check:() => ({ ok:true }),
+           /* The bar carries the title, so the card above the page says
+              nothing and is hidden while this task is on screen. */
+           fullTask: true,
+           onShow: fitSoon,
+           /* Called by the page holding this task: its title leads the bar,
+              and this task's own heading follows it. */
+           setPage: (title, text) => {
+             const t = String(title || "").trim();
+             if (!t){ setNames(b.title || "", b.task || ""); return; }
+             setNames(t, [text].concat(ownHeading).filter(Boolean).join(" \u00b7 "));
            },
            brief:{ eyebrow:"Code", title:b.title || "", text:b.task || "" } };
 }
@@ -7121,6 +7944,14 @@ function rExamTask(b){
   };
 }
 const rNotesTask   = (b) => wrapExtra(b, window.rNotes,   "Notes");
+/* The Photoshop help chat. It needs to know the lesson, so what it could
+   not answer reaches this lesson's teacher, which wrapExtra does not pass. */
+function rHelperTask(b){
+  const made = window.rHelper(b, { lessonId: lessonId === "__preview" ? "" : lessonId });
+  fields[b.id] = { get: made.get, set: made.set };
+  return { section: made.section, check: () => ({ ok:true }),
+           brief: { eyebrow: "Photoshop help", title: b.title || "", text: b.task || "" } };
+}
 const rMindmapTask = (b) => wrapExtra(b, window.rMindmap, "Mind map");
 
 function rQuiz(b){
@@ -7318,7 +8149,10 @@ function rQuiz(b){
 
 function rPassword(b){
   const s = el("section");
-  s.appendChild(el("p","warnline","🔒 Test made-up passwords only, never a real one. Nothing you type here is sent anywhere or saved."));
+  const warn = el("p","warnline","");
+  warn.innerHTML = lockIcon(16);
+  warn.appendChild(document.createTextNode(" Test made-up passwords only, never a real one. Nothing you type here is sent anywhere or saved."));
+  s.appendChild(warn);
   const inp = el("input"); inp.type = "text"; inp.autocomplete = "off"; inp.placeholder = "Try a password…";
   s.appendChild(inp);
   const meter = el("div","meter"); const bar = el("div","meter-bar"); meter.appendChild(bar); s.appendChild(meter);
@@ -8306,7 +9140,7 @@ function rImage(b){
   const listed = b.psd === true && Array.isArray(b.checks) && b.checks.length > 0;
   const checklist = listed
     ? attachChecklist(s, b.checks, () => window.runPsdChecks(b.checks, dataUrl ? psdStatsFor(b.id) : null),
-                      b.id, { mode: b.checkMode, hidden: b.checksHidden === true })
+                      b.id, b)      // the task itself: attachChecklist reads its view and hidden from it
     : null;
   /* In marking, the file is checked again against the checklist as it now
      stands, the same as a coding task's code is, so a line added after
@@ -8691,7 +9525,7 @@ function computeAssessment(){
     /* A coding task is marked by its checklist: each line is worth whatever
        the teacher put against it. Without marks on the lines there is nothing
        to add up, so it is left out of the score entirely. */
-    const codingMarks = (b.type === "ide" || b.type === "web")
+    const codingMarks = isCodeTask(b)
       && Array.isArray(b.checks)
       && b.checks.some(c => (parseInt(c.marks, 10) || 0) > 0);
     if (!codingMarks && !["mc","order","blanks","short","exam","table","label","hotspot"].includes(b.type)) return;
@@ -8733,7 +9567,7 @@ function computeAssessment(){
       max = 1;
       pts = window.hotspotHit(b, v) ? 1 : 0;
       review = { clicked: !!(v && typeof v.x === "number") };
-    } else if (b.type === "ide" || b.type === "web"){
+    } else if (isCodeTask(b)){
       const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
       review.items = (b.checks || []).map((c, i) => {
         const worth = Math.max(0, parseInt(c.marks, 10) || 0);
@@ -8763,7 +9597,7 @@ function computeAssessment(){
         review = { yours: said.trim() || "(not answered)",
                    mode: r.mode, groups: r.groups, accepted: r.accepted };
       } else {
-        const scheme = (b.scheme || []).filter(p => p && p.text);
+        const scheme = (Array.isArray(b.scheme) ? b.scheme : []).filter(p => p && p.text);
         if (!max) max = scheme.reduce((t, p) => t + Math.max(1, parseInt(p.marks, 10) || 1), 0);
         const ticked = (v && Array.isArray(v.ticks)) ? v.ticks : [];
         pts = (v && v.marks !== undefined && v.marks !== null) ? Math.max(0, Math.min(max, Number(v.marks))) : 0;
@@ -8859,14 +9693,21 @@ async function assessmentFinish(){
      it took is still worth recording. */
   if (lesson.practical){
     const secs = Math.round((Date.now() - assessStarted) / 1000);
-    try{
-      await fetch(API + "/api/assessment", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json", Authorization:"Bearer " + token },
-        body: JSON.stringify({ lesson: lessonId, score: 0, outOf: 1, breakdown: {},
-                               strength: "", target: "", seconds: secs })
-      });
-    }catch(e){}
+    const sendTime = async () => {
+      try{
+        const r = await fetch(API + "/api/assessment", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json", Authorization:"Bearer " + token },
+          body: JSON.stringify({ lesson: lessonId, score: 0, outOf: 1, breakdown: {},
+                                 strength: "", target: "", seconds: secs })
+        });
+        return r.ok ? "done" : "failed";
+      }catch(e){ return "failed"; }
+    };
+    /* A test ends with the whole room pressing Finish together, which is the
+       busiest moment there is, so it goes behind the rocket the same way. */
+    if (rocketWanted()) await rocketSave(async () => (await Promise.all([submitWork(), sendTime()]))[1]);
+    else await sendTime();
     renderPracticalComplete();
     return;
   }
@@ -8874,9 +9715,7 @@ async function assessmentFinish(){
   const st = starOn() ? computeST(res.byTopic) : NO_STAR;
   if (OFFLINE) keepResultLocally(res, st);
 
-  submitWork().then(() => {});
-  let sent = "offline";
-  if (token && apiReady){
+  const sendMark = async () => {
     try{
       const r = await fetch(API + "/api/assessment", {
         method: "POST",
@@ -8885,8 +9724,17 @@ async function assessmentFinish(){
                                breakdown: res.byTopic, strength: st.strength, target: st.target,
                                seconds: Math.round((Date.now() - assessStarted) / 1000) })
       });
-      sent = r.ok ? "done" : "failed";
-    }catch(e){ sent = "failed"; }
+      return r.ok ? "done" : "failed";
+    }catch(e){ return "failed"; }
+  };
+  let sent = "offline";
+  /* The mark and the work both go behind the rocket, and it waits for both:
+     the results page saying the mark was sent should mean it was. What it
+     reports is the mark, which is what that page is about. */
+  if (rocketWanted()) sent = await rocketSave(async () => (await Promise.all([submitWork(), sendMark()]))[1]);
+  else if (token && apiReady){
+    submitWork().then(() => {});
+    sent = await sendMark();
   }
   renderAssessmentComplete(true, res, st, sent);
 }
@@ -9030,6 +9878,14 @@ function psdDoneCard(st, wanted){
   return card;
 }
 
+/* A padlock drawn the way the console draws its icons, in the colour of
+   whatever it sits in. This page does not load ui.js, so it keeps its own. */
+function lockIcon(size){
+  const s = size || 18;
+  return '<svg class="hi" viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="none" stroke="currentColor" '
+    + 'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+    + '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+}
 /* Locked for marking before they had finished. There is nothing to show
    but where things stand, and no way back into the tasks. */
 function showMarkingLocked(){
@@ -9042,7 +9898,7 @@ function showMarkingLocked(){
     "Your teacher is marking this. You can carry on with it once they unlock it.");
   /* a padlock rather than the tick: nothing here has been finished */
   const mark = hero.querySelector(".done-tick");
-  if (mark) mark.textContent = "\u{1F512}";
+  if (mark){ mark.innerHTML = lockIcon(40); mark.classList.add("done-lockmark"); }
   box.appendChild(hero);
 }
 /* The lock arriving while the page is open: from the save being refused, or
@@ -9262,13 +10118,18 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   stCard.appendChild(sRow); stCard.appendChild(tRow);
   cards.appendChild(stCard);
 
-  // what to do about it, in the second
+  /* what to do about it, in the second: only when the lesson has response
+     tasks or extensions to do. A card and a button pointing at an empty
+     space below promised practice that was never coming. */
+  const respBank = (lesson && lesson.responses) || {};
+  const hasResponses = Object.keys(respBank).some(k => (respBank[k] || []).length) ||
+                       ((lesson && lesson.extensions) || []).length > 0;
   const respCard = el("div","st-card flyin");
   respCard.appendChild(el("h2","sect-head","Response"));
   respCard.appendChild(el("p","modal-text","Some practice on the topic your target is about."));
   const jump = el("button","btn-primary fadein","Start response tasks \u2193");
   respCard.appendChild(jump);
-  cards.appendChild(respCard);
+  if (hasResponses) cards.appendChild(respCard);
 
   /* Only what is left over once the card above has taken the wording. */
   const teacherCard = feedbackCard({ comment: tn.comment });
@@ -9469,8 +10330,13 @@ function voiceAsk(card, q, trouble){
   q.options.forEach((text, i) => {
     const b = el("button","voice-opt");
     b.type = "button";
-    const icon = (q.icons && q.icons[i]) || "";
-    if (icon) b.appendChild(el("span","voice-icon", icon)).setAttribute("aria-hidden","true");
+    const icon = window.studentVoice.iconOf(q, i, 44);
+    if (icon){
+      const pic = el("span","voice-icon");
+      pic.innerHTML = icon;
+      pic.setAttribute("aria-hidden","true");
+      b.appendChild(pic);
+    }
     b.appendChild(el("span","voice-word", text));
     b.addEventListener("click", () => pickVoice(card, q, i));
     opts.appendChild(b);
@@ -10039,7 +10905,7 @@ function renderResponses(container, targetTopic, statusEl){
   const wrap = el("div","responses");
   wrap.appendChild(el("h2","sect-head","Response tasks"));
   /* a practical gives everyone the same list, so it is not chosen from anything */
-  const saving = OFFLINE ? " Press Save Work when you're done." : " Your work saves as you go.";
+  const saving = OFFLINE ? " Press Save work when you're done." : " Your work saves as you go.";
   wrap.appendChild(el("p","resp-sub", lesson && lesson.practical
     ? "Use your feedback to make your work even better." + saving
     : "Chosen from your target. Work through them." + saving));
@@ -10250,8 +11116,10 @@ function doneShell(title){
   /* A way back into the work. Someone who has finished still wants to reread
      what they wrote, and without this the only way back was to reload. */
   if (markingLocked && !spectate){
-    box.appendChild(el("p","done-locked",
-      "🔒 Your teacher has locked this while they mark it, so it cannot be changed just now."));
+    const note = el("p","done-locked", "");
+    note.innerHTML = lockIcon(17);
+    note.appendChild(document.createTextNode(" Your teacher has locked this while they mark it, so it cannot be changed just now."));
+    box.appendChild(note);
   } else if (steps.length && !(assessPages && !spectate) && !(practicalMarked() && !spectate)){
     /* Not for a marked assessment a student has handed in. They were told
        twice that there was no going back; their answers are under View my
@@ -10273,10 +11141,13 @@ function doneShell(title){
   dock.classList.add("on-summary");
   /* A handed-in assessment keeps the bar for its teacher's dot and nothing
      else: the code that lets a student back in is typed there, the same
-     place as every other teacher code. So does a practical, whose response
-     tasks have checklists a teacher may need to tick, and a marked one has
-     no way back to the pages where the dot used to be. */
-  const keepDot = !spectate && (!!assessPages || !!(lesson && lesson.practical));
+     place as every other teacher code. Every kind of assessment, a practical
+     included, and whether it has been marked or not: asked of the lesson,
+     not of assessPages, which a practical does not have, so its summary used
+     to leave the teacher no dot at all. A marked practical has no way back
+     to the pages where the dot used to be, and its response tasks have
+     checklists a teacher may need to tick. */
+  const keepDot = !spectate && !!(lesson && (lesson.assessment || lesson.practical));
   dock.classList.toggle("keep-dot", keepDot);
   dock.classList.toggle("gone", !rubricOnSummary() && !keepDot);
   paintFrozenNote(true);
@@ -10328,7 +11199,7 @@ const saveButtons = [];
    made to agree with the ones already on screen.
 
    It starts plain. The settled green outline belongs to the "Saved" wording
-   and nothing else: a button reading "Save Work" in the saved colours was
+   and nothing else: a button reading "Save work" in the saved colours was
    telling a student two things at once, and a lesson just opened has not
    saved anything yet. */
 let saveState = "idle";
@@ -10406,8 +11277,8 @@ function saveButton(statusEl){
     }
     return pdfButton(statusEl, true);
   }
-  const btn = el("button","btn-primary done-save","Save Work");
-  const entry = { btn: btn, label: "Save Work" };
+  const btn = el("button","btn-primary done-save","Save work");
+  const entry = { btn: btn, label: "Save work" };
   saveButtons.push(entry);
   paintOneSave(entry, saveState);      // say what the one in the corner says
   btn.addEventListener("click", async () => {
@@ -10429,8 +11300,25 @@ function paintStatus(elm, state){
   elm.dataset.state = state;
   elm.textContent = state === "done" ? "\u2713 Sent to your teacher"
                   : state === "offline" ? "Sign in so your work can be sent to your teacher"
+                  : state === "busy" ? "The server is very busy just now. Your work is safe on this computer."
                   : state === "locked" ? "Your teacher has locked this while they mark it"
-                  : "Could not reach the server, press Save Work to try again";
+                  : "Could not reach the server, press Save work to try again";
+  /* Busy clears in a minute or so, when a few classes have finished handing
+     in at once. The button is right beside the words that explain it, so
+     nobody has to work out that Save work is the way to try again. */
+  if (state === "busy"){
+    const again = el("button", "btn-ghost handin-retry", "Try again");
+    again.addEventListener("click", async () => {
+      again.disabled = true;
+      again.textContent = "Trying again\u2026";
+      paintSaveButtons("saving");
+      const st = await submitWork();
+      if (st === "done") noteSaved(false);
+      paintStatus(elm, st);
+      paintSaveButtons(st === "done" ? "saved" : "idle");
+    });
+    elm.appendChild(again);
+  }
 }
 
 /* How well one task went, the same rules work.html's Progress tab marks by,
@@ -10469,6 +11357,7 @@ function lessonTaskAttempted(b, v){
   if (b.type === "blanks") return Array.isArray(v) && v.some(x => x !== null && x !== undefined && x !== "");
   if (b.type === "short") return window.shortAnswer.complete(b, v);
   if (b.type === "ide" || b.type === "web") return !!(v && v.ran);
+  if (b.type === "scratch") return !!(v && (v.changed || v.runs));
   if (b.type === "table") return Array.isArray(v) && v.some(x => String(x == null ? "" : x).trim() !== "");
   if (b.type === "label") return !!(v && v.placed && Object.keys(v.placed).some(k => v.placed[k]));
   if (b.type === "hotspot") return !!(v && typeof v.x === "number");
@@ -10507,8 +11396,7 @@ function lessonTaskScore(b, v){
     return m.max ? { got: m.got, max: m.max } : null;
   }
   if (b.type === "hotspot") return { got: window.hotspotHit(b, v) ? 1 : 0, max: 1 };
-  if ((b.type === "ide" || b.type === "web" || (b.type === "image" && b.psd === true))
-      && Array.isArray(b.checks) && b.checks.length){
+  if ((isCodeTask(b) || (b.type === "image" && b.psd === true)) && Array.isArray(b.checks) && b.checks.length){
     const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
     const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
     let got = 0;
@@ -10617,18 +11505,29 @@ function countUp(target, to, ms){
   }
   requestAnimationFrame(tick);
 }
+/* What they got comes first, most nearly all right at the top, and anything
+   they have nothing for yet goes underneath on its own, in quieter type. In
+   lesson order a big blue 0 could be the first thing on the screen, which
+   reads as "you failed" to an eleven year old who got the rest right. */
 function achievementLines(totals){
   const box = el("div");
-  Object.keys(totals).forEach(label => {
+  const labels = Object.keys(totals);
+  const share = (l) => totals[l].max ? totals[l].got / totals[l].max : 0;
+  const got = labels.filter(l => totals[l].got > 0).sort((a, b) => share(b) - share(a));
+  const none = labels.filter(l => !(totals[l].got > 0));
+  const line = (label, zero) => {
     const t = totals[label];
     const tail = (ACH_PHRASE[label] || (m => " of " + m + " on " + label.toLowerCase()))(t.max);
-    const row = el("p","ach-row");
+    const row = el("p","ach-row" + (zero ? " ach-zero" : ""));
     const num = el("b","ach-num");
     row.appendChild(num);
     row.appendChild(el("span","ach-of", tail));
     box.appendChild(row);
     countUp(num, t.got, 700);
-  });
+  };
+  got.forEach(l => line(l, false));
+  if (none.length && got.length) box.appendChild(el("p","ach-also ach-still","Still to pick up"));
+  none.forEach(l => line(l, true));
   return box;
 }
 /* Left out entirely when there is nothing quantifiable in the lesson, the
@@ -10650,7 +11549,7 @@ function achievementCard(){
   }
   return card;
 }
-function showLessonComplete(revisit, justFinished){
+function showLessonComplete(revisit, justFinished, sentAlready){
   /* Back on the summary, code written since the last visit gets its ticks
      too, and goes to the teacher the way any change on this screen does.
      Finishing has done this already, before its own save. Saved at the end,
@@ -10694,6 +11593,10 @@ function showLessonComplete(revisit, justFinished){
   const layout = el("div","done-layout" + (fb || ach ? "" : " alone"));
   const heroCol = el("div","done-hero-col");
   heroCol.appendChild(hero);
+  /* What they learned and why, under the tick: the plenary's question,
+     answered by the lesson itself. */
+  const recap = whatWhyCard(lesson, "recap");
+  if (recap) heroCol.appendChild(recap);
   layout.appendChild(heroCol);
   if (fb || ach){
     const cards = el("div","done-cards");
@@ -10723,7 +11626,9 @@ function showLessonComplete(revisit, justFinished){
 
   if (justFinished) confetti();      // only the moment they finish, not every visit
   if (!revisit && !spectate){
-    submitWork().then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
+    /* Sent behind the rocket already: say how that went, do not send again. */
+    if (sentAlready){ paintStatus(status, sentAlready); paintSaveButtons(sentAlready === "done" ? "saved" : "idle"); }
+    else submitWork().then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
   }
   else if (revisit && token && !spectate){
     status.dataset.state = "done";
@@ -10743,7 +11648,7 @@ function showLessonComplete(revisit, justFinished){
    classes lost machines to it before anyone worked out what they had typed.
 
    It now goes through _hub_run in pyhub.js, the same guarded runner the full
-   editor uses, which gives up after ten seconds and says in plain words what
+   editor uses, which gives up after five seconds and says in plain words what
    probably went wrong. Returns what the run said so the caller can deal with
    a program that stopped to ask a question. */
 async function runPython(code, out, err, answers){
@@ -10754,7 +11659,7 @@ async function runPython(code, out, err, answers){
     py.globals.set("_hub_next_inputs", (answers || []).join("\u0000"));
     py.runPython("_hub_set_inputs(_hub_next_inputs.split(chr(0)) if _hub_next_inputs != '' else [])");
     py.globals.set("_hub_src", code);
-    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 10.0)"));
+    const res = JSON.parse(py.runPython("_hub_run(_hub_src, 5.0)"));
     /* Waits are played back by the full editor's console, which this task
        does not have, so everything the program printed arrives at once. That
        is what this task always did. */
@@ -11311,6 +12216,20 @@ function buildPdf(){
       if (!any) out.push(answerBox("", "Nothing written"));
       return out;
     }
+    if (b.type === "scratch"){
+      out.push({ t: "text", face: "task", text: pdfText(b.title) || "Block coding" });
+      const proj = v && v.project;
+      if (!proj){
+        out.push(answerBox("", "Nothing changed from the starting project"));
+        return out;
+      }
+      if (v.shot) out.push({ t: "img", data: v.shot, fmt: "JPEG", w: 80, h: 60 });
+      out.push({ t: "text", face: "small",
+                 text: (window.scratchHub ? window.scratchHub.describe(proj) : "")
+                   + ". The project itself is saved with the lesson"
+                   + (OFFLINE ? ": press Download on the task to keep a copy of it as a .sb3 file." : ".") });
+      return out;
+    }
     if (b.type === "password"){
       out.push({ t: "text", face: "task", text: title || "Password strength" });
       const best = v ? v.bestScore : 0, of = v ? v.outOf : 5;
@@ -11394,6 +12313,11 @@ function buildPdf(){
       });
       if (!said.filter(x => String(x || "").trim()).length)
         out.push({ t: "text", face: "small", text: "Nothing filled in", colour: PDF.AMBER });
+      return out;
+    }
+    /* Help to ask, not work to hand in: one line so the page reads in order. */
+    if (b.type === "helper"){
+      out.push({ t: "text", face: "small", text: (title || "Photoshop help") + ": nothing to hand in" });
       return out;
     }
     if (b.type === "notes"){

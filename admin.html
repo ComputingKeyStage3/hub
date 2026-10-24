@@ -2,10 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="images/logo.svg" type="image/svg+xml">
+<link rel="icon" href="images/logo-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="images/logo-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Teacher console · Computing KS3</title>
+<title>Computing Lesson Hub</title>
 <link rel="stylesheet" href="style.css">
-<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<link rel="stylesheet" href="look.css">
+<script src="icons.js"></script>
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
 <script src="lessonorder.js"></script>
@@ -18,10 +23,11 @@
 <script src="markbook.js"></script>
 <script src="resultsbook.js"></script>
 <script src="teacher.js"></script>
+<script src="ui.js"></script>
 <script src="settings.js"></script>
 <script src="changelog.js"></script>
 </head>
-<body>
+<body class="console">
 
 <!-- The console opens on the dots with the sign-in hidden behind them, so a
      teacher whose browser fills the key never sees a sign-in screen at all.
@@ -107,57 +113,76 @@ setTimeout(function(){
 </script>
 
 <div class="homebar" id="topbar" hidden>
-  <div class="title">Computing Teacher Console</div>
-  <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
-  <button class="btn-ghost iconbtn" id="keepBtn" title="Backups and devices">&#128190;</button>
-  <button class="btn-ghost iconbtn" id="logBtn" title="What has changed">&#128220;</button>
-  <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
-  <div class="auth" id="whoBar" hidden></div>
+  <div class="title brandtitle"><img class="brandlogo" src="images/logo.svg" alt="" width="28" height="28"> Computing Lesson Hub</div>
+  <!-- Jump to: a class, a student, a lesson or a screen, from anywhere.
+       console-search.js fills it and takes the hidden off. -->
+  <div class="jump" id="jumpBox" role="search" hidden>
+    <span class="jump-icon" aria-hidden="true">&#128269;</span>
+    <input id="jumpIn" type="text" autocomplete="off" spellcheck="false"
+           placeholder="Jump to a class, student, lesson…" aria-label="Jump to a class, student, lesson or screen"
+           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="jumpList">
+    <kbd class="jump-key" aria-hidden="true">/</kbd>
+    <ul class="jump-list" id="jumpList" role="listbox" aria-label="Places to go" hidden></ul>
+  </div>
+  <div class="homebar-end">
+    <button class="btn-ghost iconbtn" id="pwBtn" title="Password updates">&#128274;<span class="pwcount" id="pwCount" hidden></span></button>
+    <button class="btn-ghost iconbtn" id="keepBtn" title="Backups and devices">&#128190;</button>
+    <button class="btn-ghost iconbtn" id="logBtn" title="What has changed">&#128220;</button>
+    <div class="auth" id="whoBar" hidden></div>
+    <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
+  </div>
 </div>
 
 <nav class="crumbbar" id="crumbBar" hidden></nav>
 
+<!-- ============ signing in, and choosing who is teaching ============
+     Pop-ups over Home rather than pages of their own, so the console is
+     already there behind them, dimmed and blurred, with the same side menu
+     and top bar as everywhere else. Outside .page on purpose: .page fades up
+     with a transform as it arrives, and a fixed box inside a transformed one
+     is placed against that box instead of the window. -->
+<div class="keywrap entry-pop" id="keyView" role="dialog" aria-modal="true" aria-labelledby="keyTitle" hidden>
+  <section class="station">
+    <h2 id="keyTitle" style="margin:0 0 6px">Teacher console</h2>
+    <p class="hint" style="margin:0 0 16px">Sign in to load your classes.</p>
+    <!-- A real form with a named password box, because that is what Edge and
+         Chrome look for before they offer to remember a sign-in and before
+         they will fill one back in. autocomplete="off" here is what stopped
+         them: the box was left empty and the key typed out every lesson. -->
+    <form id="keyForm">
+      <div class="field"><input type="password" id="keyIn" name="teacher-key"
+           placeholder="Teacher key" aria-label="Teacher key" autocomplete="current-password"></div>
+      <div class="field" id="codeField" hidden>
+        <input type="text" id="codeIn" name="code" placeholder="6-digit code" autocomplete="one-time-code"
+               inputmode="numeric" maxlength="6"></div>
+      <button class="btn-primary" id="keyGo" type="submit" style="margin-top:10px; width:100%">Sign in</button>
+    </form>
+    <p class="hint" id="keyMsg" style="margin:12px 0 0"></p>
+  </section>
+</div>
+
+<div class="keywrap entry-pop" id="whoView" role="dialog" aria-modal="true" aria-labelledby="whoTitle" hidden>
+  <section class="station">
+    <!-- Only when there is a console to go back to: changing teacher can be
+         thought better of, choosing one for the first time cannot. -->
+    <button class="btn-ghost iconbtn modal-x" id="whoX" type="button" title="Keep the current teacher" hidden>&#10005;</button>
+    <h2 id="whoTitle" style="margin:0 0 6px">Who is teaching?</h2>
+    <select id="whoAmI" class="bigselect"></select>
+    <button class="btn-primary" id="whoGo" style="margin-top:14px; width:100%">Open the console</button>
+    <p class="hint" id="whoMsg" style="margin:12px 0 0"></p>
+  </section>
+</div>
+
 <div class="page">
-
-  <!-- ============ key ============ -->
-  <div class="keywrap" id="keyView" hidden>
-    <section class="station">
-      <h2 style="margin:0 0 6px">Teacher console</h2>
-      <p class="hint" style="margin:0 0 16px">Sign in to load your classes.</p>
-      <!-- A real form with a named password box, because that is what Edge and
-           Chrome look for before they offer to remember a sign-in and before
-           they will fill one back in. autocomplete="off" here is what stopped
-           them: the box was left empty and the key typed out every lesson. -->
-      <form id="keyForm">
-        <div class="field"><input type="password" id="keyIn" name="teacher-key"
-             placeholder="Teacher key" autocomplete="current-password"></div>
-        <div class="field" id="codeField" hidden>
-          <input type="text" id="codeIn" name="code" placeholder="6-digit code" autocomplete="one-time-code"
-                 inputmode="numeric" maxlength="6"></div>
-        <button class="btn-primary" id="keyGo" type="submit" style="margin-top:10px; width:100%">Sign in</button>
-      </form>
-      <p class="hint" id="keyMsg" style="margin:12px 0 0"></p>
-    </section>
-  </div>
-
-  <!-- ============ who is teaching ============ -->
-  <div class="keywrap" id="whoView" hidden>
-    <section class="station">
-      <h2 style="margin:0 0 6px">Who is teaching?</h2>
-      <select id="whoAmI" class="bigselect"></select>
-      <button class="btn-primary" id="whoGo" style="margin-top:14px; width:100%">Open the console</button>
-      <p class="hint" id="whoMsg" style="margin:12px 0 0"></p>
-    </section>
-  </div>
 
   <!-- ============ classes grid ============ -->
   <div id="homeView" hidden>
     <h2 style="margin:22px 0 4px">Teacher console</h2>
     <div class="bigcards">
-      <button class="classtile" id="openHub"><b>&#128218; Lesson hub</b><span id="hubCount">All units and lessons</span></button>
-      <button class="classtile" id="openClasses"><b>&#128101; Classes</b><span id="clsCount">Publish, pace and mark</span></button>
-      <button class="classtile" id="openPractice" hidden><b>&#9654; Practice</b><span>Your own sandbox, and students' programs</span></button>
-      <button class="classtile" id="openResults" hidden><b>&#128202; Results</b><span>Marks and grades from assessments and practicals</span></button>
+      <button class="classtile" id="openHub"><b><span data-icon="lessons" data-size="22"></span> Lessons</b><span id="hubCount">All units and lessons</span></button>
+      <button class="classtile" id="openClasses"><b><span data-icon="classes" data-size="22"></span> Classes</b><span id="clsCount">Publish, pace and mark</span></button>
+      <button class="classtile" id="openPractice" hidden><b><span data-icon="practice" data-size="22"></span> Practice</b><span>Your own sandbox, and students' programs</span></button>
+      <button class="classtile" id="openResults" hidden><b><span data-icon="progress" data-size="22"></span> Results</b><span>Marks and grades from assessments and practicals</span></button>
     </div>
   </div>
 
@@ -193,10 +218,12 @@ setTimeout(function(){
       </div>
     </div>
     <h3 style="margin:22px 0 4px">Students' programs</h3>
-    <p class="hint">Find a student by their username or their name, then open their sandbox programs.</p>
-    <div class="toolrow">
-      <span class="searchbox"><span class="searchicon">&#128269;</span><input id="pracSearch" placeholder="Search by username or name"></span>
-      <button class="btn-primary" id="pracGo">Search</button>
+    <p class="hint">Find a student by their username or their name to see their profile and their sandbox programs.</p>
+    <!-- Not a .toolrow: the console lifts a toolrow's buttons up into the
+         screen's header, and Search belongs beside its box. -->
+    <div class="pracbar">
+      <span class="searchbox"><span class="searchicon" data-icon="search" data-size="16"></span><input id="pracSearch" placeholder="Search by username or name"></span>
+      <button class="btn-ghost bmini2" id="pracGo">Search</button>
     </div>
     <div class="loading mid" id="pracWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Looking</span></div>
     <div id="pracList"></div>
@@ -206,9 +233,8 @@ setTimeout(function(){
   <div id="hubView" hidden>
     <button class="crumb" id="hubHome">&larr; Home</button>
     <button class="btn-ghost iconbtn refresh" id="refHub" title="Refresh">&#8635;</button>
-    <h2 style="margin:14px 0 4px">Lesson hub</h2>
+    <h2 style="margin:14px 0 4px">Lessons</h2>
     <div class="toolrow">
-      <span class="searchbox"><span class="searchicon">&#128269;</span><input id="hubSearch" placeholder="Search lessons"></span>
       <button class="btn-ghost" id="hubNewYear">+ New year group</button>
       <button class="btn-primary" id="hubNewLesson">+ Build a new lesson</button>
     </div>
@@ -217,7 +243,7 @@ setTimeout(function(){
   </div>
 
   <div id="hubUnitsView" hidden>
-    <button class="crumb" id="backYears">&larr; Lesson hub</button>
+    <button class="crumb" id="backYears">&larr; Lessons</button>
     <div class="classhead">
       <h2 id="yearName"></h2>
       <button class="levelchip" id="yearLevel" title="What this year group is working towards"></button>
@@ -225,10 +251,10 @@ setTimeout(function(){
       <button class="btn-ghost iconbtn" id="deleteYearBtn" title="Delete year group">&#128465;</button>
     </div>
     <div class="toolrow">
-      <span class="searchbox"><span class="searchicon">&#128269;</span><input id="unitSearch" placeholder="Search lessons"></span>
       <button class="btn-ghost iconbtn refresh" id="refYear" title="Refresh">&#8635;</button>
       <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
       <button class="btn-ghost" id="specBtn" hidden>Specification</button>
+      <button class="btn-ghost" id="yearVoiceBtn" hidden title="What this year group said in Student Voice">Student Voice</button>
       <button class="btn-primary" id="hubNewLesson2">+ Build a new lesson</button>
     </div>
     <div class="classgrid" id="hubUnits"></div>
@@ -249,6 +275,7 @@ setTimeout(function(){
     <div class="toolrow">
       <button class="btn-ghost iconbtn refresh" id="refComp" title="Refresh">&#8635;</button>
       <button class="btn-ghost" id="compSpecBtn">Specification</button>
+      <button class="btn-ghost" id="compVoiceBtn" hidden title="What this year group said in Student Voice">Student Voice</button>
     </div>
     <div class="classgrid" id="hubStrands"></div>
   </div>
@@ -298,8 +325,21 @@ setTimeout(function(){
   <div id="classesView" hidden>
     <button class="crumb" id="backHome">&larr; Home</button>
     <h2 style="margin:14px 0 4px">Your classes</h2>
-    <div class="toolrow"><button class="btn-ghost" id="newClassBtn">+ New class</button></div>
+    <div class="toolrow">
+      <button class="btn-ghost" id="timetableBtn"><span data-icon="calendar" data-size="16"></span> Timetable</button>
+      <button class="btn-ghost" id="newClassBtn">+ New class</button>
+    </div>
     <div class="classgrid" id="classGrid"></div>
+  </div>
+
+  <!-- ============ timetable ============
+       Filled by timetable.js: the periods of the day, the lessons in each,
+       Week A and Week B, and the holidays that the weeks skip over. -->
+  <div id="timetableView" hidden>
+    <button class="crumb" id="backClassesTt">&larr; All classes</button>
+    <h2 style="margin:14px 0 4px">Timetable</h2>
+    <div class="toolrow"><span class="hint" id="ttSaved"></span></div>
+    <div id="ttBody"></div>
   </div>
 
   <!-- ============ one class ============ -->
@@ -310,10 +350,10 @@ setTimeout(function(){
       <button class="btn-ghost iconbtn" id="renameBtn" title="Rename class">&#9998;</button>
     </div>
     <div class="bigcards">
-      <button class="classtile" id="openLessons"><b>&#128218; Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
-      <button class="classtile" id="openStudents"><b>&#128101; Students</b><span>Add, edit and reset logins</span></button>
-      <button class="classtile" id="openProgress"><b>&#128200; Progress</b><span>How a unit is going, lesson by lesson</span></button>
-      <button class="classtile" id="openCover" hidden><b>&#128202; Specification coverage</b><span>How the class is doing, point by point</span></button>
+      <button class="classtile" id="openLessons"><b><span data-icon="lessons" data-size="22"></span> Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
+      <button class="classtile" id="openStudents"><b><span data-icon="classes" data-size="22"></span> Students</b><span>Add, edit and reset logins</span></button>
+      <button class="classtile" id="openProgress"><b><span data-icon="progress" data-size="22"></span> Progress</b><span>How a unit is going, lesson by lesson</span></button>
+      <button class="classtile" id="openCover" hidden><b><span data-icon="coverage" data-size="22"></span> Specification coverage</b><span>How the class is doing, point by point</span></button>
     </div>
   </div>
 
@@ -336,11 +376,19 @@ setTimeout(function(){
       <button class="btn-primary" id="addOneBtn">+ Add student</button>
       <button class="btn-ghost" id="importBtn">Import from Arbor</button>
     </div>
-    <p class="hint" id="stuHint" hidden>Click a name to see their practice programs.</p>
+    <p class="hint" id="stuHint" hidden>Click a name to see their profile.</p>
     <div id="resetBox"></div>
     <div class="loading mid" id="stuWait" hidden><div class="load-dots"><span></span><span></span><span></span></div><span>Loading the students</span></div>
     <table class="stutable" id="stuTable"></table>
     <p class="hint" id="stuMsg" style="margin-top:12px"></p>
+  </div>
+
+  <!-- ============ one student ============
+       Filled by student-profile.js. -->
+  <div id="studentView" hidden>
+    <button class="crumb" id="backStudents">&larr; <span class="bk"></span></button>
+    <h2 id="profName" style="margin:14px 0 6px">Student</h2>
+    <div id="profBody"></div>
   </div>
 
   <!-- ============ unit-wide progress ============ -->
@@ -562,14 +610,13 @@ const toHubYear = () => openYear(hubYear);
 function paintCrumbs(){
   const v = VIEWS.find(x => !$(x).hidden);
   if (v === "keyView"){ crumbs(null); return; }
-  /* Offline the hub is the top of the console rather than something sitting
-     under Home, because Home holds classes and there are none. */
-  const top = OFFLINE ? { name:"Lesson hub", go: v === "hubView" ? null : toHub }
-                      : { name:"Home", go: v === "homeView" ? null : toHome };
-  const hub = OFFLINE ? [top] : [top, { name:"Lesson hub", go: toHub }];
+  /* Every part of the console is a place of its own, the same as in the side
+     menu, so a trail starts at the part it is in: Lesson hub, Classes,
+     Practice. Home is one of those places, not the top of all of them. */
+  const hub = [{ name:"Lessons", go: toHub }];
   const home = { name:"Classes", go: toClasses };
-  if (v === "homeView") return crumbs([top]);
-  if (v === "hubView") return crumbs(OFFLINE ? [top] : [top, { name:"Lesson hub" }]);
+  if (v === "homeView" || v === "whoView") return crumbs([{ name:"Home" }]);
+  if (v === "hubView") return crumbs([{ name:"Lessons" }]);
   if (v === "hubUnitsView") return crumbs(hub.concat([{ name: hubYear || "Not in a year group" }]));
   if (v === "hubCompView") return crumbs(hub.concat([{ name: hubYear }]));
   if (v === "hubPointView") return crumbs(hub.concat([
@@ -582,27 +629,31 @@ function paintCrumbs(){
   if (v === "hubLessonsView") return crumbs(hub.concat([
                                              { name: hubYear || "Not in a year group", go: toHubYear },
                                              { name: hubUnit || "Not in a unit" }]));
-  if (v === "classesView") return crumbs([top, { name:"Classes" }]);
-  if (v === "practiceView") return crumbs([top, { name:"Practice" }]);
-  if (v === "resultsView") return crumbs([top, { name:"Results" }]);
-  if (v === "pwView") return crumbs([top, { name:"Password updates" }]);
-  if (v === "classView") return crumbs([top, home, { name: cls }]);
-  if (v === "studentsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Students" }]);
-  if (v === "coverView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Specification coverage" }]);
-  if (v === "progressView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Progress" }]);
-  if (v === "unitsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units" }]);
-  if (v === "keepView") return crumbs([top, home, { name:"Backups and devices" }]);
-  if (v === "partsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
+  if (v === "classesView") return crumbs([{ name:"Classes" }]);
+  if (v === "timetableView") return crumbs([home, { name:"Timetable" }]);
+  if (v === "practiceView") return crumbs([{ name:"Practice" }]);
+  if (v === "resultsView") return crumbs([{ name:"Results" }]);
+  if (v === "pwView") return crumbs([{ name:"Passwords" }]);
+  if (v === "keepView") return crumbs([{ name:"Backups" }]);
+  if (v === "classView") return crumbs([home, { name: cls }]);
+  if (v === "studentsView") return crumbs([home, { name: cls, go: toClass }, { name:"Students" }]);
+  if (v === "studentView") return crumbs([home, { name: cls, go: toClass },
+                                          { name:"Students", go: () => { show("studentsView"); loadStudents(); } },
+                                          { name: (window.studentProfile && window.studentProfile.name()) || "Student" }]);
+  if (v === "coverView") return crumbs([home, { name: cls, go: toClass }, { name:"Specification coverage" }]);
+  if (v === "progressView") return crumbs([home, { name: cls, go: toClass }, { name:"Progress" }]);
+  if (v === "unitsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units" }]);
+  if (v === "partsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
                                         { name: unit || "Not in a unit" }]);
   /* One crumb longer when the unit was divided, so the trail says which part
      of 2.2 this is and leads back to the rest of them. A KS3 unit has no
      parts screen to go back to, so it keeps the trail it always had. */
-  if (v === "lessonsView") return crumbs([top, home, { name: cls, go: toClass }, { name:"Units", go: toUnits }]
+  if (v === "lessonsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units", go: toUnits }]
       .concat(partsOfUnit().length
         ? [{ name: unit || "Not in a unit", go: () => openUnit(unit) },
            { name: subunit || "All of " + unitCode() }]
         : [{ name: unit || "Not in a unit" }]));
-  crumbs([top]);
+  crumbs([{ name:"Home" }]);
 }
 
 /* A point's number and name for the crumbs. Defined here because the crumbs
@@ -613,17 +664,27 @@ function crumbName(id){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView","practiceView","progressView","resultsView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView","practiceView","progressView","timetableView","studentView","resultsView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
-  VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view; });
+  /* Signing in and choosing who is teaching are pop-ups over Home, so Home
+     stays up behind them, dimmed, blurred and out of reach until they go. */
+  const entry = view === "keyView" || view === "whoView";
+  VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view && !(entry && v === "homeView"); });
+  document.body.classList.toggle("entry-open", entry);
+  ["topbar","crumbBar","homeView","rail"].forEach(id => {
+    const e = $(id);
+    if (!e) return;
+    if (entry) e.setAttribute("inert", ""); else e.removeAttribute("inert");
+  });
   clearInterval(relTimer);
   hideLoader();
   /* The bar comes out with whatever it sits above, in the same frame. Showing
      it the moment the first answer came back, while the page underneath was
      still waiting on the second and third, is what made the console arrive in
-     pieces: bar first, then a pause, then the rest of it. */
-  if (TOKEN && !OFFLINE){ const bar = $("topbar"); if (bar) bar.hidden = false; }
+     pieces: bar first, then a pause, then the rest of it. Behind the sign-in
+     it is there as part of the picture, and inert. */
+  if ((TOKEN || entry) && !OFFLINE){ const bar = $("topbar"); if (bar) bar.hidden = false; }
   paintCrumbs();
   paintWho();
   /* Remember where we are, so Back and the swipe gesture step through the
@@ -635,18 +696,21 @@ function show(view, quiet){
     try{
       sessionStorage.setItem("hub_spot", JSON.stringify(
         { view: view, cls: cls, unit: unit, subunit: subunit, hubYear: hubYear, hubUnit: hubUnit,
-          hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint }));
+          hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint,
+          stu: (window.studentProfile && window.studentProfile.username()) || "" }));
     }catch(e){}
   }
   if (!quiet && !goingBack && view !== "keyView"){
     try{
       const state = { view: view, cls: cls, unit: unit, subunit: subunit, hubYear: hubYear, hubUnit: hubUnit,
-                      hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint };
+                      hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint,
+                      stu: (window.studentProfile && window.studentProfile.username()) || "" };
       if (!history.state || history.state.view !== view ||
           history.state.cls !== cls || history.state.unit !== unit ||
           history.state.subunit !== subunit ||
           history.state.hubYear !== hubYear || history.state.hubUnit !== hubUnit ||
-          history.state.hubStrand !== hubStrand || history.state.hubPoint !== hubPoint){
+          history.state.hubStrand !== hubStrand || history.state.hubPoint !== hubPoint ||
+          (view === "studentView" && history.state.stu !== state.stu)){
         history.pushState(state, "", location.pathname + location.search);
       }
     }catch(e){}
@@ -697,6 +761,8 @@ try{
       else if (st.view === "progressView") openProgressView();
       else if (st.view === "resultsView") toResults();
       else if (st.view === "classView"){ $("clsName").textContent = cls; }
+      else if (st.view === "timetableView" && window.timetable) window.timetable.paintEditor();
+      else if (st.view === "studentView" && window.studentProfile) window.studentProfile.reopen(st.stu);
     }catch(err){}
     goingBack = false;
   });
@@ -779,6 +845,9 @@ function openModal(build){
 function closeModal(fromBack){
   const wasOpen = !$("tmodal").hidden;
   $("tmodal").hidden = true;
+  /* Whatever was open has gone, so a refresh should not bring a lesson's
+     Manage back up. */
+  if (wasOpen) forgetManaging();
   if (wasOpen && !fromBack && modalDepth > 0){
     modalDepth--;
     try{
@@ -986,10 +1055,18 @@ async function enterConsole(){
      interrupted, and restoreSpot then read it back and found Home: nobody
      has ever been put back in their class. restoreSpot shows Home itself
      when there is nothing to go back to. */
+  const managing = lastManaged();
   await restoreSpot(lastSpot());
+  /* Manage is a pop-up over a class's lessons, so it only comes back over
+     those, once they are on screen. */
+  const spotNow = lastSpot();
+  if (managing && cls && spotNow && (spotNow.view === "lessonsView" || spotNow.view === "partsView" || spotNow.view === "classView"))
+    { try{ await loadCatalogue(); }catch(e){} manageLesson(managing); }   // the catalogue has its title
+  else forgetManaging();
   nudgeBackup();           // the once-a-week reminder to take a backup
 }
 on("whoGo", "click", async () => {
+  whoCancel = false;
   meCode = $("whoAmI").value || "";
   try{
     localStorage.setItem("hub_me", meCode);
@@ -1042,12 +1119,22 @@ async function restoreSpot(spot){
   const here = cls && allClasses().some(g => String(g.name).toLowerCase() === cls.toLowerCase());
   try{
     if (spot.view === "classesView"){ toClasses(); return; }
+    if (spot.view === "timetableView" && window.timetable){ window.timetable.open(); return; }
+    if (here && spot.view === "studentView" && spot.stu && window.studentProfile){
+      nameClass(cls); await window.studentProfile.reopen(spot.stu); return;
+    }
     /* Nothing is fetched until something is searched for, so this comes back
        whole with only the box waiting in it. */
     if (spot.view === "practiceView"){ toPractice(); return; }
     if (spot.view === "resultsView"){ await toResults(); return; }
     if (here && spot.view === "classView"){ openClass(cls); return; }
     if (here && spot.view === "studentsView"){ openClass(cls); show("studentsView"); loadStudents(); return; }
+    /* The screens off the side menu and the class's own reports. Each was
+       missing here, so refreshing any of them landed on Home. */
+    if (spot.view === "pwView"){ showPwView(); return; }
+    if (spot.view === "keepView"){ $("keepBtn").click(); return; }
+    if (here && spot.view === "coverView"){ nameClass(cls); show("coverView"); loadCoverage(); return; }
+    if (here && spot.view === "progressView"){ nameClass(cls); await openProgressView(); return; }
     /* Nothing is put on screen before the catalogue has come. show() is what
        takes the dots away, so calling it for a page on the way past showed
        that page instead of the dots and then replaced it a moment later:
@@ -1094,13 +1181,29 @@ async function restoreSpot(spot){
   }
 }
 /* changing who you are, without signing in again */
+let whoCancel = false;         // true while the picker was opened over a console already in use
 function changeTeacher(){
   /* Wherever they were belongs to the teacher they were being. Coming back as
      somebody else starts at Home rather than in the other one's class, which
      they may not even take. */
   try{ sessionStorage.removeItem("hub_spot"); }catch(e){}
+  whoCancel = keyStage === "in";
+  const x = $("whoX");
+  if (x) x.hidden = !whoCancel;
+  const sel = $("whoAmI");
+  if (sel) sel.value = meCode || "";
   show("whoView", true);
+  if (sel) sel.focus();
 }
+/* Thought better of it: the same teacher, back on Home underneath. */
+function keepTeacher(){
+  if (!whoCancel || $("whoView").hidden) return;
+  whoCancel = false;
+  show("homeView");
+}
+on("whoX", "click", keepTeacher);
+on("whoView", "mousedown", (e) => { if (e.target === $("whoView")) keepTeacher(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") keepTeacher(); });
 
 /* ---------- letting the browser sign you in ----------
    Edge and Chrome fill the key box themselves once a teacher has told the
@@ -1555,12 +1658,34 @@ function paintBackupWhen(){
       + (days >= 7 ? "  Worth taking another." : "");
   loadScreen.dataset.stale = days >= 7 ? "yes" : "no";
 }
+/* A backup is collected a page at a time and put together here into the one
+   file it has always been. Asked for in a single request, a whole school was
+   more than one call to the server can carry, and more than the database's
+   share of throughput would hand over at once. */
 on("backupBtn", "click", async () => {
-  $("backupMsg").textContent = "Collecting everything\u2026";
+  const msg = $("backupMsg");
+  msg.textContent = "Collecting everything\u2026";
   try{
-    const r = await fetch(API + "/api/teacher/backup", { headers: H(), cache:"no-store" });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Could not take a backup.");
+    const ask = async (query) => {
+      const r = await fetch(API + "/api/teacher/backup" + query, { headers: H(), cache:"no-store" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Could not take a backup.");
+      return d;
+    };
+    const head = await ask("");
+    const d = { taken_at: head.taken_at, format: head.format, how_to_restore: head.how_to_restore,
+                tables: {}, counts: {} };
+    for (const t of head.tables){
+      let rows = [], after = "";
+      do{
+        msg.textContent = "Collecting everything\u2026 " + t + (rows.length ? ", " + rows.length + " so far" : "");
+        const page = await ask("?table=" + encodeURIComponent(t) + (after ? "&after=" + encodeURIComponent(after) : ""));
+        rows = rows.concat(page.rows || []);
+        after = page.next || "";
+      } while (after);
+      d.tables[t] = rows;
+      d.counts[t] = rows.length;
+    }
     saveJson(d, "computing-hub-backup-" + stamp() + ".json");
     localStorage.setItem("hub_backup_when", String(Date.now()));
     paintBackupWhen();
@@ -1661,14 +1786,33 @@ function confirmRestore(){
       if (inp.value.trim() !== "RESTORE"){ msg.textContent = "Type RESTORE to confirm."; return; }
       msg.textContent = "Putting it back\u2026";
       try{
-        const r = await fetch(API + "/api/teacher/restore", { method:"POST", headers: HJ(),
-          body: JSON.stringify({ backup: backupToRestore, confirm: "RESTORE" }) });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || "Could not put it back.");
-        const total = Object.values(d.restored || {}).reduce((a, b) => a + b, 0);
+        /* A table at a time, and a hundred rows or about 3MB at a time,
+           whichever comes first: the same reason a backup is taken in pages. */
+        let total = 0;
+        const skipped = new Set();
+        for (const t of Object.keys(backupToRestore.tables)){
+          const rows = backupToRestore.tables[t] || [];
+          let at = 0;
+          while (at < rows.length){
+            const chunk = [];
+            let size = 0;
+            while (at < rows.length && chunk.length < 100){
+              const n = JSON.stringify(rows[at]).length;
+              if (chunk.length && size + n > 3000000) break;
+              chunk.push(rows[at]); size += n; at++;
+            }
+            msg.textContent = "Putting it back\u2026 " + t + ", " + at + " of " + rows.length;
+            const r = await fetch(API + "/api/teacher/restore", { method:"POST", headers: HJ(),
+              body: JSON.stringify({ confirm: "RESTORE", table: t, rows: chunk }) });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error || "Could not put it back.");
+            total += (d.restored || {})[t] || 0;
+            (d.skipped || []).forEach(s => skipped.add(s));
+          }
+        }
         closeModal();
         $("restoreMsg").textContent = "Put back " + total + " rows." +
-          (d.skipped && d.skipped.length ? "  Some rows in " + d.skipped.join(", ") + " could not be written." : "");
+          (skipped.size ? "  Some rows in " + Array.from(skipped).join(", ") + " could not be written." : "");
         $("restoreCheck").innerHTML = "";
         backupToRestore = null;
         catLoaded = false;
@@ -1690,6 +1834,7 @@ on("storeBtn", "click", async () => {
     if (!r.ok) throw new Error(d.error || "Could not check.");
     out.innerHTML = "";
     const used = (d.totals && d.totals.work && d.totals.work.bytes) || 0;
+    /* Turso's free plan: 5GB for the whole database. */
     const pct = Math.min(100, (used / (5 * 1024 * 1024 * 1024)) * 100);
     out.appendChild(el("p","modal-text", "Saved work takes up " + niceBytes(used) +
       ", about " + (pct < 0.1 ? "less than 0.1" : pct.toFixed(1)) + "% of the 5GB."));
@@ -1907,10 +2052,10 @@ function newVersionPopup(fromId){
       }
       closeModal();
       const from = fromSel ? fromSel.value : fromId;
-      window.open("author.html?edit=" + encodeURIComponent(from) + "&version=new" +
+      consoleNav.go("author.html?edit=" + encodeURIComponent(from) + "&version=new" +
                   "&vname=" + encodeURIComponent(name) +
                   "&vnote=" + encodeURIComponent(noteIn.value.trim().slice(0, 300)) +
-                  "&vcode=" + encodeURIComponent(codeSel.value), "_blank");
+                  "&vcode=" + encodeURIComponent(codeSel.value));
     };
     go.addEventListener("click", send);
     nameIn.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
@@ -1938,7 +2083,7 @@ function editLesson(id){
   const root = rootOf(id);
   const open = (which) => {
     closeModal();
-    window.open("author.html?edit=" + encodeURIComponent(which), "_blank");
+    consoleNav.go("author.html?edit=" + encodeURIComponent(which));
   };
   openModal(box => {
     box.classList.add("roomy");
@@ -2372,7 +2517,7 @@ function paintHubUnits(){
 function openHubUnit(u){
   hubUnit = u;
   $("hubUnitName").textContent = u || "Not in a unit";
-  $("backUnitYear").textContent = hubYear || "Lesson hub";
+  $("backUnitYear").textContent = hubYear || "Lessons";
   showIf("renameHubUnitBtn", u);
   showIf("deleteHubUnitBtn", u);
   show("hubLessonsView");
@@ -2389,6 +2534,7 @@ function lessonCards(list, box){
   inOrder(list, (l) => titleOf(l.lesson_id));
   list.forEach(l => {
     const card = el("div","lessonpill");
+    card.dataset.lesson = l.lesson_id;
     const head = el("div","lp-head");
     head.appendChild(el("b","", titleOf(l.lesson_id)));
     const alts = versionsOf(l.lesson_id);
@@ -2418,7 +2564,7 @@ function lessonCards(list, box){
       (v) => OFFLINE ? shareLink(v) : distribute(v));
     const deleteIt = () => whichVersion(l.lesson_id, "Which one do you want to delete?",
       (v) => deleteLesson(v));
-    const previewIt = () => window.open("lessonpreview.html?id=" + encodeURIComponent(l.lesson_id), "_blank");
+    const previewIt = () => consoleNav.go("lessonpreview.html?id=" + encodeURIComponent(l.lesson_id));
     const give = el("button","btn-primary", OFFLINE ? "Get link" : "Give to classes");
     give.addEventListener("click", giveIt);
     const pv = el("button","btn-ghost","Preview");
@@ -2499,14 +2645,8 @@ function runSearch(termBox, into){
   into.appendChild(holder);
   return true;
 }
-on("hubSearch", "input", () => {
-  const searching = runSearch($("hubSearch"), $("hubSearchResults"));
-  $("hubYears").hidden = searching;
-});
-on("unitSearch", "input", () => {
-  const searching = runSearch($("unitSearch"), $("unitSearchResults"));
-  $("hubUnits").hidden = searching;
-});
+/* Lessons are searched from the Jump to box in the top bar, which finds
+   them in every year group at once, so the hub's own boxes have gone. */
 
 /* ---------- making year groups and units ---------- */
 function newYearPrompt(then){
@@ -2559,7 +2699,7 @@ on("hubNewUnit", "click", () => newUnitPrompt(hubYear));
       if (hubUnit) bits.push("unit=" + encodeURIComponent(hubUnit));
     }
     if (bits.length) url += "?" + bits.join("&");
-    window.open(url, "_blank");
+    consoleNav.go(url);
   });
 });
 
@@ -2584,7 +2724,7 @@ function openComponents(){
   hubComp = 0; hubStrand = ""; hubPoint = "";
   const level = hubLevel();
   $("compName").textContent = hubYear;
-  $("backCompYearName").textContent = "Lesson hub";
+  $("backCompYearName").textContent = "Lessons";
   $("compNote").textContent = level === "GCSE"
     ? "OCR J277. Pick the paper, then the part of the specification."
     : "OCR H446. Pick the paper, then the part of the specification.";
@@ -2715,7 +2855,7 @@ on("hubNewLesson4", "click", () => {
   const bits = ["year=" + encodeURIComponent(hubYear)];
   if (hubPoint) bits.push("point=" + encodeURIComponent(hubPoint));
   if (strand) bits.push("unit=" + encodeURIComponent(strand.code + " " + strand.title));
-  window.open("author.html?" + bits.join("&"), "_blank");
+  consoleNav.go("author.html?" + bits.join("&"));
 });
 const pointById = (id) => (cat.points || []).find(p => p.id === id) || null;
 
@@ -3108,6 +3248,8 @@ function classDoesSpecWork(){
   });
 }
 on("openCover", "click", () => { show("coverView"); loadCoverage(); });
+
+
 on("backClass3", "click", () => openClass(cls));
 on("refCover", "click", () => loadCoverage(true));
 
@@ -3250,46 +3392,64 @@ function paintProgressUnitSelect(){
     $("progressBody").appendChild(el("p","hint", cls + " has no lessons filed against a unit yet."));
   }
 }
-async function fetchClassRoster(){
-  const r = await fetch(API + "/api/teacher/students?group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" });
+async function fetchClassRoster(group){
+  const r = await fetch(API + "/api/teacher/students?group=" + encodeURIComponent(group || cls), { headers: H(), cache: "no-store" });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || "Could not load the class.");
   return (d.students || []).slice().sort((a, b) => (a.username || "").localeCompare(b.username || ""));
 }
+/* A unit's marks for one class, lesson by lesson. Kept apart from the
+   screen that draws them, because a student's profile reads the same
+   figures for the one child it is about. Each lesson also says who has
+   started it and who has finished it. */
+async function unitProgressFor(unitName, group, force){
+  const key = unitName + "\u0000" + group;
+  const cached = !force && progUnitCache.get(key);
+  if (cached && Date.now() - cached.at < 30000) return cached.result;
+  const lessonsInUnit = classLessonsFor(group).filter(l => (l.unit || "") === unitName)
+                          .slice().sort((a, b) => (a.position || 0) - (b.position || 0));
+  const roster = await fetchClassRoster(group);
+  const per = await Promise.all(lessonsInUnit.map(async (l) => {
+    const [lessonR, workR] = await Promise.all([
+      fetch(API + "/api/catalog?lesson=" + encodeURIComponent(l.lesson_id), { headers: H(), cache: "no-store" }),
+      fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(l.lesson_id) +
+            "&group=" + encodeURIComponent(group), { headers: H(), cache: "no-store" })
+    ]);
+    if (!lessonR.ok || !workR.ok) return null;
+    const lessonD = await lessonR.json(), workD = await workR.json();
+    if (!lessonD.lesson) return null;
+    const rows = workD.rows || [];
+    /* An assessment is marked into the results table, not saved into work
+       the way an ordinary lesson's tasks are, so work.data is empty for
+       it here. Scoring it anyway would read as the whole class getting
+       nothing, which is worse than not scoring it: its marks already have
+       a home, on Specification coverage. */
+    let mr;
+    if (lessonD.lesson.assessment){
+      mr = { tasks: [], gotSum: 0, maxSum: 0, pct: null, byUsername: {}, byLabel: {}, isAssessment: true };
+    } else {
+      const locks = await window.progressMath.fetchLockedPages(API, l.lesson_id, group, lessonD.lesson);
+      mr = window.progressMath.markRoster(lessonD.lesson, roster, rows, locks);
+    }
+    return { id: l.lesson_id, title: titleOf(l.lesson_id), mr: mr,
+             started: rows.map(r => r.username),
+             finished: rows.filter(r => r.data && r.data.__done).map(r => r.username) };
+  }));
+  const result = { roster: roster, lessons: per.filter(Boolean) };
+  progUnitCache.set(key, { at: Date.now(), result: result });
+  return result;
+}
+/* The lessons a class has been given, for any class rather than the one on
+   screen. */
+function classLessonsFor(group){
+  const g = String(group || "").toLowerCase();
+  return (cat.lessons || []).filter(l => assigns.some(a => a.lesson_id === l.lesson_id && a.group_name.toLowerCase() === g));
+}
 async function loadUnitProgress(force){
-  const key = unit + "\u0000" + cls;
   $("progressWait").hidden = false;
   $("progressBody").innerHTML = "";
-  const cached = !force && progUnitCache.get(key);
-  if (cached && Date.now() - cached.at < 30000){ paintUnitProgress(cached.result); return; }
-  const lessonsInUnit = classLessonsIn(unit).slice().sort((a, b) => (a.position || 0) - (b.position || 0));
   try{
-    const roster = await fetchClassRoster();
-    const per = await Promise.all(lessonsInUnit.map(async (l) => {
-      const [lessonR, workR] = await Promise.all([
-        fetch(API + "/api/catalog?lesson=" + encodeURIComponent(l.lesson_id), { headers: H(), cache: "no-store" }),
-        fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(l.lesson_id) +
-              "&group=" + encodeURIComponent(cls), { headers: H(), cache: "no-store" })
-      ]);
-      if (!lessonR.ok || !workR.ok) return null;
-      const lessonD = await lessonR.json(), workD = await workR.json();
-      if (!lessonD.lesson) return null;
-      /* An assessment is marked into the results table, not saved into work
-         the way an ordinary lesson's tasks are, so work.data is empty for
-         it here. Scoring it anyway would read as the whole class getting
-         nothing, which is worse than not scoring it: its marks already have
-         a home, on Specification coverage. */
-      let mr;
-      if (lessonD.lesson.assessment){
-        mr = { tasks: [], gotSum: 0, maxSum: 0, pct: null, byUsername: {}, byLabel: {}, isAssessment: true };
-      } else {
-        const locks = await window.progressMath.fetchLockedPages(API, l.lesson_id, cls, lessonD.lesson);
-        mr = window.progressMath.markRoster(lessonD.lesson, roster, workD.rows || [], locks);
-      }
-      return { id: l.lesson_id, title: titleOf(l.lesson_id), mr: mr };
-    }));
-    const result = { roster: roster, lessons: per.filter(Boolean) };
-    progUnitCache.set(key, { at: Date.now(), result: result });
+    const result = await unitProgressFor(unit, cls, force);
     $("progressWait").hidden = true;
     paintUnitProgress(result);
   }catch(e){
@@ -3423,6 +3583,8 @@ function paintUnitProgress(result){
 
 on("backClasses", "click", () => { refreshGroups(); show("classesView"); });
 on("openClasses", "click", toClasses);
+on("backClassesTt", "click", toClasses);
+on("timetableBtn", "click", () => { if (window.timetable) window.timetable.open(); });
 on("backHome", "click", toHome);
 
 /* ---------- practice: find a student, open their programs ----------
@@ -3440,10 +3602,16 @@ if (!OFFLINE){ const tile = $("openPractice"); if (tile) tile.hidden = false; }
 on("openPractice", "click", toPractice);
 /* In a tab of its own, the same as a student's programs open: the console
    stays where it was, and the sandbox is a page a teacher may want beside it. */
-on("pracMine", "click", () => { window.open("sandbox.html?teacher=1", "_blank"); });
+on("pracMine", "click", () => { consoleNav.go("sandbox.html?teacher=1"); });
 on("backHome2", "click", toHome);
 on("pracGo", "click", () => searchStudents());
 on("pracSearch", "keydown", (e) => { if (e.key === "Enter") searchStudents(); });
+
+/* A student's profile, from student-profile.js; their programs straight
+   away if that script is missing. */
+function openStudent(st){
+  if (window.studentProfile) window.studentProfile.open(st); else openPrograms(st);
+}
 
 /* ---------- results ----------
    Drawn by resultsbook.js, which is handed what it needs from the console
@@ -3480,22 +3648,36 @@ on("refResults", "click", async () => {
 
 /* Their programs, in the same viewer a lesson's work opens in. */
 function openPrograms(st){
-  window.open("work.html?practice=1&group=" + encodeURIComponent(st.group_name || cls) +
-              "&student=" + encodeURIComponent(st.username), "_blank");
+  consoleNav.go("work.html?practice=1&group=" + encodeURIComponent(st.group_name || cls) +
+              "&student=" + encodeURIComponent(st.username));
 }
 
+/* Students matching everything typed. The server matches one run of letters
+   against a name or a username, so "Amelia Brooks" found nobody whose
+   display name is Amelia and whose username is brooksa26. It is asked for
+   the longest word instead, and every word then has to appear somewhere in
+   the name and username together. */
+async function findStudents(term){
+  const words = String(term || "").toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const ask = words.slice().sort((a, b) => b.length - a.length)[0];
+  const r = await fetch(API + "/api/teacher/students?find=" + encodeURIComponent(ask),
+                        { headers: H(), cache: "no-store" });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "Could not search just now.");
+  return (d.students || []).filter(st => {
+    const hay = (String(st.display_name || "") + " " + String(st.username || "")).toLowerCase();
+    return words.every(w => hay.indexOf(w) >= 0);
+  });
+}
 async function searchStudents(){
   const term = ($("pracSearch").value || "").trim();
   const list = $("pracList"), msg = $("pracMsg");
   list.innerHTML = ""; msg.textContent = "";
-  if (term.length < 2){ msg.textContent = "Type at least two letters."; return; }
+  if (term.length < 2) return;
   $("pracWait").hidden = false;
   try{
-    const r = await fetch(API + "/api/teacher/students?find=" + encodeURIComponent(term),
-                          { headers: H(), cache: "no-store" });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Could not search just now.");
-    const found = d.students || [];
+    const found = await findStudents(term);
     /* The console shows one teacher their own classes everywhere else, and
        this must not be the one screen that hands over the whole school. The
        ones left out are counted rather than hidden silently, so a search that
@@ -3514,13 +3696,13 @@ async function searchStudents(){
       const row = el("div","lessonCard pracCard");
       const open = el("button","pracOpen");
       open.type = "button";
-      open.title = "Open " + st.display_name + "'s programs";
+      open.title = "Open " + st.display_name + "'s profile";
       const body = el("span","body");
       body.appendChild(el("b","", st.username));
       body.appendChild(el("span","", st.display_name + " · " + (st.group_name || "no class")));
       open.appendChild(body);
       open.appendChild(el("span","go","→"));
-      open.addEventListener("click", () => openPrograms(st));
+      open.addEventListener("click", () => openStudent(st));
       row.appendChild(open);
       wrap.appendChild(row);
     });
@@ -3658,8 +3840,8 @@ function paintStudents(){
     } else {
       const open = el("button","linkbtn", st.display_name);
       open.type = "button";
-      open.title = "See " + st.display_name + "'s practice programs";
-      open.addEventListener("click", () => openPrograms(st));
+      open.title = "See " + st.display_name + "'s profile";
+      open.addEventListener("click", () => openStudent(st));
       td1.appendChild(open);
     }
     const td2 = el("td"); td2.style.color = "var(--muted)";
@@ -4160,6 +4342,37 @@ function openUnit(name){
   loadClassLocks().catch(() => {});
 }
 
+/* A lesson on its class's lessons page, picked out: the class named, the
+   catalogue there, the unit and the part it is filed under, then the card
+   glows. Used by a student's profile. */
+let flashLesson = "", flashUntil = 0;
+async function showLessonInClass(group, id){
+  try{
+    nameClass(group);
+    await loadCatalogue();
+    const l = (cat.lessons || []).find(x => x.lesson_id === id) || {};
+    flashLesson = id; flashUntil = 0;
+    openUnit(l.unit || "");
+    if (partsOfUnit().length) openPart(l.subunit || "");
+  }catch(e){ openClass(group); }
+}
+/* The grid is drawn twice on the way in (again once the padlocks arrive),
+   so the glow is put back on the new card until its time is up. */
+function flashCard(){
+  if (!flashLesson) return;
+  if (flashUntil && Date.now() > flashUntil){ flashLesson = ""; flashUntil = 0; return; }
+  const card = document.querySelector('#lessonGrid .lessonpill[data-lesson="' + CSS.escape(flashLesson) + '"]');
+  if (!card) return;
+  if (!flashUntil){
+    flashUntil = Date.now() + 2300;
+    card.scrollIntoView({ block:"center", behavior:"smooth" });
+  }
+  card.classList.remove("jump-found");
+  void card.offsetWidth;
+  card.classList.add("jump-found");
+  card.addEventListener("animationend", () => card.classList.remove("jump-found"), { once:true });
+}
+
 /* One part of a unit, or everything filed against the whole of it. */
 function openPart(name){
   subunit = name;
@@ -4207,7 +4420,7 @@ on("newLessonBtn", "click", () => {
   if (year) bits.push("year=" + encodeURIComponent(year));
   const p = pointNamed(subunit);
   if (p) bits.push("point=" + encodeURIComponent(p.id));
-  window.open("author.html?" + bits.join("&"), "_blank");
+  consoleNav.go("author.html?" + bits.join("&"));
 });
 /* The point of the specification a part's wording belongs to. The catalogue
    carries the wording and not the id, because the screens that group by it
@@ -4333,6 +4546,7 @@ function paintLessonGrid(){
     const scheduled = live && a && a.release_at && a.release_at > new Date().toISOString();
     const closed = live && a && a.close_on && a.close_on < ymd(new Date());
     const card = el("div","lessonpill");
+    card.dataset.lesson = l.lesson_id;
     const head = el("div","lp-head");
     head.appendChild(el("b","", titleOf(l.lesson_id)));
     /* The pill shows its state, and swaps to the date when pointed at —
@@ -4370,7 +4584,7 @@ function paintLessonGrid(){
       vrow.appendChild(vchip);
       card.appendChild(vrow);
     }
-    if (lessonLocks[l.lesson_id]) card.appendChild(el("p","lp-note","\u{1F512} Locked for " + cls));
+    if (lessonLocks[l.lesson_id]) card.appendChild(el("p","lp-note","Locked for " + cls));
     /* Marking happens between lessons, and an assessment a class can still
        open is one that can change while it is being marked. Only an
        assessment has anything to mark this way. */
@@ -4411,6 +4625,7 @@ function paintLessonGrid(){
     card.appendChild(acts);
     grid.appendChild(card);
   });
+  flashCard();
 }
 
 /* The sub-point headings that used to sit inside this list have gone: the
@@ -4693,8 +4908,10 @@ function markingLockRow(id){
   const on = !!markingLocks[id];
   const row = el("p","lp-note verpick");
   row.appendChild(document.createTextNode("Lock for marking "));
-  const chip = el("button","statechip chip-live " + (on ? "wait" : "shut"),
-                  on ? "\u{1F512} On" : "Off");
+  const chip = el("button","statechip chip-live " + (on ? "wait" : "shut"), "");
+  /* the console's own padlock, drawn in the chip's colour, not an emoji */
+  if (on && window.hubUI) chip.innerHTML = window.hubUI.icon("lock", 13) + " ";
+  chip.appendChild(document.createTextNode(on ? "On" : "Off"));
   chip.type = "button";
   chip.title = on ? "Locked: " + cls + " can see this but cannot change it. Click to unlock."
                   : "Stop " + cls + " changing this while you mark it";
@@ -4720,8 +4937,11 @@ function paintMarkingBox(box){
   box.innerHTML = "";
   const on = !!markingLocks[lessonId];
   box.className = "marklock" + (on ? " on" : "");
+  const ico = el("span","marklock-ico");
+  ico.innerHTML = window.hubUI ? window.hubUI.icon(on ? "lock" : "unlock", 20) : "";
+  box.appendChild(ico);
   const words = el("div","marklock-words");
-  words.appendChild(el("b","", on ? "\u{1F512} Locked for marking" : "Lock for marking"));
+  words.appendChild(el("b","", on ? "Locked for marking" : "Lock for marking"));
   words.appendChild(el("span","", on
     ? cls + " can see their work but cannot change it. Unlock it when you have finished marking."
     : "Stops " + cls + " changing their work while you mark it. They can still see it."));
@@ -4785,6 +5005,12 @@ async function loadClassLocks(){
        it stayed behind, calling a function that no longer existed. */
   }
 }
+/* Which lesson's Manage is open, beside hub_spot and for the same reason: a
+   refresh with Manage open put the teacher back on the class with it shut,
+   and the lesson they were pacing had to be found again. */
+function rememberManaging(id){ try{ sessionStorage.setItem("hub_manage", id); }catch(e){} }
+function forgetManaging(){ try{ sessionStorage.removeItem("hub_manage"); }catch(e){} }
+function lastManaged(){ try{ return sessionStorage.getItem("hub_manage") || ""; }catch(e){ return ""; } }
 async function manageLesson(id){
   lessonId = id;
   workCache = { key: "", rows: [], t: 0 };
@@ -4849,6 +5075,15 @@ function openManage(){
     const sch = el("button","btn-ghost","Schedule");
     sch.addEventListener("click", () => { closeModal(); schedulePopup(lessonId); });
     bar.appendChild(sch);
+    /* Presenting from here tells this class which slide is up, so a student
+       following live turns with it. Its own tab, because it goes full
+       screen and the console should still be there afterwards. */
+    if (lessonJson.slides && Array.isArray(lessonJson.slides.list) && lessonJson.slides.list.length){
+      const pres = el("button","btn-ghost","▶ Present slides");
+      pres.addEventListener("click", () => window.open("slides.html?id=" + encodeURIComponent(lessonId) +
+                                                       "&group=" + encodeURIComponent(cls), "_blank"));
+      bar.appendChild(pres);
+    }
     if (canLockPages()){
       /* An assessment has no summary page in the list to lock with the rest. */
       const every = lessonJson.blocks.map((_, i) => i)
@@ -4963,7 +5198,7 @@ function paintTasks(){
     });
     const eye = el("button","btn-ghost iconbtn","\u{1F441}");
     eye.title = "Preview as a student";
-    eye.addEventListener("click", () => window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&preview=" + i, "_blank"));
+    eye.addEventListener("click", () => consoleNav.go("lesson.html?id=" + encodeURIComponent(lessonId) + "&preview=" + i));
     const who = el("button","btn-ghost iconbtn","\u{1F465}");
     who.title = "Who has done this task?";
     who.addEventListener("click", () => whoDone(i, b, true));
@@ -5014,8 +5249,8 @@ function summaryRow(){
 /* Looking at a class's work happens on its own page, where there is room
    for the progress markbook and the feedback panel. */
 function openWorkPage(id, tab){
-  window.open("work.html?lesson=" + encodeURIComponent(id) + "&group=" + encodeURIComponent(cls) +
-              (tab ? "&tab=" + tab : ""), "_blank");
+  consoleNav.go("work.html?lesson=" + encodeURIComponent(id) + "&group=" + encodeURIComponent(cls) +
+              (tab ? "&tab=" + tab : ""));
 }
 
 /* ---------- student work: view on screen or print to PDF ---------- */
@@ -5053,7 +5288,7 @@ function handOff(rows, idx){
 
 function inspect(rows, idx, stepIdx){
   handOff(rows, idx);
-  window.open("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1" + (stepIdx !== undefined ? "&step=" + stepIdx : ""), "_blank");
+  consoleNav.go("lesson.html?id=" + encodeURIComponent(lessonId) + "&view=1" + (stepIdx !== undefined ? "&step=" + stepIdx : ""));
 }
 function printWork(rows, idx){
   handOff(rows, idx);
@@ -5243,5 +5478,12 @@ if (OFFLINE){
    the page that this script ran to the end and the dots are in hand. */
 window.consoleReady = true;
 </script>
+<!-- the newer layout, built on top of everything above -->
+<script src="console-ui.js"></script>
+<script src="timetable.js"></script>
+<script src="student-profile.js"></script>
+<script src="console-search.js"></script>
+<script src="voice.js"></script>
+<script src="year-voice.js"></script>
 </body>
 </html>

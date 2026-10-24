@@ -2,13 +2,20 @@
 <html lang="en" class="builder">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="images/logo.svg" type="image/svg+xml">
+<link rel="icon" href="images/logo-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="images/logo-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson builder · Computing KS3</title>
 <link rel="stylesheet" href="style.css">
-<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<link rel="stylesheet" href="look.css">
+<script src="icons.js"></script>
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="lessoncompat.js"></script>
 <script src="shortmatch.js"></script>
+<script>window.richTextBarOnFocus = true;   /* see richtext.js */</script>
 <script src="ordermarks.js"></script>
 <script src="voice.js"></script>
 <!-- for the wording a practical uses for a student who was not there, kept
@@ -16,9 +23,19 @@
 <script src="progressmath.js"></script>
 <script src="richtext.js"></script>
 <script src="pyedit.js"></script>
+<script src="scratchhub.js"></script>
 <script src="teacher.js"></script>
 <script src="menus.js"></script>
 <script src="dragline.js"></script>
+<script src="author-editors.js"></script>
+<script src="author-extras.js"></script>
+<script src="slides.js"></script>
+<script src="slides-import.js"></script>
+<script src="author-slides.js"></script>
+<script src="docs.js"></script>
+<script src="docs-import.js"></script>
+<script src="author-docs.js"></script>
+<script src="ui.js"></script>
 <script src="settings.js"></script>
 </head>
 <body>
@@ -53,7 +70,7 @@
 })();
 </script>
 
-<div class="homebar">
+<div class="homebar" data-console-back>
   <!-- Which of the two things this page is. They were a strip of their own
        under the title, which put two rows of switching above the work; the
        title was already a word saying where you are, so it became the
@@ -68,12 +85,13 @@
     </button>
   </div>
   <div class="title"><span id="titleShow"></span></div>
-  <!-- which kind of work this is, on a narrow screen where the tab strip
-       below has been folded away -->
-  <button class="modechip" id="modeChip" hidden>
-    <span id="modeChipName">Lesson</span><span class="modechip-pen">&#9998;</span>
+  <!-- Which kind of work this is. It used to be a row of tabs under the
+       title, which made a lesson and an assessment one click apart; they are
+       not things to flick between, so the kind is chosen in Lesson options
+       and this only says what it is, opening Lesson options to change it. -->
+  <button class="modechip" id="modeChip" type="button" title="Change in Lesson options">
+    <span id="modeChipName">Lesson</span>
   </button>
-  <a class="crumb" href="admin.html" id="consoleLink" style="margin-right:10px">&larr; Teacher console</a>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
 
@@ -86,16 +104,18 @@
   <button class="btn-ghost bmini2 prevtoggle" id="prevToggle">Preview</button>
 </div>
 
-<div class="modeswitch">
-  <button class="on" id="modeLesson">Lesson</button>
-  <button id="modeAssess">Assessment</button>
-  <button id="modePractical">Practical assessment</button>
-  <button id="modeHome">Home learning</button>
-</div>
-
 <div class="build-top">
   <div class="build-titles">
     <button class="btn-ghost" id="optionsBtn">Lesson options</button>
+    <button class="btn-ghost" id="slidesBtn" type="button" title="Slides students can open beside the lesson">Slides</button>
+    <button class="btn-ghost" id="docsBtn" type="button" title="Word documents shown beside the lesson">Documents</button>
+  </div>
+  <!-- The year group and unit are chosen in Lesson options, which borrows
+       these pickers while it is open and puts them back here after. They
+       are kept out of sight rather than deleted because everything that
+       fills them, "+ New year group" included, is wired to these very
+       elements. -->
+  <div id="pickerHome" hidden>
     <select id="lYear" title="Year group"></select>
     <select id="lUnit" title="Unit"></select>
     <!-- Only for GCSE and A Level, where the unit picker beside it is the
@@ -103,7 +123,8 @@
     <select id="lSub" title="Sub-point" hidden></select>
   </div>
   <div class="build-actions">
-    <button class="btn-primary" id="saveSite">Save to the site</button>
+    <span class="savestate" id="saveState" aria-live="polite"></span>
+    <button class="btn-primary" id="saveSite" title="Save to the site (Ctrl+S)">Save to the site</button>
     <span class="menuwrap">
       <button class="btn-ghost iconbtn" id="moreBtn" title="More">&#8942;</button>
       <span class="menu" id="moreMenu" hidden>
@@ -215,12 +236,13 @@
           <button class="pal" data-add="notes"><b>Notes</b><span>Their own notes, with formatting</span></button>
           <button class="pal" data-add="mindmap"><b>Mind map</b><span>A middle idea with branches</span></button>
           <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
+          <button class="pal" data-add="helper"><b>Photoshop help</b><span>A help chat they can ask</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="coding">
         <button class="pal-head" type="button">Coding</button>
         <div class="palbody" hidden>
-          <button class="pal" data-add="code"><b>Coding task</b><span>Python, or HTML + CSS + JS</span></button>
+          <button class="pal" data-add="code"><b>Coding task</b><span>Python, a web page, or blocks</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="cyber">
@@ -299,6 +321,13 @@
   </aside>
 
   <main class="build-list" id="list"></main>
+
+  <!-- Drag to give the preview more room, from the narrow phone-shaped
+       column it starts as up to most of the screen. Double-click puts it
+       back. Only on a wide screen: below that the preview sits underneath. -->
+  <div class="build-split" id="buildSplit" role="separator" aria-orientation="vertical"
+       aria-label="Preview width" tabindex="0"
+       title="Drag to make the preview wider or narrower. Double-click to put it back."></div>
 
   <section class="build-preview">
     <div class="prev-head">
@@ -559,28 +588,30 @@ let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", asses
 
 const BLANK = {
   text:     () => ({ type:"text", heading:"", html:"" }),
-  picture:  () => ({ type:"picture", title:"Have a look at this", url:"", caption:"", note:"",
+  picture:  () => ({ type:"picture", title:"", url:"", caption:"", note:"",
                      alt:"", size:"full", width:"", align:"left", beside:"", frame:true }),
-  pastelink:() => ({ type:"pastelink", heading:"Paste your link", task:"", note:"" }),
-  code:     () => ({ type:"code", lang:"" }),        // they pick Python or web next
-  ide:      () => ({ type:"ide", title:"Python", task:"Write your code, then press Run.",
-                     starter:'print("Hello World!")', turtle:false, expect:"", run:true, edit:true,
+  pastelink:() => ({ type:"pastelink", heading:"", task:"", note:"" }),
+  code:     () => ({ type:"code", lang:"" }),        // they pick Python, web or blocks next
+  ide:      () => ({ type:"ide", title:"", task:"",
+                     starter:'print("Hello World!")', turtle:false, run:true, edit:true,
                      autocomplete:true }),
-  web:      () => ({ type:"web", title:"Build a web page", task:"Edit the files, then press Run.",
+  web:      () => ({ type:"web", title:"", task:"",
                      html:'<h1>My page</h1>\n<p>Hello!</p>',
                      css:'h1 {\n  color: navy;\n}',
                      js:'console.log("Ready");',
                      run:true, edit:true, help:true, tooltips:true, autocomplete:true, expect:"" }),
+  /* Block coding in the Scratch editor. No project means the new-project
+     cat; project and own are put in by the starter project editor. */
+  scratch:  () => ({ type:"scratch", title:"", task:"" }),
   question: () => ({ type:"question", heading:"", context:"", prompt:"", minWords:20, lines:4 }),
-  quiz:     () => ({ type:"quiz", title:"Check your understanding", pass:{ mode:"percent", value:70 },
+  quiz:     () => ({ type:"quiz", title:"", pass:{ mode:"percent", value:70 },
                      questions:[{ q:"", options:["",""], answers:[0], hint:"", why:"" }] }),
   page:     () => ({ type:"page", title:"New page", task:"", startLocked:true, blocks:[] }),
   /* A page within a page: it holds whatever a teacher wants, and the lesson
      keeps it out of sight until the rest of the page is finished with. */
   /* The lesson asks "Finished early?" itself, so the title is a teacher's own
      wording rather than something every one of these has to carry. */
-  extension:() => ({ type:"extension", title:"Extension tasks",
-                     task:"Have a go at these", blocks:[] }),
+  extension:() => ({ type:"extension", title:"", task:"", blocks:[] }),
   /* Several tasks kept together as one. Unlike a page it is not a screen of
      its own, and unlike extension tasks nothing about it is held back: what
      is in it is on the page from the start and holds it up exactly as it
@@ -591,21 +622,22 @@ const BLANK = {
   /* They pick one, and what they picked decides the work they then get. */
   choice:   () => ({ type:"choice", title:"", task:"", prompt:"Choose one",
                      options:[{ label:"", blocks:[] }, { label:"", blocks:[] }] }),
-  image:    () => ({ type:"image", title:"Add your screenshot", task:"Take a screenshot and paste it here." }),
+  image:    () => ({ type:"image", title:"", task:"" }),
   /* A Screenshot task set to take a Photoshop file, so the lesson page, the
      PDF and View Work treat it as the screenshot it ends up as. */
-  photoshop:() => ({ type:"image", psd:true, title:"Hand in your Photoshop work",
-                     task:"Save your work in Photoshop, then choose the file here." }),
-  embed:    () => ({ type:"embed", url:"", title:"Watch this", note:"Watch it all the way through.", confirm:false }),
-  frame:    () => ({ type:"frame", url:"", heading:"Have a go", task:"", width:"100%", height:520, confirm:false }),
-  link:     () => ({ type:"link", url:"", title:"Open this", heading:"Have a look at this site", task:"", confirm:false }),
+  photoshop:() => ({ type:"image", psd:true, title:"", task:"" }),
+  embed:    () => ({ type:"embed", url:"", title:"", note:"", confirm:false }),
+  frame:    () => ({ type:"frame", url:"", heading:"", task:"", width:"100%", height:520, confirm:false }),
+  link:     () => ({ type:"link", url:"", title:"Open this", heading:"", task:"", confirm:false }),
   mc:       () => ({ type:"mc", prompt:"", options:["",""], answer:0, topic:"" }),
-  blanks:   () => ({ type:"blanks", prompt:"Fill in the gaps", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
-  order:    () => ({ type:"order", prompt:"Put these in order", items:["","",""], topic:"" }),
+  blanks:   () => ({ type:"blanks", prompt:"", text:"The [[cat]] sat on the mat.", distractors:"", topic:"" }),
+  order:    () => ({ type:"order", prompt:"", items:["","",""], topic:"" }),
   notes:    () => ({ type:"notes", title:"", task:"", starter:"" }),
+  helper:   () => ({ type:"helper", title:"Stuck? Ask for help", topic:"photoshop",
+                     task:"Type what you want to do in Photoshop, or what has gone wrong." }),
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
-  keywords: () => ({ type:"keywords", title:"Keywords", task:"Write what each one means in your own words.",
+  keywords: () => ({ type:"keywords", title:"", task:"",
                      words:[{ word:"", hint:"" }, { word:"", hint:"" }] }),
   label:    () => ({ type:"label", title:"", task:"", image:"", spots:[] }),
   hotspot:  () => ({ type:"hotspot", title:"", task:"", image:"", x:50, y:50, r:8 }),
@@ -629,12 +661,12 @@ const BLANK = {
   exam:     () => ({ type:"exam", prompt:"", command:"State", marks:1, answer:"lines",
                      lines:"", answers:[""], scheme:[{ text:"", marks:1 }], model:"",
                      point:"", code:"", strand:"" }),
-  password: () => ({ type:"password", title:"Password strength challenge",
+  password: () => ({ type:"password", title:"",
                      task:"Invent a made-up password that turns all five checks green." }),
   /* The teacher writes the real message and picks a shift; the coded text and
      the answer's hash are worked out when the lesson is compiled, so the
      answer never sits in the lesson file in readable form. */
-  caesar:   () => ({ type:"caesar", title:"Caesar cipher puzzle",
+  caesar:   () => ({ type:"caesar", title:"",
                      task:"Slide the shift until the message becomes English, then type it in.",
                      message:"THE PASSWORD IS FIREWALL", shift:7,
                      prompt:"Type the hidden message here (letters only, spaces are fine):" })
@@ -698,7 +730,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -748,6 +780,7 @@ function saveDraft(){
      nothing being edited that put "Saving..." up over an empty pane. */
   if (bankOpen && bankTask && bankTask.block){ bankTouch(); return; }
   dirty = true;
+  builderChanged();                    // undo, the draft and the save status
 }
 function loadDraft(){ /* deliberately empty, see the note above */ }
 try{
@@ -921,6 +954,18 @@ function migrate(arr){
 function inline(s){
   return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
 }
+/* A mark scheme as a list of points, whatever shape it arrived in. A task
+   copied in from elsewhere can carry it as the text of the scheme, one point
+   to a line, or as an object keyed by number, and either one stopped the
+   whole lesson compiling, which took the live preview down with it. */
+function schemeList(v){
+  if (Array.isArray(v)) return v;
+  if (!v) return [];
+  if (typeof v === "string")
+    return v.split(/\r?\n/).map(t => t.trim()).filter(Boolean).map(t => ({ text:t, marks:1 }));
+  if (typeof v === "object") return Object.keys(v).map(k => v[k]).filter(p => p && typeof p === "object");
+  return [];
+}
 /* One answer from a formatting box, as one line of html: a picture, bold,
    code and so on survive, the paragraph round it does not. Empty means
    nothing typed and no picture, and is dropped. Plain text, from a lesson
@@ -952,6 +997,9 @@ function compile(){
   idsUsed = new Set();
   const out = { title: lesson.title || "Untitled lesson", blocks: [] };
   if (lesson.intro) out.intro = lesson.intro;
+  /* What and why, said once per lesson: what students learn, why it matters,
+     and a career it leads to. Only kept when written. */
+  ["what", "why", "career", "careerLink"].forEach(k => { if (lesson[k]) out[k] = lesson[k]; });
   if (lesson.unit) out.unit = lesson.unit;
   if (lesson.year) out.year = lesson.year;
   /* Where it sits on the specification. Saved with the lesson so reopening
@@ -963,6 +1011,12 @@ function compile(){
      home page group by, and neither of those has the specification. */
   if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
+  /* The lesson's slides (author-slides.js), one deck kept whole. */
+  const slides = window.compileSlides ? window.compileSlides(lesson) : null;
+  if (slides) out.slides = slides;
+  /* and its Word documents (author-docs.js) */
+  const docs = window.compileDocs ? window.compileDocs(lesson) : null;
+  if (docs) out.docs = docs;
   /* On unless a teacher turned it off, so only the off ones are written
      down and every lesson saved before the default changed has it on. */
   if (lesson.linger === false) out.linger = false;
@@ -1051,6 +1105,7 @@ function compile(){
     if (extras.length) out.extensions = extras;
   }
   firstPageOpen();
+  resetCompiledIds();                  // so the preview and the builder can find each other's tasks
   lesson.blocks.forEach((b, i) => {
     /* The questions page is saved as its questions, loose at the top level,
        numbered on from where the first one has always been (see
@@ -1115,6 +1170,7 @@ function savedChecks(checks, kinds){
 
 function compileOne(b, id, target){
   id = blockId(b, id);
+  noteCompiledId(b, id);
   /* "can be skipped" is remembered on whatever the task compiles to */
   const push = (x) => {
     if (x && b && b.required === false) x.required = false;
@@ -1139,6 +1195,10 @@ function compileOne(b, id, target){
            /* On unless it was turned off, so only the off ones are written
               down and every lesson made before this setting existed keeps it. */
            taskbar: b.taskbar === false ? false : undefined,
+           /* the slide this page opens the slides at, while that slide is
+              still in the deck */
+           slide: b.slide && window.slideIds && window.slideIds(lesson).has(b.slide) ? b.slide : undefined,
+           doc: b.doc && window.docIds && window.docIds(lesson).has(b.doc) ? b.doc : undefined,
            passHash: b.passHash || undefined, blocks: kids });
     return;
   }
@@ -1162,7 +1222,7 @@ function compileOne(b, id, target){
     (b.blocks || []).forEach((child, k) => compileOne(child, id + "_" + (k + 1), kids));
     if (!kids.length) return;                 // an empty one is not worth saving
     push({ type:"extension", id, title: b.title || "Extension tasks",
-           task: b.task || "Have a go at these",
+           task: b.task || "",
            waitForPage: b.waitForPage === true ? true : undefined, blocks: kids });
     return;
   }
@@ -1218,14 +1278,9 @@ function compileOne(b, id, target){
         if (keys.length) blk.checksFrom = keys;
       }
       if (Array.isArray(b.checks) && b.checks.length) blk.checks = savedChecks(b.checks, PY_CHECKS);
-      if (b.checkMode === "one" || b.checkMode === "choose") blk.checkMode = b.checkMode;
-      if (b.checksHidden === true && Array.isArray(blk.checks) && blk.checks.length) blk.checksHidden = true;
-      /* the finished program students can run beside the checklist */
-      if (String(b.model || "").trim()) blk.model = b.model;
       if (b.title) blk.title = b.title;              // headings stay optional
       if (b.task) blk.task = b.task;
       if (b.turtle) blk.turtle = true;
-      if (b.expect) blk.expect = b.expect;
       /* Nothing waits on the Run button any more, so this is always off. Written
          out rather than left absent, because absent means "required" to the
          code that reads it. */
@@ -1235,6 +1290,10 @@ function compileOne(b, id, target){
       if (b.help === false) blk.help = false;      // no Help tab
       if (b.tooltips === false) blk.tooltips = false;
       if (b.autocomplete === false) blk.autocomplete = false;
+      if (blk.checks && b.checksShowAll === true) blk.checksShowAll = true;
+      if (blk.checks && b.checksHidden === true) blk.checksHidden = true;      // kept off the page, still marked
+      if (blk.checks && b.checksLive === false) blk.checksLive = false;
+      if (String(b.modelCode || "").trim()) blk.modelCode = b.modelCode;
       if (b.helpful === true) blk.helpful = true;  // off unless turned on
       /* No box for it in the builder, but a lesson file can set how tall the
          code box is when there is no starter to size it from, and saving the
@@ -1277,20 +1336,6 @@ function compileOne(b, id, target){
                     files: (b.files && b.files.length) ? b.files : ["html","css","js"] };
       if (b.addFiles === true) blk.addFiles = true;
       if (Array.isArray(b.checks) && b.checks.length) blk.checks = savedChecks(b.checks, WEB_CHECKS);
-      if (b.checkMode === "one" || b.checkMode === "choose") blk.checkMode = b.checkMode;
-      if (b.checksHidden === true && Array.isArray(blk.checks) && blk.checks.length) blk.checksHidden = true;
-      /* The finished page, kept under the builder's own three keys while it is
-         being written because the field helper edits one key each. Only the
-         files the task has are kept: a stylesheet written for it and then
-         switched off would still be styling a page the student cannot match. */
-      {
-        const model = {};
-        blk.files.forEach(k => {
-          const v = b["model" + k.charAt(0).toUpperCase() + k.slice(1)];
-          if (String(v || "").trim()) model[k] = v;
-        });
-        if (Object.keys(model).length) blk.model = model;
-      }
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
       if (b.expect) blk.expect = b.expect;
@@ -1300,6 +1345,35 @@ function compileOne(b, id, target){
       if (b.help === false) blk.help = false;
       if (b.tooltips === false) blk.tooltips = false;
       if (b.autocomplete === false) blk.autocomplete = false;
+      if (blk.checks && b.checksShowAll === true) blk.checksShowAll = true;
+      if (blk.checks && b.checksHidden === true) blk.checksHidden = true;      // kept off the page, still marked
+      if (blk.checks && b.checksLive === false) blk.checksLive = false;
+      /* the model answer: a page they can try but not read */
+      if (["modelHtml","modelCss","modelJs"].some(k => String(b[k] || "").trim())){
+        blk.modelHtml = b.modelHtml || ""; blk.modelCss = b.modelCss || ""; blk.modelJs = b.modelJs || "";
+      }
+      push(blk);
+    }
+    else if (b.type === "scratch"){
+      const blk = { type:"scratch", id };
+      if (b.title) blk.title = b.title;
+      if (b.task) blk.task = b.task;
+      if (b.project && typeof b.project === "object"){
+        blk.project = b.project;
+        if (b.own && Object.keys(b.own).length) blk.own = b.own;
+      }
+      if (Array.isArray(b.checks) && b.checks.length){
+        blk.checks = b.checks.filter(c => (c.label || "").trim())
+                             .map(c => Object.assign({}, c,
+                               c.marks === undefined ? {} : { marks: Math.max(0, parseInt(c.marks, 10) || 0) }));
+        /* conditions after the first are about lines of text; a project
+           has none, so none are kept */
+        blk.checks.forEach(c => { delete c.more; });
+      }
+      if (blk.checks && b.checksShowAll === true) blk.checksShowAll = true;
+      if (blk.checks && b.checksHidden === true) blk.checksHidden = true;      // kept off the page, still marked
+      if (blk.checks && b.checksLive === false) blk.checksLive = false;
+      blk.required = false;
       push(blk);
     }
     else if (b.type === "code"){ /* not chosen yet, nothing to build */ }
@@ -1317,6 +1391,8 @@ function compileOne(b, id, target){
     else if (b.type === "notes")
       push(keepArrays({ type:"notes", id, title: b.title || "", task: b.task || "",
         starter: b.starter || "" }));
+    else if (b.type === "helper")
+      push({ type:"helper", id, title: b.title || "", task: b.task || "", topic: "photoshop" });
     else if (b.type === "mindmap")
       push(keepArrays({ type:"mindmap", id, title: b.title || "", task: b.task || "",
         centre: b.centre || "", lockCentre: b.lockCentre === true,
@@ -1379,7 +1455,7 @@ function compileOne(b, id, target){
              beside: (b.beside === "left" || b.beside === "right") ? b.beside : "",
              frame: b.frame === false ? false : undefined }));
     else if (b.type === "pastelink")
-      push(keepArrays({ type:"pastelink", id, heading: b.heading || "Paste your link",
+      push(keepArrays({ type:"pastelink", id, heading: b.heading || "",
              task: b.task || "", note: b.note || "" }));
     else if (b.type === "quiz")
       push({ type:"quiz", id, title: b.title || "",
@@ -1492,7 +1568,7 @@ function compileOne(b, id, target){
       if (short) out.answers = (b.answers || []).map(x => String(x).trim()).filter(Boolean);
       else {
         out.model = b.model || "";
-        out.scheme = (b.scheme || [])
+        out.scheme = schemeList(b.scheme)
           .filter(p => p && String(p.text || "").trim())
           .map(p => ({ text: String(p.text).trim(), marks: Math.max(1, parseInt(p.marks, 10) || 1) }));
         const lines = parseInt(b.lines, 10) || 0;
@@ -1626,7 +1702,7 @@ function taskSummary(b){
     return (b.type === "group" && b.title ? b.title + ", " : "")
            + n + " task" + (n === 1 ? "" : "s");
   }
-  if (b.type === "code") return "Python or a web page, not picked yet";
+  if (b.type === "code") return "Python, a web page or blocks, not picked yet";
   for (let i = 0; i < SUMMARY_FIELDS.length; i++){
     const t = plainWords(b[SUMMARY_FIELDS[i]]);
     if (t) return t;
@@ -1720,6 +1796,9 @@ function render(){
   const keepList = list ? list.scrollTop : 0;
   const keepPage = window.scrollY;
   renderNow();
+  builderRendered();
+  if (window.paintSlidesButton) window.paintSlidesButton();
+  if (window.paintDocsButton) window.paintDocsButton();
   const want = scrollToBlock; scrollToBlock = null;
   if (!list) return;
   if (want){
@@ -1797,11 +1876,11 @@ function renderNow(){
     const arr = respEditing === "__ext" ? (lesson.extensions || [])
                                         : (lesson.responses[respEditing] || []);
     if (!arr.length){
-      const empty = el("p","hint dropzone","No tasks here yet, drag one from the left, or click it.");
+      const empty = el("p","hint dropzone","No tasks here yet. Press + Add task.");
       list.appendChild(empty);
     }
     arr.forEach((b, i) => list.appendChild(card(b, i, arr)));
-    if (isCompact()) list.appendChild(addTaskRow(arr));
+    list.appendChild(addTaskRow(arr));
     /* dropping anywhere in the empty space adds to the end */
     list.addEventListener("dragover", (e) => {
       if (!canDropOn(arr)) return;
@@ -1827,8 +1906,12 @@ function renderNow(){
        built by dragging tasks over from the left. So the empty space takes
        the drop and makes the first page for it, which is what clicking a
        task has always done. */
-    const empty = el("p","hint dropzone",
-      "No pages yet. Drag a task here, or click one on the left, and a page is made for it.");
+    const empty = el("div","hint dropzone emptylesson");
+    empty.appendChild(el("p","", "No pages yet. Add a task and a page is made for it."));
+    const first = el("button","pageadd-btn","+ Add task");
+    first.type = "button";
+    first.addEventListener("click", () => openTaskPicker(null));
+    empty.appendChild(first);
     empty.addEventListener("dragover", (e) => {
       if (!newTask && !newBank) return;
       e.preventDefault(); empty.classList.add("over");
@@ -1858,10 +1941,13 @@ function renderNow(){
     openPageRef = at >= 0 ? lesson.blocks[at] : pages[0];
     lastPageAt = Math.max(0, lesson.blocks.indexOf(openPageRef));
   }
-  /* again, now the open page is settled: an assessment's palette follows it */
-  paintPaletteChoice();
-  const shown = viewAll ? lesson.blocks : [openPageRef];
-  shown.forEach(b => list.appendChild(card(b, lesson.blocks.indexOf(b), lesson.blocks)));
+    /* again, now the open page is settled: an assessment's palette follows it */
+    paintPaletteChoice();
+  /* One page is not a card of its own: its title is the heading over its
+     tasks and they are the list. All pages keeps a card for each page, which
+     is what folds there. */
+  if (viewAll) lesson.blocks.forEach((b, n) => list.appendChild(card(b, n, lesson.blocks)));
+  else list.appendChild(pageView(openPageRef));
   saveDraft();
 }
 
@@ -1886,14 +1972,16 @@ function pageStrip(){
     const chip = el("button","pagechip");
     chip.type = "button";
     chip.__page = p;
+    /* The number and nothing else. A title cut to "Check what y…" said less
+       than the number did and took five times the room; the whole title and
+       how many tasks it holds are the tooltip, read out as its name. */
     chip.appendChild(el("span","n", String(n + 1)));
-    chip.appendChild(el("span","t", name));
-    chip.appendChild(el("span","c", String(count)));
     chip.title = name + " • " + count + " task" + (count === 1 ? "" : "s");
     if (p === questionsPage()){
       chip.classList.add("qpage");
       chip.title = name + " • the questions page • " + count + " question" + (count === 1 ? "" : "s");
     }
+    chip.setAttribute("aria-label", "Page " + (n + 1) + ": " + chip.title);
     /* Filled in when this is the page being edited; only outlined when every
        page is on screen, where it is saying which one the preview follows
        rather than which one you are in. */
@@ -2177,7 +2265,7 @@ function shortAnswerNotes(body, b){
    as the Progress tab; this only offers the levels that mean something for
    the kind of task it is. The tasks that can be marked are the ones the
    Progress tab counts. */
-const GATE_TYPES = ["quiz","mc","order","blanks","short","ide","web"];
+const GATE_TYPES = ["quiz","mc","order","blanks","short","ide","web","scratch"];
 const EYE_SHUT = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
   'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>' +
@@ -2206,7 +2294,7 @@ function gateChoices(b){
   if (b.type === "quiz") return [none,
     ["attempted","Attempted","They have answered at least one question, right or wrong."],
     ["pass","Pass mark","They finish the quiz and get enough right. You choose how many below."]];
-  const code = b.type === "ide" || b.type === "web";
+  const code = b.type === "ide" || b.type === "web" || b.type === "scratch";
   const out = [none, ["attempted","Attempted", code
     ? "They have changed the code or run it, whether or not it works yet."
     : "They have had a go, right or wrong."]];
@@ -2299,6 +2387,47 @@ function passMarkEditor(b){
   return pw;
 }
 
+/* The padlock on a page, and without a server the passcode beside it. Drawn
+   on a page's card in All pages and at the top of the page being edited. */
+function pageLockTools(b, tools){
+  /* Home learning has none: it is done at home, where there is no teacher
+     to open a page, so lesson.html never locks one. An assessment's pages
+     are gone through one after another in the one sitting, so none either. */
+  if (lesson.homework || lesson.assessment) return;
+  const isFirst = lesson.blocks.indexOf(b) === 0;
+  if (isFirst) b.startLocked = false;     // students must be able to begin
+  const locked = b.startLocked !== false;
+  const lk = el("button","btn-ghost bmini lockbtn" + (locked ? "" : " open"), locked ? "\u{1F512}" : "\u{1F513}");
+  lk.title = isFirst ? "The first page always starts unlocked"
+           : locked ? (OFFLINE ? "Locked until the passcode is typed, click to leave it open"
+                               : "Starts locked when a class gets this lesson, click to start it unlocked")
+                    : "Starts unlocked, click to start it locked";
+  lk.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (isFirst){
+      say("The first page stays unlocked",
+          "Students need somewhere to begin, so the first page of a lesson is always open. " +
+          "Move another page to the front if you want that one open instead.");
+      return;
+    }
+    b.startLocked = !locked;
+    if (b.startLocked === false){ delete b.passCode; delete b.passHash; }
+    render(); schedulePreview();
+  });
+  tools.appendChild(lk);
+  /* Without a server nothing releases a page: the passcode is the release,
+     so a locked page without one would simply be shut for ever. The pill
+     says which it is, and saving is refused until they all have one. */
+  if (OFFLINE && locked && !isFirst){
+    const set = !!b.passHash;
+    const pill = el("button","passpill " + (set ? "set" : "unset"),
+                     set ? "Passcode set" : "Set a passcode");
+    pill.title = set ? "Change the passcode for this page"
+                     : "This page cannot be opened until it has one";
+    pill.addEventListener("click", (e) => { e.stopPropagation(); askPasscode(b); });
+    tools.appendChild(pill);
+  }
+}
 function card(b, i, arr){
   const c = el("div","bcard");
   c.draggable = false;
@@ -2376,48 +2505,17 @@ function card(b, i, arr){
       saveDraft(); render();
     });
   }
+  /* Something a student would get stuck on, marked on the line itself. */
+  if (b.type !== "page"){
+    const dot = problemDot(b);
+    if (dot) head.appendChild(dot);
+  }
   const paintHead = () => { btype.textContent = headLabel(b, i); };
   const tools = el("span","btools");
   /* A page in the task builder is a shape to fill in, not a page of a
      lesson: there is nothing for it to be locked against and no class to
-     release it to. Those buttons appear when it is put into a lesson.
-     Home learning has none either: it is done at home, where there is no
-     teacher to open a page, so lesson.html never locks one. */
-  if (b.type === "page" && b !== bankRoot && !lesson.homework && !lesson.assessment){
-    const isFirst = lesson.blocks.indexOf(b) === 0;
-    if (isFirst) b.startLocked = false;     // students must be able to begin
-    const locked = b.startLocked !== false;
-    const lk = el("button","btn-ghost bmini lockbtn" + (locked ? "" : " open"), locked ? "\u{1F512}" : "\u{1F513}");
-    lk.title = isFirst ? "The first page always starts unlocked"
-             : locked ? (OFFLINE ? "Locked until the passcode is typed, click to leave it open"
-                                 : "Starts locked when a class gets this lesson, click to start it unlocked")
-                      : "Starts unlocked, click to start it locked";
-    lk.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (isFirst){
-        say("The first page stays unlocked",
-            "Students need somewhere to begin, so the first page of a lesson is always open. " +
-            "Move another page to the front if you want that one open instead.");
-        return;
-      }
-      b.startLocked = !locked;
-      if (b.startLocked === false){ delete b.passCode; delete b.passHash; }
-      render(); schedulePreview();
-    });
-    tools.appendChild(lk);
-    /* Without a server nothing releases a page: the passcode is the release,
-       so a locked page without one would simply be shut for ever. The pill
-       says which it is, and saving is refused until they all have one. */
-    if (OFFLINE && locked && !isFirst){
-      const set = !!b.passHash;
-      const pill = el("button","passpill " + (set ? "set" : "unset"),
-                       set ? "Passcode set" : "Set a passcode");
-      pill.title = set ? "Change the passcode for this page"
-                       : "This page cannot be opened until it has one";
-      pill.addEventListener("click", (e) => { e.stopPropagation(); askPasscode(b); });
-      tools.appendChild(pill);
-    }
-  }
+     release it to. Those buttons appear when it is put into a lesson. */
+  if (b.type === "page" && b !== bankRoot) pageLockTools(b, tools);
   /* Dragging a task onto another page needs both pages on screen, which only
      the All pages view has. Everywhere else this is the way across. */
   const onAPage = b.type !== "page"
@@ -2453,22 +2551,29 @@ function card(b, i, arr){
   const acts = (b === bankRoot) ? [] :
                [["\u2191","Move up", () => move(arr, i, -1)],
                 ["\u2193","Move down", () => move(arr, i, 1)],
-                ["\u29C9","Duplicate", () => {
-                  const copy = JSON.parse(JSON.stringify(b));
-                  /* there is only ever one questions page */
-                  delete copy.questions; delete copy.qBase;
-                  arr.splice(i + 1, 0, copy); render(); schedulePreview(); }],
-                ["\u2715","Delete", () => {
-                  if (b === questionsPage()){
-                    say("Keep the questions page",
-                        "Every assessment needs a questions page. To use a different page for "
-                        + "the questions, open it and press Make this the questions page first.");
-                    return;
-                  }
-                  askDelete(LABEL[b.type], () => { arr.splice(i, 1); render(); schedulePreview(); });
-                }]];
+                  ["duplicate","Duplicate: add a copy just below", () => {
+                    const copy = JSON.parse(JSON.stringify(b));
+                    /* there is only ever one questions page */
+                    delete copy.questions; delete copy.qBase;
+                    arr.splice(i + 1, 0, copy); render(); schedulePreview(); saveDraft(); }],
+                  ["copy","Copy to paste into another lesson", () => clipCopy(b)],
+                  ["✕","Delete", () => {
+                    if (b === questionsPage()){
+                      say("Keep the questions page",
+                          "Every assessment needs a questions page. To use a different page for "
+                          + "the questions, open it and choose Make this the questions page first.");
+                      return;
+                    }
+                    askDelete(LABEL[b.type], () => { arr.splice(i, 1); render(); schedulePreview(); });
+                  }]];
   acts.forEach(a => {
-    const btn = el("button","btn-ghost bmini", a[0]); btn.title = a[1];
+    /* Duplicate and Copy used to be two sets of overlapping squares. Duplicate
+       is a square with a plus now (another one, here), and Copy the clipboard
+       (to paste somewhere else). */
+    const drawn = (a[0] === "copy" || a[0] === "duplicate") && window.hubUI;
+    const btn = el("button","btn-ghost bmini", drawn ? "" : a[0]); btn.title = a[1];
+    if (drawn) btn.innerHTML = window.hubUI.icon(a[0] === "copy" ? "clipboard" : "duplicate", 15);
+    btn.setAttribute("aria-label", a[1]);
     btn.addEventListener("click", a[2]);
     tools.appendChild(btn);
   });
@@ -2505,1495 +2610,18 @@ function card(b, i, arr){
   }
 
   const body = el("div","bbody");
-  function F(label, key, opts){
-    const o = opts || {};
-    const w = el("div","bfield");
-    w.appendChild(el("label","", label));
-    const input = o.area ? el("textarea") : el("input");
-    if (o.area) input.rows = o.rows || 4;
-    if (o.mono) input.className = "mono";
-    if (o.placeholder) input.placeholder = o.placeholder;
-    input.value = b[key] === undefined ? "" : b[key];
-    input.addEventListener("input", () => {
-      b[key] = o.num ? Number(input.value) : input.value;
-      saveDraft(); schedulePreview();
-      if (o.then) o.then();
-    });
-    w.appendChild(withHelp(input, o.help));
-    body.appendChild(w);
-  }
-  /* The starter code is the very thing a student opens in the editor, so it
-     is written in the editor: same colours, same line numbers, same indent
-     after a colon, and the same list of mistakes underneath. A plain box let
-     a teacher hand out code that only looked right. */
-  function PY(label, key, opts){
-    const o = opts || {};
-    const w = el("div","bfield");
-    w.appendChild(el("label","", label));
-    const shell = el("div","ide bfield-ide");
-    window.pyEdit.follow(shell);
-    const ed = window.pyEdit.attach({
-      value: b[key] === undefined ? "" : String(b[key]),
-      onInput: () => { b[key] = ed.ta.value; saveDraft(); schedulePreview(); }
-    });
-    shell.appendChild(ed.editor);
-    shell.appendChild(ed.probs);
-    w.appendChild(withHelp(shell, o.help));
-    body.appendChild(w);
-  }
-  function R(label, key, opts){
-    const o = opts || {};
-    const w = el("div","bfield");
-    w.appendChild(el("label","", label));
-    const ed = window.richText(b[key] || "", (html) => { b[key] = html; saveDraft(); schedulePreview(); },
-                               { rows: o.rows || 4, placeholder: o.placeholder,
-                                 /* A picture pasted in here goes into the
-                                    database, not into the lesson's own JSON. */
-                                 upload: pasteUpload,
-                                 imageSrc: (id) => pictureSrc({ imgId: id }) });
-    w.appendChild(withHelp(ed, o.help));
-    body.appendChild(w);
-  }
-  /* The sentence of a fill in the gaps, in a formatting box so it can have
-     new lines, bold and code in it. What is saved keeps every answer inside
-     [[ ]] as plain words, never as HTML: the marking on this page, in the
-     console and in progressmath all read the answers out of the brackets
-     and compare them as typed, so "[[<=]]" has to stay "<=" and not become
-     "&lt;=" or "<b>&lt;=</b>". Going into the box the answers are escaped
-     again, or "[[<p>]]" would turn into a paragraph. A lesson written before
-     this has plain text with no "rich" on it, and its new lines become line
-     breaks in the box; it is only saved as HTML once it has been edited. */
-  function blanksField(){
-    const w = el("div","bfield");
-    w.appendChild(el("label","", "Sentence with gaps"));
-    const raw = String(b.text || "");
-    const shown = b.rich
-      ? raw.replace(/\[\[(.*?)\]\]/g, (_, g) => "[[" + esc(g) + "]]")
-      : esc(raw).replace(/\r?\n/g, "<br>");
-    const ed = window.richText(shown, (html) => {
-      const box = document.createElement("div");
-      b.text = String(html || "").replace(/\[\[([\s\S]*?)\]\]/g, (_, g) => {
-        box.innerHTML = g.replace(/<br\s*\/?>/gi, " ");
-        return "[[" + box.textContent.replace(/\s+/g, " ").trim() + "]]";
-      });
-      b.rich = true;
-      saveDraft(); schedulePreview();
-    }, { rows: 3, upload: pasteUpload, imageSrc: (id) => pictureSrc({ imgId: id }) });
-    w.appendChild(withHelp(ed, "Put the answers in double brackets: The [[cat]] sat on the [[mat]]."));
-    body.appendChild(w);
-  }
-  /* on/off buttons; each entry is [key, label, defaultOn] */
-  /* Which page of an assessment holds the questions. It is moved rather
-     than switched off, because an assessment always has exactly one. */
-  function questionsRow(page){
-    const w = el("div","bfield");
-    w.appendChild(el("label","","Questions page"));
-    const row = el("div","brow");
-    if (page === questionsPage()){
-      const on = el("button","btn-ghost bmini2 right","This is the questions page");
-      on.disabled = true;
-      row.appendChild(on);
-    } else {
-      const btn = el("button","btn-ghost bmini2","Make this the questions page");
-      btn.addEventListener("click", () => makeQuestionsPage(page));
-      row.appendChild(btn);
-    }
-    row.appendChild(helpDot([
-      "Students answer everything on the questions page, and it is the only page that "
-      + "is marked. Only the question types on the left can be added to it.",
-      "The pages in front of it are what students go through first, one at a time, "
-      + "before the questions. Any task can go on those, and none of it is marked."]));
-    w.appendChild(row);
-    body.appendChild(w);
-  }
-  function toggleRow(defs, label, help){
-    const w = el("div","bfield");
-    w.appendChild(el("label","", label || "Options"));
-    const row = el("div","brow");
-    defs.forEach(d => {
-      const key = d[0], name = d[1], onByDefault = d[2] !== false, lockOff = d[3];
-      /* Some settings only make sense alongside another one. A fourth entry
-         says when this one cannot be on, and it is then shown off and cannot
-         be pressed, rather than being left on and quietly ignored. */
-      const locked = typeof lockOff === "function" && !!lockOff();
-      if (locked && b[key] !== false) b[key] = false;
-      const on = !locked && (b[key] === undefined ? onByDefault : b[key] !== false && b[key] !== 0);
-      const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""), name + ": " + (on ? "on" : "off"));
-      if (locked){
-        btn.disabled = true;
-        btn.title = "Turn Running on first";
-      } else {
-        btn.addEventListener("click", () => { b[key] = !on; render(); schedulePreview(); });
-      }
-      row.appendChild(btn);
-    });
-    if (help) row.appendChild(helpDot(help));
-    w.appendChild(row);
-    body.appendChild(w);
-  }
-  /* A checklist kept off the page: still run, saved and marked, and still
-     what the marking list and the Strength and Target are worked out from,
-     but seen by nobody in the lesson, students or teachers. */
-  function hideChecklistRow(){
-    toggleRow([["checksHidden","Hide the checklist", false]], "Checklist on the page",
-      "Hidden, nobody sees the checklist in the lesson, but it still ticks itself and is still used " +
-      "for the marking list and the Strength and Target in Mark work.");
-  }
-  /* One of several, chosen the way the on/off buttons are turned on: the
-     picked one is filled in. A dropdown would hide the choices behind a tap,
-     and there are only ever a handful of them. Each entry is [value, words];
-     the first is what an older lesson with nothing stored falls back to. */
-  function pickRow(label, key, defs, help){
-    const w = el("div","bfield");
-    w.appendChild(el("label","", label));
-    const row = el("div","brow");
-    const now = (b[key] === undefined || b[key] === "") ? defs[0][0] : b[key];
-    defs.forEach(d => {
-      const btn = el("button","btn-ghost bmini2" + (d[0] === now ? " right" : ""), d[1]);
-      btn.addEventListener("click", () => { b[key] = d[0]; render(); schedulePreview(); });
-      row.appendChild(btn);
-    });
-    if (help) row.appendChild(helpDot(help));
-    w.appendChild(row);
-    body.appendChild(w);
-  }
-  /* onChange fires whenever a line is typed in, added or removed, for the
-     lists that have something to put right once a teacher has touched them. */
-  function listField(label, key, help, onChange, rich){
-    const changed = () => { if (onChange) onChange(); };
-    const w = el("div","bfield");
-    w.appendChild(el("label","", label));
-    b[key].forEach((val, k) => {
-      const row = el("div","brow");
-      if (rich){
-        /* An answer can be a picture: a Scratch block pasted in, say, or
-           words with bold or code in them. Its formatting bar only shows
-           while it is being written in, or a list of four would be four
-           bars. */
-        const ed = window.richText(val || "", (html) => { b[key][k] = html; changed(); saveDraft(); schedulePreview(); },
-                                   { rows: 1, upload: pasteUpload, imageSrc: (id) => pictureSrc({ imgId: id }) });
-        ed.classList.add("rt-option");
-        row.appendChild(ed);
-      } else {
-        const input = el("input"); input.value = val;
-        input.addEventListener("input", () => { b[key][k] = input.value; changed(); saveDraft(); schedulePreview(); });
-        row.appendChild(input);
-      }
-      if (b.answer !== undefined){
-        const pick = el("button","btn-ghost bmini" + (Number(b.answer) === k ? " right" : ""), "\u2713");
-        pick.title = "This is the correct answer";
-        pick.addEventListener("click", () => { b.answer = k; render(); schedulePreview(); });
-        row.appendChild(pick);
-      }
-      const del = el("button","btn-ghost bmini","\u2715"); del.title = "Remove";
-      del.addEventListener("click", () => { b[key].splice(k, 1); changed(); render(); schedulePreview(); });
-      row.appendChild(del);
-      w.appendChild(row);
-    });
-    const add = el("button","btn-ghost bmini2","+ Add another");
-    add.addEventListener("click", () => { b[key].push(""); changed(); render(); });
-    if (help){
-      const foot = el("div","brow");
-      foot.appendChild(add);
-      foot.appendChild(helpDot(help));
-      w.appendChild(foot);
-    } else w.appendChild(add);
-    body.appendChild(w);
-  }
-
-  if (b.type === "text"){
-    F("Heading (optional)", "heading");
-    R("Paragraph", "html", { rows:5 });
-  }
-  if (b.type === "picture"){
-    /* Two ways to get a picture in, and the one a teacher reaches for
-       most is first. Uploading puts it in the database and hands it out
-       through the API; an address points at wherever it already lives,
-       which is right for a diagram in site/images and for anything on
-       the web that is meant to be linked to. */
-    const up = el("div","bfield");
-    up.appendChild(el("label","","The picture"));
-    const upRow = el("div","brow");
-    const pick = el("button","btn-ghost bmini2", b.imgId ? "Replace the picture" : "Upload a picture");
-    const file = el("input","sb-picker");
-    file.type = "file"; file.accept = "image/*";
-    const said = el("span","bhelp","");
-    pick.addEventListener("click", () => file.click());
-    file.addEventListener("change", () => {
-      if (!file.files || !file.files[0]) return;
-      said.textContent = "Shrinking and uploading\u2026";
-      said.classList.remove("warn");
-      uploadPicture(file.files[0], b.alt || "", (made, why) => {
-        file.value = "";
-        if (!made){ said.textContent = why; said.classList.add("warn"); return; }
-        b.imgId = made.id;
-        b.url = "";                 // the upload is the picture now
-        render(); schedulePreview();
-      });
-    });
-    upRow.appendChild(pick);
-    if (b.imgId){
-      const drop = el("button","btn-ghost bmini2","Remove it");
-      drop.addEventListener("click", () => { b.imgId = ""; render(); schedulePreview(); });
-      upRow.appendChild(drop);
-    }
-    upRow.appendChild(said);
-    up.appendChild(upRow);
-    up.appendChild(file);
-    body.appendChild(up);
-    if (!b.imgId)
-      F("Or the address of one", "url",
-        { help:"Right-click a picture on the web and choose \u201cCopy image address\u201d. A picture in the "
-             + "site's own images folder is written as images/whatever.jpg." });
-    const shown = pictureSrc(b);
-    if (shown){
-      const prev = el("div","bfield");
-      const img = el("img","bpreview"); img.src = shown; img.alt = "";
-      img.addEventListener("error", () => {
-        img.hidden = true;
-        prev.appendChild(el("p","bhelp warn", b.imgId
-          ? "That upload could not be loaded back."
-          : "That address did not load a picture."));
-      });
-      prev.appendChild(img);
-      if (b.imgId) prev.appendChild(el("p","bhelp","Kept in the database, not in the public site folder."));
-      body.appendChild(prev);
-    }
-    F("Caption underneath (optional)", "caption");
-    F("Instruction above it (optional)", "note");
-    F("Words for a screen reader (optional)", "alt",
-      { help:"Read out to anyone who cannot see the picture. The caption is used if this is left empty." });
-    pickRow("How big", "size",
-      [["full","Full width"],["large","Large"],["medium","Medium"],["small","Small"],["custom","Exact"]]);
-    if (b.size === "custom")
-      F("How wide", "width", { help:"A number of pixels, such as 320, or a share of the width, such as 60%." });
-    pickRow("Beside the next task", "beside",
-      [["","No, on its own"],["left","Picture on the left"],["right","Picture on the right"]],
-      "Only works on a page with something after the picture. They share a line on a computer and stack on a phone.");
-    /* Where it sits across the page is only a question once there is room
-       either side of it. Full width has nowhere to go, and standing beside a
-       task the row has already decided which side it is on. */
-    if (!b.beside && b.size && b.size !== "full")
-      pickRow("Where it sits", "align", [["left","Left"],["centre","Middle"],["right","Right"]]);
-    toggleRow([["frame","Border", true]], "Style");
-  }
-  if (b.type === "pastelink"){
-    F("Heading (optional)", "heading");
-    F("What should they paste?", "task", { area:true, rows:2 });
-  }
-  if (b.type === "code"){
-    const w = el("div","bfield");
-    w.appendChild(el("label","","Which kind of code?"));
-    const row = el("div","brow");
-    const py = el("button","btn-primary bmini2","Python");
-    py.addEventListener("click", () => {
-      const made = BLANK.ide();
-      Object.keys(b).forEach(k => delete b[k]);
-      Object.assign(b, made);
-      render(); schedulePreview();
-    });
-    const web = el("button","btn-primary bmini2","HTML, CSS and JavaScript");
-    web.addEventListener("click", () => {
-      const made = BLANK.web();
-      Object.keys(b).forEach(k => delete b[k]);
-      Object.assign(b, made);
-      render(); schedulePreview();
-    });
-    row.appendChild(py); row.appendChild(web);
-    row.appendChild(helpDot("Pick one and the right options appear. You can delete the task and start again if you change your mind."));
-    w.appendChild(row);
-    body.appendChild(w);
-  }
-  if (b.type === "web"){
-    F("Heading (optional)", "title");
-    R("Subheading (optional)", "task", { rows:2 });
-    const fw = el("div","bfield");
-    fw.appendChild(el("label","","Which files can they use?"));
-    const frow = el("div","brow");
-    if (!b.files) b.files = ["html","css","js"];
-    [["html","index.html"],["css","style.css"],["js","script.js"]].forEach(pair => {
-      const on = b.files.indexOf(pair[0]) >= 0;
-      const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""), pair[1] + ": " + (on ? "on" : "off"));
-      btn.addEventListener("click", () => {
-        if (on){ if (b.files.length > 1) b.files = b.files.filter(x => x !== pair[0]); }
-        else b.files = ["html","css","js"].filter(x => x === pair[0] || b.files.indexOf(x) >= 0);
-        render(); schedulePreview();
-      });
-      frow.appendChild(btn);
-    });
-    fw.appendChild(frow); body.appendChild(fw);
-    if (b.files.indexOf("html") >= 0) F("Starting HTML", "html", { area:true, rows:6, mono:true });
-    if (b.files.indexOf("css") >= 0) F("Starting CSS", "css", { area:true, rows:5, mono:true });
-    if (b.files.indexOf("js") >= 0) F("Starting JavaScript", "js", { area:true, rows:5, mono:true });
-    /* The model page, opened by students from beside the checklist with its
-       code hidden. The same files as the task, so it can only be built out
-       of what the student has to build theirs out of. */
-    const modelHelp = "The page as it should look once it is done. Students get a Model Program "
-      + "button beside the checklist that opens it in a pop-up, as often as they like, but they "
-      + "never see its code. Leave these empty and there is no Model Program button.";
-    if (b.files.indexOf("html") >= 0) F("Model HTML (optional)", "modelHtml", { area:true, rows:5, mono:true, help: modelHelp });
-    if (b.files.indexOf("css") >= 0) F("Model CSS (optional)", "modelCss", { area:true, rows:4, mono:true, help: modelHelp });
-    if (b.files.indexOf("js") >= 0) F("Model JavaScript (optional)", "modelJs", { area:true, rows:4, mono:true, help: modelHelp });
-    toggleRow([["run","Running", true], ["edit","Editing", true],
-               ["help","Help", true], ["tooltips","Tooltips", true],
-               ["autocomplete","Autocomplete", true],
-               ["addFiles","Students can add files", false]],
-              null,
-              "With Autocomplete on, a little list of tag names, properties and words they have "
-              + "already used appears as they type. Arrow keys or a tap to choose, Enter or Tab to "
-              + "take it. The rest of the typing help stays either way: closing tags written for "
-              + "them, brackets and quotes in pairs, and Backspace taking a whole indent.");
-    F("Code must contain (optional)", "expect");
-  }
-  if (b.type === "ide"){
-    F("Heading (optional)", "title");
-    R("Subheading (optional)", "task", { rows:2 });
-    /* Carrying on from an earlier task: the box below is then only what they
-       see if that task was left empty. */
-    {
-      const earlier = earlierCodeTasks(b);
-      const w = el("div","bfield");
-      w.appendChild(el("label","","Start from"));
-      const sel = document.createElement("select");
-      const none = document.createElement("option");
-      none.value = ""; none.textContent = "The starter code below";
-      sel.appendChild(none);
-      earlier.forEach(entry => {
-        const o = document.createElement("option");
-        o.value = entry.task.key;
-        o.textContent = codeTaskLabel(entry);
-        sel.appendChild(o);
-      });
-      sel.value = b.startFrom || "";
-      sel.addEventListener("change", () => {
-        b.startFrom = sel.value || undefined;
-        saveDraft(); render(); schedulePreview();
-      });
-      const startHelp = ["Pick an earlier Python task and their code from it is put in "
-                         + "here when they open this one, so they can keep building on "
-                         + "it. It is fetched again each time they come back, and when "
-                         + "they tick to open an extension, so it is their newest code "
-                         + "rather than whatever was there when the page was drawn.",
-                         "Anything they have written here themselves is left alone, and "
-                         + "Reset takes them back to the earlier task rather than to an "
-                         + "empty box."];
-      if (!earlier.length) startHelp.unshift("Nothing to start from yet: this is the first Python task.");
-      w.appendChild(withHelp(sel, startHelp));
-      body.appendChild(w);
-      /* Nothing to write when the code comes from somewhere else: a starter box
-         sitting under it only invites a teacher to fill in something a student
-         will never see. */
-      if (!b.startFrom) PY("Starter code", "starter");
-    }
-    /* A follow-up task's checklist can be whatever the student has not yet
-       ticked on the tasks before it: a response task after a practical, or
-       a catch-up task at the end of a lesson. Its own lines, if it has any,
-       come after those. */
-    {
-      const earlier = earlierCodeTasks(b).filter(e => Array.isArray(e.task.checks) && e.task.checks.length);
-      if (earlier.length || b.checksFrom){
-        const w = el("div","bfield");
-        w.appendChild(el("label","","Checklist lines still to do"));
-        const row = el("div","brow");
-        const on = !!b.checksFrom;
-        const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""),
-          "From earlier tasks: " + (on ? "on" : "off"));
-        btn.addEventListener("click", () => {
-          if (on) delete b.checksFrom; else b.checksFrom = true;
-          saveDraft(); render(); schedulePreview();
-        });
-        row.appendChild(btn);
-        row.appendChild(helpDot(["Turn this on and the checklist starts with every line the student " +
-          "has not ticked yet on the coding tasks " + (respEditing ? "in the lesson" : "before this one") +
-          ", each worded as it was there. Any lines you add below come after those.",
-          "Pair it with Start from, so they carry on with their own code and can see what is left to do. " +
-          "A student who ticked everything is told so, and the box is theirs to improve their program."]));
-        w.appendChild(row);
-        body.appendChild(w);
-      }
-    }
-    PY("Model program (optional)", "model", { help: [
-      "The program as it should work once it is done. Students get a Model Program button "
-      + "beside the checklist that runs it in a pop-up, as often as they like, before they "
-      + "start or while they are writing their own, but they never see its code.",
-      "It runs in its own console, so nothing it prints ticks off their checklist. Leave it "
-      + "empty and there is no Model Program button."] });
-    toggleRow([["turtle","Turtle canvas", false],
-               ["run","Running", true],
-               ["edit","Editing", true], ["help","Help", true], ["tooltips","Tooltips", true],
-               ["autocomplete","Autocomplete", true], ["helpful","Helpful IDE", false]],
-              null,
-              ["With Helpful IDE on, mistakes are explained one at a time in a yellow card under the "
-              + "code: which line, what is wrong and how to fix it, with a button to jump to the line "
-              + "and, where it is safe, one to fix it. It looks harder than usual for the mistakes "
-              + "beginners make, such as a missing colon, a line not pushed in, capital letters on "
-              + "print or if, text with no quote marks and answer == \"B\" or \"b\". When the program "
-              + "stops with an error, the card says what Python meant in plain words. Best for "
-              + "students who find errors hard to read.",
-              "With Autocomplete on, a little list of words appears as they type: keywords, "
-              + "built-in functions, what is in random or turtle, and the variables they have "
-              + "made themselves. Arrow keys or a tap to choose, Enter or Tab to take it. The "
-              + "rest of the typing help stays either way: brackets and quotes in pairs, and "
-              + "Backspace taking a whole indent."]);
-    F("Output must contain (optional)", "expect", { help:"Leave empty unless you want Continue to wait for the right output." });
-  }
-  if (b.type === "question"){
-    F("Heading (optional)", "heading");
-    R("Context (optional)", "context", { rows:3 });
-    R("The question", "prompt", { rows:2 });
-    const ww = el("div","bfield");
-    ww.appendChild(el("label","","Recommended word count"));
-    const wrow = el("div","stepper");
-    const less = el("button","btn-ghost iconbtn","\u2212");
-    const num = el("input"); num.type = "number"; num.className = "stepnum";
-    num.value = String(b.minWords === undefined ? 20 : b.minWords);
-    const more = el("button","btn-ghost iconbtn","+");
-    const setW = (v) => { b.minWords = Math.max(0, v); num.value = String(b.minWords); saveDraft(); schedulePreview(); };
-    less.addEventListener("click", () => setW((parseInt(num.value, 10) || 0) - 5));
-    more.addEventListener("click", () => setW((parseInt(num.value, 10) || 0) + 5));
-    num.addEventListener("input", () => { b.minWords = Math.max(0, parseInt(num.value, 10) || 0); saveDraft(); schedulePreview(); });
-    wrow.appendChild(less); wrow.appendChild(num); wrow.appendChild(more);
-    ww.appendChild(wrow);
-    body.appendChild(ww);
-
-    /* How tall the answer box starts, in lines. One setting for every box in
-       the task: several questions sharing a heading are usually asking for
-       answers of about the same size. The box still scrolls and can be
-       dragged taller, so this is how much room it looks like there is, not a
-       limit on what can be written. */
-    const lw = el("div","bfield");
-    lw.appendChild(el("label","","Lines shown in the answer box"));
-    const lrow = el("div","stepper");
-    const lless = el("button","btn-ghost iconbtn","\u2212");
-    const lnum = el("input"); lnum.type = "number"; lnum.className = "stepnum";
-    lnum.min = "1"; lnum.max = "30";
-    lnum.value = String(answerLines(b));
-    const lmore = el("button","btn-ghost iconbtn","+");
-    const setL = (v) => { b.lines = Math.max(1, Math.min(30, Math.round(Number(v) || 4)));
-                          lnum.value = String(b.lines); saveDraft(); schedulePreview(); };
-    lless.addEventListener("click", () => setL(answerLines(b) - 1));
-    lmore.addEventListener("click", () => setL(answerLines(b) + 1));
-    lnum.addEventListener("change", () => setL(lnum.value));
-    lrow.appendChild(lless); lrow.appendChild(lnum); lrow.appendChild(lmore);
-    lw.appendChild(withHelp(lrow, "How many lines of writing the box has room for before it scrolls. Four suits a sentence or two."));
-    body.appendChild(lw);
-
-    /* Written answers usually come in runs of two or three. Another one joins
-       this task rather than becoming a task of its own: it shares the heading
-       and the context already written above, and only needs its own question
-       and its own recommended length. */
-    if (!Array.isArray(b.extra)) b.extra = [];
-    b.extra.forEach((q, k) => {
-      const wrapx = el("div","bfield extraq");
-      const head = el("div","brow");
-      head.appendChild(el("label","","Question " + (k + 2)));
-      const del = el("button","btn-ghost bmini","×");
-      del.title = "Remove this question";
-      del.addEventListener("click", () => { b.extra.splice(k, 1); render(); schedulePreview(); });
-      head.appendChild(del);
-      wrapx.appendChild(head);
-
-      const ed = window.richText(q.prompt || "", (html) => { q.prompt = html; saveDraft(); schedulePreview(); },
-                                 { rows:2 });
-      wrapx.appendChild(ed);
-
-      const rowx = el("div","brow");
-      rowx.appendChild(el("label","","Recommended word count"));
-      const st = el("div","stepper");
-      const lessx = el("button","btn-ghost iconbtn","−");
-      const numx = el("input"); numx.type = "number"; numx.className = "stepnum";
-      numx.value = String(q.minWords === undefined ? 20 : q.minWords);
-      const morex = el("button","btn-ghost iconbtn","+");
-      const setx = (v) => { q.minWords = Math.max(0, v); numx.value = String(q.minWords); saveDraft(); schedulePreview(); };
-      lessx.addEventListener("click", () => setx((parseInt(numx.value,10) || 0) - 5));
-      morex.addEventListener("click", () => setx((parseInt(numx.value,10) || 0) + 5));
-      numx.addEventListener("input", () => { q.minWords = Math.max(0, parseInt(numx.value,10) || 0); saveDraft(); schedulePreview(); });
-      st.appendChild(lessx); st.appendChild(numx); st.appendChild(morex);
-      rowx.appendChild(st);
-      wrapx.appendChild(rowx);
-      body.appendChild(wrapx);
-    });
-
-    const another = el("button","btn-ghost bmini2","+ Another question");
-    another.addEventListener("click", () => {
-      b.extra.push({ prompt:"", minWords:20 });
-      render(); schedulePreview();
-    });
-    body.appendChild(another);
-  }
-  if (b.type === "quiz"){
-    if (!b.questions) b.questions = [{ q:"", options:["",""], answer:0, hint:"" }];
-    b.questions.forEach((q, qi) => {
-      const box = el("div","qsub");
-      const qh = el("div","qsub-head");
-      qh.appendChild(el("b","", "Question " + (qi + 1)));
-      if (b.questions.length > 1){
-        const rm = el("button","btn-ghost bmini","\u2715"); rm.title = "Remove this question";
-        rm.addEventListener("click", () => askDelete("Question " + (qi + 1), () => { b.questions.splice(qi, 1); render(); schedulePreview(); }));
-        qh.appendChild(rm);
-      }
-      box.appendChild(qh);
-      const qw = el("div","bfield");
-      qw.appendChild(el("label","","Question"));
-      /* A quiz question can want a line of code or a bold word in it, so it
-         gets the same formatting bar as everything else a teacher writes. */
-      qw.appendChild(window.richText(q.q || "",
-        (html) => { q.q = html; saveDraft(); schedulePreview(); }, { rows: 2 }));
-      box.appendChild(qw);
-      if (!q.answers) q.answers = [q.answer === undefined ? 0 : q.answer];
-      const ow = el("div","bfield");
-      const many = q.answers.length > 1;
-      ow.appendChild(el("label","", many ? "Options (tick every right answer)" : "Options (tick the right one)"));
-      (q.options || []).forEach((val, k) => {
-        const row = el("div","brow");
-        const inp = el("input"); inp.value = val;
-        inp.addEventListener("input", () => { q.options[k] = inp.value; saveDraft(); schedulePreview(); });
-        row.appendChild(inp);
-        const isRight = q.answers.indexOf(k) >= 0;
-        const pick = el("button","btn-ghost bmini" + (isRight ? " right" : ""), "\u2713");
-        pick.title = isRight ? "A correct answer, click to unmark" : "Mark as a correct answer";
-        pick.addEventListener("click", () => {
-          const at = q.answers.indexOf(k);
-          if (at >= 0){ if (q.answers.length > 1) q.answers.splice(at, 1); }
-          else q.answers.push(k);
-          q.answers.sort((x, y) => x - y);
-          render(); schedulePreview();
-        });
-        row.appendChild(pick);
-        const del = el("button","btn-ghost bmini","\u2715");
-        del.addEventListener("click", () => {
-          q.options.splice(k, 1);
-          q.answers = q.answers.filter(a => a !== k).map(a => a > k ? a - 1 : a);
-          if (!q.answers.length) q.answers = [0];
-          render(); schedulePreview();
-        });
-        row.appendChild(del);
-        ow.appendChild(row);
-      });
-      const addOpt = el("button","btn-ghost bmini2","+ Add another option");
-      addOpt.addEventListener("click", () => { q.options.push(""); render(); });
-      const optFoot = el("div","brow");
-      optFoot.appendChild(addOpt);
-      optFoot.appendChild(helpDot(q.answers.length > 1
-        ? "Students must tick all " + q.answers.length + " to get it right."
-        : "Tick a second option to make it a multiple-answer question."));
-      ow.appendChild(optFoot); box.appendChild(ow);
-      /* The lesson page has always been able to show this; there was simply
-         nowhere to write it. */
-      const yw = el("div","bfield");
-      yw.appendChild(el("label","","Sentence to display when they get it right"));
-      const yi = el("input"); yi.value = q.why || "";
-      yi.addEventListener("input", () => { q.why = yi.value; saveDraft(); schedulePreview(); });
-      yw.appendChild(yi); box.appendChild(yw);
-      const hw = el("div","bfield");
-      hw.appendChild(el("label","","Hint if they get it wrong"));
-      const hi = el("input"); hi.value = q.hint || "";
-      hi.addEventListener("input", () => { q.hint = hi.value; saveDraft(); schedulePreview(); });
-      hw.appendChild(hi); box.appendChild(hw);
-      body.appendChild(box);
-    });
-    const addQ = el("button","btn-ghost bmini2","+ Add another question");
-    addQ.addEventListener("click", () => { b.questions.push({ q:"", options:["",""], answer:0, hint:"", why:"" }); render(); schedulePreview(); });
-    body.appendChild(addQ);
-
-    /* How well they have to do, and whether the rest of the page waits for
-       it, is set from the eye in this card's top corner, alongside the same
-       choice every other task that can be marked has. */
-  }
-  if (b.type === "page"){
-    /* All pages is for reading the shape of a lesson and shifting things
-       about, so it leaves out everything that is writing rather than
-       arranging: the title and subtitle boxes, and the row of containers.
-       Five pages' worth of those came to more than two screens on their own,
-       which is most of what the view was meant to get rid of. The page title
-       is already on the line above. */
-    if (!viewAll && lesson.assessment){
-      F("Title", "title", { then: paintHead });
-      R("Subtitle", "task", { rows:2 });
-      questionsRow(b);
-      /* A page in front of the questions keeps its task bar, the same as a
-         lesson's. The questions page has the question numbers instead, and
-         an extension page means nothing where nothing is counted. */
-      if (b !== questionsPage())
-        toggleRow([["taskbar","Task bar", true]], "This page",
-          ["The task bar is the line of small icons down the left of the page, one "
-           + "for each task, that a student can press to get straight to that task. "
-           + "It is not shown on a phone or where the page holds only one task."]);
-    } else if (!viewAll){
-      F("Title", "title", { then: paintHead });
-      R("Subtitle", "task", { rows:2 });
-      /* The task bar is on unless a teacher turns it off, because a page with
-         several tasks on it is easier to get about with one than without.
-
-         Saving on Continue used to be a setting here too. It went once the
-         lesson's own Autosave was on by default: that already sends the work
-         while they are on the page, and Continue now sends anything still
-         waiting, so a page had nothing left to decide.
-
-         An extension page is off unless asked for. It changes nothing a
-         student sees on the way through; it only moves the page's tasks out
-         of the Progress tab's main columns and into "You also completed" on
-         the tally, where finishing early belongs. */
-      toggleRow([["taskbar","Task bar", true],
-                 ["extension","Extension page", false]], "This page",
-        ["The task bar is the line of small icons down the left of the page, one "
-         + "for each task, that a student can press to get straight to that task. "
-         + "It is on by default, and it is not shown on a phone or where the page "
-         + "holds only one task.",
-         "An extension page is for students who finish early. Its tasks are left "
-         + "out of the Progress tab until Include Extension Tasks is pressed, and on "
-         + "a student's tally at the end they are counted under You also completed "
-         + "rather than against what they got done."]);
-    }
-
-    const inner = el("div","pagekids");
-    if (!b.blocks) b.blocks = [];
-    if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone", viewAll
-      ? "Nothing on this page yet."
-      : "Drag a task here, or use the buttons below."));
-    b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
-    wireDropList(inner, () => b.blocks);
-    body.appendChild(inner);
-    if (!viewAll) body.appendChild(addTaskRow(b.blocks));
-  }
-  if (b.type === "extension"){
-    F("Heading", "title");
-    R("Subtitle", "task", { rows:2, help:[
-      "The lesson shows “Finished early?” with a box to tick, and these open "
-      + "when it is ticked. They never hold anybody up, so nobody is asked to "
-      + "complete them.",
-      "The subtitle is shown under “Finished early?” once they open it."] });
-    /* Off unless asked for, so every extension made before this keeps the
-       box a student can tick whenever they like. */
-    toggleRow([["waitForPage","Wait for the page", false]], "Opening",
-      ["When this is on, the box cannot be ticked until every other task on the "
-       + "page is finished, and the student is told how many are left. A quiz with "
-       + "a pass mark counts once it is passed; everything else has to be right, "
-       + "with every checklist line ticked. A Choose your challenge is left out, "
-       + "because which level a student picks is up to them."]);
-    const inner = el("div","pagekids");
-    if (!b.blocks) b.blocks = [];
-    if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
-    b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
-    wireDropList(inner, () => b.blocks);
-    body.appendChild(inner);
-    body.appendChild(addTaskRow(b.blocks, "extension"));
-  }
-  if (b.type === "group"){
-    F("Heading (optional)", "title");
-    R("Subtitle (optional)", "task", { rows:2, help:[
-      "A group keeps several tasks together as one thing. Everything in it is "
-      + "on the page from the start and counts the same as it would on its own: "
-      + "it is a way of building a piece of work once and dropping it into as "
-      + "many lessons as you like, not a way of hiding anything.",
-      "Leave both boxes empty and the tasks simply follow one another."] });
-    const inner = el("div","pagekids");
-    if (!b.blocks) b.blocks = [];
-    if (!b.blocks.length) inner.appendChild(el("p","bhelp dropzone","Drag a task here, or use the buttons below."));
-    b.blocks.forEach((child, k) => inner.appendChild(card(child, k, b.blocks)));
-    wireDropList(inner, () => b.blocks);
-    body.appendChild(inner);
-    body.appendChild(addTaskRow(b.blocks, "group"));
-  }
-  if (b.type === "choice"){
-    F("Heading (optional)", "title");
-    R("What they are choosing between", "prompt", { rows:2 });
-    if (!Array.isArray(b.options)) b.options = [];
-    b.options.forEach((opt, k) => {
-      if (!opt.blocks) opt.blocks = [];
-      const w = el("div","bfield choiceopt");
-      const lab = el("div","brow");
-      const name = el("input");
-      name.placeholder = "Choice " + String.fromCharCode(65 + k);
-      name.value = opt.label || "";
-      name.addEventListener("input", () => { opt.label = name.value; saveDraft(); schedulePreview(); });
-      lab.appendChild(name);
-      if (b.options.length > 2){
-        const del = el("button","btn-ghost bmini","×");
-        del.title = "Remove this choice";
-        del.addEventListener("click", () => { b.options.splice(k, 1); render(); schedulePreview(); });
-        lab.appendChild(del);
-      }
-      w.appendChild(lab);
-      const inner = el("div","pagekids");
-      if (!opt.blocks.length) inner.appendChild(el("p","bhelp dropzone","What they get for this choice. Use the buttons below."));
-      opt.blocks.forEach((child, j) => inner.appendChild(card(child, j, opt.blocks)));
-      wireDropList(inner, () => opt.blocks);
-      w.appendChild(inner);
-      w.appendChild(addTaskRow(opt.blocks, "choice"));
-      body.appendChild(w);
-    });
-    const add = el("button","btn-ghost bmini2","+ Another choice");
-    add.addEventListener("click", () => { b.options.push({ label:"", blocks:[] }); render(); schedulePreview(); });
-    body.appendChild(add);
-  }
-  if (b.type === "image"){
-    F("Heading (optional)", "title"); F("Instruction (optional)", "task", { area:true, rows:2 });
-    /* For a screenshot taken again, after feedback: Original and Updated
-       tabs over the new picture, the original being the first other
-       screenshot in the lesson the student has one for. Off unless asked. */
-    toggleRow([["compare","Compare with an earlier screenshot", false]], "Options",
-      "After pasting, the student can switch between this screenshot and their earlier one from the same lesson. " +
-      "Nothing changes for a student who has no earlier screenshot.");
-    if (b.psd === true){
-      if (!Array.isArray(b.checks)) b.checks = [];
-      const w = el("div","bfield");
-      w.appendChild(el("label","","Checklist"));
-      const n = b.checks.length;
-      const open3 = el("button","btn-ghost bmini2",
-        n ? "Edit the checklist (" + n + ")" : "+ Add a checklist");
-      open3.addEventListener("click", () => checklistPopup(b, false, true));
-      const checkRow = el("div","brow");
-      checkRow.appendChild(open3);
-      checkRow.appendChild(helpDot(
-        "Ticked from the Photoshop file they choose: how many text layers, shapes, layer styles and so on. " +
-        "A line can be yours to tick instead, for anything the file cannot show, like whether the design suits the brief."));
-      w.appendChild(checkRow);
-      body.appendChild(w);
-      if (n) hideChecklistRow();
-    }
-    toggleRow([["psd","Photoshop file", false]], "What they hand in",
-      "The student chooses their .psd file instead of pasting. The picture is read from it on their computer and " +
-      "only that is saved, never the file. In View Work and Mark work, Photoshop details lists its layers, " +
-      "layer styles, masks, text and history.");
-  }
-  if (b.type === "frame"){
-    F("Heading (optional)", "heading");
-    F("Address of the page", "url");
-    F("Instruction (optional)", "task", { area:true, rows:2 });
-    F("Width", "width", { help:"A number of pixels, or something like 100%." });
-    F("Height", "height");
-    toggleRow([["confirm","Confirmation", false]]);
-  }
-  if (b.type === "embed"){
-    F("YouTube link, video id, or the whole embed code", "url", { area:true, rows:2 });
-    const shown = toEmbed(b.url);
-    const note = el("p","bhelp", shown ? "Will be embedded as: " + shown : "Paste any YouTube address, it gets tidied up automatically.");
-    if (shown && !/youtube\.com\/embed\//.test(shown)) note.className = "bhelp warn";
-    body.appendChild(note);
-    F("Heading (optional)", "title");
-    R("Subheading (optional)", "note", { rows:2 });
-    toggleRow([["confirm","Confirmation", false]]);
-  }
-  if (b.type === "link"){
-    F("Heading (optional)", "heading");
-    F("Address", "url",
-      { help: b.download
-          ? "A file in the site's files folder is written as files/whatever.psd."
-          : "" });
-    F("Button label", "title");
-    F("What to do there (optional)", "task", { area:true, rows:2 });
-    toggleRow([["download","A file to download", false], ["confirm","Confirmation", false]], "",
-      "On for a starter file a student opens in another program, a .psd for Photoshop say. "
-      + "The button saves the file instead of opening a new tab.");
-    if (b.download)
-      F("It opens in (optional)", "app",
-        { placeholder:"Photoshop",
-          help:"Named in the line under the button, so they know what should happen when they click the file." });
-  }
-  if (b.type === "mc"){
-    R("Question", "prompt", { rows:2 });
-    listField("Options (tick the right one)", "options",
-      "Each option can hold a picture as well as words: paste one in, a screenshot of a Scratch block for example.",
-      null, true);
-    if (topicTags()) F("Topic tag", "topic", { help:"Used for Strength and Target feedback." });
-  }
-  if (b.type === "blanks"){
-    F("Instruction (optional)", "prompt");
-    blanksField();
-    F("Extra wrong words for the dropdowns", "distractors");
-    if (topicTags()) F("Topic tag", "topic");
-  }
-  if (b.type === "order"){
-    F("Instruction (optional)", "prompt");
-    listField("Items in the CORRECT order", "items",
-      "Students see them shuffled. Each item can hold a picture as well as words: paste one in.", null, true);
-    if (topicTags()) F("Topic tag", "topic");
-  }
-  if (b.type === "ide" || b.type === "web"){          // once Python or web has been chosen
-    const isWeb = b.type === "web";
-    if (!Array.isArray(b.checks)) b.checks = [];
-    const w = el("div","bfield");
-    w.appendChild(el("label","","Checklist"));
-    const n = b.checks.length;
-    const open2 = el("button","btn-ghost bmini2",
-      n ? "Edit the checklist (" + n + ")" : "+ Add a checklist");
-    open2.addEventListener("click", () => checklistPopup(b, isWeb));
-    const checkRow = el("div","brow");
-    checkRow.appendChild(open2);
-    checkRow.appendChild(helpDot(
-      "Students see these above the editor and press Check my work. Leave empty for no checklist."));
-    w.appendChild(checkRow);
-    body.appendChild(w);
-    if (n) hideChecklistRow();
-  }
-  if (b.type === "keywords"){
-    F("Heading (optional)", "title");
-    R("Instruction (optional)", "task", { rows:2 });
-    if (!Array.isArray(b.words)) b.words = [];
-    const w = el("div","bfield");
-    w.appendChild(el("label","","The keywords"));
-    b.words.forEach((entry, k) => {
-      const row = el("div","brow kwrow");
-      const word = el("input");
-      word.placeholder = "Keyword";
-      word.value = entry.word || "";
-      word.addEventListener("input", () => { entry.word = word.value; saveDraft(); schedulePreview(); });
-      const hint = el("input");
-      hint.placeholder = "Hint (optional)";
-      hint.value = entry.hint || "";
-      hint.addEventListener("input", () => { entry.hint = hint.value; saveDraft(); schedulePreview(); });
-      row.appendChild(word); row.appendChild(hint);
-      [["↑","Move up", () => { if (k){ b.words.splice(k-1,0,b.words.splice(k,1)[0]); render(); schedulePreview(); } }],
-       ["↓","Move down", () => { if (k<b.words.length-1){ b.words.splice(k+1,0,b.words.splice(k,1)[0]); render(); schedulePreview(); } }],
-       ["✕","Remove", () => { b.words.splice(k,1); render(); schedulePreview(); }]
-      ].forEach(t => {
-        const btn = el("button","btn-ghost bmini", t[0]);
-        btn.title = t[1];
-        btn.addEventListener("click", t[2]);
-        row.appendChild(btn);
-      });
-      w.appendChild(row);
-    });
-    const add = el("button","btn-ghost bmini2","+ Another keyword");
-    add.addEventListener("click", () => { b.words.push({ word:"", hint:"" }); render(); schedulePreview(); });
-    const kwFoot = el("div","brow");
-    kwFoot.appendChild(add);
-    kwFoot.appendChild(helpDot(
-      "One per row. The hint is optional and sits under the word, for anything "
-      + "that needs narrowing down."));
-    w.appendChild(kwFoot);
-    body.appendChild(w);
-  }
-  if (b.type === "notes"){
-    F("Heading (optional)", "title");
-    F("Instruction (optional)", "task", { area:true, rows:2 });
-    F("Something to start them off (optional)", "starter", { area:true, rows:3 });
-  }
-  if (b.type === "mindmap"){
-    F("Heading (optional)", "title");
-    F("Instruction (optional)", "task", { area:true, rows:2 });
-    F("The idea in the middle", "centre", { help:"Left empty, they choose their own." });
-    toggleRow([["lockCentre","Students cannot change the middle", false]]);
-  }
-  if (b.type === "board"){
-    F("Heading (optional)", "title");
-    F("Instruction (optional)", "task", { area:true, rows:2 });
-    F("How tall, in pixels", "height", { num:true,
-      help:"What they draw is kept as the strokes themselves, not a picture, so it takes very little room." });
-  }
-  if (b.type === "label"){
-    F("Heading (optional)", "title");
-    F("Instruction (optional)", "task", { area:true, rows:2 });
-    /* drawn again as the address is typed, the same as Click the right spot */
-    let labelWait = 0;
-    F("Picture address", "image", { help:"Paste a link to the picture they will label.",
-      then: () => { clearTimeout(labelWait); labelWait = setTimeout(paintLabelPic, 300); } });
-    if (!Array.isArray(b.spots)) b.spots = [];
-
-    const w = el("div","bfield");
-    const labHead = el("div","brow");
-    labHead.appendChild(el("label","","The picture, and where the labels go"));
-    labHead.appendChild(helpDot("Drag on the picture to draw a box, then type the word for it below."));
-    w.appendChild(labHead);
-
-    /* With no picture there is nothing to draw boxes on, so only the hint
-       shows. This used to return from card() instead, which handed
-       appendChild an undefined card: adding a Label a picture task blanked
-       the whole page in the builder, because a fresh one has no image yet. */
-    const labelBox = el("div");
-    w.appendChild(labelBox);
-    function paintLabelPic(){
-      labelBox.innerHTML = "";
-      if (!String(b.image || "").trim()){
-        labelBox.appendChild(el("p","hint","Paste a picture address above to start."));
-        return;
-      }
-      const holder = el("div","label-pic label-edit");
-      const img = el("img");
-      img.src = b.image;
-      img.draggable = false;
-      holder.appendChild(img);
-      const ghost = el("div","label-ghost");
-      ghost.hidden = true;
-      holder.appendChild(ghost);
-      labelBox.appendChild(holder);
-
-      const list = el("div","label-list");
-      labelBox.appendChild(list);
-
-      function paintSpots(){
-        holder.querySelectorAll(".label-spot").forEach(n => n.remove());
-        list.innerHTML = "";
-        b.spots.forEach((sp, i) => {
-          const mark = el("div","label-spot");
-          mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
-          mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
-          mark.textContent = sp.answer || String(i + 1);
-          holder.appendChild(mark);
-
-          /* the word for this box, typed underneath rather than in a list
-             of commas somewhere else */
-          const row = el("div","label-row");
-          row.appendChild(el("span","label-num", String(i + 1)));
-          const word = el("input","checkname");
-          word.value = sp.answer || "";
-          word.placeholder = "The word that goes in box " + (i + 1);
-          word.addEventListener("input", () => {
-            sp.answer = word.value;
-            mark.textContent = word.value || String(i + 1);
-            saveDraft(); schedulePreview();
-          });
-          const rm = el("button","btn-ghost bmini","\u2715");
-          rm.title = "Remove this box";
-          rm.addEventListener("click", () => { b.spots.splice(i, 1); saveDraft(); paintSpots(); schedulePreview(); });
-          row.appendChild(word); row.appendChild(rm);
-          list.appendChild(row);
-        });
-        if (!b.spots.length) list.appendChild(el("p","hint","No boxes yet. Drag on the picture to draw one."));
-      }
-
-      let from = null;
-      const pct = (e) => {
-        const r = holder.getBoundingClientRect();
-        return { x: ((e.clientX - r.left) / r.width) * 100,
-                 y: ((e.clientY - r.top) / r.height) * 100 };
-      };
-      holder.addEventListener("pointerdown", (e) => {
-        if (e.target.classList.contains("label-spot")) return;
-        e.preventDefault();
-        holder.setPointerCapture(e.pointerId);
-        from = pct(e);
-        ghost.hidden = false;
-        ghost.style.left = from.x + "%"; ghost.style.top = from.y + "%";
-        ghost.style.width = "0%"; ghost.style.height = "0%";
-      });
-      holder.addEventListener("pointermove", (e) => {
-        if (!from) return;
-        const now = pct(e);
-        ghost.style.left = Math.min(from.x, now.x) + "%";
-        ghost.style.top = Math.min(from.y, now.y) + "%";
-        ghost.style.width = Math.abs(now.x - from.x) + "%";
-        ghost.style.height = Math.abs(now.y - from.y) + "%";
-      });
-      holder.addEventListener("pointerup", (e) => {
-        if (!from) return;
-        const now = pct(e);
-        const spot = { x: Math.min(from.x, now.x), y: Math.min(from.y, now.y),
-                       w: Math.abs(now.x - from.x), h: Math.abs(now.y - from.y), answer:"" };
-        from = null;
-        ghost.hidden = true;
-        if (spot.w < 3 || spot.h < 3) return;      // a stray click, not a box
-        b.spots.push(spot);
-        saveDraft(); paintSpots(); schedulePreview();
-      });
-
-      paintSpots();
-    }
-    paintLabelPic();
-    body.appendChild(w);
-    /* Each label is a mark in an assessment, so it needs a topic for the
-       Strength and Target the same as any other question. */
-    if (topicTags()) F("Topic tag", "topic");
-  }
-  if (b.type === "hotspot"){
-    F("Heading (optional)", "title");
-    F("Instruction (optional)", "task", { area:true, rows:2 });
-    /* The picture is drawn into a box of its own and drawn again as the
-       address is typed. It used to be built once with the card, so a
-       picture pasted in did not show until the task was shut and opened. */
-    let picWait = 0;
-    F("Picture address", "image", { help:"Paste a link to the picture, or the address of one in the site's images folder.",
-      then: () => { clearTimeout(picWait); picWait = setTimeout(paintPic, 300); } });
-    F("What the picture shows (optional)", "alt", { help:"Read out by a screen reader. Do not give the answer away." });
-    const w = el("div","bfield");
-    const head = el("div","brow");
-    head.appendChild(el("label","","The right spot"));
-    head.appendChild(helpDot("Drag across the picture to draw the right spot, or click to move it there. Drag the shape to move it and the dot on its edge to change its size. Anywhere inside counts as right."));
-    w.appendChild(head);
-
-    const shapes = el("div","brow");
-    const shapeBtns = [["circle","Circle"],["rect","Rectangle"]].map(pair => {
-      const btn = el("button","btn-ghost bmini2", pair[1]);
-      btn.type = "button";
-      btn.addEventListener("click", () => {
-        if (hotspotShape(b) === pair[0]) return;
-        /* The first rectangle is the square the circle sat in, so changing
-           shape leaves the spot where it was rather than somewhere new. */
-        if (pair[0] === "rect" && !(Number(b.w) > 0 && Number(b.h) > 0)){
-          const r = Number(b.r) || 8;
-          b.w = Math.round(2 * r * 10) / 10;
-          b.h = Math.round(2 * r / hotspotRatio(b) * 10) / 10;
-        }
-        b.shape = pair[0];
-        paintArea(); saveDraft(); schedulePreview();
-      });
-      shapes.appendChild(btn);
-      return { btn, shape: pair[0] };
-    });
-    w.appendChild(shapes);
-    const picBox = el("div");
-    w.appendChild(picBox);
-    body.appendChild(w);
-
-    /* filled in by paintPic once there is a picture to paint on */
-    let paintArea = () => shapeBtns.forEach(s => s.btn.classList.toggle("right", s.shape === hotspotShape(b)));
-    function paintPic(){
-      picBox.innerHTML = "";
-      paintArea = () => shapeBtns.forEach(s => s.btn.classList.toggle("right", s.shape === hotspotShape(b)));
-      if (!String(b.image || "").trim()){
-        picBox.appendChild(el("p","hint","Paste a picture address above to start."));
-        paintArea();
-        return;
-      }
-      const holder = el("div","hotspot-pic hotspot-edit");
-      const img = el("img"); img.src = b.image; img.draggable = false;
-      holder.appendChild(img);
-      const area = el("div","hotspot-ring");
-      const dot = el("div","hotspot-pin");
-      const grip = el("div","hotspot-grip");
-      grip.title = "Drag to change the size";
-      holder.appendChild(area); holder.appendChild(dot); holder.appendChild(grip);
-      const missing = el("p","hint","There is no picture at that address yet.");
-      missing.hidden = true;
-      picBox.appendChild(holder);
-      picBox.appendChild(missing);
-
-      const size = el("div","brow");
-      size.appendChild(el("span","bhelp","How big the ring is"));
-      const range = el("input");
-      range.type = "range"; range.min = "1"; range.max = "50"; range.step = "0.5";
-      range.addEventListener("input", () => { b.r = Number(range.value); paintArea(); saveDraft(); schedulePreview(); });
-      size.appendChild(range);
-      picBox.appendChild(size);
-
-      paintArea = () => {
-        const rect = hotspotShape(b) === "rect";
-        shapeBtns.forEach(s => s.btn.classList.toggle("right", s.shape === hotspotShape(b)));
-        const x = Number(b.x) || 0, y = Number(b.y) || 0;
-        area.dataset.shape = rect ? "rect" : "circle";
-        area.style.left = dot.style.left = x + "%";
-        area.style.top = dot.style.top = y + "%";
-        if (rect){
-          const half = { w: (Number(b.w) || 16) / 2, h: (Number(b.h) || 16) / 2 };
-          area.style.width = 2 * half.w + "%"; area.style.height = 2 * half.h + "%";
-          grip.style.left = (x + half.w) + "%"; grip.style.top = (y + half.h) + "%";
-        } else {
-          const r = Number(b.r) || 8;
-          area.style.width = 2 * r + "%"; area.style.height = "";
-          grip.style.left = (x + r) + "%"; grip.style.top = y + "%";
-          range.value = String(r);
-        }
-        size.hidden = rect;
-        grip.style.cursor = rect ? "nwse-resize" : "ew-resize";
-      };
-
-      /* The circle is a share of the picture's width, so how tall it is on
-         the picture depends on the picture's shape, measured here. */
-      img.addEventListener("load", () => {
-        missing.hidden = true; holder.hidden = false;
-        if (img.naturalWidth){
-          const ratio = Math.round(img.naturalHeight / img.naturalWidth * 10000) / 10000;
-          if (ratio !== b.ratio){ b.ratio = ratio; saveDraft(); }
-        }
-      });
-      img.addEventListener("error", () => { missing.hidden = false; holder.hidden = true; size.hidden = true; });
-
-      /* One press does one of three things, decided by what it lands on:
-         the dot on the edge resizes, the shape itself moves, and the bare
-         picture draws a new spot from where the press started (or, if the
-         pointer barely moved, puts the spot there at the size it was). */
-      const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
-      const tenth = (n) => Math.round(n * 10) / 10;
-      const at = (e) => {
-        const r = img.getBoundingClientRect();
-        return { x: (e.clientX - r.left) / r.width * 100, y: (e.clientY - r.top) / r.height * 100,
-                 ratio: r.width ? r.height / r.width : 1 };
-      };
-      let press = null;
-      holder.addEventListener("pointerdown", (e) => {
-        if (!img.getBoundingClientRect().width) return;
-        e.preventDefault();
-        holder.setPointerCapture(e.pointerId);
-        const p = at(e);
-        const kind = e.target === grip ? "size" : e.target === area ? "move" : "draw";
-        press = { kind, from: p, moved: false,
-                  off: { x: p.x - (Number(b.x) || 0), y: p.y - (Number(b.y) || 0) },
-                  corner: { x: (Number(b.x) || 0) - (Number(b.w) || 16) / 2,
-                            y: (Number(b.y) || 0) - (Number(b.h) || 16) / 2 } };
-      });
-      holder.addEventListener("pointermove", (e) => {
-        if (!press) return;
-        const p = at(e);
-        const rect = hotspotShape(b) === "rect";
-        /* how far the press is from a point, in the circle's own units:
-           per cent of the width, with the height scaled to match */
-        const reach = (c) => Math.hypot(p.x - c.x, (p.y - c.y) * p.ratio);
-        if (!press.moved && reach(press.from) < 1.5) return;   // a click, so far
-        press.moved = true;
-        if (press.kind === "move"){
-          b.x = tenth(clamp(p.x - press.off.x, 0, 100));
-          b.y = tenth(clamp(p.y - press.off.y, 0, 100));
-        } else if (press.kind === "size" && rect){
-          /* the top left corner stays put and the dot drags the other */
-          const wide = clamp(p.x - press.corner.x, 2, 100), tall = clamp(p.y - press.corner.y, 2, 100);
-          b.w = tenth(wide); b.h = tenth(tall);
-          b.x = tenth(press.corner.x + wide / 2); b.y = tenth(press.corner.y + tall / 2);
-        } else if (press.kind === "size"){
-          b.r = tenth(clamp(reach({ x: Number(b.x) || 0, y: Number(b.y) || 0 }), 1, 50));
-        } else if (rect){
-          const left = clamp(Math.min(press.from.x, p.x), 0, 100), right = clamp(Math.max(press.from.x, p.x), 0, 100);
-          const top = clamp(Math.min(press.from.y, p.y), 0, 100), bottom = clamp(Math.max(press.from.y, p.y), 0, 100);
-          b.w = tenth(Math.max(2, right - left)); b.h = tenth(Math.max(2, bottom - top));
-          b.x = tenth((left + right) / 2); b.y = tenth((top + bottom) / 2);
-        } else {
-          b.x = tenth(clamp(press.from.x, 0, 100)); b.y = tenth(clamp(press.from.y, 0, 100));
-          b.r = tenth(clamp(reach(press.from), 1, 50));
-        }
-        paintArea();
-      });
-      const letGo = (e) => {
-        if (!press) return;
-        if (!press.moved && press.kind !== "size"){
-          const p = at(e);
-          b.x = tenth(clamp(p.x, 0, 100)); b.y = tenth(clamp(p.y, 0, 100));
-          paintArea();
-        }
-        press = null;
-        saveDraft(); schedulePreview();
-      };
-      holder.addEventListener("pointerup", letGo);
-      holder.addEventListener("pointercancel", () => { press = null; saveDraft(); });
-      paintArea();
-    }
-    paintPic();
-    if (topicTags()) F("Topic tag", "topic");
-  }
-  if (b.type === "binary" || b.type === "binadd"){
-    F("Heading (optional)", "title");
-    F("Instruction (optional)", "task", { area:true, rows:2 });
-    const w = el("div","bfield");
-    w.appendChild(el("label","","How many bits"));
-    const st = el("div","stepper");
-    const less = el("button","btn-ghost iconbtn","\u2212");
-    const num = el("input"); num.type = "number"; num.className = "stepnum"; num.value = String(b.bits || 8);
-    const more = el("button","btn-ghost iconbtn","+");
-    const setB = (v) => { b.bits = Math.max(4, Math.min(16, v)); num.value = String(b.bits); saveDraft(); schedulePreview(); };
-    less.addEventListener("click", () => setB((parseInt(num.value, 10) || 8) - 1));
-    more.addEventListener("click", () => setB((parseInt(num.value, 10) || 8) + 1));
-    num.addEventListener("input", () => { b.bits = Math.max(4, Math.min(16, parseInt(num.value, 10) || 8)); saveDraft(); });
-    st.appendChild(less); st.appendChild(num); st.appendChild(more);
-    w.appendChild(st);
-    body.appendChild(w);
-    F("How many questions", "count", { num:true });
-    if (b.type === "binary"){
-      const mw = el("div","bfield");
-      mw.appendChild(el("label","","Which way round"));
-      const row = el("div","brow");
-      [["toDenary","Binary to denary"],["toBinary","Denary to binary"],["either","A mixture"]].forEach(pair => {
-        const btn = el("button","btn-ghost bmini2" + (b.mode === pair[0] ? " right" : ""), pair[1]);
-        btn.addEventListener("click", () => { b.mode = pair[0]; render(); schedulePreview(); });
-        row.appendChild(btn);
-      });
-      mw.appendChild(row); body.appendChild(mw);
-      F("Set numbers (optional)", "numbers", { help:"Separate with commas, e.g. 13, 200. Left empty, numbers are made up each time." });
-      toggleRow([["showPlace","Place values", true]]);
-    } else {
-      F("Set sums (optional)", "pairs", { help:"One per line, e.g. 10 + 5. Left empty, sums are made up each time." });
-      toggleRow([["showPlace","Place values", true], ["showCarry","Row for carrying", true]]);
-    }
-  }
-  if (b.type === "password"){
-    F("Heading (optional)", "title");
-    F("What they have to do", "task", { area:true, rows:2 });
-  }
-  if (b.type === "caesar"){
-    F("Heading (optional)", "title");
-    F("What they have to do", "task", { area:true, rows:2 });
-    F("The hidden message", "message", { area:true, rows:2, then: () => showCoded() });
-    const sw = el("div","bfield");
-    sw.appendChild(el("label","","Shift"));
-    const srow = el("div","stepper");
-    const down = el("button","btn-ghost iconbtn","−");
-    const num = el("input"); num.type = "number"; num.className = "stepnum";
-    num.min = "1"; num.max = "25";
-    num.value = String(b.shift || 7);
-    const up = el("button","btn-ghost iconbtn","+");
-    /* One step either way is no puzzle at all, and 26 is back where it
-       started, so the slider a student drags only ever offers 1 to 25. */
-    const setShift = (v) => {
-      b.shift = Math.max(1, Math.min(25, v));
-      num.value = String(b.shift);
-      saveDraft(); schedulePreview(); showCoded();
-    };
-    down.addEventListener("click", () => setShift((parseInt(num.value, 10) || 7) - 1));
-    up.addEventListener("click", () => setShift((parseInt(num.value, 10) || 7) + 1));
-    num.addEventListener("input", () => setShift(parseInt(num.value, 10) || 7));
-    srow.appendChild(down); srow.appendChild(num); srow.appendChild(up);
-    sw.appendChild(srow);
-    /* What the class will actually see, so a teacher can check it before
-       the lesson rather than by playing it through. */
-    const coded = el("p","bhelp");
-    function showCoded(){
-      const shift = Math.max(1, Math.min(25, Number(b.shift) || 7));
-      coded.textContent = b.message
-        ? "They will see: " + caesarEncode(b.message, shift)
-        : "Type the message above and the coded version appears here.";
-    }
-    showCoded();
-    sw.appendChild(coded);
-    body.appendChild(sw);
-    F("Label above the answer box", "prompt");
-  }
-  if (b.type === "short"){
-    R("Question", "prompt", { rows:2 });
-    /* Under the question, where a reminder such as "Answer with just 1
-       word." is seen before anything is typed. */
-    R("Subheading (optional)", "note", { rows:2 });
-    if (!Array.isArray(b.answers)) b.answers = [""];
-    listField("Accepted answers", "answers",
-      "The student has to type one of these. Capitals, extra spaces and stray " +
-      "punctuation are ignored, so add a line only for answers that are really " +
-      "different, such as CPU and central processing unit. The first one sets " +
-      "the word limit: a student who types more words than it has is told to " +
-      "keep their answer that long. Where it is a number, they are told to " +
-      "type just a number.",
-      /* The note about the old keyword marking has been read and acted on the
-         moment the list is touched, so it goes rather than sitting there for
-         the rest of the afternoon. */
-      () => { delete b.wasKeywords; });
-    shortAnswerNotes(body, b);
-    if (topicTags()) F("Topic tag", "topic");
-  }
-  if (b.type === "table"){
-    F("Heading (optional)", "title");
-    R("What are they to do?", "task", { rows:2,
-      placeholder:"Complete the table for the algorithm above." });
-    if (!Array.isArray(b.head)) b.head = [];
-    if (!Array.isArray(b.rows)) b.rows = [];
-    const cols = Math.max(b.head.length, ...b.rows.map(r => (r || []).length), 1);
-    /* Every row the same width, whatever editing has left behind. */
-    while (b.head.length < cols) b.head.push("");
-    b.rows.forEach(r => { while (r.length < cols) r.push({ t:"", fill:true }); });
-    /* Widths and heights are kept one per column and one per row, so every
-       add and remove below has to keep them lined up with the grid. */
-    if (!Array.isArray(b.widths)) b.widths = [];
-    if (!Array.isArray(b.lines)) b.lines = [];
-    while (b.widths.length < cols) b.widths.push("");
-    b.widths.length = cols;
-    while (b.lines.length < b.rows.length) b.lines.push(1);
-    b.lines.length = b.rows.length;
-    const picker = (choices, value, title, set) => {
-      const sel = document.createElement("select");
-      sel.className = "tt-size";
-      sel.title = title;
-      choices.forEach(([v, text]) => {
-        const o = document.createElement("option");
-        o.value = v; o.textContent = text;
-        sel.appendChild(o);
-      });
-      sel.value = String(value);
-      sel.addEventListener("change", () => { set(sel.value); saveDraft(); schedulePreview(); });
-      return sel;
-    };
-    const WIDTH_CHOICES = [["","Auto width"],["narrow","Narrow"],["medium","Medium"],["wide","Wide"],["wider","Extra wide"]];
-    const LINE_CHOICES = [1,2,3,4,5,6].map(n => [String(n), n === 1 ? "1 line" : n + " lines"]);
-
-    const w = el("div","bfield");
-    w.appendChild(el("label","","The table"));
-    w.appendChild(el("p","bhelp",
-      "Type what a student should see. A cell with the box turned on is one "
-      + "they fill in, and whatever you type in it is the answer it is marked "
-      + "against. Leave that empty and the cell is still theirs to fill in, "
-      + "but nothing marks it."));
-    const scroll = el("div","tt-edit-scroll");
-    const grid = el("table","tt-edit");
-
-    const headRow = el("tr");
-    b.head.forEach((h, c) => {
-      const th = el("th");
-      const inp = el("input");
-      inp.value = h || "";
-      inp.placeholder = "Heading";
-      inp.addEventListener("input", () => { b.head[c] = inp.value; saveDraft(); schedulePreview(); });
-      th.appendChild(inp);
-      const drop = el("button","btn-ghost bmini","✕");
-      drop.title = "Remove this column";
-      drop.addEventListener("click", () => {
-        if (cols <= 1) return;
-        b.head.splice(c, 1);
-        b.widths.splice(c, 1);
-        b.rows.forEach(r => r.splice(c, 1));
-        render(); schedulePreview();
-      });
-      th.appendChild(drop);
-      th.appendChild(picker(WIDTH_CHOICES, b.widths[c] || "", "How wide this column is",
-        v => { b.widths[c] = v; }));
-      headRow.appendChild(th);
-    });
-    headRow.appendChild(el("th","tt-edit-corner",""));
-    grid.appendChild(headRow);
-
-    b.rows.forEach((row, r) => {
-      const tr = el("tr");
-      row.forEach((cell, c) => {
-        if (!cell || typeof cell !== "object") row[c] = cell = { t: String(cell == null ? "" : cell) };
-        const td = el("td");
-        const inp = el("input");
-        inp.value = cell.t || "";
-        inp.placeholder = cell.fill ? "Answer (optional)" : "What they see";
-        inp.addEventListener("input", () => { cell.t = inp.value; saveDraft(); schedulePreview(); });
-        td.appendChild(inp);
-        /* One button a cell, and it says which of the two the cell is. */
-        const flip = el("button","btn-ghost bmini tt-flip" + (cell.fill ? " on" : ""),
-                        cell.fill ? "▢" : "T");
-        flip.title = cell.fill ? "They fill this in. Click to show it instead."
-                               : "They see this. Click to make it a box they fill in.";
-        flip.addEventListener("click", () => { cell.fill = !cell.fill; render(); schedulePreview(); });
-        td.appendChild(flip);
-        tr.appendChild(td);
-      });
-      const end = el("td","tt-edit-corner");
-      const drop = el("button","btn-ghost bmini","✕");
-      drop.title = "Remove this row";
-      drop.addEventListener("click", () => {
-        b.rows.splice(r, 1); b.lines.splice(r, 1);
-        render(); schedulePreview();
-      });
-      end.appendChild(picker(LINE_CHOICES, b.lines[r] || 1, "How tall this row is",
-        v => { b.lines[r] = parseInt(v, 10) || 1; }));
-      end.appendChild(drop);
-      tr.appendChild(end);
-      grid.appendChild(tr);
-    });
-    scroll.appendChild(grid);
-    w.appendChild(scroll);
-
-    const add = el("div","brow");
-    const addRow = el("button","btn-ghost bmini2","+ Row");
-    addRow.addEventListener("click", () => {
-      const fresh = [];
-      for (let c = 0; c < cols; c++) fresh.push({ t:"", fill:true });
-      b.rows.push(fresh);
-      /* A new row is as tall as the one above it: a table of explanations
-         is usually explanations all the way down. */
-      b.lines.push(b.lines[b.lines.length - 1] || 1);
-      render(); schedulePreview();
-    });
-    const addCol = el("button","btn-ghost bmini2","+ Column");
-    addCol.addEventListener("click", () => {
-      b.head.push("");
-      b.widths.push("");
-      b.rows.forEach(r => r.push({ t:"", fill:true }));
-      render(); schedulePreview();
-    });
-    /* For a trace table or a comparison, where the left column names each
-       row rather than being part of the answer. */
-    const side = el("button","btn-ghost bmini2 toggle", "First column is headings");
-    side.type = "button";
-    side.setAttribute("aria-pressed", b.sideHead ? "true" : "false");
-    side.addEventListener("click", () => { b.sideHead = !b.sideHead; render(); schedulePreview(); });
-    add.appendChild(addRow); add.appendChild(addCol); add.appendChild(side);
-    /* Said once, under the grid, rather than left to be discovered when a
-       class has already done it. */
-    const marked = b.rows.reduce((n, r) => n + r.filter(c => c && c.fill && String(c.t || "").trim()).length, 0);
-    const blanks = b.rows.reduce((n, r) => n + r.filter(c => c && c.fill).length, 0);
-    add.appendChild(el("span","bhelp", blanks
-      ? blanks + (blanks === 1 ? " box, " : " boxes, ") + (marked || "none") + " with an answer to mark against"
-      : "No boxes yet, so there is nothing for them to fill in."));
-    w.appendChild(add);
-    body.appendChild(w);
-    /* Each box with an answer is a mark in an assessment. */
-    if (topicTags()) F("Topic tag", "topic");
-    if (specLevel()) specPicker(body, b);
-  }
-  if (b.type === "exam"){
-    R("The question", "prompt", { rows:3,
-      placeholder:"Describe how the CPU fetches an instruction from memory." });
-    const cmds = ["State", "Identify", "Describe", "Explain", "Compare", "Discuss", "Evaluate", "Complete", "Calculate"];
-    const cw = el("div","bfield");
-    cw.appendChild(el("label","","Command word"));
-    const crow = el("div","brow");
-    const csel = document.createElement("select");
-    [""].concat(cmds).forEach(w => {
-      const o = document.createElement("option");
-      o.value = w; o.textContent = w || "None";
-      if ((b.command || "") === w) o.selected = true;
-      csel.appendChild(o);
-    });
-    csel.addEventListener("change", () => { b.command = csel.value; saveDraft(); schedulePreview(); });
-    crow.appendChild(csel);
-    const mlab = el("label","brow-inline","Worth");
-    const mnum = el("input"); mnum.type = "number"; mnum.min = "0"; mnum.max = "30";
-    mnum.className = "smallnum";
-    mnum.value = String(Math.max(0, parseInt(b.marks, 10) || 0));
-    mnum.addEventListener("input", () => {
-      b.marks = Math.max(0, Math.min(30, Math.round(Number(mnum.value) || 0)));
-      saveDraft(); schedulePreview();
-    });
-    crow.appendChild(mlab); crow.appendChild(mnum);
-    crow.appendChild(helpDot("The number of marks on the paper. It sets how much room the answer box gets."));
-    cw.appendChild(crow);
-    body.appendChild(cw);
-
-    pickRow("How do they answer?", "answer",
-      [["lines","In their own words"],["short","One line"]],
-      "One line is the only one marked on its own, because the whole line is the answer. " +
-      "Anything longer shows the mark scheme once they have had a go and they tick off what they wrote.");
-
-    if (b.answer === "short"){
-      if (!Array.isArray(b.answers) || !b.answers.length) b.answers = [""];
-      listField("Accepted answers", "answers",
-        "Capitals, spacing and stray punctuation are ignored, so add a line only for " +
-        "answers that are really different, such as CPU and central processing unit.");
-      shortAnswerNotes(body, b);
-    } else {
-      /* The mark scheme, a point at a time. A student sees these only after
-         they have written something, and ticks off the ones they made. */
-      if (!Array.isArray(b.scheme) || !b.scheme.length) b.scheme = [{ text:"", marks:1 }];
-      const sw = el("div","bfield");
-      sw.appendChild(el("label","","Mark scheme"));
-      b.scheme.forEach((point, k) => {
-        const row = el("div","brow");
-        const inp = el("input");
-        inp.placeholder = "One point worth a mark";
-        inp.value = point.text || "";
-        inp.addEventListener("input", () => { point.text = inp.value; saveDraft(); schedulePreview(); });
-        row.appendChild(inp);
-        const worth = el("input"); worth.type = "number"; worth.min = "1"; worth.max = "10";
-        worth.className = "smallnum";
-        worth.title = "How many marks this point is worth";
-        worth.value = String(Math.max(1, parseInt(point.marks, 10) || 1));
-        worth.addEventListener("input", () => {
-          point.marks = Math.max(1, Math.min(10, Math.round(Number(worth.value) || 1)));
-          saveDraft(); schedulePreview();
-        });
-        row.appendChild(worth);
-        const del = el("button","btn-ghost bmini","✕"); del.title = "Remove";
-        del.addEventListener("click", () => { b.scheme.splice(k, 1); render(); schedulePreview(); });
-        row.appendChild(del);
-        sw.appendChild(row);
-      });
-      const addRow = el("div","brow");
-      const add = el("button","btn-ghost bmini2","+ Add a point");
-      add.addEventListener("click", () => { b.scheme.push({ text:"", marks:1 }); render(); });
-      addRow.appendChild(add);
-      /* The two numbers drifting apart is the mistake worth catching: a four
-         marker whose scheme adds up to three cannot be got full marks on. */
-      const worthAll = b.scheme.reduce((n, p) => n + Math.max(1, parseInt(p.marks, 10) || 1), 0);
-      const want = Math.max(0, parseInt(b.marks, 10) || 0);
-      if (want && b.scheme.some(p => String(p.text || "").trim()) && worthAll !== want)
-        addRow.appendChild(el("span","bhelp warn",
-          "The scheme adds up to " + worthAll + " but the question is worth " + want + "."));
-      sw.appendChild(addRow);
-      body.appendChild(sw);
-      F("A full answer (optional)", "model", { area:true, rows:2,
-        help:"Shown under the mark scheme, so they can see what a complete answer reads like." });
-      F("Lines for the answer (optional)", "lines", { num:true,
-        help:"Left empty, the box is two lines a mark." });
-    }
-    specPicker(body, b);
-  }
+  /* Drawing this one task again, for the buttons inside it. Rebuilding the
+     whole list for those threw away every other card, lost the cursor and
+     scrolled the column about; only this card has changed. */
+  const redraw = () => {
+    if (!c.isConnected){ render(); return null; }
+    closeHelp();
+    const fresh = card(b, i, arr);
+    c.replaceWith(fresh);
+    saveDraft();
+    return fresh;
+  };
+  editTask(b, body, { redraw, paintHead });
   c.appendChild(body);
   return c;
 }
@@ -4121,10 +2749,13 @@ function say(title, message, opts){
 function askDelete(what, done){
   openModal(box => {
     box.appendChild(el("h2","","Delete this " + String(what || "task").toLowerCase() + "?"));
-    box.appendChild(el("p","modal-text","It will be removed from the lesson. You can undo it only by adding it again."));
+    box.appendChild(el("p","modal-text","It will be removed from the lesson. Ctrl+Z, or Undo in the message afterwards, brings it back."));
     const yes = el("button","btn-primary modal-cta","Delete");
     yes.style.background = "var(--red)";
-    yes.addEventListener("click", () => { closeModal(); done(); });
+    yes.addEventListener("click", () => {
+      closeModal(); done();
+      if (window.hubUI) window.hubUI.toast(String(what || "Task") + " deleted", { action:"Undo", onAction: builderUndo });
+    });
     const no = el("button","btn-ghost modal-stay","Keep it");
     no.addEventListener("click", closeModal);
     box.appendChild(yes); box.appendChild(no);
@@ -4139,16 +2770,9 @@ function setMode(assess, practical){
   lesson.practical = !!practical;
   if (practical) lesson.assessment = false;
   ensureQuestionsPage();
-  /* The practical button is taken off the page when there is no server, so
-     it may not be there to mark. */
-  const prBtn = $("modePractical");
-  if (prBtn) prBtn.classList.toggle("on", !!practical);
-  $("modeHome").classList.toggle("on", !!lesson.homework && !assess && !practical);
   $("assessTabs").hidden = !assess && !practical;
   $("tabQuestions").textContent = practical ? "Tasks" : "Questions";
   if (!assess){ assessTab = "questions"; respEditing = null; }
-  $("modeLesson").classList.toggle("on", !assess && !practical && !lesson.homework);
-  $("modeAssess").classList.toggle("on", assess);
   $("palLesson").hidden = !!assess;          // a practical uses the lesson palette
   /* Extension tasks are for a lesson or a piece of home learning. An
      assessment has its own extension list, and a practical one is marked by
@@ -4163,26 +2787,28 @@ function setMode(assess, practical){
   saveDraft(); render(); schedulePreview();
   if (typeof paintBuildBar === "function") paintBuildBar();
 }
-on("modeLesson", "click", () => {
-  lesson.homework = false;
-  if (lesson.assessment && lesson.blocks.length){
-    openModal(box => {
-      box.appendChild(el("h2","","Switch to a lesson?"));
-      box.appendChild(el("p","modal-text","Your questions stay, but assessment marking is switched off."));
-      const yes = el("button","btn-primary modal-cta","Switch");
-      yes.addEventListener("click", () => { closeModal(); setMode(false, false); });
-      const no = el("button","btn-ghost modal-stay","Cancel"); no.addEventListener("click", closeModal);
-      box.appendChild(yes); box.appendChild(no);
-    });
-  } else setMode(false, false);
-});
-on("modeAssess", "click", () => setMode(true, false));
-on("modePractical", "click", () => { lesson.homework = false; setMode(false, true); });
-on("modeHome", "click", () => {
-  /* the same as a lesson in every way, but students see it as home learning */
-  lesson.homework = true;
-  setMode(false, false);
-});
+/* The four kinds of work, in the order they are offered. Home learning is
+   a lesson in every way except that students see it as home learning and
+   nothing in it is ever locked. */
+const KINDS = [
+  { id:"lesson",    name:"Lesson",               icon:"lessons",
+    about:"Pages a class works through, opened one at a time as you teach." },
+  { id:"assess",    name:"Assessment",           icon:"work",
+    about:"Questions marked as they are answered, with a Strength, a Target and response tasks." },
+  { id:"practical", name:"Practical assessment", icon:"practice",
+    about:"Built like a lesson, sat a page at a time, and marked by you." },
+  { id:"home",      name:"Home learning",        icon:"home",
+    about:"A lesson done at home. Every page is open from the start." }
+];
+function kindNow(){
+  return lesson.practical ? "practical" : lesson.assessment ? "assess" : lesson.homework ? "home" : "lesson";
+}
+function setKind(id){
+  lesson.homework = id === "home";
+  setMode(id === "assess", id === "practical");
+  paintBuildBar();
+}
+
 function setAssessTab(which){
   assessTab = which;
   respEditing = null;
@@ -4282,14 +2908,16 @@ function rubricPopup(){
         };
         [["\u2191","Move up", move(-1)],
          ["\u2193","Move down", move(1)],
-         ["\u29C9","Duplicate", () => {
+         ["duplicate","Duplicate: add a copy just below", () => {
             lesson.rubric.splice(i + 1, 0, JSON.parse(JSON.stringify(g)));
             saveDraft(); paint();
           }],
          ["\u2715","Remove", () => { lesson.rubric.splice(i, 1); saveDraft(); paint(); }]
         ].forEach(t => {
-          const b = el("button","btn-ghost bmini", t[0]);
+          const b = el("button","btn-ghost bmini", t[0] === "duplicate" && window.hubUI ? "" : t[0]);
+          if (t[0] === "duplicate" && window.hubUI) b.innerHTML = window.hubUI.icon("duplicate", 15);
           b.title = t[1];
+          b.setAttribute("aria-label", t[1]);
           b.addEventListener("click", t[2]);
           tools.appendChild(b);
         });
@@ -4356,6 +2984,16 @@ const WEB_CHECKS = [
   ["cssHas",     "A CSS rule sets...",     "selector"],
   ["fileHas",    "A file contains...",     "text"],
   ["runCount",   "Runs the page at least...", "number"]
+];
+/* Block coding reads the project rather than any text, so it has kinds of
+   its own. Which block is picked from SCRATCH_BLOCKS in scratchhub.js. */
+const SCRATCH_CHECKS = [
+  ["block",      "Uses a block...",          "which"],
+  ["sprites",    "Has this many sprites",    "count"],
+  ["scripts",    "Has this many scripts",    "count"],
+  ["variables",  "Makes this many variables","count"],
+  ["costumes",   "A sprite has this many costumes", "count"],
+  ["runCount",   "Clicks the green flag at least...", "number"]
 ];
 /* What a Photoshop file can be checked for. Each counts something in the
    file's layers (runPsdChecks in psd.js), so every one takes how many.
@@ -4472,9 +3110,50 @@ function checkFields(c, row, kinds, repaint){
     row.appendChild(f);
   };
 
+  /* The two output checks take a box that can hold more than one line, since
+     what a program prints usually runs over several: a name on one line and a
+     greeting on the next. It grows with what is typed so a four-line answer
+     is seen whole rather than scrolled through. */
+  const outputLines = (name, key, help) => {
+    const f = el("div","bfield checkfield grow outfield");
+    f.appendChild(el("label","", name));
+    const ta = document.createElement("textarea");
+    ta.className = "outtext";
+    ta.spellcheck = false;
+    ta.value = c[key] || "";
+    if (help) ta.placeholder = help;
+    const fit = () => { ta.rows = Math.max(2, Math.min(10, ta.value.split("\n").length)); };
+    fit();
+    ta.addEventListener("input", () => { c[key] = ta.value; fit(); saveDraft(); });
+    f.appendChild(ta);
+    row.appendChild(f);
+  };
+
+  /* the blocks, by the names a teacher knows them by */
+  const whichBlock = () => {
+    const f = el("div","bfield checkfield grow");
+    f.appendChild(el("label","","Which block"));
+    const sel = document.createElement("select");
+    (window.SCRATCH_BLOCKS || []).forEach(d => {
+      const o = document.createElement("option");
+      o.value = d[0]; o.textContent = d[1];
+      sel.appendChild(o);
+    });
+    sel.value = c.value || "forever";
+    sel.addEventListener("change", () => { c.value = sel.value; saveDraft(); });
+    f.appendChild(sel);
+    row.appendChild(f);
+  };
+
   const kind = c.kind || kinds[0][0];
-  if (isPsdKind(kind)) howMany();
-  else if (kind === "uses") whichOne();
+  if (isPsdKind(kind)){ howMany(); return; }
+  if (kinds === SCRATCH_CHECKS){
+    if (kind === "block"){ whichBlock(); howMany(); }
+    else if (kind === "runCount") needs("How many times", "count", "1");
+    else howMany();
+    return;
+  }
+  if (kind === "uses") whichOne();
   else if (kind === "usesCount"){ whichOne(); howMany(); }
   else if (kind === "codeCount"){
     needs("Text to count", "value", "elif");
@@ -4482,6 +3161,10 @@ function checkFields(c, row, kinds, repaint){
   }
   else if (kind === "lineCount") needs("How many lines", "count", "5");
   else if (kind === "runCount") needs("How many times", "count", "1");
+  else if (kind === "outputHas")
+    outputLines("Output to look for (Enter for a new line)", "value", "Hello Ada\nYou are 12");
+  else if (kind === "outputIs")
+    outputLines("The whole output (Enter for a new line)", "value", "Hello Ada\nYou are 12");
   else if (kind === "tag") needs("Tag name", "selector", "h1");
   else if (kind === "classOrId") needs("Class or id", "selector", ".title or #header");
   else if (kind === "attr"){
@@ -4515,7 +3198,12 @@ function checkFields(c, row, kinds, repaint){
 /* Filling in whatever a newly chosen kind needs, so a check is never left
    asking for nothing, and a count never reads back as zero and ticks itself
    off whatever the student wrote. */
-function settleKind(c){
+function settleKind(c, scratch){
+  if (scratch){
+    if (c.kind === "block" && !(window.SCRATCH_BLOCKS || []).some(d => d[0] === c.value)) c.value = "forever";
+    if (!String(c.count || "").trim()) c.count = "1";
+    return;
+  }
   if (picksFromList(c.kind) && !c.value) c.value = USES_OPTIONS[0];
   if ((c.kind === "usesCount" || c.kind === "codeCount" ||
        c.kind === "lineCount" || c.kind === "runCount" || isPsdKind(c.kind)) && !String(c.count || "").trim())
@@ -4595,7 +3283,8 @@ function logicSentence(more){
 }
 
 function checklistPopup(block, isWeb, psd){
-  const kinds = psd ? PSD_CHECKS : isWeb ? WEB_CHECKS : PY_CHECKS;
+  const isScratch = block.type === "scratch";
+  const kinds = psd ? PSD_CHECKS : isScratch ? SCRATCH_CHECKS : isWeb ? WEB_CHECKS : PY_CHECKS;
   /* Which cards are open. Held against the checks themselves rather than
      against their positions, so moving one up or down does not open a
      different line than the one that was being edited. Nothing about it is
@@ -4611,33 +3300,48 @@ function checklistPopup(block, isWeb, psd){
         "Keep the wording plain, it is what they read when they are stuck."
       : "Each line becomes something the student can tick off. Keep the wording plain, " +
         "it is what they read when they are stuck."));
-
-    /* How the whole list is shown. All together is how it has always been, so
-       it is what a lesson with nothing written down gets. */
-    const modeRow = el("div","bfield");
-    modeRow.appendChild(el("label","","How students see it"));
-    const modeBtns = el("div","brow");
-    const modeNow = () => (block.checkMode === "one" || block.checkMode === "choose") ? block.checkMode : "all";
-    const MODES = [["all","All together","Every line on show at once"],
-                   ["one","One at a time","The next line appears once the one before it is ticked"],
-                   ["choose","Students decide","A switch on the checklist lets each student pick"]];
-    function paintModes(){
-      modeBtns.innerHTML = "";
-      MODES.forEach(m => {
-        const b = el("button","btn-ghost bmini2" + (modeNow() === m[0] ? " right" : ""), m[1]);
-        b.type = "button";
-        b.title = m[2];
-        b.setAttribute("aria-pressed", modeNow() === m[0] ? "true" : "false");
-        b.addEventListener("click", () => {
-          if (m[0] === "all") delete block.checkMode; else block.checkMode = m[0];
-          saveDraft(); paintModes();
-        });
-        modeBtns.appendChild(b);
-      });
-    }
-    paintModes();
-    modeRow.appendChild(modeBtns);
-    box.appendChild(modeRow);
+    /* Students get one line at a time unless this is on: a long list read
+       all at once is a wall, and one thing to do next is somewhere to start.
+       They can always press Show all themselves. */
+    const showRow = el("div","brow checkshowall");
+    const showBtn = el("button","btn-ghost bmini2");
+    showBtn.type = "button";
+    const paintShow = () => {
+      const on = block.checksShowAll === true;
+      showBtn.textContent = "Start with every line showing: " + (on ? "on" : "off");
+      showBtn.classList.toggle("right", on);
+    };
+    showBtn.addEventListener("click", () => {
+      if (block.checksShowAll === true) delete block.checksShowAll;
+      else block.checksShowAll = true;
+      paintShow(); saveDraft(); schedulePreview();
+    });
+    paintShow();
+    showRow.appendChild(showBtn);
+    /* Lines that only look at the code can tick themselves off as the
+       student types, without waiting for Run. On unless a teacher would
+       rather the Run button was the only thing that ticks anything. */
+    const liveBtn = el("button","btn-ghost bmini2");
+    liveBtn.type = "button";
+    liveBtn.hidden = !!psd;          // a file is chosen, not typed: nothing to tick as they type
+    const paintLive = () => {
+      const on = block.checksLive !== false;
+      liveBtn.textContent = "Tick off as they type: " + (on ? "on" : "off");
+      liveBtn.classList.toggle("right", on);
+    };
+    liveBtn.addEventListener("click", () => {
+      if (block.checksLive === false) delete block.checksLive;
+      else block.checksLive = false;
+      paintLive(); saveDraft(); schedulePreview();
+    });
+    paintLive();
+    showRow.appendChild(liveBtn);
+    showRow.appendChild(helpDot(["Start with every line showing: off, students see one line at a time, with the "
+      + "rest numbered above it and a button to show them all. On, they start with the whole list and can "
+      + "switch to one at a time.",
+      "Tick off as they type: lines that only look at the code tick themselves off a moment after the "
+      + "student stops typing. Lines about what the program prints still wait for Run."]));
+    box.appendChild(showRow);
     const list = el("div");
     box.appendChild(list);
 
@@ -4801,7 +3505,7 @@ function checklistPopup(block, isWeb, psd){
         pick.value = c.kind || kinds[0][0];
         pick.addEventListener("change", () => {
           c.kind = pick.value;
-          settleKind(c);
+          settleKind(c, isScratch);
           saveDraft(); paint();
         });
         row.appendChild(pick);
@@ -4858,9 +3562,11 @@ function checklistPopup(block, isWeb, psd){
            is written inside those lines: pick "uses an if" and a condition
            inside the block asks about what the if actually does, rather than
            about the condition on it. */
-        if (!Array.isArray(c.more)) c.more = [];
-        if (psd) c.more = [];
-        if (!psd) c.more.forEach((m, mi) => {
+        /* A block coding line is about the project, and a Photoshop line
+           about the file: neither has lines of text for a condition to
+           narrow down to, so neither has any. */
+        if (!Array.isArray(c.more) || isScratch || psd) c.more = [];
+        c.more.forEach((m, mi) => {
           const mr = el("div","morecond" + (m.group ? " grouped" : ""));
           const top = el("div","brow condtop");
 
@@ -4931,7 +3637,7 @@ function checklistPopup(block, isWeb, psd){
           saveDraft(); paint();
         });
         /* on the same row as the box it adds a condition to, not under it */
-        if (!psd) mainRow.appendChild(addMore);
+        if (!isScratch && !psd) mainRow.appendChild(addMore);
         if (c.more.length){
           const sum = el("div","logicline");
           sum.appendChild(el("span","logiclead","Ticked when"));
@@ -4946,41 +3652,38 @@ function checklistPopup(block, isWeb, psd){
 
         /* Last, so it applies whatever kind of check this is. Left empty, the
            line says nothing under it. Teacher-checked lines never reach here:
-           they have nothing to fail at, so there is nothing to say about it.
-           The student sees "Need a hint?" under a line they have not got yet,
-           once they have run their code this many times, and the hint only
-           when they press it. */
-        const hrow = el("div","checkrow");
-        const hfield = el("div","bfield checkfield grow");
-        hfield.appendChild(el("label","","Hint"));
+           they have nothing to fail at, so there is nothing to say about it. */
+        const hrow = el("div","bfield wide");
+        hrow.appendChild(el("label","","Hint"));
+        const hline = el("div","brow hintrow");
         const hin = el("input");
         hin.value = c.hint || "";
         hin.placeholder = "Leave empty for no hint";
         hin.addEventListener("input", () => { c.hint = hin.value; saveDraft(); });
         /* Code goes between backticks and is drawn as code, the way the
            Helpful IDE writes its own. */
-        hfield.appendChild(withHelp(hin, ["Put any code between backticks and students see it as code: " +
+        hline.appendChild(withHelp(hin, ["Put any code between backticks and students see it as code: " +
           "`print(\"Hello\")` shows as print(\"Hello\") in the code font."]));
-        hrow.appendChild(hfield);
-        const afield = el("div","bfield checkfield");
-        if (psd) afield.hidden = true;            // there is no Run to count
-        afield.appendChild(el("label","","Offer it after this many runs"));
-        const apair = el("div","countpair");
-        const anum = el("input");
-        anum.type = "number"; anum.min = "0"; anum.max = "99";
-        anum.value = c.hintAfter === undefined || c.hintAfter === "" ? "1" : String(c.hintAfter);
-        anum.title = "0 offers it straight away";
-        /* One is what nearly everyone wants, so only a different number is
-           written into the lesson. */
-        anum.addEventListener("input", () => {
-          const n = parseInt(anum.value, 10);
-          if (isNaN(n) || n === 1) delete c.hintAfter;
-          else c.hintAfter = Math.max(0, n);
+        /* How many times they have to have pressed Run before Need a hint?
+           appears under the line. Nought offers it as soon as the line is
+           not ticked. */
+        const after = el("label","hintafter");
+        if (psd) after.hidden = true;             // there is no Run to count
+        after.appendChild(document.createTextNode("Offer after "));
+        const hnum = el("input");
+        hnum.type = "number"; hnum.min = "0"; hnum.max = "99"; hnum.className = "stepnum";
+        hnum.value = String(Math.max(0, parseInt(c.hintAfter, 10) || 0));
+        hnum.addEventListener("input", () => {
+          const n = Math.max(0, Math.min(99, parseInt(hnum.value, 10) || 0));
+          if (n) c.hintAfter = n; else delete c.hintAfter;
           saveDraft();
         });
-        apair.appendChild(anum);
-        afield.appendChild(apair);
-        hrow.appendChild(afield);
+        after.appendChild(hnum);
+        after.appendChild(document.createTextNode(" runs"));
+        hline.appendChild(after);
+        hline.appendChild(helpDot("Students see Need a hint? under this line once they have pressed Run "
+          + "this many times and the line is still not ticked. It never shows on a line that is ticked off."));
+        hrow.appendChild(hline);
         card.appendChild(hrow);
 
         list.appendChild(card);
@@ -4994,6 +3697,8 @@ function checklistPopup(block, isWeb, psd){
       const first = kinds[0][0];
       const made = { label:"", labelHtml:"", kind: first,
                      value: picksFromList(first) ? USES_OPTIONS[0] : "" };
+      if (isScratch) settleKind(made, true);
+      /* a Photoshop line counts something, and starts at one */
       if (psd){ delete made.value; made.count = "1"; }
       block.checks.push(made);
       /* whatever was just added is the thing being written, so it opens */
@@ -5464,82 +4169,170 @@ function showTitle(){
    with the X keeps the change. The year and unit pickers already worked that
    way and having half the pop-up behave differently is how a teacher loses a
    title without noticing. */
-on("optionsBtn", "click", () => {
+/* A switch for a setting that is on or off, the same one the console's
+   pacing uses, with what it does written beside it rather than behind it. */
+function optSwitch(isOn, label, onFlip){
+  const sw = el("button","pace-switch" + (isOn ? " on" : ""));
+  sw.type = "button";
+  sw.setAttribute("role", "switch");
+  sw.setAttribute("aria-checked", isOn ? "true" : "false");
+  sw.setAttribute("aria-label", label);
+  sw.appendChild(el("span","pace-switch-words", isOn ? "On" : "Off"));
+  sw.appendChild(el("span","pace-knob"));
+  sw.addEventListener("click", onFlip);
+  return sw;
+}
+/* One setting: its name and what it does on the left, the switch on the
+   right, and the longer explanation behind the help dot. */
+function optRow(name, about, sw, help){
+  const row = el("div","optrow");
+  const words = el("div","optrow-words");
+  const head = el("b","", name);
+  words.appendChild(head);
+  if (about) words.appendChild(el("span","", about));
+  row.appendChild(words);
+  if (help) row.appendChild(helpDot(help));
+  row.appendChild(sw);
+  return row;
+}
+function optSection(title, about){
+  const sec = el("section","optsec");
+  sec.appendChild(el("h3","optsec-head", title));
+  if (about) sec.appendChild(el("p","optsec-about", about));
+  return sec;
+}
+
+/* Everything that belongs to the lesson rather than to a page: what kind of
+   work it is, what it is called, where it sits in the hub, and how it
+   behaves. One pop-up in both layouts, because the top row it used to sit
+   on is not there at all below 1100px and a setting a teacher cannot reach
+   on an iPad may as well not exist.
+
+   Each field writes as it is typed rather than waiting for Done, so closing
+   with the X keeps the change. The year and unit pickers already worked that
+   way and having half the pop-up behave differently is how a teacher loses a
+   title without noticing. The kind of work changes on the press too. */
+function openLessonOptions(){
   const titles = document.querySelector(".build-titles");
   openModal(box => {
+    box.classList.add("lessonopts");
     box.appendChild(el("h2","","Lesson options"));
 
+    /* ---- what it is ---- */
+    const secKind = optSection("What this is");
+    const grid = el("div","kindgrid");
+    grid.setAttribute("role", "radiogroup");
+    grid.setAttribute("aria-label", "What this is");
+    /* Changing kind deletes nothing, so it happens on the press: what has
+       already been built stays, whichever kind it becomes. */
+    const paintKinds = () => {
+      grid.innerHTML = "";
+      KINDS.forEach(k => grid.appendChild(kindCard(k, k.id === kindNow(), (pick) => {
+        if (pick.id === kindNow()) return;
+        setKind(pick.id); repaint();
+      })));
+    };
+    secKind.appendChild(grid);
+    box.appendChild(secKind);
+
+    /* ---- what it is called ---- */
+    const secAbout = optSection("About it");
     const w1 = el("div","bfield");
-    w1.appendChild(el("label","","Lesson title"));
+    w1.appendChild(el("label","","Title"));
     const t1 = el("input"); t1.value = lesson.title || "";
+    t1.placeholder = "What students will see it called";
     t1.addEventListener("input", () => {
       lesson.title = t1.value; saveDraft(); showTitle(); schedulePreview(); });
-    w1.appendChild(t1); box.appendChild(w1);
-
+    w1.appendChild(t1); secAbout.appendChild(w1);
     const w2 = el("div","bfield");
     w2.appendChild(el("label","","One line for the home page"));
     const t2 = el("input"); t2.value = lesson.intro || "";
+    t2.placeholder = "Optional. Shown under the title on a student's home page";
     t2.addEventListener("input", () => {
       lesson.intro = t2.value; saveDraft(); schedulePreview(); });
-    w2.appendChild(t2); box.appendChild(w2);
+    w2.appendChild(t2); secAbout.appendChild(w2);
+    box.appendChild(secAbout);
 
-    /* The real pickers are moved in, not copied, so "+ New year group" and
+    /* ---- what and why ----
+       Said once for the whole lesson, and shown to students where the
+       lesson page puts it, rather than typed into a task on every page. */
+    const secWhy = optSection("What and why");
+    [["what", "What we are learning", "One sentence. What students will be able to do by the end"],
+     ["why", "Why it matters", "One sentence. Why this is worth learning"],
+     ["career", "Where this can lead", "Optional. A job that uses this, and how"],
+     ["careerLink", "Careers link", "Optional. A National Careers Service page, starting https://"]].forEach(([key, label, hint]) => {
+      const w = el("div","bfield");
+      w.appendChild(el("label","",label));
+      const inp = el(key === "careerLink" ? "input" : "textarea"); inp.value = lesson[key] || "";
+      if (key !== "careerLink") inp.rows = 2;
+      inp.placeholder = hint;
+      inp.addEventListener("input", () => { lesson[key] = inp.value.trim() ? inp.value : ""; saveDraft(); schedulePreview(); });
+      w.appendChild(inp); secWhy.appendChild(w);
+    });
+    box.appendChild(secWhy);
+
+    /* ---- where it lives ----
+       The real pickers are moved in, not copied, so "+ New year group" and
        everything else attached to them still works. */
+    const secWhere = optSection("Where it lives", specLevel()
+      ? "The year group and the point of the specification it is filed under."
+      : "The year group and unit it is filed under in Lessons.");
     const w3 = el("div","bfield savepickers");
-    w3.appendChild(el("label","", specLevel() ? "Year group and specification point"
-                                             : "Year group and unit"));
     w3.appendChild($("lYear"));
     w3.appendChild($("lUnit"));
     w3.appendChild($("lSub"));
-    box.appendChild(w3);
+    secWhere.appendChild(w3);
+    box.appendChild(secWhere);
 
-    const w4 = el("div","bfield");
-    w4.appendChild(el("label","","Saving"));
-    const row = el("div","brow");
-    const tog = el("button","btn-ghost bmini2","");
-    const paint = () => {
-      tog.textContent = "Autosave: " + (lesson.linger !== false ? "on" : "off");
-      tog.classList.toggle("right", lesson.linger !== false);
+    /* ---- how it behaves ---- */
+    const secHow = optSection("How it works");
+    const howRows = el("div","optrows");
+    secHow.appendChild(howRows);
+    box.appendChild(secHow);
+
+    const paintHow = () => {
+      howRows.innerHTML = "";
+      const auto = lesson.linger !== false;
+      howRows.appendChild(optRow("Autosave",
+        auto ? "Work is sent as students go, as well as when they finish."
+             : "Work only arrives when a student presses Finish or Save work.",
+        optSwitch(auto, "Autosave", () => {
+          lesson.linger = lesson.linger === false; saveDraft(); schedulePreview(); paintHow(); }),
+        ["On by default. Their work is sent half a minute after they stop typing, "
+         + "at least every three minutes while they keep going, and again as they "
+         + "press Continue if anything is still waiting, so a task that takes "
+         + "twenty minutes is not twenty minutes at risk. Turned off, work only "
+         + "reaches you when a student presses Finish or Save work."]));
+      /* Only a standard assessment has STAR feedback to turn off, or asks
+         Student Voice, so nothing else is shown either. */
+      if (lesson.assessment && !lesson.practical){
+        const star = lesson.star !== false;
+        howRows.appendChild(optRow("STAR feedback",
+          star ? "Each student gets a Strength, a Target and response tasks."
+               : "Each student gets their mark, and everyone gets the same extension tasks.",
+          optSwitch(star, "STAR feedback", () => {
+            lesson.star = lesson.star === false;
+            paintAssessTabs(); saveDraft(); render(); schedulePreview(); paintHow();
+          }),
+          ["On: each student gets a Strength and Target from the topics their questions are tagged "
+           + "with, and response tasks chosen from their target.",
+           "Off: they get their mark and nothing more, and the same extension tasks for everyone at "
+           + "the bottom of their summary. The tabs above change to Questions and Extension tasks."]));
+        howRows.appendChild(voiceField());
+      }
     };
-    tog.addEventListener("click", () => {
-      lesson.linger = lesson.linger === false; paint(); saveDraft(); schedulePreview(); });
-    paint();
-    row.appendChild(tog);
-    row.appendChild(helpDot(
-      ["On by default. Their work is sent half a minute after they stop typing, "
-       + "at least every three minutes while they keep going, and again as they "
-       + "press Continue if anything is still waiting, so a task that takes "
-       + "twenty minutes is not twenty minutes at risk. Turned off, work only "
-       + "reaches you when a student presses Finish or Save Work."]));
-    w4.appendChild(row); box.appendChild(w4);
 
-    /* Only a standard assessment has STAR feedback to turn off, so nothing
-       else is shown the choice. */
-    if (lesson.assessment && !lesson.practical){
-      const w5 = el("div","bfield");
-      w5.appendChild(el("label","","STAR feedback"));
-      const row5 = el("div","brow");
-      const star = el("button","btn-ghost bmini2","");
-      const paintStar = () => {
-        star.textContent = "STAR feedback: " + (lesson.star !== false ? "on" : "off");
-        star.classList.toggle("right", lesson.star !== false);
-      };
-      star.addEventListener("click", () => {
-        lesson.star = lesson.star === false;
-        paintStar(); paintAssessTabs(); saveDraft(); render(); schedulePreview();
-      });
-      paintStar();
-      row5.appendChild(star);
-      row5.appendChild(helpDot(
-        ["On: each student gets a Strength and Target from the topics their questions are tagged "
-         + "with, and response tasks chosen from their target.",
-         "Off: they get their mark and nothing more, and the same extension tasks for everyone at "
-         + "the bottom of their summary. The tabs above change to Questions and Extension tasks."]));
-      w5.appendChild(row5); box.appendChild(w5);
-      box.appendChild(voiceField());
-    }
+    /* ---- versions ----
+       versionField brings its own label, which the section heading replaces. */
+    const secVer = optSection("Versions");
+    const ver = versionField();
+    const verLabel = ver.querySelector(":scope > label");
+    if (verLabel) verLabel.remove();
+    secVer.appendChild(ver);
+    box.appendChild(secVer);
 
-    box.appendChild(versionField());
+    const repaint = () => { paintKinds(); paintHow(); };
+    paintKinds(); paintHow();
 
     const go = el("button","btn-primary modal-cta","Done");
     go.addEventListener("click", closeModal);
@@ -5555,7 +4348,8 @@ on("optionsBtn", "click", () => {
     };
     document.addEventListener("hubModalClosed", back);
   }
-});
+}
+on("optionsBtn", "click", openLessonOptions);
 
 
 /* ---------------- versions of a lesson ----------------
@@ -5595,31 +4389,30 @@ function lastTeacher(){
    the ids are kept, in lesson.voice: the questions themselves live in
    voice.js, so improving the wording there reaches every lesson. */
 function voiceField(){
-  const w = el("div","bfield");
-  w.appendChild(el("label","","Student Voice"));
   const all = (window.studentVoice && window.studentVoice.QUESTIONS) || [];
-  const row = el("div","brow");
-  const tog = el("button","btn-ghost bmini2","");
-  const list = el("div","voice-picks");
   const on = () => Array.isArray(lesson.voice) && lesson.voice.length > 0;
   const changed = () => { paint(); saveDraft(); schedulePreview(); };
+  const w = el("div","optrow-wrap");
+  const list = el("div","voice-picks");
+  let row = null;
   const paint = () => {
-    tog.textContent = "Student Voice: " + (on() ? "on" : "off");
-    tog.classList.toggle("right", on());
+    const fresh = optRow("Student Voice",
+      on() ? "Each student is asked one of the ticked questions, picked at random."
+           : "A short question about how the half term went, under their marks.",
+      optSwitch(on(), "Student Voice", () => {
+        lesson.voice = on() ? [] : all.map(q => q.id);
+        changed();
+      }),
+      ["On: under the summary of their marks, each student is asked one of the ticked questions "
+       + "about how the half term went, picked at random. It is optional, with a Skip button, and "
+       + "their answer is saved the moment they pick it.",
+       "Their answers are in the Student Voice tab of the markbook, one question at a time."]);
+    if (row) w.replaceChild(fresh, row); else w.insertBefore(fresh, list);
+    row = fresh;
     list.hidden = !on();
     list.querySelectorAll("input").forEach(box => { box.checked = on() && lesson.voice.indexOf(box.value) >= 0; });
   };
-  tog.addEventListener("click", () => {
-    lesson.voice = on() ? [] : all.map(q => q.id);
-    changed();
-  });
-  row.appendChild(tog);
-  row.appendChild(helpDot(
-    ["On: under the summary of their marks, each student is asked one of the ticked questions "
-     + "about how the half term went, picked at random. It is optional, with a Skip button, and "
-     + "their answer is saved the moment they pick it.",
-     "Their answers are in the Student Voice tab of the markbook, one question at a time."]));
-  w.appendChild(row);
+  w.appendChild(list);
   all.forEach(q => {
     const line = el("label","voice-pick");
     const box = el("input");
@@ -5636,7 +4429,6 @@ function voiceField(){
     line.appendChild(el("span","", q.ask));
     list.appendChild(line);
   });
-  w.appendChild(list);
   paint();
   return w;
 }
@@ -5984,146 +4776,25 @@ function taskGroups(target){
        lists say different things about what a teacher may add */
     kinds: Array.from(group.querySelectorAll(".pal[data-add]")).filter(btn => !btn.hidden).map(btn => ({
       kind: btn.dataset.add,
-      label: (btn.querySelector("b") || {}).textContent || btn.dataset.add
+      label: (btn.querySelector("b") || {}).textContent || btn.dataset.add,
+      note: (btn.querySelector("span") || {}).textContent || ""
     }))
   })).filter(g => g.kinds.length);
 }
 
-/* The containers a task is added from. Given whichever list is being looked
-   at: the tasks on a page, the questions in an assessment, or the practice
-   under one topic. */
+/* Where a task is added from, under whichever list is being looked at: the
+   tasks on a page, the questions in an assessment, or the practice under one
+   topic. One button, which opens the full list of tasks with a search box.
+   It used to be a row of nine containers repeating the palette on the left,
+   which was two lines of buttons under every list of tasks. */
 function addTaskRow(target, inside){
   const wrap = el("div","pageadd");
-  const bar = el("div","pageadd-bar");        // the containers, side by side
-  const tray = el("div","pageadd-tray");      // whichever one is open, below
-  tray.hidden = true;
-  wrap.appendChild(bar); wrap.appendChild(tray);
-  /* Containers do not go inside themselves. A choice inside extension tasks is
-     fine and useful; a choice inside a choice is a maze. */
-  const groups = taskGroups(target).map(g => ({
-    name: g.name,
-    kinds: g.kinds.filter(k => {
-      if (inside === "choice") return k.kind !== "choice" && k.kind !== "extension";
-      /* Extension tasks are a page's own "finished early?" flap, so they go
-         on a page and nowhere else. A group inside either of these is fine,
-         and a group inside a group is the whole point of one. */
-      if (inside === "extension" || inside === "group") return k.kind !== "extension";
-      return true;
-    })
-  })).filter(g => g.kinds.length);
-
-  function openGroup(group, chip){
-    const already = chip.classList.contains("open");
-    bar.querySelectorAll(".pageadd-chip").forEach(c => c.classList.remove("open"));
-    tray.innerHTML = "";
-    if (already){ tray.hidden = true; return; }
-    chip.classList.add("open");
-    group.kinds.forEach(item => {
-      const btn = el("button","btn-ghost bmini2", item.label);
-      btn.addEventListener("click", () => {
-        const made = newBlock(item.kind);
-        if (!made) return;
-        target.push(made);
-        openOnly(target, made);
-        viewAll = false;
-        scrollToBlock = made;
-        render(); schedulePreview();
-      });
-      tray.appendChild(btn);
-    });
-    tray.hidden = false;
-  }
-
-  const chips = groups.map(group => {
-    const chip = el("button","pageadd-chip","+ " + group.name);
-    chip.type = "button";
-    chip.addEventListener("click", () => openGroup(group, chip));
-    bar.appendChild(chip);
-    return { group, chip };
-  });
-
-  /* On a wide screen the containers wrap onto as many lines as they need and
-     that is the end of it. On a phone that would push the page's own tasks a
-     long way down, so the row is held to two lines with a button that grows it
-     one line at a time, and shrinks it again the same way once it is all out.
-
-     What was here before moved whatever spilled into a More pop-up. Deciding
-     what had spilled meant measuring the row, and when that measurement landed
-     before the middle column had its width every chip looked wrapped, so a
-     desktop builder would show one container and hide the other eight behind
-     More. Nothing is moved now: the bar is only ever clipped, so a bad
-     measurement can no longer rearrange anything. */
-  const LIMIT = 2;                    // lines shown before a phone hides any
-  let shown = LIMIT;
-  const more = el("button","pageadd-more","More");
-  more.type = "button";
-  more.hidden = true;
-  wrap.insertBefore(more, tray);      // above the open container, not below it
-
-  /* Where each line of chips begins. Clipping the bar does not change how they
-     wrap, so this reads the same whether the row is open or held down. */
-  function lineTops(){
-    const tops = [];
-    chips.forEach(c => {
-      const t = c.chip.offsetTop;
-      if (!tops.some(v => Math.abs(v - t) < 4)) tops.push(t);
-    });
-    return tops.sort((a, b) => a - b);
-  }
-
-  function fit(){
-    if (!wrap.isConnected) return;
-    const tops = lineTops();
-    if (!tops.length) return;
-    const loose = () => {
-      more.hidden = true;
-      bar.classList.remove("clamped");
-      bar.style.removeProperty("max-height");
-    };
-    if (!isCompact() || tops.length <= LIMIT) return loose();
-    shown = Math.max(LIMIT, Math.min(shown, tops.length));
-    if (shown >= tops.length){
-      /* everything is out, so the button turns round */
-      bar.classList.remove("clamped");
-      bar.style.removeProperty("max-height");
-      more.hidden = false;
-      more.textContent = "Less";
-      return;
-    }
-    more.hidden = false;
-    more.textContent = "More";
-    bar.classList.add("clamped");
-    /* The bottom of the lowest chip on the last line being shown. Chips are not
-       all one height, because a long name wraps to two lines inside its own
-       pill on a narrow screen, so taking the first chip's height here left the
-       row a line short of what it was meant to be showing. */
-    const cut = tops[shown - 1];
-    let bottom = 0;
-    chips.forEach(c => {
-      if (c.chip.offsetTop <= cut + 4){
-        bottom = Math.max(bottom, c.chip.offsetTop + c.chip.offsetHeight);
-      }
-    });
-    bar.style.maxHeight = (bottom - tops[0]) + "px";
-  }
-  more.addEventListener("click", () => {
-    shown += (shown >= lineTops().length) ? -1 : 1;
-    fit();
-  });
-  wrap._fit = fit;
-  /* after the browser has laid the row out: until then nothing has a width and
-     every chip reads as though it had wrapped */
-  setTimeout(fit, 0);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  const btn = el("button","pageadd-btn","+ Add task");
+  btn.type = "button";
+  btn.addEventListener("click", () => openTaskPicker(target, inside));
+  wrap.appendChild(btn);
   return wrap;
 }
-
-/* One listener for every row on the page rather than one per row per render.
-   The builder rebuilds its cards on every change and the old per-row resize
-   listeners were never taken off again, so they gathered all session. */
-window.addEventListener("resize", () => {
-  document.querySelectorAll(".pageadd").forEach(w => { if (w._fit) w._fit(); });
-});
 
 /* a small prompt that returns what was typed */
 function askNew(title, label){
@@ -6861,7 +5532,8 @@ const BANK_TYPES = [
   ["text","Paragraph","Words, with formatting"],
   ["picture","Image","Show a picture from a link"],
   ["embed","Video","Embed a clip"],
-  ["notes","Notes","Their own notes, with formatting"]
+  ["notes","Notes","Their own notes, with formatting"],
+  ["helper","Photoshop help","A help chat they can ask"]
 ];
 
 let bankOpen = false;        // the Task bank tab is the one on screen
@@ -6899,7 +5571,6 @@ function showBank(on){
   const hide = (sel, yes) => document.querySelectorAll(sel).forEach(e => { e.hidden = yes; });
   hide(".build", bankOpen);
   hide(".build-top", bankOpen);
-  hide(".modeswitch", bankOpen);
   $("bankView").hidden = !bankOpen;
   if (bankOpen) $("assessTabs").hidden = true;
   else setMode(!!lesson.assessment, !!lesson.practical);
@@ -7797,9 +6468,9 @@ function refreshBankPreview(){
        has been typed into it, as the lesson's preview does. */
     const fresh = bankPreviewOf !== bankTask;
     bankPreviewOf = bankTask;
-    writePreview(bankPreviewLesson(), bankTask);
+    writePreview(bankPreviewLesson(), bankTask, fresh);
     if (fresh){ try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){} }
-    reloadPreview(frame, fresh);
+    reloadPreview(frame, fresh, false);
     $("bankPrevMsg").textContent = "up to date";
   }catch(e){ $("bankPrevMsg").textContent = e.message; }
 }
@@ -8032,12 +6703,13 @@ on("prevPop", "click", () => popOutPreview(compile, "prevMsg"));
 function popOutPreview(make, msgId){
   try{
     localStorage.setItem("hub_preview", JSON.stringify(make()));
-    /* preview.html, not the lesson page: it is what keeps up with the builder
-       without starting the page again each time. */
     /* Which page the preview is on is deliberately left alone. It lives in
        this tab's sessionStorage, which the panel's frame shares and the new
        tab does not, so clearing it here would only throw the panel back to
-       page one. */
+       page one.
+
+       preview.html, not the lesson page: it is what keeps up with the builder
+       without starting the page again each time. */
     window.open("preview.html?t=" + Date.now(), "_blank", "noopener");
   }catch(e){ const m = $(msgId); if (m) m.textContent = e.message; }
 }
@@ -8063,12 +6735,13 @@ function openFullPreview(src){
   document.body.appendChild(back);
 }
 
-function refreshPreview(){
+/* `force` is the Refresh button: load it again even if nothing has changed. */
+function refreshPreview(force){
   try{
     const fresh = previewReset;
     if (previewReset){ try{ sessionStorage.removeItem("hub_preview_step"); }catch(e){} previewReset = false; }
     writePreview(compile(), "lesson", fresh);
-    reloadPreview($("prev"), fresh);
+    reloadPreview($("prev"), fresh, force === true);
     $("prevMsg").textContent = "up to date";
   }catch(e){ $("prevMsg").textContent = e.message; }
 }
@@ -8090,16 +6763,16 @@ function writePreview(json, source, fresh){
    once and asked to refresh after that; setting the frame's address on every
    change, as this used to, is exactly the blank flash and the lost answers
    it exists to avoid. */
-function reloadPreview(frame, fresh){
+function reloadPreview(frame, fresh, force){
   if (!frame) return;
   if (!/^preview\.html/.test(frame.getAttribute("src") || "")){
     frame.src = "preview.html";
     return;
   }
-  try{ frame.contentWindow.postMessage({ hubPreviewRefresh: true, fresh: !!fresh }, location.origin); }
+  try{ frame.contentWindow.postMessage({ hubPreviewRefresh: true, fresh: !!fresh, force: !!force }, location.origin); }
   catch(e){ frame.src = "preview.html?t=" + Date.now(); }
 }
-on("prevBtn", "click", refreshPreview);
+on("prevBtn", "click", () => refreshPreview(true));
 /* the same preview, with the room to see it properly */
 on("prevFull", "click", () => openFullPreview($("prev").src));
 on("moreBtn", "click", (e) => {
@@ -8183,11 +6856,14 @@ function scrollBody(box){
    for one then stops halfway through building itself, leaving a pop-up with
    no buttons in it and no way out. */
 function homePickers(){
-  const titles = document.querySelector(".build-titles");
-  if (!titles) return;
+  /* Their home is out of sight now: the year and unit are set in Lesson
+     options and nowhere else, so the top of the builder does not carry two
+     dropdowns that only repeat what Lesson options says. */
+  const home = $("pickerHome");
+  if (!home) return;
   ["lYear", "lUnit", "lSub"].forEach(id => {
     const pick = $(id);
-    if (pick && pick.parentNode !== titles) titles.appendChild(pick);
+    if (pick && pick.parentNode !== home) home.appendChild(pick);
   });
 }
 function openModal(build){
@@ -8393,6 +7069,7 @@ function importPopup(opts){
       msg.textContent = "Reading…";
       try{
         const data = await readJsonFile(file.files[0]);
+        readOriginal(data);
         await opts.take(data, msg);
       }catch(e){ msg.textContent = e.message; }
       file.value = "";
@@ -8414,6 +7091,7 @@ function importPopup(opts){
       let data;
       try{ data = JSON.parse(text); }
       catch(e){ msg.textContent = "That is not valid JSON. It may have been cut off, or be missing a bracket."; return; }
+      readOriginal(data);
       msg.textContent = "Reading…";
       try{ await opts.take(data, msg); }
       catch(e){ msg.textContent = e.message; }
@@ -8422,6 +7100,12 @@ function importPopup(opts){
     box.appendChild(msg);
     scrollBody(box);
   });
+}
+
+/* A file from the original site names a few settings differently. Only one
+   that plainly is from there is converted, in place: see lessoncompat.js. */
+function readOriginal(data){
+  if (window.lessonCompat && window.lessonCompat.looksOriginal(data)) window.lessonCompat.fromOriginal(data);
 }
 
 /* Whatever shape it arrived in, as a list of blocks the builder can edit.
@@ -8484,6 +7168,7 @@ function importLessonFile(){
         versionNote: lesson.versionNote, versionCode: lesson.versionCode,
         savedAs: lesson.savedAs, code: lesson.code } : null;
       lesson = made;
+      previewReset = true;      // another lesson's answers mean nothing here
       if (intoVersion) Object.assign(lesson, intoVersion);
       else {
         /* lesson.savedAs is what Save writes over. Cleared, so an imported
@@ -8494,7 +7179,6 @@ function importLessonFile(){
       }
       openPageRef = null; viewAll = false;
       pointTasksFor = null; palAllFor = null;
-      previewReset = true;      // another lesson's answers mean nothing here
       tidyIntoPages();
       startFolded();
       showTitle(); paintPickers();
@@ -8839,14 +7523,17 @@ async function saveToSite(){
     const r = await fetch(API + "/api/teacher/save-lesson", {
       method:"POST",
       headers: window.teacherAuth.json(),
+      /* When it was saved travels with it, for the lesson hub's cards. */
       body: JSON.stringify({ id: lessonId(), title: lesson.title, unit: lesson.unit,
-                             year: lesson.year || "", data: compile() })
+                             year: lesson.year || "",
+                             data: Object.assign(compile(), { savedAt: new Date().toISOString() }) })
     });
     const d = await r.json().catch(() => ({}));
     if (authFailed(r.status, saveToSite)){ btn.disabled = false; btn.textContent = "Save to the site"; return; }
     if (!r.ok) throw new Error(d.error || "Could not save it.");
     lesson.savedAs = d.id;
     dirty = false;                       // saved, and nothing changed since
+    builderSaved();
     if (lesson.versionOf){
       say("Saved as a version", "It is under \u201C" + parentTitle() + "\u201D in the lesson hub, behind the "
           + "Versions button. Give it to a class from your teacher console.");
@@ -8861,8 +7548,9 @@ async function saveToSite(){
 }
 on("saveSite", "click", () => {
   /* On a narrow screen Save is a button in the corner rather than a wide
-     one that says where it is sending the lesson, so it confirms first. */
-  if (isCompact()) savePopup(); else saveToSite();
+     one that says where it is sending the lesson, so it confirms first.
+     Either way anything a student would get stuck on is listed first. */
+  checkBeforeSave(() => { if (isCompact()) savePopup(); else saveToSite(); });
 });
 
 /* deleting from here asks twice too, it is the same job as in the console */
@@ -8910,10 +7598,10 @@ on("delLesson", "click", () => {
             if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
             closeModal();
             lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:[] };
+            previewReset = true;
             dirty = false;
             showTitle(); paintPickers();
             $("delLesson").hidden = true;
-            previewReset = true;
             render(); refreshPreview();
             say("Deleted", version
               ? "The “" + version + "” version has gone. “" + parent + "” is still there."
@@ -9059,6 +7747,7 @@ async function loadUnitsAndMaybeLesson(){
 /* turn a saved lesson file back into editable cards */
 function fromCompiled(data, meta){
   const out = { title: data.title || (meta && meta.title) || "", intro: data.intro || "",
+                what: data.what || "", why: data.why || "", career: data.career || "", careerLink: data.careerLink || "",
                 unit: data.unit || (meta && meta.unit) || "", year: data.year || "",
                 /* The sub-point it was filed under, so reopening a lesson
                    finds both pickers where they were left. */
@@ -9068,6 +7757,10 @@ function fromCompiled(data, meta){
                    the plain palette and the task builder stopped knowing what
                    the lesson was about. */
                 point: data.point || "",
+                /* Left out here, a deck would be gone the first time the
+                   lesson was reopened and saved. */
+                slides: window.readSlides ? window.readSlides(data) : null,
+                docs: window.readDocs ? window.readDocs(data) : null,
                 assessment: !!data.assessment && !data.practical,
                 practical: !!data.practical || !!data.practiceAssessment,
                 /* Practice and the graded rubric are one thing now, so a
@@ -9132,6 +7825,8 @@ function fromCompiled(data, meta){
                                     startLocked: b.startLocked !== false,
                                     extension: b.extension === true,
                                     taskbar: b.taskbar !== false,
+                                    slide: b.slide || undefined,
+                                    doc: b.doc || undefined,
                                     passHash: b.passHash || undefined,
                                     blocks:(b.blocks || []).map(back) };
     if (b.type === "extension") return { type:"extension", title:b.title || "",
@@ -9198,17 +7893,6 @@ function fromCompiled(data, meta){
       }
       return { type:"caesar", title:b.title || "", task:b.task || "",
                prompt:b.prompt || "", message: message, shift: shift };
-    }
-    /* A web task's finished page is saved as one { html, css, js } and edited
-       as three boxes, one key each, so it is spread back out here. Left as it
-       was, the boxes opened empty and the next save threw the page away. */
-    if (b.type === "web" && b.model && typeof b.model === "object"){
-      const copy = JSON.parse(JSON.stringify(b));
-      delete copy.id; delete copy.model;
-      if (b.model.html) copy.modelHtml = b.model.html;
-      if (b.model.css) copy.modelCss = b.model.css;
-      if (b.model.js) copy.modelJs = b.model.js;
-      return copy;
     }
     const copy = JSON.parse(JSON.stringify(b));
     delete copy.id;
@@ -9286,15 +7970,18 @@ function applyBuildLayout(){
     /* Save and the menu sit beside the cog; Lesson options joins the bar. */
     homeSlot.appendChild(actions);
     if (options) $("buildBarScroll").appendChild(options);
+    /* Slides goes wherever Lesson options goes, so it is there in both */
+    if ($("slidesBtn")) $("buildBarScroll").appendChild($("slidesBtn"));
+    if ($("docsBtn")) $("buildBarScroll").appendChild($("docsBtn"));
     $("buildBar").hidden = false;
-    $("modeChip").hidden = false;
     $("saveSite").textContent = "Save";
   } else {
     if (options) titles.insertBefore(options, titles.firstChild);
+    if ($("slidesBtn") && options) titles.insertBefore($("slidesBtn"), options.nextSibling);
+    if ($("docsBtn") && $("slidesBtn")) titles.insertBefore($("docsBtn"), $("slidesBtn").nextSibling);
     topSlot.appendChild(titles);
     topSlot.appendChild(actions);
     $("buildBar").hidden = true;
-    $("modeChip").hidden = true;
     $("saveSite").textContent = "Save to the site";
     stopPreviewing();
   }
@@ -9305,9 +7992,10 @@ function applyBuildLayout(){
 /* What belongs on the one row of controls, which depends on the kind of
    work: an assessment and a practical have their tabs, a lesson has none. */
 function paintBuildBar(){
+  paintKindChip();
   if (!isCompact()) return;
   const scroll = $("buildBarScroll");
-  if (!scroll || !$("assessTabs") || !$("modeChipName")) return;
+  if (!scroll || !$("assessTabs")) return;
   const assess = !!lesson.assessment;
   const practical = !!lesson.practical;
   /* The tab strip is moved in beside New page rather than copied, so the
@@ -9319,43 +8007,55 @@ function paintBuildBar(){
   } else {
     tabs.hidden = true;
   }
-  /* The chip says what kind of work this is, and on the bank there is no
-     kind: it is not part of the lesson at all. */
-  const chip = $("modeChip");
-  if (chip) chip.hidden = bankOpen;
-  $("modeChipName").textContent = practical ? "Practical assessment"
-    : assess ? "Assessment"
-    : lesson.homework ? "Home learning" : "Lesson";
+}
+/* The chip says what kind of work this is, in both layouts, and on the bank
+   there is no kind: a bank task is not part of a lesson at all. */
+function paintKindChip(){
+  const chip = $("modeChip"), name = $("modeChipName");
+  if (!chip || !name) return;
+  chip.hidden = !!bankOpen;
+  const k = KINDS.find(x => x.id === kindNow());
+  name.textContent = k ? k.name : "Lesson";
+  chip.dataset.kind = kindNow();
 }
 
-/* ---------- which kind of work ---------- */
-function modePicker(force){
-  openModal(box => {
-    box.appendChild(el("h2","","What are you making?"));
-    const list = el("div","modepick");
-    [["Lesson", () => { lesson.homework = false; setMode(false, false); }],
-     ["Assessment", () => setMode(true, false)],
-     ["Practical assessment", () => { lesson.homework = false; setMode(false, true); }],
-     ["Home learning", () => { lesson.homework = true; setMode(false, false); }]
-    ].forEach(pair => {
-      const b = el("button","modepick-item", pair[0]);
-      b.addEventListener("click", () => {
-        pair[1]();
-        modeChosen = true;
-        closeModal();
-        paintBuildBar();
-      });
-      list.appendChild(b);
-    });
-    box.appendChild(list);
-    if (!force){
-      const no = el("button","btn-ghost modal-stay","Cancel");
-      no.addEventListener("click", closeModal);
-      box.appendChild(no);
-    }
-  });
+/* ---------- which kind of work ----------
+   Asked once, when a new piece of work is started, in both layouts. After
+   that the kind is changed in Lesson options, where it sits with everything
+   else that is about the lesson as a whole rather than one press away. */
+function kindCard(k, picked, onPick){
+  const b = el("button","kindcard" + (picked ? " on" : ""));
+  b.type = "button";
+  b.setAttribute("role", "radio");
+  b.setAttribute("aria-checked", picked ? "true" : "false");
+  const ico = el("span","kindcard-ico");
+  ico.innerHTML = window.hubUI ? window.hubUI.icon(k.icon, 22) : "";
+  b.appendChild(ico);
+  const words = el("span","kindcard-words");
+  words.appendChild(el("b","", k.name));
+  words.appendChild(el("span","", k.about));
+  b.appendChild(words);
+  b.addEventListener("click", () => onPick(k));
+  return b;
 }
-on("modeChip", "click", () => modePicker(false));
+function modePicker(){
+  openModal(box => {
+    box.classList.add("kindpop");
+    box.appendChild(el("h2","","What are you making?"));
+    box.appendChild(el("p","modal-text","You can change this later in Lesson options."));
+    const list = el("div","kindgrid");
+    list.setAttribute("role", "radiogroup");
+    KINDS.forEach(k => list.appendChild(kindCard(k, k.id === kindNow(), (pick) => {
+      setKind(pick.id);
+      modeChosen = true;
+      closeModal();
+    })));
+    box.appendChild(list);
+  });
+  const first = document.querySelector(".kindgrid .kindcard.on") || document.querySelector(".kindgrid .kindcard");
+  if (first) first.focus();
+}
+on("modeChip", "click", () => $("optionsBtn").click());
 
 /* ---------- the Save pop-up ----------
    A last look before it goes to the class. The title, year and unit it used
@@ -9439,6 +8139,74 @@ function fitPreview(){
   if (list) list.style.paddingBottom = (box.getBoundingClientRect().height + 20) + "px";
 }
 
+/* ---------- the width of the preview ----------
+   The bar between the tasks and the preview drags the preview wider, so a
+   page can be seen at nearer the width a class sees it, and back down to the
+   narrow column it starts as. It never takes so much that the tasks are left
+   too thin to write in. Kept for this browser, like the rest of the layout. */
+const PREVIEW_MIN = 460;            // the narrow column the preview has always been
+const PREVIEW_MAX = 1200;           // about a classroom laptop's worth of lesson
+const LIST_MIN = 480;               // what the tasks need to stay usable
+function previewMax(){
+  return Math.max(PREVIEW_MIN, Math.min(PREVIEW_MAX, window.innerWidth - LIST_MIN));
+}
+function savedPreviewWidth(){
+  try{ return parseInt(localStorage.getItem("hub_prev_w") || "", 10) || PREVIEW_MIN; }catch(e){ return PREVIEW_MIN; }
+}
+function setPreviewWidth(w, keep){
+  const width = Math.round(Math.max(PREVIEW_MIN, Math.min(previewMax(), w)));
+  document.documentElement.style.setProperty("--prev-w", width + "px");
+  const bar = $("buildSplit");
+  if (bar){
+    bar.setAttribute("aria-valuemin", String(PREVIEW_MIN));
+    bar.setAttribute("aria-valuemax", String(previewMax()));
+    bar.setAttribute("aria-valuenow", String(width));
+  }
+  if (keep){ try{ localStorage.setItem("hub_prev_w", String(width)); }catch(e){} }
+  return width;
+}
+(function wireSplit(){
+  const bar = $("buildSplit");
+  if (!bar) return;
+  setPreviewWidth(savedPreviewWidth(), false);
+  let from = null;
+  bar.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const box = document.querySelector(".build-preview");
+    from = { x: e.clientX, w: box ? box.getBoundingClientRect().width : savedPreviewWidth() };
+    try{ bar.setPointerCapture(e.pointerId); }catch(err){}
+    /* the preview is a page of its own and would swallow the drag */
+    document.documentElement.classList.add("splitting");
+  });
+  bar.addEventListener("pointermove", (e) => {
+    if (!from) return;
+    /* the preview is on the right, so dragging left widens it */
+    setPreviewWidth(from.w + (from.x - e.clientX), false);
+  });
+  const done = (e) => {
+    if (!from) return;
+    from = null;
+    try{ bar.releasePointerCapture(e.pointerId); }catch(err){}
+    document.documentElement.classList.remove("splitting");
+    const box = document.querySelector(".build-preview");
+    if (box) setPreviewWidth(box.getBoundingClientRect().width, true);
+  };
+  bar.addEventListener("pointerup", done);
+  bar.addEventListener("pointercancel", done);
+  bar.addEventListener("dblclick", () => setPreviewWidth(PREVIEW_MIN, true));
+  bar.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 120 : 40;
+    const now = savedPreviewWidth();
+    if (e.key === "ArrowLeft"){ e.preventDefault(); setPreviewWidth(now + step, true); }
+    else if (e.key === "ArrowRight"){ e.preventDefault(); setPreviewWidth(now - step, true); }
+    else if (e.key === "Home"){ e.preventDefault(); setPreviewWidth(PREVIEW_MIN, true); }
+    else if (e.key === "End"){ e.preventDefault(); setPreviewWidth(previewMax(), true); }
+  });
+  /* a narrower window can no longer hold what was dragged out */
+  window.addEventListener("resize", () => setPreviewWidth(savedPreviewWidth(), false));
+})();
+
 try{
   compactQ().addEventListener("change", applyBuildLayout);
   roomyQ().addEventListener("change", () => { applyBuildLayout(); fitPreview(); });
@@ -9462,11 +8230,10 @@ render();
 refreshPreview();
 fitPreview();
 if (window.initSettings) initSettings($("setBtn"));
-/* A fresh lesson on a narrow screen starts by asking what it is, because
-   the row of kinds that asks on a desktop is not on the page there. One
-   opened for editing already knows. */
-if (isCompact() && !new URLSearchParams(location.search).get("edit")){
-  setTimeout(() => { if (!modeChosen) modePicker(true); }, 300);
+/* A fresh piece of work starts by asking what it is. One opened for editing
+   already knows, and so does a draft being carried on with. */
+if (!new URLSearchParams(location.search).get("edit") && !(lesson.blocks && lesson.blocks.length)){
+  setTimeout(() => { if (!modeChosen) modePicker(); }, 300);
 }
 </script>
 </body>

@@ -12,11 +12,6 @@
     ["pink","Pink","#EA9AC0"], ["yellow","Yellow","#F2D479"],
     ["purple","Purple","#8B6FB5"], ["forest","Dark green","#4E8C63"]
   ];
-  const FONTS = [
-    ["","Poppins \u2014 the standard font","'Poppins'"],
-    ["lexend","Lexend \u2014 easier for some readers","'Lexend'"],
-    ["atkinson","Atkinson Hyperlegible \u2014 extra-clear letters","'Atkinson Hyperlegible'"]
-  ];
   function prefs(){ try{ return JSON.parse(localStorage.getItem("hub_prefs") || "{}"); }catch(e){ return {}; } }
 
   /* Everything a browser can be left holding that is neither a display choice
@@ -81,7 +76,19 @@
     o.style.opacity = String((p.tintAmt === undefined ? 25 : p.tintAmt) / 100);
   }
   function apply(p){
+    /* The New look is the site's design now, with no switch to turn it off:
+       look.css, every rule of it behind this one attribute. Anyone who had
+       chosen the old design is given the new one, and the old "classic" in
+       their hub_prefs is never read again. */
+    document.documentElement.dataset.look = "new";
     if (p.bg) document.documentElement.dataset.bg = p.bg; else delete document.documentElement.dataset.bg;
+    /* One reading font now, Lexend, behind one switch. Anyone who had picked
+       Atkinson Hyperlegible when there were three to choose from wanted the
+       easier font, so they keep having one. */
+    if (p.font === "atkinson"){
+      p.font = "lexend";
+      try{ localStorage.setItem("hub_prefs", JSON.stringify(p)); }catch(e){}
+    }
     if (p.font) document.documentElement.dataset.font = p.font; else delete document.documentElement.dataset.font;
     applyTint(p);
     /* editors on the page follow along */
@@ -126,9 +133,16 @@
       '<label for="tintAmt">Strength</label>' +
       '<input type="range" id="tintAmt" min="5" max="60" step="5">' +
       '<span id="tintAmtOut"></span></div></div>' +
-      '<div class="set-group"><span class="set-label">Font</span><div class="font-opts" id="setFo">' +
-      FONTS.map(f => '<button class="font-opt" data-font="' + f[0] + '" style="font-family:' + f[2] + '">' + f[1] + '</button>').join("") +
-      '</div></div>' +
+      '<div class="set-group"><span class="set-label">Font</span>' +
+      '<button class="btn-ghost set-look" type="button" id="setDys" role="switch" style="width:100%; font-family:\'Lexend\',sans-serif"></button>' +
+      '<p class="subnote" style="margin:8px 0 0">Lexend, a font with wider letters and more space between them, which many people with dyslexia find easier to read.</p></div>' +
+      /* The one layout choice left from trying the new console out: the
+         side menu, or the console the way it was. Only on the teacher's
+         pages, and only once ui.js is there. */
+      (onConsole && window.hubUI
+        ? '<div class="set-group"><span class="set-label">Console layout</span>' +
+          '<button class="btn-ghost" type="button" id="setOldView" style="width:100%"></button></div>'
+        : "") +
       '<div class="set-group" id="pwGroup" hidden><span class="set-label">Your password</span>' +
       '<div class="field"><label>New password (12\u201325 characters)</label><input type="password" id="pwNew" autocomplete="new-password"></div>' +
       '<div class="field"><label>Type it again</label><input type="password" id="pwNew2" autocomplete="new-password"></div>' +
@@ -148,7 +162,15 @@
       const amt2 = back.querySelector("#tintAmt"), out = back.querySelector("#tintAmtOut");
       if (amt2){ amt2.value = String(p.tintAmt === undefined ? 25 : p.tintAmt); }
       if (out) out.textContent = (p.tintAmt === undefined ? 25 : p.tintAmt) + "%";
-      back.querySelectorAll(".font-opt").forEach(b => b.classList.toggle("on", (p.font || "") === b.dataset.font));
+      const dy = back.querySelector("#setDys");
+      if (dy){
+        const dysNow = p.font === "lexend";
+        dy.textContent = "Dyslexia friendly font: " + (dysNow ? "on" : "off");
+        dy.setAttribute("aria-checked", dysNow ? "true" : "false");
+        dy.classList.toggle("on", dysNow);
+      }
+      const ov = back.querySelector("#setOldView");
+      if (ov) ov.textContent = window.hubUI.oldView() ? "Switch to new view" : "Switch to old view";
       /* the lesson page may have changed it since this was last opened */
       const nb = back.querySelector("#setName");
       if (nb && document.activeElement !== nb) nb.value = localStorage.getItem("hub_name") || "";
@@ -164,14 +186,20 @@
       if (p.tintAmt === undefined) p.tintAmt = 25;
       save(p); paint();
     }));
+    const ovBtn = back.querySelector("#setOldView");
+    if (ovBtn) ovBtn.addEventListener("click", () => {
+      window.hubUI.setOldView(!window.hubUI.oldView());
+      paint();
+    });
     const amt = back.querySelector("#tintAmt");
     if (amt) amt.addEventListener("input", () => {
       const p = prefs(); p.tintAmt = parseInt(amt.value, 10) || 25; save(p); paint();
     });
     function save(p){ localStorage.setItem("hub_prefs", JSON.stringify(p)); apply(p); }
-    back.querySelectorAll(".font-opt").forEach(b => b.addEventListener("click", () => {
-      const p = prefs(); p.font = b.dataset.font; localStorage.setItem("hub_prefs", JSON.stringify(p)); apply(p); paint();
-    }));
+    const dysBtn = back.querySelector("#setDys");
+    if (dysBtn) dysBtn.addEventListener("click", () => {
+      const p = prefs(); p.font = p.font === "lexend" ? "" : "lexend"; save(p); paint();
+    });
     /* Saved as they type. Only the name changes: the work already on this
        machine is theirs, so correcting a spelling must not throw it away.
        A different child is caught when the lesson opens, not here. */

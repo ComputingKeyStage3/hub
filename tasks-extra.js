@@ -811,6 +811,51 @@
      Somewhere for a student to keep their own notes, with the same
      formatting bar the lesson builder uses.
      =================================================================== */
+  /* ===================================================================
+     PHOTOSHOP HELP
+     { type:"helper", title, task, topic:"photoshop" }
+     The help chat from helper.js, on the page like any other task, for a
+     lesson done in Photoshop. Nothing is saved and nothing is marked: it is
+     there to be asked. What it cannot answer goes to the teacher, filed
+     against this lesson and this task, and shows in the builder under this
+     task (author-editors.js). The answers are fetched the first time one
+     of these is drawn, so a lesson without one never loads them.
+     =================================================================== */
+  window.rHelper = function(b, ctx){
+    const s = make("section", "helpertask");
+    const box = make("div", "hp-task");
+    s.appendChild(box);
+    const out = make("a", "hp-taskout", "Open the help in its own window");
+    out.href = "help.html"; out.target = "hubPhotoshopHelp";
+    out.title = "Keep it open beside Photoshop";
+    s.appendChild(out);
+    const start = () => {
+      box.textContent = "";
+      window.hubHelper.mount(box, window.HELP_PHOTOSHOP, { lesson: ctx.lessonId || "", task: b.id || "" });
+    };
+    if (!window.hubHelper) box.textContent = "The help could not be loaded.";
+    else if (window.HELP_PHOTOSHOP) start();
+    else {
+      box.textContent = "Loading the help\u2026";
+      let tag = document.querySelector('script[data-help-pack]');
+      if (!tag){
+        tag = document.createElement("script");
+        tag.src = "help-photoshop.js";
+        tag.dataset.helpPack = "1";
+        document.head.appendChild(tag);
+      }
+      tag.addEventListener("load", start);
+      tag.addEventListener("error", () => { box.textContent = "The help could not be loaded. Check the internet connection and refresh."; });
+    }
+    return {
+      section: s,
+      get: () => null,
+      set: () => {},
+      /* never holds anyone up: it is help, not a task to finish */
+      done: () => true
+    };
+  };
+
   window.rNotes = function(b, ctx){
     const s = make("section", "notestask");
     const inner = make("div", "notes-inner");
@@ -1193,6 +1238,25 @@
       get: () => boxes.map(x => x.input.value),
       set: (v) => {
         if (!Array.isArray(v)) return;
+        /* What this saves is a flat list, one answer per box. Work can also
+           arrive as the whole grid, a row for each row of the table with
+           the given cells in it too, heading row first. Read that as a flat
+           list and every box got a whole row joined with commas: ",101"
+           where "101" was typed. So a grid is read by where each box sits. */
+        if (v.some(Array.isArray)){
+          const skip = head.length && v.length === rows.length + 1 ? 1 : 0;
+          let n = 0;
+          rows.forEach((row, r) => {
+            (Array.isArray(row) ? row : []).forEach((cell, c) => {
+              if (!(cell && typeof cell === "object" && cell.fill)) return;
+              const line = v[r + skip];
+              const text = Array.isArray(line) ? line[c] : "";
+              if (boxes[n]) boxes[n].input.value = text == null ? "" : String(text);
+              n++;
+            });
+          });
+          return;
+        }
         v.forEach((text, i) => { if (boxes[i]) boxes[i].input.value = text == null ? "" : String(text); });
       },
       done: () => boxes.length > 0 && written() === boxes.length,

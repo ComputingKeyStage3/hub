@@ -26,7 +26,15 @@ window.HUB = {
 
   // Your Vercel address — no trailing slash. Ignored entirely when OFFLINE
   // is true, so it can be left as it is.
-  API: "https://hub-backend-azure.vercel.app".replace(/\/+$/, "")
+  API: "https://hub-backend-azure.vercel.app".replace(/\/+$/, ""),
+
+  // Where block coding (Scratch) tasks fetch library sprites, backdrops and
+  // sounds from. Leave it "" for Scratch's own library server,
+  // cdn.assets.scratch.mit.edu, which the school's filter has to allow. If it
+  // cannot, copy the files the lessons use onto this site and put their
+  // address here with {md5ext} where the file name goes, for example
+  // "scratch/library/{md5ext}".
+  SCRATCH_ASSETS: ""
 };
 
 /* Inside the lesson Preview (lessonpreview.html) a page is a pretend student

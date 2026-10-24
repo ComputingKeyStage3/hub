@@ -2,10 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="images/logo.svg" type="image/svg+xml">
+<link rel="icon" href="images/logo-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="images/logo-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Computing KS3</title>
+<title>Computing Lesson Hub</title>
 <link rel="stylesheet" href="style.css">
-<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<link rel="stylesheet" href="look.css">
+<script src="icons.js"></script>
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
 <script src="lessonorder.js"></script>
@@ -15,7 +20,7 @@
 <body>
 
 <div class="homebar">
-  <div class="title">Computing KS3</div>
+  <div class="title brandtitle"><img class="brandlogo" src="images/logo.svg" alt="" width="28" height="28"> <span class="brandword">Computing Lesson Hub</span></div>
   <button class="btn-ghost iconbtn" id="helpBtn" title="Help" aria-label="Help" hidden>?</button>
   <button class="btn-ghost settings-btn" id="setBtn"><span class="ico">&#9881;&#65038;</span><span class="lbl"> Settings</span></button>
   <div class="auth" id="auth"></div>
@@ -28,17 +33,33 @@
     <h1 id="headline">Sign in</h1>
   </div>
 
-  <section class="station" id="loginCard">
-    <div class="grid3">
-      <div><label for="u">Username</label><input type="text" id="u" autocomplete="username"></div>
-      <div><label for="p">Password</label><input type="password" id="p" autocomplete="current-password"></div>
-    </div>
-    <div class="row" style="margin-top:16px">
-      <button class="btn-primary" id="loginBtn">Sign in</button>
-      <button class="crumb" id="forgotBtn" style="margin-left:14px">Forgot password?</button>
-      <span class="err" id="loginErr" role="alert"></span>
-    </div>
-    <p class="hint" id="loginNote" style="margin:12px 0 0">First time? Leave the password box empty and press Sign in.</p>
+  <!-- Username first, then Continue, then the password underneath it.
+       Both boxes are in the one form from the start, the password folded
+       away rather than missing, so a password manager still sees a username
+       and a password together and fills them as it always has. A student
+       with no password yet never sees the password box at all: Continue
+       signs them in and asks them to pick one. -->
+  <section class="station signin" id="loginCard">
+    <form id="loginForm" class="signin-form" autocomplete="on" novalidate>
+      <div class="signin-field">
+        <label for="u">Username</label>
+        <input type="text" id="u" name="username" autocomplete="username" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="signin-pass" id="passWrap">
+        <div class="signin-pass-inner">
+          <div class="signin-field">
+            <label for="p">Password</label>
+            <input type="password" id="p" name="password" autocomplete="current-password" tabindex="-1">
+          </div>
+        </div>
+      </div>
+      <div class="signin-acts">
+        <button class="btn-primary" id="loginBtn" type="submit">Continue</button>
+        <button class="crumb" id="forgotUserBtn" type="button">Forgot username?</button>
+        <button class="crumb" id="forgotBtn" type="button" hidden>Forgot password?</button>
+      </div>
+      <p class="err" id="loginErr" role="alert"></p>
+    </form>
   </section>
 
   <div class="tabs" id="tabs" hidden>
@@ -78,9 +99,9 @@
            heading instead of centred the way a one line pop-up message is. -->
       <div class="set-group" style="text-align:left">
         <span class="set-label">How to sign in</span>
-        <p class="modal-text">Type in your computer username, and then a password you have set.</p>
-        <p class="modal-text">If this is your first time, leave the password box empty and press Sign in.
-          You will be asked to pick a password of your own.</p>
+        <p class="modal-text">Type in your computer username and press Continue, then type your password underneath.</p>
+        <p class="modal-text">If this is your first time, you will be asked to pick a password of your own
+          straight after pressing Continue.</p>
         <p class="modal-text">If you have forgotten your password, press Forgot password and put your
           hand up, so your teacher can let you back in.</p>
       </div>
@@ -101,6 +122,22 @@
     <h2 id="sayTitle" style="margin-top:0"></h2>
     <p class="modal-text" id="sayText"></p>
     <button class="btn-primary modal-cta" id="sayOk">OK</button>
+  </div>
+</div>
+
+<!-- How a username is made, with the example taken apart so each piece can
+     be matched to the rule it comes from. -->
+<div class="modal-back no-print" id="userModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="userTitle">
+    <h2 id="userTitle" style="margin-top:0">Your username</h2>
+    <p class="modal-text">Your username is the same as your computer username. It is made of three parts:</p>
+    <div class="uname-parts" aria-hidden="true">
+      <span class="uname-part"><b>Smith</b><span>your surname</span></span>
+      <span class="uname-part"><b>J</b><span>first letter of your first name</span></span>
+      <span class="uname-part"><b>26</b><span>the year you started here</span></span>
+    </div>
+    <p class="modal-text">So John Smith, who started at the school in 2026, is <b>SmithJ26</b>.</p>
+    <button class="btn-primary modal-cta" id="userOk">OK</button>
   </div>
 </div>
 
@@ -268,8 +305,14 @@ function renderAuth(){
   if (OFFLINE){ offlineHome(); return; }
   if (name && localStorage.getItem("hub_token")){
     if (help) help.hidden = true;
-    $("auth").innerHTML = '<span class="who"><b></b></span> <button class="btn-ghost" id="outBtn"><span class="ico">&#9099;</span><span class="lbl"> Sign out</span></button>';
+    /* Their name is a button: it opens their own profile. Settings sits
+       between it and Sign out, moved in here rather than drawn twice, so
+       the order along the bar is who they are, then their settings, then
+       the way out. */
+    $("auth").innerHTML = '<button class="who who-btn" id="whoBtn" type="button" title="My profile"><b></b></button> <button class="btn-ghost" id="outBtn"><span class="ico">&#9099;</span><span class="lbl"> Sign out</span></button>';
     $("auth").querySelector("b").textContent = name;
+    if ($("setBtn") && $("outBtn")) $("auth").insertBefore($("setBtn"), $("outBtn"));
+    on("whoBtn", "click", openProfile);
     on("outBtn", "click", () => {
       ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
       /* Not only the token. A teacher sign-in left on this machine goes stale
@@ -290,9 +333,13 @@ function renderAuth(){
     $("headline").textContent = part + ", " + name.split(" ")[0];
     signedInView(true);
   } else {
+    /* Settings back beside Help before the bar is emptied, or it goes with it */
+    const bar = $("auth").parentNode;
+    if (bar && bar.insertBefore && $("setBtn")) bar.insertBefore($("setBtn"), $("auth"));
     $("auth").innerHTML = "";
     if (help) help.hidden = false;
     $("loginCard").hidden = false;
+    resetSignIn();
     $("headline").textContent = "Sign in";
     signedInView(false);
   }
@@ -318,15 +365,73 @@ on("helpFix", "click", () => {
 });
 renderAuth();
 
-on("loginBtn", "click", async () => {
+/* ---- signing in, a box at a time ----
+   Continue first tries the username on its own. The server signs in a
+   student who has no password yet (and tells us they must pick one), and
+   answers everyone else, real username or not, with the same "enter your
+   password", so this shows nothing about which usernames exist. That answer
+   is what opens the password box. */
+var passOpen = false;      // var: renderAuth runs above this line and resets it
+function openPassword(focus){
+  if (!passOpen){
+    passOpen = true;
+    $("passWrap").classList.add("open");
+    $("p").tabIndex = 0;
+    $("forgotBtn").hidden = false;
+    $("loginBtn").textContent = "Sign in";
+  }
+  if (focus) setTimeout(() => { try{ $("p").focus(); }catch(e){} }, 120);
+}
+function closePassword(){
+  passOpen = false;
+  $("passWrap").classList.remove("open");
+  $("p").tabIndex = -1;
+  $("forgotBtn").hidden = true;
+  $("loginBtn").textContent = "Continue";
+}
+/* Back to the start, for the next student on a shared computer. */
+function resetSignIn(){
+  closePassword();
+  try{ $("p").value = ""; }catch(e){}
+  $("loginErr").textContent = "";
+}
+/* A password manager that fills both boxes, as the page loads or when a
+   name is picked from its list, has answered the question Continue asks:
+   the box opens to show what it put there. */
+function noticeFilled(){ if ($("p").value) openPassword(false); }
+[300, 1000, 2500].forEach(ms => setTimeout(noticeFilled, ms));
+on("p", "input", noticeFilled);
+on("p", "change", noticeFilled);
+/* A different username while the box is still empty starts again; one the
+   password manager changed together with the password keeps both. */
+on("u", "input", () => { if (passOpen && !$("p").value){ closePassword(); $("loginErr").textContent = ""; } });
+
+on("loginForm", "submit", (e) => { e.preventDefault(); signIn(); });
+let signingIn = false;
+async function signIn(){
+  if (signingIn) return;
   $("loginErr").textContent = "";
   if (!ready){ $("loginErr").textContent = "Site not connected to its server yet (config.js)."; return; }
+  const username = $("u").value.trim();
+  if (!username){ $("loginErr").textContent = "Type your username first."; $("u").focus(); return; }
+  if (passOpen && !$("p").value){ $("loginErr").textContent = "Type your password."; $("p").focus(); return; }
+  const btn = $("loginBtn");
+  const label = btn.textContent;
+  signingIn = true;
+  btn.disabled = true;
+  btn.textContent = passOpen ? "Signing in…" : "Checking…";
   try{
     const r = await fetch(API + "/api/login", {
       method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ username: $("u").value, password: $("p").value })
+      body: JSON.stringify({ username: username, password: passOpen ? $("p").value : "" })
     });
     const d = await r.json();
+    /* Turned away without a password: they have one, so ask for it. */
+    if (!r.ok && !passOpen && r.status !== 503 && r.status < 500){
+      btn.disabled = false; signingIn = false;
+      openPassword(true);
+      return;
+    }
     if (!r.ok) throw new Error(d.error || "Sign-in failed.");
     /* Shared computers: if this is a DIFFERENT student from the last one to
        sign in here, drop the cached work so nobody sees someone else's answers.
@@ -342,9 +447,14 @@ on("loginBtn", "click", async () => {
     renderAuth();
     if (d.mustSet) forcePassword(d.name);
     else loadLessons();
-  }catch(e){ $("loginErr").textContent = e.message; }
-});
-on("p", "keydown", (e) => { if (e.key === "Enter") $("loginBtn").click(); });
+  }catch(e){
+    $("loginErr").textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message;
+  }finally{
+    signingIn = false;
+    btn.disabled = false;
+    if (btn.textContent === "Checking…" || btn.textContent === "Signing in…") btn.textContent = passOpen ? "Sign in" : label;
+  }
+}
 
 /* housekeeping: clear stored work for retired or stale lessons */
 const MAX_AGE_DAYS = 60;
@@ -768,6 +878,16 @@ function say(title, text, then){
 }
 on("sayModal", "mousedown", (e) => { if (e.target === $("sayModal")) $("sayModal").hidden = true; });
 
+/* ---- forgot username ----
+   Nothing to look up: every username is made the same way, so the pop-up
+   says how, and they work their own out. */
+on("forgotUserBtn", "click", () => { $("userModal").hidden = false; $("userOk").focus(); });
+on("userOk", "click", () => { $("userModal").hidden = true; $("u").focus(); });
+on("userModal", "mousedown", (e) => { if (e.target === $("userModal")) $("userModal").hidden = true; });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("userModal").hidden){ $("userModal").hidden = true; $("u").focus(); }
+});
+
 /* ---- forgot password ----
    Check the username, let them choose the new password there and then, and
    hold it until their teacher approves it, no emails, no teacher typing. */
@@ -1041,9 +1161,108 @@ async function fetchResults(){
     if (!r.ok) throw new Error(d.error || "Could not load results.");
     const fb = await fbComing;
     resultsLoaded = true;
+    myResults = { results: d.results || [], feedback: (fb && fb.feedback) || [] };
     paintResults(box, d, (fb && fb.feedback) || []);
 
   }catch(e){ box.innerHTML = '<p class="hint">' + e.message + '</p>'; }
+}
+
+/* ---------- My profile ----------
+   Pressing their own name in the bar. Everything on it is what this page
+   has already been sent for them, the lesson list and their results, so it
+   costs one request at most, for the results if that tab has not been
+   opened yet. Nothing on it is anybody else's, and nothing can be changed
+   here except through Settings, which it links to. */
+let myResults = null;
+async function openProfile(){
+  const back = el("div","modal-back");
+  const box = el("div","modal narrow me-profile");
+  box.setAttribute("role","dialog");
+  box.setAttribute("aria-modal","true");
+  box.setAttribute("aria-label","My profile");
+  const close = () => { back.remove(); document.removeEventListener("keydown", onKey); $("whoBtn") && $("whoBtn").focus(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const x = el("button","btn-ghost iconbtn modal-x","✕");
+  x.setAttribute("aria-label","Close");
+  x.addEventListener("click", close);
+  box.appendChild(x);
+
+  const name = localStorage.getItem("hub_name") || "";
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase() || "?";
+  const who = el("div","me-who");
+  who.appendChild(el("span","me-initials", initials));
+  const words = el("div");
+  words.appendChild(el("h2","", name));
+  const meta = [localStorage.getItem("hub_user"), localStorage.getItem("hub_group") && "Class " + localStorage.getItem("hub_group")]
+    .filter(Boolean).join(" · ");
+  words.appendChild(el("p","me-meta", meta));
+  who.appendChild(words);
+  box.appendChild(who);
+
+  const stats = el("div","me-stats");
+  const stat = (n, label) => {
+    const s = el("div","me-stat");
+    s.appendChild(el("b","", String(n)));
+    s.appendChild(el("span","", label));
+    stats.appendChild(s);
+    return s.querySelector("b");
+  };
+  const cat = ((catalogue && catalogue.lessons) || []).filter(c => !lockedLessons.has(c.lesson_id) && !c.assessment);
+  const today = todayHere();
+  const openNow = cat.filter(c => !doneLessons.has(c.lesson_id) && !(c.close_on && c.close_on < today)).length;
+  stat(doneLessons.size, doneLessons.size === 1 ? "lesson finished" : "lessons finished");
+  stat(openNow, openNow === 1 ? "lesson open now" : "lessons open now");
+  const markedNum = stat("…", "assessments marked");
+  box.appendChild(stats);
+
+  const latest = el("div","me-latest");
+  box.appendChild(latest);
+
+  const acts = el("div","me-acts");
+  const setGo = el("button","btn-ghost","Settings and password");
+  setGo.type = "button";
+  setGo.addEventListener("click", () => { close(); $("setBtn").click(); });
+  const done = el("button","btn-primary","Done");
+  done.type = "button";
+  done.addEventListener("click", close);
+  acts.appendChild(setGo);
+  acts.appendChild(done);
+  box.appendChild(acts);
+
+  back.appendChild(box);
+  back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(back);
+  setTimeout(() => done.focus(), 30);
+
+  /* The results tab may never have been opened, so they are fetched now if
+     they have not been. What came back fills in the last two parts. */
+  if (!myResults && ready && !OFFLINE){
+    try{ await fetchResults(); }catch(e){}
+  }
+  const res = (myResults && myResults.results) || [];
+  markedNum.textContent = String(res.filter(r => typeof r.score === "number" || r.grade).length);
+  const fbRows = ((myResults && myResults.feedback) || [])
+    .map(r => Object.assign({ at: r.updated_at || "", lesson: r.lesson_id }, parseFeedback(r.feedback)))
+    .filter(f => f.strength || f.target)
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  if (fbRows.length){
+    const f = fbRows[0];
+    latest.appendChild(el("h3","", "Your latest feedback"));
+    latest.appendChild(el("p","me-from", lessonTitles[f.lesson] || ""));
+    if (f.strength){
+      const p = el("p","me-fb");
+      p.appendChild(el("b","fb-str","Strength "));
+      p.appendChild(document.createTextNode(f.strength));
+      latest.appendChild(p);
+    }
+    if (f.target){
+      const p = el("p","me-fb");
+      p.appendChild(el("b","fb-tgt","Target "));
+      p.appendChild(document.createTextNode(f.target));
+      latest.appendChild(p);
+    }
+  }
 }
   if (window.initSettings) initSettings($("setBtn"));
 </script>

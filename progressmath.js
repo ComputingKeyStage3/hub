@@ -7,7 +7,7 @@
 (function(){
   const TASK_LABEL = { quiz:"Quiz", mc:"Multiple choice", order:"Put in order",
                        blanks:"Fill the gaps", short:"Short answer",
-                       ide:"Coding task", web:"Coding task", image:"Photoshop task",
+                       ide:"Coding task", web:"Coding task", scratch:"Coding task", image:"Photoshop task",
                        table:"Table", label:"Label a picture", hotspot:"Click the right spot" };
   function plainText(html){ return String(html || "").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
   function normAns(x){ return String(x || "").toLowerCase().trim().replace(/\s+/g," ").replace(/[.,!?;:'"]+$/g,""); }
@@ -53,8 +53,10 @@
     const dx = v.x - Number(b.x || 0), dy = (v.y - Number(b.y || 0)) * ratio;
     return { got: Math.sqrt(dx * dx + dy * dy) <= Number(b.r || 0) ? 1 : 0, max: 1 };
   }
-  /* The tasks a checklist can hang off: coding tasks, and a Screenshot task
-     set to take a Photoshop file. */
+  /* The tasks a practical's ticks are counted from: Python and web tasks,
+     and a Screenshot task set to take a Photoshop file. Scratch is left out
+     on purpose, as it always was here: counting it now would change how
+     every Scratch practical already marked adds up. */
   function hasChecklist(b){
     return !!b && (b.type === "ide" || b.type === "web" || (b.type === "image" && b.psd === true))
       && Array.isArray(b.checks) && b.checks.length > 0;
@@ -63,7 +65,7 @@
     const label = TASK_LABEL[b.type];
     if (!label) return null;
     if (b.type === "quiz" && !(b.questions || []).length) return null;
-    if ((b.type === "ide" || b.type === "web") && !(Array.isArray(b.checks) && b.checks.length)) return null;
+    if ((b.type === "ide" || b.type === "web" || b.type === "scratch") && !(Array.isArray(b.checks) && b.checks.length)) return null;
     /* A screenshot has nothing to mark; a Photoshop task with a checklist
        is marked by it, ticked from the file, the same as a coding task. */
     if (b.type === "image" && !hasChecklist(b)) return null;
