@@ -7144,6 +7144,48 @@ function saidDropped(dropped){
        + " left out, because nothing here can make " + names + ".";
 }
 
+/* ---------- pictures carried inside a file ----------
+   A lesson written outside the builder (a help sheet read from Word, a
+   picture on a starter) has nowhere to put its pictures but inside the
+   file, as data: addresses. Saved like that, a few screenshots take a
+   lesson past the 900KB the server allows, and a picture belongs in the
+   images table and travels as its id. So each one is uploaded here, the
+   way the Documents button uploads a Word file's, before the lesson is
+   opened. Offline there is no table, and they stay where they are. */
+const DATA_PIC = /^data:image\/[a-z+.-]+;base64,/i;
+async function uploadCarriedPictures(data, msg){
+  if (OFFLINE || !window.slidePicture) return;
+  const found = [];
+  const walk = (v) => {
+    if (Array.isArray(v)){ v.forEach(walk); return; }
+    if (!v || typeof v !== "object") return;
+    if (v.type === "picture" && DATA_PIC.test(String(v.url || ""))) found.push({ block: v, src: v.url });
+    Object.keys(v).forEach(k => {
+      const s = v[k];
+      if (typeof s === "string" && s.indexOf('src="data:image') >= 0)
+        (s.match(/src="data:image\/[^"]+"/g) || []).forEach(m => found.push({ holder: v, key: k, src: m.slice(5, -1) }));
+      else if (s && typeof s === "object") walk(s);
+    });
+  };
+  walk(data);
+  if (!found.length) return;
+  /* One upload per picture, however many places it is used. */
+  const ids = {};
+  const distinct = found.map(f => f.src).filter((s, i, all) => all.indexOf(s) === i);
+  for (let i = 0; i < distinct.length; i++){
+    if (msg) msg.textContent = "Uploading picture " + (i + 1) + " of " + distinct.length + "…";
+    const blob = await (await fetch(distinct[i])).blob();
+    const made = await window.slidePicture(blob);
+    if (!made || !made.imgId) throw new Error("A picture in that file could not be uploaded. Try again.");
+    ids[distinct[i]] = made.imgId;
+  }
+  found.forEach(f => {
+    const id = ids[f.src];
+    if (f.block){ f.block.imgId = id; f.block.url = ""; return; }
+    f.holder[f.key] = f.holder[f.key].split('src="' + f.src + '"').join('data-img="' + id + '"');
+  });
+}
+
 /* ---------- a whole lesson ---------- */
 function importLessonFile(){
   const start = () => importPopup({
@@ -7151,11 +7193,12 @@ function importLessonFile(){
     help: "A lesson file, the kind the JSON button writes. It opens here for you to "
         + "look at and then save, so nothing on the site changes until you press Save.",
     example: '{ "title": "The CPU", "year": "Year 10", "unit": "1.1 Systems architecture",\n  "blocks": [ { "type": "page", "title": "Starter", "blocks": [] } ] }',
-    take: async (data) => {
+    take: async (data, msg) => {
       if (!data || typeof data !== "object" || Array.isArray(data))
         throw new Error("A lesson file is one object with a title and a list of blocks in it.");
       if (!Array.isArray(data.blocks))
         throw new Error("That file has no blocks in it, so it is not a lesson.");
+      await uploadCarriedPictures(data, msg);
       const check = blocksFromImport(data);          // throws if there is nothing usable
       const made = fromCompiled(data, {});
       made.blocks = check.blocks;
@@ -7217,7 +7260,8 @@ function importPageFile(){
     help: "A page, or just a list of tasks, which is added to the end of this lesson. "
         + "A list of tasks with no page round it gets one.",
     example: '{ "type": "page", "title": "Memory", "blocks": [\n  { "type": "text", "html": "<p>RAM is volatile.</p>" }\n] }',
-    take: async (data) => {
+    take: async (data, msg) => {
+      await uploadCarriedPictures(data, msg);
       const got = blocksFromImport(data);
       /* One page arrives as a page. Anything else is tasks, and tasks go on
          a page, because that is what a lesson is made of. */
