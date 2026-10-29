@@ -1144,7 +1144,7 @@ function defaultLocks(){
   let firstDo = -1;
   for (let i = 0; i < blocks.length; i++){
     const t = blocks[i].type;
-    const reading = t === "text" || t === "picture";
+    const reading = t === "text" || t === "picture" || t === "video";
     if (!reading){ firstDo = i; break; }
   }
   if (firstDo === -1) return out;                 // all reading: nothing to gate
@@ -3189,6 +3189,10 @@ const TASK_ICON = {
   embed:     { name:"Video",
                d:'<rect x="3" y="5" width="18" height="14" rx="2"/>' +
                  '<path d="M10.5 9.3l4.7 2.7-4.7 2.7z"/>' },
+  /* a film frame with a play button, for a video file played on the page */
+  video:     { name:"Video",
+               d:'<rect x="3" y="5" width="18" height="14" rx="2"/>' +
+                 '<path d="M3 9h18M3 15h18M10.5 10.3l3.5 1.7-3.5 1.7z"/>' },
   /* a browser window */
   frame:     { name:"Website",
                d:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/>' +
@@ -4374,14 +4378,14 @@ let qCounter = 0;
 const questionNo = {};
 /* What an assessment shows to be read rather than asks. A run of these
    before the first question is its welcome page. */
-const ASSESS_READING = ["text","picture","embed","link","frame"];
+const ASSESS_READING = ["text","picture","video","embed","link","frame"];
 /* Builds one activity without putting it on the page, used both for ordinary
    steps and for the several activities that share a "page". */
 function buildBlock(b, i){
   if (!b.id) b.id = b.type + "_" + i;
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
-              picture:rPicture, pastelink:rPasteLink, frame:rFrame, web:rWeb,
+              picture:rPicture, video:rVideo, pastelink:rPasteLink, frame:rFrame, web:rWeb,
               scratch:rScratch, binary:rBinary, binadd:rBinAdd,
               board:rBoardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
               keywords:rKeywordsTask, helper:rHelperTask,
@@ -5348,6 +5352,93 @@ function rEmbed(b){
   return { section:s,
            check:() => (!wantTick || cb.checked)
              ? { ok:true } : { ok:false, message:"Tick the box once you have watched it" },
+           brief:{ eyebrow:"Watch", title:stripTags(b.title) || "", text:b.note || "" } };
+}
+
+/* A video file played on the page itself, rather than a YouTube clip in a
+   frame: an .mp4 or .webm from an address, which can be a file in the site's
+   files folder. It sits and sizes exactly as a picture does (the same figure,
+   so the same rules place it left, middle or right), and saves nothing. */
+function rVideo(b){
+  const s = el("section","video");
+  const fig = el("figure","picfig");
+  const wide = picWidth(b);
+  s.style.setProperty("--pic-w", wide);
+  if (wide !== "100%") fig.classList.add("sized");
+  if (b.align === "centre" || b.align === "right") fig.classList.add("pic-" + b.align);
+  if (b.frame === false) fig.classList.add("bare");
+  const v = document.createElement("video");
+  v.className = "vidplay";
+  v.src = String(b.url || "").trim();
+  v.preload = "metadata";
+  /* Without this an iPhone takes the video full screen the moment it plays. */
+  v.playsInline = true; v.setAttribute("playsinline", "");
+  v.setAttribute("aria-label", stripTags(b.title) || b.caption || "Video");
+  const showBar = b.controls !== false;
+  v.controls = showBar;
+  /* Who paused it, and whether it has played to its end: a video paused by a
+     student, or one that has finished, is not started again by scrolling. */
+  let pausedByUs = false, pausedByThem = false, finished = false;
+  /* A part of a video, from Start at to Stop at. Done here rather than with a
+     #t=2,4 on the address: Chrome played one of those from the beginning,
+     measured, and a fragment would loop back to 0 rather than to the start. */
+  const from = Math.max(0, Number(b.start) || 0);
+  const to = Number(b.end) > from ? Number(b.end) : 0;
+  const loops = b.loop === true;
+  if (loops && !to) v.loop = true;
+  if (from) v.addEventListener("loadedmetadata", () => { if (v.currentTime < from) v.currentTime = from; });
+  if (from || to){
+    v.addEventListener("timeupdate", () => {
+      if (!to || v.currentTime < to) return;
+      if (loops){ v.currentTime = from; return; }
+      pausedByUs = true; finished = true; v.pause(); v.currentTime = to;
+    });
+    /* Played again after it stopped, it starts the part again. */
+    v.addEventListener("play", () => { if (v.currentTime < from || (to && v.currentTime >= to - 0.05)) v.currentTime = from; });
+  }
+  const autoplay = b.autoplay === true;
+  const sound = b.sound === "off" || b.sound === "muted" ? b.sound : "on";
+  /* A browser will only start a video by itself if it is silent, so one that
+     plays by itself starts muted whatever the sound is set to; with sound on,
+     the speaker on the play bar turns it up. */
+  v.muted = sound !== "on" || autoplay;
+  /* Always muted means always: the play bar still has a speaker on it, and
+     every browser draws its own, so turning it up is undone rather than the
+     button hidden. */
+  if (sound === "off") v.addEventListener("volumechange", () => { if (!v.muted) v.muted = true; });
+  /* With no play bar there is nothing else to press, so the video itself
+     plays and pauses. */
+  if (!showBar){
+    v.classList.add("vid-tap");
+    v.tabIndex = 0;
+    const toggle = () => { if (v.paused) v.play().catch(() => {}); else v.pause(); };
+    v.addEventListener("click", toggle);
+    v.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter"){ e.preventDefault(); toggle(); } });
+  }
+  /* Only one page of a lesson is on screen at a time, and a video left
+     playing on a page that has been moved past carries on talking from
+     nowhere. So it pauses whenever it is hidden; one set to play by itself
+     plays again when it is back in view, unless somebody paused it.
+     Reduced motion is not asked about: it is on for every computer in the
+     school, so honouring it would mean a teacher's Plays by itself never did. */
+  v.addEventListener("pause", () => { if (!pausedByUs && !v.ended) pausedByThem = true; pausedByUs = false; });
+  v.addEventListener("play", () => { pausedByThem = false; finished = false; });
+  v.addEventListener("ended", () => { finished = true; });
+  if ("IntersectionObserver" in window){
+    new IntersectionObserver((seen) => {
+      const inView = seen[seen.length - 1].isIntersecting;
+      if (!inView && !v.paused){ pausedByUs = true; v.pause(); }
+      else if (inView && autoplay && v.paused && !pausedByThem && !finished) v.play().catch(() => {});
+    }, { threshold: 0.5 }).observe(v);
+  }
+  v.addEventListener("error", () => {
+    fig.innerHTML = "";
+    fig.appendChild(el("p","hint","This video could not be played. Tell your teacher the link may be broken."));
+  });
+  fig.appendChild(v);
+  if (b.caption) fig.appendChild(el("figcaption","piccap", b.caption));
+  s.appendChild(fig);
+  return { section:s, check:() => ({ ok:true }),
            brief:{ eyebrow:"Watch", title:stripTags(b.title) || "", text:b.note || "" } };
 }
 
@@ -10918,7 +11009,7 @@ function renderResponses(container, targetTopic, statusEl){
        it here it was dropped without a word, so the reminders a teacher
        put there never reached anyone. */
     const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort,
-                text:rText, picture:rPicture, ide:rIDE, web:rWeb, order:rOrder, image:rImage,
+                text:rText, picture:rPicture, video:rVideo, ide:rIDE, web:rWeb, order:rOrder, image:rImage,
                 embed:rEmbed, link:rLink, pastelink:rPasteLink, frame:rFrame, page:rPage,
                 choice:rChoice }[b.type];
     if (!R) return;
@@ -10958,7 +11049,7 @@ function renderResponses(container, targetTopic, statusEl){
     extras.forEach((b, i) => {
       if (!b.id) b.id = "ext_" + i;
       const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort,
-                  text:rText, picture:rPicture, ide:rIDE, web:rWeb, order:rOrder, image:rImage,
+                  text:rText, picture:rPicture, video:rVideo, ide:rIDE, web:rWeb, order:rOrder, image:rImage,
                   embed:rEmbed, link:rLink, pastelink:rPasteLink, frame:rFrame }[b.type];
       if (!R) return;
       try{
@@ -12054,7 +12145,7 @@ function buildPdf(){
     }
     /* A picture the teacher put there and a window onto another site are not
        the student's work, so a hand-in says nothing about them. */
-    if (b.type === "picture" || b.type === "frame") return out;
+    if (b.type === "picture" || b.type === "video" || b.type === "frame") return out;
 
     if (b.type === "embed"){
       out.push({ t: "text", face: "task", text: title || "Video" });

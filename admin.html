@@ -5045,7 +5045,7 @@ function defaultLocks(){
   let firstDo = -1;
   for (let i = 0; i < b.length; i++){
     const t = b[i].type;
-    if (t !== "text" && t !== "picture"){ firstDo = i; break; }
+    if (t !== "text" && t !== "picture" && t !== "video"){ firstDo = i; break; }
   }
   if (firstDo === -1) return out;
   for (let i = firstDo + 1; i < b.length; i++) out.add(i);

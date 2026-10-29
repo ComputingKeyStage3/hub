@@ -555,7 +555,7 @@
   const baseStepTitle = stepTitle;
   const KIND = { page:"Page", text:"Reading", picture:"Picture", pastelink:"Paste a link", ide:"Python code",
     web:"Web page", question:"Written answer", quiz:"Quiz", extension:"Extension tasks", group:"Group",
-    choice:"Choice", image:"Screenshot", embed:"Video", frame:"Embedded page", link:"Link to a site",
+    choice:"Choice", image:"Screenshot", embed:"Video", video:"Video file", frame:"Embedded page", link:"Link to a site",
     mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order", keywords:"Keyword definitions",
     notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", binary:"Binary conversion",
     binadd:"Binary addition", password:"Password checker", caesar:"Caesar cipher", short:"Short answer",

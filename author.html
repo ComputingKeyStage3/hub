@@ -226,6 +226,7 @@
         <div class="palbody" hidden>
           <button class="pal" data-add="picture"><b>Image</b><span>Show a picture from a link</span></button>
           <button class="pal" data-add="embed"><b>Video</b><span>Embed a clip</span></button>
+          <button class="pal" data-add="video"><b>Video file</b><span>Play an .mp4 on the page</span></button>
           <button class="pal" data-add="frame"><b>Embedded page</b><span>A site inside the lesson</span></button>
           <button class="pal" data-add="link"><b>Link to a site</b><span>Send them somewhere</span></button>
         </div>
@@ -627,6 +628,8 @@ const BLANK = {
      PDF and View Work treat it as the screenshot it ends up as. */
   photoshop:() => ({ type:"image", psd:true, title:"", task:"" }),
   embed:    () => ({ type:"embed", url:"", title:"", note:"", confirm:false }),
+  video:    () => ({ type:"video", title:"", url:"", caption:"", note:"", size:"full", width:"", align:"left",
+                     sound:"on", autoplay:false, loop:false, controls:true, start:"", end:"", frame:true }),
   frame:    () => ({ type:"frame", url:"", heading:"", task:"", width:"100%", height:520, confirm:false }),
   link:     () => ({ type:"link", url:"", title:"Open this", heading:"", task:"", confirm:false }),
   mc:       () => ({ type:"mc", prompt:"", options:["",""], answer:0, topic:"" }),
@@ -729,7 +732,7 @@ function codeTaskLabel(entry){
 }
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
-                embed:"Video", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
+                embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
                 short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
@@ -823,7 +826,7 @@ function tidyIntoPages(){
    the top level, where the lesson page, the marking and the markbook have
    always looked for them, and questionsPage says what the page around them
    was called. So this puts the page back round them as the lesson opens. */
-const LEAD_READING = ["text","picture","embed","link","frame"];
+const LEAD_READING = ["text","picture","video","embed","link","frame"];
 function tidyAssessment(){
   const info = lesson.questionsPage || null;
   delete lesson.questionsPage;
@@ -1489,6 +1492,20 @@ function compileOne(b, id, target){
       }
       push(keepArrays(blk));
     }
+    else if (b.type === "video")
+      /* As a picture: only what differs from the ordinary settings is written. */
+      push(keepArrays({ type:"video", id, title: b.title || "", url: String(b.url || "").trim(),
+             caption: b.caption || "", note: b.note || "",
+             size: (b.size && b.size !== "full") ? b.size : "",
+             width: (b.size === "custom") ? String(b.width || "") : "",
+             align: (b.align === "centre" || b.align === "right") ? b.align : "",
+             sound: (b.sound === "muted" || b.sound === "off") ? b.sound : "",
+             autoplay: b.autoplay === true ? true : undefined,
+             loop: b.loop === true ? true : undefined,
+             controls: b.controls === false ? false : undefined,
+             start: Number(b.start) > 0 ? Number(b.start) : undefined,
+             end: Number(b.end) > 0 ? Number(b.end) : undefined,
+             frame: b.frame === false ? false : undefined }));
     else if (b.type === "embed")
       push(keepArrays({ type:"embed", id, url: toEmbed(b.url), title: b.title || "",
              note: b.note || "", confirm: b.confirm === true }));
@@ -5532,6 +5549,7 @@ const BANK_TYPES = [
   ["text","Paragraph","Words, with formatting"],
   ["picture","Image","Show a picture from a link"],
   ["embed","Video","Embed a clip"],
+  ["video","Video file","Play an .mp4 on the page"],
   ["notes","Notes","Their own notes, with formatting"],
   ["helper","Photoshop help","A help chat they can ask"]
 ];

@@ -238,7 +238,7 @@
     let firstDo = -1;
     for (let i = 0; i < b.length; i++){
       const t = b[i].type;
-      if (t !== "text" && t !== "picture"){ firstDo = i; break; }
+      if (t !== "text" && t !== "picture" && t !== "video"){ firstDo = i; break; }
     }
     if (firstDo === -1) return out;
     for (let i = firstDo + 1; i < b.length; i++) out.add(i);
@@ -361,7 +361,7 @@
      carried in, or has been run, or has a line ticked. Response tasks are
      not looked at: they come after marking, so they say nothing about
      whether somebody was in the lesson being marked. */
-  const NOT_WORK = { text:1, picture:1, link:1, embed:1, frame:1 };
+  const NOT_WORK = { text:1, picture:1, video:1, link:1, embed:1, frame:1 };
   const HOLDS = { page:1, group:1, extension:1, choice:1 };
   function hasWork(lessonJson, data){
     if (!data || typeof data !== "object") return false;

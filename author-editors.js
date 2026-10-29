@@ -385,6 +385,7 @@ const TASK_ICONS = {
   hotspot:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="14" cy="11" r="3.5"/><path d="M14 11h.01M7 16l2.5-2.5"/>',
   picture:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 8"/>',
   embed:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
+  video:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18M10.5 10.3l3.5 1.7-3.5 1.7z"/>',
   frame:     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M6.5 6.5h.01M9 6.5h.01"/>',
   link:      '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   notes:     '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/>',
@@ -859,6 +860,47 @@ EDITORS.picture = function(b, k){
        either side of it. Full width has nowhere to go, and standing beside a
        task the row has already decided which side it is on. */
     if (!b.beside && b.size && b.size !== "full")
+      pickRow("Where it sits", "align", [["left","Left"],["centre","Middle"],["right","Right"]]);
+    toggleRow([["frame","Border", true]], "Style");
+  });
+};
+
+/* A video file played on the page, placed the way a picture is. There is no
+   upload: a video is too big for the database, so it is always an address,
+   which can be the site's own files folder. */
+EDITORS.video = function(b, k){
+  const { F, toggleRow, pickRow, add, settings } = k;
+  F("The address of the video", "url",
+    { help:"An .mp4 or .webm file. One in the site's files folder is written as files/whatever.mp4. "
+         + "For YouTube use Video instead. A OneDrive or Teams link will not play here." });
+  const src = String(b.url || "").trim();
+  if (src){
+    const prev = el("div","bfield");
+    const v = document.createElement("video");
+    v.className = "bpreview"; v.src = src; v.controls = true; v.muted = true; v.preload = "metadata";
+    v.addEventListener("error", () => {
+      v.hidden = true;
+      prev.appendChild(el("p","bhelp warn",
+        "That address did not load a video this browser can play. An .avi, .wmv or .mov needs saving as .mp4 first."));
+    });
+    prev.appendChild(v);
+    add(prev);
+  }
+  F("Caption underneath (optional)", "caption");
+  F("Instruction above it (optional)", "note");
+  settings(() => {
+    pickRow("Sound", "sound", [["on","On"],["muted","Starts muted"],["off","Always muted"]],
+      "Starts muted: they can turn it up with the speaker on the play bar. Always muted: it stays silent even if they try.");
+    toggleRow([["autoplay","Plays by itself", false], ["loop","Loops", false], ["controls","Play bar", true]], "Playing",
+      "A video that plays by itself starts silent, because browsers will not start one with sound; it pauses when it is "
+      + "out of sight and carries on when it is back. With no play bar, clicking the video plays and pauses it.");
+    F("Start at (seconds, optional)", "start", { placeholder:"0" });
+    F("Stop at (seconds, optional)", "end", { help:"Leave empty to play to the end." });
+    pickRow("How big", "size",
+      [["full","Full width"],["large","Large"],["medium","Medium"],["small","Small"],["custom","Exact"]]);
+    if (b.size === "custom")
+      F("How wide", "width", { help:"A number of pixels, such as 320, or a share of the width, such as 60%." });
+    if (b.size && b.size !== "full")
       pickRow("Where it sits", "align", [["left","Left"],["centre","Middle"],["right","Right"]]);
     toggleRow([["frame","Border", true]], "Style");
   });

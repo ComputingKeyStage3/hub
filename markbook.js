@@ -141,7 +141,7 @@
     let n = 0;
     /* Numbered the way the student saw them: every question counts, reading
        does not, so Q5 here is the question that was 5 on their page. */
-    const reading = ["text","picture","embed","link","frame"];
+    const reading = ["text","picture","video","embed","link","frame"];
     ((lessonJson && lessonJson.blocks) || []).forEach(b => {
       /* A page is one of the pages in front of the questions, and the
          lesson page gives it no number either. */
