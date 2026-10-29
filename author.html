@@ -35,6 +35,7 @@
 <script src="docs.js"></script>
 <script src="docs-import.js"></script>
 <script src="author-docs.js"></script>
+<script src="author-pictures.js"></script>
 <script src="ui.js"></script>
 <script src="settings.js"></script>
 </head>
@@ -132,6 +133,7 @@
         <button id="jsonBtn">JSON</button>
         <button id="importLesson">Import a lesson</button>
         <button id="importPage">Import a page</button>
+        <button id="picLibBtn">Pictures</button>
         <button id="delLesson">Delete lesson</button>
       </span>
     </span>
@@ -6805,6 +6807,8 @@ on("moreBtn", "click", (e) => {
                  ["JSON", () => $("jsonBtn").click()],
                  ["Import a lesson", () => $("importLesson").click()],
                  ["Import a page", () => $("importPage").click()],
+                 /* pictures live in the database, so there are none offline */
+                 ...(OFFLINE ? [] : [["Pictures", () => $("picLibBtn").click()]]),
                  [delWord, () => $("delLesson").click()]];
   if (window.openMenu) window.openMenu(b, m, "More", items);
   else m.hidden = false;
@@ -7391,6 +7395,9 @@ async function saveImportedTask(t, level){
 }
 on("importLesson", "click", () => { $("moreMenu").hidden = true; importLessonFile(); });
 on("importPage", "click", () => { $("moreMenu").hidden = true; importPageFile(); });
+/* Every uploaded picture, where each is used, and a way to delete the
+   ones nothing uses any more: author-pictures.js. */
+on("picLibBtn", "click", () => { $("moreMenu").hidden = true; if (window.pictureLibrary) window.pictureLibrary.open(); });
 on("bankImport", "click", importTasksFile);
 
 /* ---------- publishing straight to the site ----------

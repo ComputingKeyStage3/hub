@@ -817,6 +817,15 @@ EDITORS.picture = function(b, k){
     });
   });
   upRow.appendChild(pick);
+  /* A picture already uploaded, for this lesson or another, used again
+     rather than uploaded a second time. */
+  if (!OFFLINE && window.pictureLibrary){
+    const reuse = el("button","btn-ghost bmini2","Choose an uploaded picture");
+    reuse.addEventListener("click", () => window.pictureLibrary.open({ pick: (id) => {
+      b.imgId = id; b.url = ""; redraw(); schedulePreview();
+    } }));
+    upRow.appendChild(reuse);
+  }
   if (b.imgId){
     const drop = el("button","btn-ghost bmini2","Remove it");
     drop.addEventListener("click", () => { b.imgId = ""; redraw(); schedulePreview(); });

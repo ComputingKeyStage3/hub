@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"15.5.1", text:"Pictures in the lesson builder's ⋯ menu shows every uploaded picture and where it is used, and deletes the ones nothing uses. A picture task can also reuse one already uploaded." },
   { v:"15.5", text:"New Video file task: plays an .mp4 on the page, sized and placed like a picture, with sound, playing by itself, looping, the play bar and start and stop times to choose. It pauses when it goes out of sight." },
   { v:"15.4.9", text:"Importing a lesson or page that carries its own pictures, such as help sheets, uploads them like Documents does, so it saves." },
   { v:"15.4.8", text:"Import a two week timetable from Arbor's PDF: lessons in P1 to P5 go in, and form time, duties and clubs are left out. DIRECT can be chosen for a period." },
