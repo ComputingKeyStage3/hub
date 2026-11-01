@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"15.6.1", text:"Photoshop help: its Help button is purple and gently pulses until it is opened, replies are shown from their first line, and it no longer mentions tutorial numbers." },
   { v:"15.6", text:"Documents and slides dock between the top and bottom bars, and open at a task page's own document. Every picture can go full screen. Photoshop help can float as a Help button, shows fewer suggestions, and no longer sends what it could not answer." },
   { v:"15.5.1", text:"Pictures in the lesson builder's ⋯ menu shows every uploaded picture and where it is used, and deletes the ones nothing uses. A picture task can also reuse one already uploaded." },
   { v:"15.5", text:"New Video file task: plays an .mp4 on the page, sized and placed like a picture, with sound, playing by itself, looping, the play bar and start and stop times to choose. It pauses when it goes out of sight." },

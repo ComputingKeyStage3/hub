@@ -8090,7 +8090,7 @@ let helpFloat = null;
 function floatHelp(b, section){
   if (helpFloat || embedParam !== null || pdfParam !== null || allParam !== null) return !!helpFloat;
   watchBars();
-  const fab = el("button","btn-primary hp-fab no-print",
+  const fab = el("button","hp-fab no-print",
     '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" ' +
     'stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.2-.8.6-.8 1.1"/>' +
     '<path d="M12 14h.01"/></svg><span>Help</span>');
@@ -8111,6 +8111,7 @@ function floatHelp(b, section){
   const set = (open) => {
     panel.hidden = !open;
     fab.classList.toggle("on", open);
+    if (open) fab.classList.add("seen");          // it has been found: the pulse stops
     fab.setAttribute("aria-expanded", open ? "true" : "false");
     if (open){ const box = panel.querySelector("input, textarea"); if (box) box.focus(); }
   };

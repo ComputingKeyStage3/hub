@@ -186,6 +186,15 @@ function mount(holder, pack, opts){
   holder.appendChild(root);
 
   const scroll = () => { log.scrollTop = log.scrollHeight; };
+  /* A reply is shown from its first line, not its last. Jumping to the end
+     of a long set of steps left a student reading from the middle, and
+     looking for where the answer began. If it all fits, that is the same as
+     the bottom; if not, its top sits at the top of the box. */
+  const showFrom = (node) => {
+    if (!node || node.parentNode !== log) return scroll();
+    const top = node.getBoundingClientRect().top - log.getBoundingClientRect().top + log.scrollTop - 8;
+    log.scrollTop = Math.min(top, log.scrollHeight - log.clientHeight);
+  };
 
   /* ---- the helper's turn ----
      Every reply waits behind three dots for a moment that grows with how
@@ -206,8 +215,9 @@ function mount(holder, pack, opts){
         log.appendChild(dots); scroll();
         setTimeout(() => {
           dots.remove();
+          const before = log.children.length;
           try{ draw(); }catch(e){}
-          scroll();
+          showFrom(log.children[before]);
           done();
         }, Math.min(1700, 500 + size * 6));
       }, 250);
@@ -216,7 +226,10 @@ function mount(holder, pack, opts){
   function bubble(who, node){
     const b = el("div", "hp-msg hp-" + who);
     if (typeof node === "string") b.textContent = node; else b.appendChild(node);
-    log.appendChild(b); scroll();
+    log.appendChild(b);
+    /* What a student sends goes to the bottom, where they expect it; the
+       helper's own replies are placed by botTurn, from their first line. */
+    if (who === "me") scroll();
     return b;
   }
   function chips(list, label){
@@ -238,7 +251,6 @@ function mount(holder, pack, opts){
     const ol = el("ol", "hp-steps");
     e.steps.forEach(s => { const li = el("li"); li.innerHTML = keys(s); ol.appendChild(li); });
     card.appendChild(ol);
-    if (e.card) card.appendChild(el("div", "hp-cue", "Tutorial #" + e.card + " has a cue card and video for this."));
     const acts = el("div", "hp-acts");
     const good = el("button", "hp-act", "That helped");
     const bad = el("button", "hp-act", e.fix && e.fix.length ? "Still not working" : "Not quite");

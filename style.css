@@ -56,6 +56,10 @@
   --amber:#2F6BAE;
   --amber-dark:#255A96;
   --amber-ink:#FFFFFF;
+  /* Photoshop help's own colour, so its button is never taken for Continue,
+     which is the blue above. White on it reads at 7.6:1. */
+  --help:#6B3FA0;
+  --help-ink:#FFFFFF;
   --mint:#2E7D5B;
   --mint-dim:#D6E8DF;
   --red:#CF1111;
@@ -95,6 +99,8 @@ html[data-bg=blue]{--bg:#E2EDF7; --bar:#D0E2F0; --panel:#FFFFFF; --panel-2:#F4F9
 html[data-bg=green]{--bg:#DDEDD5; --bar:#CBE2C0; --panel:#FFFFFF; --panel-2:#F2F8EF; --line:#CBDEC4; --line-2:#AECBA4}
 html[data-bg=peach]{--bg:#FAEADC; --bar:#F1DCC6; --panel:#FFFFFF; --panel-2:#FDF6F0; --line:#EFD9C7; --line-2:#DEC0A6}
 html[data-bg=yellow]{--bg:#F9F0CB; --bar:#EDE0AC; --panel:#FFFFFF; --panel-2:#FCF8E9; --line:#E9DDAF; --line-2:#D6C588}
+/* on a dark page the help colour lightens, and its writing goes dark */
+html[data-bg=dark], html[data-bg=night]{--help:#B79BE0; --help-ink:#1A1426}
 html[data-bg=dark]{--bg:#23262E; --bar:#2C303A; --panel:#2C303A; --panel-2:#333846; --line:#3D434F; --line-2:#4C5464;
   --text:#EAEBEF; --muted:#A9AFBC; --dim:#7E8595; --amber:#E39B52; --amber-ink:#221A0F;
   --mint:#5BBE94; --mint-dim:#2C5847; --red:#DE7C74; --red-dim:#54312E}
@@ -4341,8 +4347,10 @@ html[data-build=compact][data-preview=full] .homebar{display:none}
 }
 /* A help bubble is left out of this because it is placed by measuring where
    its question mark is: a seventh of a second sliding up from 7px below puts
-   it somewhere it was never asked to be. */
-body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell):not(.helpbub){
+   it somewhere it was never asked to be. The floating Help button is left
+   out because this rule is the more specific (the #hubTint in it) and would
+   take the place of the pulse it has instead. */
+body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell):not(.helpbub):not(.hp-fab){
   animation:hub-arrive .34s cubic-bezier(.22,.61,.36,1);
 }
 /* the bars settle a little sooner than what sits underneath them */
@@ -5206,7 +5214,7 @@ button.who:focus-visible{outline:2px solid var(--amber); outline-offset:3px; bor
    :not(#hubTint) puts an id's worth of weight into it, so a plainer rule
    loses to it however late it comes. That same weight is why the line giving
    the bars a shorter .24s has never had any effect either. */
-html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell):not(.helpbub){
+html[data-arrive=off] body > *:not(script):not(.modal-back):not(#hubTint):not(.confetti):not(.pdfshell):not(.helpbub):not(.hp-fab){
   animation:none;
 }
 
@@ -7721,7 +7729,6 @@ body.dc-pin-right .sl-win:not(.dc-win)[data-mode=right]{right:var(--dc-side, 440
 .hp-title{font-weight:700; font-size:var(--text-md)}
 .hp-tool{font-size:var(--text-sm); color:var(--muted)}
 .hp-steps, .hp-fixes{margin:0; padding-left:20px; display:flex; flex-direction:column; gap:5px}
-.hp-cue{font-size:var(--text-sm); color:var(--muted); font-style:italic}
 .hp kbd{font-family:var(--mono); font-size:.85em; padding:1px 5px; border-radius:var(--rad-xs);
   border:1px solid var(--line-2); border-bottom-width:2px; background:var(--panel); color:var(--text); white-space:nowrap}
 .hp-acts{display:flex; flex-wrap:wrap; gap:6px; margin-top:4px}
@@ -7941,12 +7948,31 @@ button.piclib-card:hover{border-color:var(--amber)}
    corner above the bottom bar, and the chat in a panel over it. Both keep
    clear of a docked document or slides, which take the right-hand edge. */
 .hp-fab{position:fixed; right:16px; bottom:calc(var(--bars-bottom, 0px) + 16px); z-index:70;
-  display:flex; align-items:center; gap:8px; min-height:44px; padding:10px 18px; border-radius:999px;
-  box-shadow:0 4px 14px rgba(0,0,0,.22)}
+  display:flex; align-items:center; gap:8px; min-height:44px; padding:10px 18px; border-radius:var(--rad-pill);
+  font:inherit; font-weight:700; cursor:pointer; border:0;
+  background:var(--help); color:var(--help-ink);
+  box-shadow:0 4px 14px rgba(0,0,0,.22);
+  /* A slow ring breathing out from it, until it has been opened once: there
+     to be noticed, not to nag. */
+  --help-pulse:helppulse 2.8s ease-out infinite;
+  animation:var(--help-pulse)}
+.hp-fab:hover{filter:brightness(1.08)}
+.hp-fab:focus-visible{outline:3px solid var(--help); outline-offset:3px}
+.hp-fab.seen, .hp-fab.on{animation:none}
+@keyframes helppulse{
+  0%{box-shadow:0 4px 14px rgba(0,0,0,.22), 0 0 0 0 color-mix(in srgb, var(--help) 45%, transparent)}
+  70%{box-shadow:0 4px 14px rgba(0,0,0,.22), 0 0 0 12px color-mix(in srgb, var(--help) 0%, transparent)}
+  100%{box-shadow:0 4px 14px rgba(0,0,0,.22), 0 0 0 0 color-mix(in srgb, var(--help) 0%, transparent)}}
+/* Runs where Windows has animation effects off, which is every machine in the
+   school: a ring this slow and this small is not the movement that setting is
+   for, and without it nothing tells a student the button is there. */
+@media (prefers-reduced-motion:reduce){ .hp-fab:not(.seen):not(.on){animation:var(--help-pulse) !important} }
 .hp-float{position:fixed; right:16px; bottom:calc(var(--bars-bottom, 0px) + 72px); z-index:70;
   width:min(400px, calc(100vw - var(--dock-w, 0px) - 32px));
-  height:min(560px, calc(100vh - var(--bars-top, 0px) - var(--bars-bottom, 0px) - 96px));
-  height:min(560px, calc(100dvh - var(--bars-top, 0px) - var(--bars-bottom, 0px) - 96px));
+  /* Up to the top of the window, not the top bar: on a short screen,
+     keeping clear of both bars left the chat a sliver 24px high. */
+  height:min(560px, calc(100vh - var(--bars-bottom, 0px) - 88px));
+  height:min(560px, calc(100dvh - var(--bars-bottom, 0px) - 88px));
   display:flex; flex-direction:column; overflow:hidden;
   background:var(--panel); border:1px solid var(--line); border-radius:var(--rad-lg); box-shadow:0 10px 32px rgba(0,0,0,.25)}
 .hp-float[hidden]{display:none}
