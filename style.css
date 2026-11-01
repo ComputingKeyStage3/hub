@@ -7983,6 +7983,8 @@ button.piclib-card:hover{border-color:var(--amber)}
   --help-pulse:helppulse 2.8s ease-out infinite;
   animation:var(--help-pulse)}
 .hp-fab:hover{filter:brightness(1.08)}
+/* Only on the page its help task is on; display:flex above beats [hidden]. */
+.hp-fab[hidden]{display:none}
 .hp-fab:focus-visible{outline:3px solid var(--help); outline-offset:3px}
 .hp-fab.seen, .hp-fab.on{animation:none}
 @keyframes helppulse{

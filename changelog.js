@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"15.7.1", text:"Photoshop help set to float now shows its Help button only on the page the help task is on, not on every page. Put one on each page that needs it." },
   { v:"15.7", text:"Tables: any cell can hold a picture, a box can accept more than one answer, and the builder's table editor is simpler: type straight into the grid, pick a cell to change it, and paste a table in from Word or Excel." },
   { v:"15.6.2", text:"Photoshop help: every answer now uses the same tools and keys as the Year 7 and Year 8 lessons, in fewer steps, with new answers for shapes, Warp Text, clipping masks, text behind a picture, colour pop, blur, the Lomo effect, filters and handing in." },
   { v:"15.6.1", text:"Photoshop help: its Help button is purple and gently pulses until it is opened, replies are shown from their first line, and it no longer mentions tutorial numbers." },

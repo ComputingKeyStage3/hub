@@ -2686,6 +2686,9 @@ function showStep(i){
   if (embedParam !== null){
     try{ parent.postMessage({ hubWorkStep: i }, "*"); }catch(e){}
   }
+  /* An assessment's screens are not the pages its tasks were built on, so
+     there any floating help shows throughout, as it always did. */
+  if (assessPages) try{ showHelpFor(null); Object.keys(helpFloats).forEach(id => { helpFloats[id].fab.hidden = false; }); }catch(e){}
   if (assessPages){
     /* Anyone coming back with answers already saved goes straight to the
        questions rather than through the welcome again, and so does a
@@ -2702,6 +2705,7 @@ function showStep(i){
     step = (b !== null) ? b : (nextOpen(0, +1) !== null ? nextOpen(0, +1) : 0);
   }
   steps.forEach((s, n) => { s.section.hidden = (n !== step); });
+  try{ showHelpFor(steps[step].section); }catch(e){}
   /* How far they have been, so only a page never reached before announces
      itself on arrival (playArrival). Where a lesson opens counts as reached. */
   if (step > furthestStep) furthestStep = step;
@@ -4714,8 +4718,9 @@ function rPage(b){
       if (child.waitForPage === true && built.waitFor) waiting.push(built);
       return;
     }
-    /* A floating help task is in the corner of every page, not on this one. */
-    if (built.floating) return;
+    /* A floating help task is a button in the corner while this page is
+       up, not a task in the list on it. */
+    if (built.floating){ helpOnPage(child.id, s); return; }
     if (child.required === false){
       built.check = () => ({ ok:true });
       /* A task nobody has to do must not hold the page shut either. */
@@ -8081,14 +8086,31 @@ function rHelperTask(b){
   return { section: made.section, check: () => ({ ok:true }),
            brief: { eyebrow: "Photoshop help", title: b.title || "", text: b.task || "" } };
 }
-/* A help task set to float: a Help button in the corner of every page,
-   above the bottom bar and clear of a docked document, which opens the chat
-   in a panel. It is still the lesson's task, so it is built where the task
-   is; it just does not take a place on that page. One per lesson: a second
-   floating one would be a second button saying the same thing. */
-let helpFloat = null;
+/* A help task set to float: a Help button in the corner, above the bottom
+   bar and clear of a docked document, which opens the chat in a panel. It
+   is still the lesson's task, so it is built where the task is; it just
+   does not take a place on that page.
+
+   It is there only while its own page is: help put on the Task 2 page is
+   for Task 2, and a button on the Starter offering Photoshop help before
+   Photoshop is open was one more thing to press. A lesson wanting it on
+   several pages puts a help task on each, and each has its own button,
+   only one of them ever showing. One not inside a page (a lesson with no
+   pages) shows throughout, as every floating one did before. */
+const helpFloats = {};      // help task id -> { fab, panel, close, page }
+function helpOnPage(id, pageSection){
+  if (helpFloats[id]) helpFloats[id].page = pageSection;
+}
+function showHelpFor(pageSection){
+  Object.keys(helpFloats).forEach(id => {
+    const h = helpFloats[id];
+    const here = !h.page || h.page === pageSection;
+    if (!here) h.close();
+    h.fab.hidden = !here;
+  });
+}
 function floatHelp(b, section){
-  if (helpFloat || embedParam !== null || pdfParam !== null || allParam !== null) return !!helpFloat;
+  if (embedParam !== null || pdfParam !== null || allParam !== null) return false;
   watchBars();
   const fab = el("button","hp-fab no-print",
     '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" ' +
@@ -8120,7 +8142,9 @@ function floatHelp(b, section){
   panel.addEventListener("keydown", (e) => { if (e.key === "Escape"){ set(false); fab.focus(); } });
   document.body.appendChild(panel);
   document.body.appendChild(fab);
-  helpFloat = fab;
+  /* Hidden until its page is shown, so it never flashes up on another. */
+  fab.hidden = true;
+  helpFloats[b.id] = { fab, panel, close: () => set(false), page: null };
   return true;
 }
 const rMindmapTask = (b) => wrapExtra(b, window.rMindmap, "Mind map");
