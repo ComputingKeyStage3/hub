@@ -26,7 +26,7 @@
       box++;
       if (!answer) return;
       max++;
-      if (given && window.shortAnswer && window.shortAnswer.mark({ answers: [answer] }, given).ok) got++;
+      if (given && window.shortAnswer && window.shortAnswer.mark(window.shortAnswer.forCell(cell), given).ok) got++;
     }));
     return { got: got, max: max };
   }

@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"15.7", text:"Tables: any cell can hold a picture, a box can accept more than one answer, and the builder's table editor is simpler: type straight into the grid, pick a cell to change it, and paste a table in from Word or Excel." },
   { v:"15.6.2", text:"Photoshop help: every answer now uses the same tools and keys as the Year 7 and Year 8 lessons, in fewer steps, with new answers for shapes, Warp Text, clipping masks, text behind a picture, colour pop, blur, the Lomo effect, filters and handing in." },
   { v:"15.6.1", text:"Photoshop help: its Help button is purple and gently pulses until it is opened, replies are shown from their first line, and it no longer mentions tutorial numbers." },
   { v:"15.6", text:"Documents and slides dock between the top and bottom bars, and open at a task page's own document. Every picture can go full screen. Photoshop help can float as a Help button, shows fewer suggestions, and no longer sends what it could not answer." },

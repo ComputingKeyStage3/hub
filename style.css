@@ -6016,22 +6016,49 @@ html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
 .tt-said[data-stage=all]{color:var(--mint)}
 .tt-said[data-stage=none]{color:var(--red)}
 
-/* the grid in the builder */
-.tt-edit-scroll{overflow-x:auto; margin:0 0 10px}
-.tt-edit{border-collapse:collapse}
-.tt-edit th, .tt-edit td{border:1px solid var(--line); padding:4px; vertical-align:middle}
-.tt-edit input{width:130px; min-width:0; font-size:var(--text-base); padding:7px 9px}
+/* A picture in a cell sits above its words or its box, no taller than a
+   few lines of the table, so a row of them still reads as a table rather
+   than a gallery. Full screen is a click away for a closer look. */
+.tt .tt-pic{display:block; max-width:100%; max-height:7.5rem; width:auto; height:auto; margin:0 auto; object-fit:contain}
+.tt td.tt-fill .tt-pic, .tt td.tt-fill .zoomwrap{margin:10px auto}
+/* Under a picture the box is most of what is not picture, so it is tinted
+   to read as somewhere to type rather than as the cell's empty bottom. */
+.tt td.tt-fill > .tt-pic ~ .tt-in, .tt td.tt-fill > .zoomwrap ~ .tt-in{border-top:1px solid var(--line-2); background:var(--panel-2)}
+.tt .zoomwrap{display:block; width:max-content; max-width:100%; margin:0 auto}
+.tt .tt-cap{display:block; text-align:center; margin:6px 0 0}
+
+/* the grid in the builder: the table as it will be, typed into in place */
+.tt-ed-size{display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; margin:2px 0 10px}
+.tt-ed-step{display:flex; align-items:center; gap:6px; font-size:var(--text-base)}
+.tt-ed-step > span{color:var(--muted); margin-right:2px}
+.tt-ed-step > b{min-width:1.6em; text-align:center}
+/* The bar for the picked cell, under the grid. On a long table it stays
+   in sight at the foot of the builder while the table is scrolled. */
+.tt-ed-bar{display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; min-height:44px; margin:0 0 8px;
+  position:sticky; bottom:0; z-index:2;
+  padding:8px 10px; border:1px solid var(--line); border-radius:var(--rad-md); background:var(--panel-2)}
+.tt-ed-where{font-size:var(--text-sm); white-space:nowrap}
+.tt-ed-hint{font-size:var(--text-sm); color:var(--muted)}
+.tt-ed-group{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
+.tt-ed-also{display:flex; align-items:center; gap:6px; font-size:var(--text-sm); color:var(--muted)}
+.tt-ed-also input, .tt-ed-addr{width:min(220px, 45vw); font-size:var(--text-sm); padding:6px 8px}
+.tt-ed .tt-size{font-size:var(--text-sm); padding:5px 6px; width:auto}
+.tt-edit-scroll{overflow-x:auto; margin:0 0 8px}
+.tt-edit{border-collapse:collapse; min-width:100%}
+.tt-edit th, .tt-edit td{border:1px solid var(--line-2); padding:0; vertical-align:top; background:var(--panel)}
+.tt-edit th{background:var(--panel-2)}
+.tt-edit input{display:block; width:100%; min-width:110px; box-sizing:border-box; border:none; border-radius:0;
+  background:transparent; font-size:var(--text-base); padding:9px 10px; box-shadow:none}
+.tt-edit input:focus{outline:none; box-shadow:none}
 .tt-edit th input{font-weight:700}
-.tt-edit-corner{border:none !important; background:transparent}
-/* Column width sits under its heading, row height at the end of its row. */
-.tt-edit .tt-size{font-size:var(--text-xs); padding:4px 6px; width:auto}
-.tt-edit th .tt-size{display:block; width:100%; margin:4px 0 0; font-weight:400}
-.tt-edit-corner .tt-size{margin:0 4px 0 0}
-.tt-edit-corner{white-space:nowrap}
-/* Which of the two a cell is, said by the button rather than by a colour
-   alone: the difference matters and colour on its own is not enough. */
-.tt-flip{min-width:30px; font-weight:700}
-.tt-flip.on{border-color:var(--amber); color:var(--amber)}
+/* A box they fill in is shaded in the accent colour, so which cells are
+   theirs can be seen across the whole table at once. */
+.tt-edit td.tt-ed-box{background:color-mix(in srgb, var(--amber) 9%, var(--panel))}
+.tt-edit td.tt-ed-box input::placeholder{color:var(--amber-dark)}
+.tt-edit .tt-ed-on{outline:2px solid var(--amber); outline-offset:-2px}
+.tt-edit .tt-ed-pic{display:block; max-width:100%; max-height:64px; margin:8px auto 0}
+.tt-edit .tt-ed-withpic input{text-align:center}
+.tt-ed-foot{display:flex; flex-direction:column; gap:2px; font-size:var(--text-sm); color:var(--muted)}
 
 /* inserting one, in the formatting bar */
 .rt-tablewrap{position:relative; display:inline-block}
@@ -6053,7 +6080,6 @@ html[data-build=compact] .homebar .title{flex:1 1 0; min-width:0}
   .tt th, .tt td, .prose th, .prose td, .rt-box th, .rt-box td{padding:8px 10px; font-size:var(--text-md)}
   .tt .tt-in{min-width:100px; padding:9px 10px; font-size:var(--text-md)}
   .tt-actions .tt-check{width:100%}
-  .tt-edit input{width:110px}
 }
 
 /* =====================================================================

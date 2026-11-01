@@ -2136,6 +2136,18 @@ EDITORS.short = function(b, k){
   });
 };
 
+/* The table, edited as the table it will be. Every cell is typed into
+   where it sits, and everything that is about one cell (is it words or a
+   box, a picture, its column's width, its row's height, taking its row or
+   column away) lives in one bar above the grid that acts on the cell last
+   clicked. It used to be a button, a drop-down and a cross beside every
+   cell, row and column, which on a ten row table was sixty controls and
+   a teacher could not see the table for them.
+
+   Which cell is picked survives a redraw, which every change here does,
+   so it is kept beside the block rather than in it: nothing about it is
+   saved. */
+const ttPicked = new WeakMap();
 EDITORS.table = function(b, k){
   const { F, R, add, redraw } = k;
   F("Heading (optional)", "title");
@@ -2143,19 +2155,225 @@ EDITORS.table = function(b, k){
     placeholder:"Complete the table for the algorithm above." });
   if (!Array.isArray(b.head)) b.head = [];
   if (!Array.isArray(b.rows)) b.rows = [];
-  const cols = Math.max(b.head.length, ...b.rows.map(r => (r || []).length), 1);
-  /* Every row the same width, whatever editing has left behind. */
-  while (b.head.length < cols) b.head.push("");
-  b.rows.forEach(r => { while (r.length < cols) r.push({ t:"", fill:true }); });
-  /* Widths and heights are kept one per column and one per row, so every
-     add and remove below has to keep them lined up with the grid. */
-  if (!Array.isArray(b.widths)) b.widths = [];
-  if (!Array.isArray(b.lines)) b.lines = [];
-  while (b.widths.length < cols) b.widths.push("");
-  b.widths.length = cols;
-  while (b.lines.length < b.rows.length) b.lines.push(1);
-  b.lines.length = b.rows.length;
-  const picker = (choices, value, title, set) => {
+  if (!b.rows.length) b.rows.push([{ t:"", fill:true }]);
+  const cols = () => Math.max(b.head.length, ...b.rows.map(r => (r || []).length), 1);
+  /* Every row the same width, whatever editing has left behind, and every
+     cell an object, so the bar has something to change. */
+  const square = () => {
+    const n = cols();
+    while (b.head.length < n) b.head.push("");
+    b.rows.forEach((r, i) => {
+      if (!Array.isArray(r)) b.rows[i] = r = [];
+      for (let c = 0; c < n; c++){
+        if (!r[c] || typeof r[c] !== "object") r[c] = r[c] == null ? { t:"", fill:true } : { t: String(r[c]) };
+      }
+    });
+    /* Widths and heights are kept one per column and one per row, so every
+       add and remove has to keep them lined up with the grid. */
+    if (!Array.isArray(b.widths)) b.widths = [];
+    if (!Array.isArray(b.lines)) b.lines = [];
+    while (b.widths.length < n) b.widths.push("");
+    b.widths.length = n;
+    while (b.lines.length < b.rows.length) b.lines.push(1);
+    b.lines.length = b.rows.length;
+  };
+  square();
+  const changed = () => { saveDraft(); schedulePreview(); };
+  /* r is -1 for the heading row. */
+  let pick = ttPicked.get(b) || null;
+  if (pick && (pick.r >= b.rows.length || pick.c >= cols())) pick = null;
+  const choose = (r, c, focus) => { ttPicked.set(b, { r, c, focus: !!focus }); redraw(); };
+
+  const addRow = (at) => {
+    const fresh = [];
+    for (let c = 0; c < cols(); c++) fresh.push({ t:"", fill:true });
+    b.rows.splice(at, 0, fresh);
+    /* A new row is as tall as the one above it: a table of explanations
+       is usually explanations all the way down. */
+    b.lines.splice(at, 0, b.lines[at - 1] || 1);
+  };
+  const addCol = (at) => {
+    b.head.splice(at, 0, "");
+    b.widths.splice(at, 0, "");
+    b.rows.forEach(r => r.splice(at, 0, { t:"", fill:true }));
+  };
+  const dropRow = (at) => { if (b.rows.length > 1){ b.rows.splice(at, 1); b.lines.splice(at, 1); } };
+  const dropCol = (at) => {
+    if (cols() <= 1) return;
+    b.head.splice(at, 1); b.widths.splice(at, 1);
+    b.rows.forEach(r => r.splice(at, 1));
+  };
+
+  const w = el("div","bfield tt-ed");
+  w.appendChild(el("label","","The table"));
+
+  /* ---- its size, and whether the first column names the rows ---- */
+  const size = el("div","tt-ed-size");
+  const stepper = (label, n, less, more) => {
+    const box = el("div","tt-ed-step");
+    box.appendChild(el("span","", label));
+    const down = el("button","btn-ghost iconbtn","−");
+    down.type = "button"; down.title = "One fewer"; down.disabled = n <= 1;
+    down.addEventListener("click", () => { less(); square(); redraw(); schedulePreview(); });
+    const up = el("button","btn-ghost iconbtn","+");
+    up.type = "button"; up.title = "One more";
+    up.addEventListener("click", () => { more(); square(); redraw(); schedulePreview(); });
+    box.appendChild(down); box.appendChild(el("b","", String(n))); box.appendChild(up);
+    return box;
+  };
+  size.appendChild(stepper("Rows", b.rows.length, () => dropRow(b.rows.length - 1), () => addRow(b.rows.length)));
+  size.appendChild(stepper("Columns", cols(), () => dropCol(cols() - 1), () => addCol(cols())));
+  /* For a trace table or a comparison, where the left column names each
+     row rather than being part of the answer. */
+  const side = el("button","btn-ghost bmini2 toggle", "First column is headings");
+  side.type = "button";
+  side.setAttribute("aria-pressed", b.sideHead ? "true" : "false");
+  side.addEventListener("click", () => { b.sideHead = !b.sideHead; redraw(); schedulePreview(); });
+  size.appendChild(side);
+  w.appendChild(size);
+
+  /* ---- the bar for the picked cell ---- */
+  const bar = el("div","tt-ed-bar");
+  const file = el("input","sb-picker");
+  file.type = "file"; file.accept = "image/*";
+  const said = el("span","bhelp","");
+  const putPicture = (cell, source) => {
+    said.textContent = "Shrinking and uploading…";
+    said.classList.remove("warn");
+    uploadPicture(source, "", (made, why) => {
+      if (!made){ said.textContent = why; said.classList.add("warn"); return; }
+      cell.imgId = made.id; cell.url = "";
+      redraw(); schedulePreview();
+    });
+  };
+  if (!pick){
+    bar.appendChild(el("span","tt-ed-hint","Click a cell to make it a box, add a picture, or change its row or column."));
+  } else if (pick.r < 0){
+    bar.appendChild(el("b","tt-ed-where","Heading, column " + (pick.c + 1)));
+    bar.appendChild(el("span","tt-ed-hint","Leave every heading empty for a table with no heading row."));
+    const colGroup = el("div","tt-ed-group");
+    colGroup.appendChild(widthPicker(pick.c));
+    colGroup.appendChild(gridMenu([
+      ["Insert a column to the right", () => { addCol(pick.c + 1); choose(-1, pick.c + 1, true); }],
+      cols() > 1 && ["Delete this column", () => { dropCol(pick.c); ttPicked.delete(b); redraw(); }]
+    ]));
+    bar.appendChild(colGroup);
+  } else {
+    const cell = b.rows[pick.r][pick.c];
+    bar.appendChild(el("b","tt-ed-where","Row " + (pick.r + 1) + ", column " + (pick.c + 1)));
+    /* The one choice every cell has to make, said in words on both
+       buttons, because the difference decides what a student can do. */
+    const kind = el("div","tt-ed-group");
+    [[false, "Words they read"], [true, "A box they fill in"]].forEach(([fill, text]) => {
+      const btn = el("button","btn-ghost bmini2" + (!!cell.fill === fill ? " right" : ""), text);
+      btn.type = "button";
+      btn.setAttribute("aria-pressed", !!cell.fill === fill ? "true" : "false");
+      btn.addEventListener("click", () => { cell.fill = fill; choose(pick.r, pick.c, true); schedulePreview(); });
+      kind.appendChild(btn);
+    });
+    const whole = el("button","btn-ghost bmini2","Whole column");
+    whole.type = "button";
+    whole.title = "Make every cell in this column " + (cell.fill ? "a box" : "words they read");
+    whole.addEventListener("click", () => {
+      b.rows.forEach(r => { r[pick.c].fill = !!cell.fill; });
+      redraw(); schedulePreview();
+    });
+    kind.appendChild(whole);
+    bar.appendChild(kind);
+
+    const picGroup = el("div","tt-ed-group");
+    const has = !!(cell.imgId || cell.url);
+    picGroup.appendChild(actionBtn(has ? "Change the picture" : "Add a picture", () => {
+      file.onchange = () => {
+        const f = file.files && file.files[0];
+        file.value = "";
+        if (f) putPicture(cell, f);
+      };
+      file.click();
+    }));
+    if (!OFFLINE && window.pictureLibrary)
+      picGroup.appendChild(actionBtn("Use an uploaded one", () => window.pictureLibrary.open({ pick: (id) => {
+        cell.imgId = id; cell.url = ""; redraw(); schedulePreview();
+      } })));
+    if (has) picGroup.appendChild(actionBtn("Remove the picture", () => {
+      delete cell.imgId; delete cell.url; redraw(); schedulePreview();
+    }));
+    picGroup.appendChild(said);
+    bar.appendChild(picGroup);
+    /* Offline nothing can be uploaded, so a picture is an address, which
+       is how a picture task works offline too. */
+    if (OFFLINE && !cell.imgId){
+      const addr = el("input","tt-ed-addr");
+      addr.placeholder = "Or the address of a picture";
+      addr.value = cell.url || "";
+      addr.addEventListener("change", () => { cell.url = addr.value.trim(); redraw(); schedulePreview(); });
+      bar.appendChild(addr);
+    }
+
+    /* A box marks against its own text; these are the other answers it
+       takes, for a word with two spellings or a name with a short form. */
+    if (cell.fill){
+      const also = el("label","tt-ed-also");
+      also.appendChild(el("span","","Also accept"));
+      const inp = el("input");
+      inp.placeholder = cell.t ? "Other answers, split with /" : "Type the answer in the cell first";
+      inp.disabled = !String(cell.t || "").trim();
+      inp.value = (cell.also || []).join(" / ");
+      inp.addEventListener("input", () => {
+        const list = inp.value.split("/").map(x => x.trim()).filter(Boolean);
+        if (list.length) cell.also = list; else delete cell.also;
+        changed();
+      });
+      also.appendChild(inp);
+      bar.appendChild(also);
+    }
+
+    const rowGroup = el("div","tt-ed-group");
+    rowGroup.appendChild(widthPicker(pick.c));
+    const LINE_CHOICES = [1,2,3,4,5,6].map(n => [String(n), n === 1 ? "Row: 1 line" : "Row: " + n + " lines"]);
+    rowGroup.appendChild(picker(LINE_CHOICES, b.lines[pick.r] || 1, "How tall this row's boxes are",
+      v => { b.lines[pick.r] = parseInt(v, 10) || 1; }));
+    rowGroup.appendChild(gridMenu([
+      ["Insert a row below", () => { addRow(pick.r + 1); choose(pick.r + 1, pick.c, true); }],
+      ["Insert a column to the right", () => { addCol(pick.c + 1); choose(pick.r, pick.c + 1, true); }],
+      b.rows.length > 1 && ["Delete this row", () => { dropRow(pick.r); ttPicked.delete(b); redraw(); }],
+      cols() > 1 && ["Delete this column", () => { dropCol(pick.c); ttPicked.delete(b); redraw(); }]
+    ]));
+    bar.appendChild(rowGroup);
+  }
+  bar.appendChild(file);
+
+  /* Adding and taking away rows and columns, as one drop-down that acts
+     the moment something is picked from it and then goes back to its
+     label, so four rarely wanted buttons take the room of one. */
+  function gridMenu(items){
+    const sel = document.createElement("select");
+    sel.className = "tt-size tt-ed-menu";
+    sel.title = "Add or take away rows and columns";
+    const label = document.createElement("option");
+    label.value = ""; label.textContent = "Rows and columns…";
+    sel.appendChild(label);
+    const acts = items.filter(Boolean);
+    acts.forEach(([text], i) => {
+      const o = document.createElement("option");
+      o.value = String(i); o.textContent = text;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", () => {
+      const act = acts[parseInt(sel.value, 10)];
+      sel.value = "";
+      if (act){ act[1](); square(); schedulePreview(); }
+    });
+    return sel;
+  }
+  function actionBtn(text, go, off){
+    const btn = el("button","btn-ghost bmini2", text);
+    btn.type = "button";
+    btn.disabled = !!off;
+    btn.addEventListener("click", () => { go(); schedulePreview(); });
+    return btn;
+  }
+  function picker(choices, value, title, set){
     const sel = document.createElement("select");
     sel.className = "tt-size";
     sel.title = title;
@@ -2165,116 +2383,144 @@ EDITORS.table = function(b, k){
       sel.appendChild(o);
     });
     sel.value = String(value);
-    sel.addEventListener("change", () => { set(sel.value); saveDraft(); schedulePreview(); });
+    sel.addEventListener("change", () => { set(sel.value); changed(); });
     return sel;
-  };
-  const WIDTH_CHOICES = [["","Auto width"],["narrow","Narrow"],["medium","Medium"],["wide","Wide"],["wider","Extra wide"]];
-  const LINE_CHOICES = [1,2,3,4,5,6].map(n => [String(n), n === 1 ? "1 line" : n + " lines"]);
+  }
+  function widthPicker(c){
+    const WIDTH_CHOICES = [["","Column: auto width"],["narrow","Column: narrow"],["medium","Column: medium"],
+                           ["wide","Column: wide"],["wider","Column: extra wide"]];
+    return picker(WIDTH_CHOICES, b.widths[c] || "", "How wide this column is", v => { b.widths[c] = v; });
+  }
 
-  const w = el("div","bfield");
-  w.appendChild(el("label","","The table"));
-  w.appendChild(el("p","bhelp",
-    "Type what a student should see. A cell with the box turned on is one "
-    + "they fill in, and whatever you type in it is the answer it is marked "
-    + "against. Leave that empty and the cell is still theirs to fill in, "
-    + "but nothing marks it."));
+  /* ---- the grid ---- */
   const scroll = el("div","tt-edit-scroll");
   const grid = el("table","tt-edit");
+  const inputs = [];          // [r + 1][c], the heading row first, for moving about
+
+  /* A table copied out of Word or Excel arrives as lines of tab-separated
+     cells. It is spread out from the cell it was pasted into, growing the
+     table to fit. What it brings is words to read, and the cells it left
+     empty become boxes, which is what a worksheet's blank cells were for. */
+  const spread = (r, c, text) => {
+    const lines = text.replace(/\r/g, "").replace(/\n+$/, "").split("\n").map(l => l.split("\t"));
+    lines.forEach((parts, i) => {
+      const rr = r + i;
+      parts.forEach((value, j) => {
+        const cc = c + j;
+        while (cols() <= cc) addCol(cols());
+        if (rr < 0){ b.head[cc] = value.trim(); return; }
+        while (b.rows.length <= rr) addRow(b.rows.length);
+        const cell = b.rows[rr][cc];
+        cell.t = value.trim();
+        cell.fill = !cell.t;
+      });
+    });
+    square();
+    ttPicked.set(b, { r: r, c: c, focus: true });
+    redraw(); schedulePreview();
+  };
+
+  const cellInput = (r, c, value, place) => {
+    const inp = el("input");
+    inp.value = value;
+    inp.placeholder = place;
+    const picked = () => {
+      const was = ttPicked.get(b);
+      if (was && was.r === r && was.c === c) return;
+      /* The bar is drawn for one cell, so a new cell redraws it. The cell
+         is focused again afterwards, at the same place in its words. */
+      ttPicked.set(b, { r, c, focus: true, caret: inp.selectionStart });
+      redraw();
+    };
+    /* Focus covers Tab; a click as well, because a browser whose window is
+       not the one in front moves the caret without saying so. */
+    inp.addEventListener("focus", picked);
+    inp.addEventListener("click", picked);
+    inp.addEventListener("paste", (e) => {
+      const data = e.clipboardData;
+      if (!data) return;
+      const img = Array.from(data.files || []).find(f => /^image\//.test(f.type));
+      if (img && r >= 0){ e.preventDefault(); putPicture(b.rows[r][c], img); return; }
+      const text = data.getData("text/plain") || "";
+      if (/[\t\n]/.test(text.replace(/\r?\n$/, ""))){ e.preventDefault(); spread(r, c, text); }
+    });
+    /* Enter goes down a row, the way it does in a spreadsheet, and off the
+       bottom of the table it makes a new one. */
+    inp.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      if (r + 1 >= b.rows.length){ addRow(b.rows.length); schedulePreview(); }
+      choose(r + 1, c, true);
+    });
+    (inputs[r + 1] = inputs[r + 1] || [])[c] = inp;
+    return inp;
+  };
 
   const headRow = el("tr");
   b.head.forEach((h, c) => {
     const th = el("th");
-    const inp = el("input");
-    inp.value = h || "";
-    inp.placeholder = "Heading";
-    inp.addEventListener("input", () => { b.head[c] = inp.value; saveDraft(); schedulePreview(); });
+    if (pick && pick.r === -1 && pick.c === c) th.classList.add("tt-ed-on");
+    const inp = cellInput(-1, c, h || "", "Heading (optional)");
+    inp.addEventListener("input", () => { b.head[c] = inp.value; changed(); });
     th.appendChild(inp);
-    const drop = el("button","btn-ghost bmini","✕");
-    drop.title = "Remove this column";
-    drop.addEventListener("click", () => {
-      if (cols <= 1) return;
-      b.head.splice(c, 1);
-      b.widths.splice(c, 1);
-      b.rows.forEach(r => r.splice(c, 1));
-      redraw(); schedulePreview();
-    });
-    th.appendChild(drop);
-    th.appendChild(picker(WIDTH_CHOICES, b.widths[c] || "", "How wide this column is",
-      v => { b.widths[c] = v; }));
     headRow.appendChild(th);
   });
-  headRow.appendChild(el("th","tt-edit-corner",""));
   grid.appendChild(headRow);
 
   b.rows.forEach((row, r) => {
     const tr = el("tr");
     row.forEach((cell, c) => {
-      if (!cell || typeof cell !== "object") row[c] = cell = { t: String(cell == null ? "" : cell) };
-      const td = el("td");
-      const inp = el("input");
-      inp.value = cell.t || "";
-      inp.placeholder = cell.fill ? "Answer (optional)" : "What they see";
-      inp.addEventListener("input", () => { cell.t = inp.value; saveDraft(); schedulePreview(); });
+      const td = el(b.sideHead && c === 0 && !cell.fill ? "th" : "td");
+      if (cell.fill) td.classList.add("tt-ed-box");
+      if (pick && pick.r === r && pick.c === c) td.classList.add("tt-ed-on");
+      const src = (cell.imgId || cell.url) ? pictureSrc(cell) : "";
+      if (src){
+        const img = el("img","tt-ed-pic"); img.src = src; img.alt = "";
+        td.appendChild(img);
+        td.classList.add("tt-ed-withpic");
+      }
+      const inp = cellInput(r, c, cell.t || "",
+        cell.fill ? "Answer (optional)" : (src ? "Caption (optional)" : "Words they read"));
+      inp.addEventListener("input", () => {
+        cell.t = inp.value; changed();
+      });
       td.appendChild(inp);
-      /* One button a cell, and it says which of the two the cell is. */
-      const flip = el("button","btn-ghost bmini tt-flip" + (cell.fill ? " on" : ""),
-                      cell.fill ? "▢" : "T");
-      flip.title = cell.fill ? "They fill this in. Click to show it instead."
-                             : "They see this. Click to make it a box they fill in.";
-      flip.addEventListener("click", () => { cell.fill = !cell.fill; redraw(); schedulePreview(); });
-      td.appendChild(flip);
       tr.appendChild(td);
     });
-    const end = el("td","tt-edit-corner");
-    const drop = el("button","btn-ghost bmini","✕");
-    drop.title = "Remove this row";
-    drop.addEventListener("click", () => {
-      b.rows.splice(r, 1); b.lines.splice(r, 1);
-      redraw(); schedulePreview();
-    });
-    end.appendChild(picker(LINE_CHOICES, b.lines[r] || 1, "How tall this row is",
-      v => { b.lines[r] = parseInt(v, 10) || 1; }));
-    end.appendChild(drop);
-    tr.appendChild(end);
     grid.appendChild(tr);
   });
   scroll.appendChild(grid);
   w.appendChild(scroll);
+  /* Under the grid rather than over it: over it, picking the first cell
+     grew the bar and slid the whole table down from under the pointer. */
+  w.appendChild(bar);
 
-  const foot = el("div","brow");
-  const addRow = el("button","btn-ghost bmini2","+ Row");
-  addRow.addEventListener("click", () => {
-    const fresh = [];
-    for (let c = 0; c < cols; c++) fresh.push({ t:"", fill:true });
-    b.rows.push(fresh);
-    /* A new row is as tall as the one above it: a table of explanations
-       is usually explanations all the way down. */
-    b.lines.push(b.lines[b.lines.length - 1] || 1);
-    redraw(); schedulePreview();
-  });
-  const addCol = el("button","btn-ghost bmini2","+ Column");
-  addCol.addEventListener("click", () => {
-    b.head.push("");
-    b.widths.push("");
-    b.rows.forEach(r => r.push({ t:"", fill:true }));
-    redraw(); schedulePreview();
-  });
-  /* For a trace table or a comparison, where the left column names each
-     row rather than being part of the answer. */
-  const side = el("button","btn-ghost bmini2 toggle", "First column is headings");
-  side.type = "button";
-  side.setAttribute("aria-pressed", b.sideHead ? "true" : "false");
-  side.addEventListener("click", () => { b.sideHead = !b.sideHead; redraw(); schedulePreview(); });
-  foot.appendChild(addRow); foot.appendChild(addCol); foot.appendChild(side);
   /* Said once, under the grid, rather than left to be discovered when a
      class has already done it. */
+  const foot = el("div","tt-ed-foot");
   const marked = b.rows.reduce((n, r) => n + r.filter(c => c && c.fill && String(c.t || "").trim()).length, 0);
   const blanks = b.rows.reduce((n, r) => n + r.filter(c => c && c.fill).length, 0);
-  foot.appendChild(el("span","bhelp", blanks
-    ? blanks + (blanks === 1 ? " box, " : " boxes, ") + (marked || "none") + " with an answer to mark against"
+  foot.appendChild(el("span","", blanks
+    ? blanks + (blanks === 1 ? " box, " : " boxes, ") + (marked || "none") + " with an answer to mark against."
     : "No boxes yet, so there is nothing for them to fill in."));
+  foot.appendChild(el("span","", "Shaded cells are boxes they fill in; what you type in one is the answer it is marked against. "
+    + "A table copied from Word or Excel can be pasted into any cell."));
   w.appendChild(foot);
   add(w);
+
+  /* Put the caret back in the cell that was being typed in, once the
+     redrawn card is on the page. */
+  if (pick && pick.focus){
+    const at = pick.caret;
+    ttPicked.set(b, { r: pick.r, c: pick.c });
+    setTimeout(() => {
+      const inp = inputs[pick.r + 1] && inputs[pick.r + 1][pick.c];
+      if (!inp || !inp.isConnected) return;
+      inp.focus({ preventScroll: true });
+      const end = at == null ? inp.value.length : at;
+      try{ inp.setSelectionRange(end, end); }catch(e){}
+    }, 0);
+  }
   /* Each box with an answer is a mark in an assessment. */
   if (topicTags()) F("Topic tag", "topic");
   if (specLevel()) specPicker(k.here(), b);

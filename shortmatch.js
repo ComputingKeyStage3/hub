@@ -167,6 +167,16 @@ function complete(b, given){
   return typeof given === "string" && given.trim() !== "" && !tooLong(b, given).over;
 }
 
-window.shortAnswer = { mark, accepted, normalise, legacy, tooLong, complete };
+/* A box in a Table task, as something mark() can take: its own text is the
+   answer, and "also" lists any others it accepts. Three places mark a table
+   (the lesson page, the hand-in review and the markbook), so they all read
+   a cell's answers through this rather than each deciding for itself. */
+function forCell(cell){
+  const own = String(cell && cell.t != null ? cell.t : "").trim();
+  if (!own) return { answers: [] };
+  const also = (cell && Array.isArray(cell.also) ? cell.also : []).map(x => String(x == null ? "" : x).trim()).filter(Boolean);
+  return { answers: [own].concat(also) };
+}
+window.shortAnswer = { mark, accepted, normalise, legacy, tooLong, complete, forCell };
 
 })();

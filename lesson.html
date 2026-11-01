@@ -9694,7 +9694,7 @@ function tableMarks(b, v){
     const given = String(typed[box] == null ? "" : typed[box]).trim();
     box++;
     if (!answer) return;
-    const ok = !!given && window.shortAnswer.mark({ answers: [answer] }, given).ok;
+    const ok = !!given && window.shortAnswer.mark(window.shortAnswer.forCell(cell), given).ok;
     items.push({ given: given || "(blank)", ok, expected: answer, box: box - 1 });
   }));
   return { got: items.filter(x => x.ok).length, max: items.length, items };
@@ -10611,14 +10611,20 @@ function reviewTable(b, q){
     (Array.isArray(row) ? row : []).forEach((cell, c) => {
       const want = cell && typeof cell === "object" ? cell : { t: String(cell == null ? "" : cell) };
       const td = el(b.sideHead && c === 0 && !want.fill ? "th" : "td");
+      if (want.imgId || want.url){
+        const img = el("img","tt-pic"); img.src = pictureSrc(want); img.alt = "Picture";
+        td.appendChild(img);
+      }
       if (want.fill){
         const it = byBox[box];
         const typed = String((Array.isArray(v) && v[box]) || "").trim();
         box++;
         if (it) td.appendChild(answerChip(it));
-        else td.textContent = typed;
+        else td.appendChild(document.createTextNode(typed));
       } else {
-        td.textContent = String(want.t == null ? "" : want.t);
+        const said = el("span", want.imgId || want.url ? "tt-cap" : "");
+        said.textContent = String(want.t == null ? "" : want.t);
+        td.appendChild(said);
       }
       tr.appendChild(td);
     });
@@ -12500,11 +12506,14 @@ function buildPdf(){
       (b.rows || []).forEach((row, r) => {
         const parts = (Array.isArray(row) ? row : []).map(cell => {
           const c = (cell && typeof cell === "object") ? cell : { t: String(cell == null ? "" : cell) };
-          if (!c.fill) return String(c.t == null ? "" : c.t);
+          /* A picture cannot be printed in a line of text, so it is
+             named, and its caption or its box follows. */
+          const pic = c.imgId || c.url ? "(picture) " : "";
+          if (!c.fill) return (pic + String(c.t == null ? "" : c.t)).trim();
           /* A tall row's box can hold line breaks, which would split the
              row across the page. */
           const typed = String(said[at++] || "").replace(/\s*\n\s*/g, " / ").trim();
-          return typed || "____";
+          return pic + (typed || "____");
         });
         out.push({ t: "text", face: "p", text: (r + 1) + ".  " + parts.join("   |   ") });
       });

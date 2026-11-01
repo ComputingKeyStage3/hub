@@ -654,7 +654,7 @@ const BLANK = {
   /* A trace table, a conversion table, a table of outputs. Two columns and
      two rows to start with, the first row a heading, and every cell in the
      body a box for them to fill in: that is the common case, and a cell is
-     turned back into a given one with the button beside it. */
+     turned back into words they read from the bar above the grid. */
   table:    () => ({ type:"table", title:"", task:"",
                      head:["", ""],
                      rows:[ [{t:"",fill:true},{t:"",fill:true}],
@@ -1553,7 +1553,15 @@ function compileOne(b, id, target){
           const text = String(o.t == null ? "" : o.t);
           /* fill is written down only when it is on, and the answer only
              where there is one, so a big table stays a small lesson. */
-          out.push(o.fill ? (text ? { t: text, fill: true } : { fill: true }) : { t: text });
+          const kept = o.fill ? (text ? { t: text, fill: true } : { fill: true }) : { t: text };
+          /* A picture travels as its id; an address only where there is
+             no id, which is offline, or a file whose pictures were not
+             uploaded. Other answers only go with an answer to sit beside. */
+          if (o.imgId) kept.imgId = String(o.imgId);
+          else if (String(o.url || "").trim()) kept.url = String(o.url).trim();
+          const also = (Array.isArray(o.also) ? o.also : []).map(x => String(x == null ? "" : x).trim()).filter(Boolean);
+          if (o.fill && text && also.length) kept.also = also;
+          out.push(kept);
         }
         return out;
       });
@@ -7183,6 +7191,12 @@ async function uploadCarriedPictures(data, msg){
     if (Array.isArray(v)){ v.forEach(walk); return; }
     if (!v || typeof v !== "object") return;
     if (v.type === "picture" && DATA_PIC.test(String(v.url || ""))) found.push({ block: v, src: v.url });
+    /* A table's rows are lists of cells, and a cell with a picture keeps it
+       the way a picture task does, so it takes an id the same way. */
+    if (v.type === "table" && Array.isArray(v.rows))
+      v.rows.forEach(row => (Array.isArray(row) ? row : []).forEach(cell => {
+        if (cell && typeof cell === "object" && DATA_PIC.test(String(cell.url || ""))) found.push({ block: cell, src: cell.url });
+      }));
     Object.keys(v).forEach(k => {
       const s = v[k];
       if (typeof s === "string" && s.indexOf('src="data:image') >= 0)

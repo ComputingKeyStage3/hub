@@ -1116,6 +1116,12 @@
        { t:"18" }               shown, and cannot be typed in
        { t:"360", fill:true }   a box, and 360 is the answer
        { t:"",    fill:true }   a box with no right answer, read by a teacher
+       also: ["..."]            more answers a box accepts, beside its own
+
+     Any cell can carry a picture as well, given or a box: imgId for one
+     uploaded to the images table, url for an address (or a data: address
+     in a file not yet imported). The picture sits above the cell's words
+     or its box, so a row of logos can each have a box to name it.
 
      Marking is shortmatch, the same comparison Short answers use, so "8"
      and " 8 " are the same answer and nothing is marked right for merely
@@ -1135,6 +1141,22 @@
   /* rem, not em: a heading cell and a body cell are set in different sizes,
      and a column has to be one width all the way down. */
   const TT_WIDTHS = { narrow: "4.5rem", medium: "9rem", wide: "15rem", wider: "24rem" };
+  /* The lesson page's own pictureSrc turns an id into an address on this
+     server; anything else (the builder's preview of one cell) falls back to
+     the address itself. */
+  function cellPicture(cell){
+    if (!cell || (!cell.imgId && !cell.url)) return null;
+    const src = typeof window.pictureSrc === "function" ? window.pictureSrc(cell) : (cell.url || "");
+    if (!src) return null;
+    const img = make("img", "tt-pic");
+    img.src = src;
+    /* Under a box, the words in it are the answer, so the picture is not
+       described by them; a given cell's words are its caption. */
+    img.alt = !cell.fill && String(cell.t || "").trim() ? String(cell.t).trim() : "Picture";
+    img.loading = "lazy";
+    img.draggable = false;
+    return img;
+  }
   window.rTable = function(b, ctx){
     const s = make("section", "tabletask");
     const head = Array.isArray(b.head) ? b.head : [];
@@ -1178,6 +1200,8 @@
         const td = make(b.sideHead && c === 0 && !want.fill ? "th" : "td");
         if (td.tagName === "TH") td.scope = "row";
         sizeCell(td, c);
+        const pic = cellPicture(want);
+        if (pic) td.appendChild(pic);
         if (want.fill){
           td.className = "tt-fill";
           const input = make(tall > 1 ? "textarea" : "input", "tt-in");
@@ -1188,7 +1212,11 @@
             (head[c] ? head[c] + ", " : "") + (side || "row " + (r + 1)));
           input.addEventListener("input", () => { td.dataset.verdict = ""; ctx.changed(); });
           td.appendChild(input);
-          boxes.push({ input: input, td: td, answer: String(want.t == null ? "" : want.t).trim() });
+          boxes.push({ input: input, td: td, answer: String(want.t == null ? "" : want.t).trim(), cell: want });
+        } else if (pic){
+          /* Under a picture the words are its caption. */
+          const said = String(want.t == null ? "" : want.t);
+          if (said.trim()) td.appendChild(make("span", "tt-cap", said));
         } else {
           td.textContent = String(want.t == null ? "" : want.t);
         }
@@ -1212,7 +1240,7 @@
         let right = 0;
         boxes.forEach(x => {
           if (!x.answer){ x.td.dataset.verdict = ""; return; }
-          const ok = window.shortAnswer.mark({ answers: [x.answer] }, x.input.value).ok;
+          const ok = window.shortAnswer.mark(window.shortAnswer.forCell(x.cell), x.input.value).ok;
           x.td.dataset.verdict = x.input.value.trim() ? (ok ? "right" : "wrong") : "";
           if (ok) right++;
         });
