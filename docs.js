@@ -98,8 +98,13 @@ function viewer(o){
   name.appendChild(list.length > 1 ? picker : nameText);
   const tools = div("sl-tools");
   const bContents = btn("sl-tool", "&#9776;", "Contents: jump to a part of the document");
-  const bSmaller = btn("sl-tool", "A&#8722;", "Smaller writing");
-  const bBigger = btn("sl-tool", "A+", "Bigger writing");
+  /* A magnifying glass with a minus and a plus: the whole page, pictures
+     and all, grows and shrinks, which "bigger writing" did not say. */
+  const glass = (plus) => '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M7.5 10.5h6' +
+    (plus ? "M10.5 7.5v6" : "") + '"/></svg>';
+  const bSmaller = btn("sl-tool", glass(false), "Zoom out");
+  const bBigger = btn("sl-tool", glass(true), "Zoom in");
   const bFull = btn("sl-tool", "&#9974;", "Fill the screen");
   const bClose = btn("sl-tool", "&#10005;", "Close the document");
   [bContents, bSmaller, bBigger, bFull, bClose].forEach(b => tools.appendChild(b));
@@ -117,6 +122,8 @@ function viewer(o){
     const p = paper(d);
     p.style.setProperty("--dc-z", String(view.zoom));
     stage.appendChild(p);
+    /* its pictures go full screen as a screenshot does, on the lesson page */
+    if (window.hubZoomable) window.hubZoomable(p);
     nameText.textContent = d.title || "Document";
     nameText.title = d.title || "";
     picker.value = String(cur);
@@ -232,12 +239,17 @@ function viewer(o){
   split.addEventListener("pointerup", endSplit);
   split.addEventListener("pointercancel", endSplit);
 
-  /* ---- a page can bring a document forward ---- */
+  /* ---- a page can bring a document forward ----
+     A page tied to a document opens it at that document, so the help sheet
+     for a task is beside the task without anyone looking for it. Not on a
+     phone, where it would take half the screen unasked; there the button
+     is lit instead. */
   function page(i){
     const id = o.docForPage ? o.docForPage(i) : null;
     const at = id ? list.findIndex(d => d.id === id) : -1;
-    open.classList.toggle("sl-hint", at >= 0 && !shown);
     if (at >= 0 && at !== cur) choose(at);
+    if (at >= 0 && !shown && !narrow()) show();
+    open.classList.toggle("sl-hint", at >= 0 && !shown);
   }
 
   zoomTo(view.zoom);

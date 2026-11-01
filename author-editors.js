@@ -1704,129 +1704,14 @@ EDITORS.notes = function(b, k){
    task above it changes that id, so narrowing to this one task only
    happens where the lesson has more than one help task to tell apart. */
 EDITORS.helper = function(b, k){
-  const { F, add } = k;
+  const { F, toggleRow } = k;
   F("Heading (optional)", "title");
   F("Instruction (optional)", "task", { area:true, rows:2 });
-  const w = el("div", "bfield hq-box");
-  w.appendChild(el("label", "", "Questions it could not answer"));
-  const note = el("p", "hint", "");
-  const tools = el("div", "hq-tools");
-  const allBtn = el("button", "btn-ghost toggle", "Show dealt with");
-  const clearBtn = el("button", "btn-ghost", "Clear dealt with");
-  const refresh = el("button", "btn-ghost", "Refresh");
-  [allBtn, clearBtn, refresh].forEach(x => { x.type = "button"; tools.appendChild(x); });
-  const list = el("div", "hq-list");
-  w.appendChild(note); w.appendChild(tools); w.appendChild(list);
-  add(w);
-
-  const API = (window.HUB && window.HUB.API) || "";
-  let showAll = false, rows = [];
-  const lessonId = lesson && lesson.savedAs;
-  if (OFFLINE || !API){
-    note.textContent = "Questions are collected by the server, so there are none to show in offline mode.";
-    tools.hidden = true;
-    return;
-  }
-  if (!lessonId){
-    note.textContent = "Save the lesson and give it to a class. What students ask this task that it cannot answer appears here.";
-    tools.hidden = true;
-    return;
-  }
-  const helpers = [];
-  (function walk(arr){ (arr || []).forEach(x => {
-    if (!x) return;
-    if (x.type === "helper") helpers.push(x);
-    walk(x.blocks);
-    (x.options || []).forEach(o => walk(o.blocks));
-  }); })(lesson.blocks);
-  const myId = () => {
-    let id = (typeof compiledIds !== "undefined" && compiledIds.get(b)) || "";
-    if (!id){ try{ compile(); id = compiledIds.get(b) || ""; }catch(e){} }
-    return id;
-  };
-  /* the answers' titles, for saying what it gave instead; only fetched
-     for this screen */
-  const titles = () => {
-    const out = {};
-    ((window.HELP_PHOTOSHOP || {}).entries || []).forEach(e => { out[e.id] = e.title; });
-    return out;
-  };
-  const loadTitles = () => window.HELP_PHOTOSHOP ? Promise.resolve() : new Promise(ok => {
-    const s = document.createElement("script");
-    s.src = "help-photoshop.js"; s.onload = ok; s.onerror = ok;
-    document.head.appendChild(s);
-  });
-  const HOW = { "unsure": "It did not understand", "not-quite": "The answer did not help",
-                "still-stuck": "Still stuck after the fixes" };
-
-  async function load(){
-    note.textContent = "Loading…";
-    list.innerHTML = "";
-    try{
-      const [r] = await Promise.all([
-        fetch(API + "/api/teacher/help-questions?lesson=" + encodeURIComponent(lessonId) + (showAll ? "&done=1" : ""),
-              { headers: window.teacherAuth.headers(), cache: "no-store" }),
-        loadTitles()]);
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.error || "Could not read the questions.");
-      rows = d.rows || [];
-      if (helpers.length > 1){ const id = myId(); rows = rows.filter(q => q.task === id); }
-    }catch(e){ note.textContent = e.message; return; }
-    paint();
-  }
-  function paint(){
-    list.innerHTML = "";
-    const names = titles();
-    const open = rows.filter(q => !q.done).length;
-    allBtn.classList.toggle("on", showAll);
-    allBtn.textContent = showAll ? "Hide dealt with" : "Show dealt with";
-    clearBtn.hidden = !showAll || !rows.some(q => q.done);
-    if (!rows.length){
-      note.textContent = showAll ? "Nothing yet." : "Nothing waiting. Questions appear here when students ask this task something it cannot answer.";
-      return;
-    }
-    note.textContent = open + " waiting" + (showAll ? ", " + (rows.length - open) + " dealt with" : "") +
-      ". Each one is wording to add to the helper's answers, in help-photoshop.js.";
-    rows.forEach(q => {
-      const row = el("div", "hq-row" + (q.done ? " done" : ""));
-      const words = el("div", "hq-words");
-      words.appendChild(el("div", "hq-q", "“" + q.question + "”"));
-      const at = new Date(String(q.at || "").replace(" ", "T") + "Z");
-      const bits = [HOW[q.how] || "Not answered"];
-      if (q.matched) bits.push("it gave: " + (names[q.matched] || q.matched));
-      if (q.group) bits.push(q.group);
-      bits.push(isNaN(at) ? String(q.at || "") : at.toLocaleString("en-GB", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }));
-      words.appendChild(el("div", "hq-meta", bits.join(" · ")));
-      row.appendChild(words);
-      const mark = el("button", "btn-ghost", q.done ? "Not dealt with" : "Dealt with");
-      mark.type = "button";
-      mark.addEventListener("click", async () => {
-        mark.disabled = true;
-        try{
-          const r = await fetch(API + "/api/teacher/help-questions", { method:"POST", headers: window.teacherAuth.json(),
-            body: JSON.stringify({ op: q.done ? "open" : "done", id: q.id }) });
-          if (!r.ok) throw new Error();
-          q.done = !q.done;
-          if (!showAll && q.done) rows = rows.filter(x => x !== q);
-          paint();
-        }catch(e){ mark.disabled = false; mark.textContent = "Try again"; }
-      });
-      row.appendChild(mark);
-      list.appendChild(row);
-    });
-  }
-  allBtn.addEventListener("click", () => { showAll = !showAll; load(); });
-  refresh.addEventListener("click", load);
-  clearBtn.addEventListener("click", async () => {
-    if (!confirm("Remove every question marked dealt with for this lesson? This cannot be undone.")) return;
-    try{
-      const r = await fetch(API + "/api/teacher/help-questions", { method:"POST", headers: window.teacherAuth.json(),
-        body: JSON.stringify({ op: "clear", lesson: lessonId }) });
-      if (!r.ok) throw new Error();
-    }catch(e){ note.textContent = "Could not clear them. Try again in a moment."; return; }
-    load();
-  });
-  load();
+  /* On the page it is a task like any other; floating, it is a Help button
+     in the corner of every page of the lesson that opens the same chat, so
+     it is to hand on whichever task somebody is stuck on. */
+  toggleRow([["floating","Floating button", false]], "Where it goes",
+    "On: a Help button in the corner of every page, which opens the chat. Off: the chat sits on this page like any other task.");
 };
 
 EDITORS.mindmap = function(b, k){

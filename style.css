@@ -194,6 +194,10 @@ input:focus,textarea:focus{outline:none; border-color:var(--amber); box-shadow:0
 body.lesson{
   height:100dvh; display:grid;
   grid-template-rows:auto auto auto 1fr auto;
+  /* One column no wider than the window. Left to size itself, the column
+     grew by a docked document's margin on the brief, 1476px on an 839px
+     screen, instead of the brief giving the document its room. */
+  grid-template-columns:minmax(0, 1fr);
   overflow:hidden;
 }
 /* Held to their rows, so the stage keeps the one that stretches when the
@@ -627,6 +631,15 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:var
   box-shadow:0 2px 6px rgba(0,0,0,.18);
 }
 .shot-full-btn:hover{border-color:rgba(0,0,0,.5); box-shadow:0 3px 10px rgba(0,0,0,.28)}
+/* Any picture a student reads, holding the same button over its corner
+   (zoomablePictures in lesson.html). Inline in a paragraph it stays inline;
+   a picture task's picture keeps the whole width of its figure. */
+.zoomwrap{position:relative; display:inline-block; max-width:100%; vertical-align:bottom}
+.zoomwrap.block{display:block; width:fit-content}
+.picfig.sized .zoomwrap{width:100%}
+.zoomwrap > img{max-width:100%}
+.zoomwrap .shot-full-btn{opacity:.85}
+.zoomwrap:hover .shot-full-btn, .zoomwrap .shot-full-btn:focus-visible{opacity:1}
 .shot-full-btn:focus-visible{outline:3px solid var(--amber); outline-offset:2px}
 html[data-bg=dark] .shot-full-btn,html[data-bg=night] .shot-full-btn{
   background:var(--panel-2); color:var(--text); border-color:var(--line-2); box-shadow:0 2px 6px rgba(0,0,0,.45)}
@@ -7470,8 +7483,17 @@ button.mbvoice-row.on .mbvoice-opt{color:var(--text); font-weight:700}
 .sl-win[data-mode=full] .sl-bar{cursor:default}
 .sl-win[data-mode=sheet]{left:0; right:0; bottom:0; height:46vh; height:46dvh; border-radius:var(--rad-lg) var(--rad-lg) 0 0;
   border-width:1px 0 0; padding-bottom:env(safe-area-inset-bottom)}
-body.lesson.sl-pin-right{padding-right:var(--sl-side, 420px)}
-body.lesson.sl-sheet{padding-bottom:46vh; padding-bottom:46dvh}
+/* On a lesson the window sits between the bars rather than over them: the
+   top bar and progress strip stay across the whole width above it and the
+   Back and Continue bar below it, so it reads as part of the page. lesson.html
+   measures where those bars end into --bars-top and --bars-bottom, because
+   the strip changes height as it is pointed at and the bottom bar comes and
+   goes. Only the brief and the work beneath it make room, not the bars. */
+body.lesson .sl-win[data-mode=right]{top:var(--bars-top, 0px); bottom:var(--bars-bottom, 0px)}
+body.lesson .sl-win[data-mode=sheet]{bottom:var(--bars-bottom, 0px); padding-bottom:0}
+body.lesson.sl-pin-right{--dock-w:var(--sl-side, 420px)}
+body.lesson.sl-pin-right > .stage{margin-right:var(--sl-side, 420px)}
+body.lesson.sl-sheet > .stage{margin-bottom:46vh; margin-bottom:46dvh}
 
 .sl-snaphint{position:fixed; top:8px; bottom:8px; width:min(420px, 36vw); z-index:59; pointer-events:none;
   border:2px dashed var(--amber); border-radius:var(--rad-md); background:color-mix(in srgb, var(--amber) 12%, transparent)}
@@ -7528,7 +7550,7 @@ body.sl-presenting{overflow:hidden}
 }
 @media print{
   .sl-win, .sl-open, .sl-present, .sl-snaphint{display:none !important}
-  body.lesson.sl-pin-right, body.lesson.sl-sheet{padding:0}
+  body.lesson.sl-pin-right > .stage, body.lesson.sl-sheet > .stage{margin:0}
 }
 
 /* ---- the builder's Slides pop-up (author-slides.js) ---- */
@@ -7591,9 +7613,18 @@ body.sl-start{min-height:100vh; min-height:100dvh}
 .dc-win[data-mode=right]{width:var(--dc-side, 440px)}
 /* nothing about a document is dragged but its inside edge */
 .dc-win .sl-bar{cursor:default}
-body.lesson.dc-pin-right{padding-right:var(--dc-side, 440px)}
-body.lesson.dc-sheet{padding-bottom:46vh; padding-bottom:46dvh}
-body.lesson.dc-pin-right.sl-pin-right{padding-right:calc(var(--dc-side, 440px) + var(--sl-side, 420px))}
+body.lesson.dc-pin-right{--dock-w:var(--dc-side, 440px)}
+body.lesson.dc-pin-right > .stage{margin-right:var(--dc-side, 440px)}
+body.lesson.dc-sheet > .stage{margin-bottom:46vh; margin-bottom:46dvh}
+body.lesson.dc-pin-right.sl-pin-right{--dock-w:calc(var(--dc-side, 440px) + var(--sl-side, 420px))}
+body.lesson.dc-pin-right.sl-pin-right > .stage{margin-right:var(--dock-w)}
+/* The brief has a width of its own (up to 760px, centred), which a margin
+   alone does not beat: it is sized and centred in what the window leaves.
+   :root because html[data-look=new] body.lesson .brief sets its width too
+   and is the more specific. */
+:root body.lesson.dc-pin-right > .brief, :root body.lesson.sl-pin-right > .brief{
+  --brief-w:min(760px, calc(100% - 40px - var(--dock-w)));
+  width:var(--brief-w); margin-left:max(20px, calc((100% - var(--dock-w) - var(--brief-w)) / 2)); margin-right:auto}
 /* the slides window moves inwards, never the document window, which is an
    sl-win as well and would otherwise be pushed off its own edge */
 body.dc-pin-right .sl-win:not(.dc-win)[data-mode=right]{right:var(--dc-side, 440px)}
@@ -7642,7 +7673,7 @@ body.dc-pin-right .sl-win:not(.dc-win)[data-mode=right]{right:var(--dc-side, 440
 
 @media print{
   .dc-win{display:none !important}
-  body.lesson.dc-pin-right, body.lesson.dc-sheet{padding:0}
+  body.lesson.dc-pin-right > .stage, body.lesson.dc-sheet > .stage{margin:0}
 }
 
 /* ---- the builder's Documents pop-up (author-docs.js) ---- */
@@ -7728,21 +7759,11 @@ body.dc-pin-right .sl-win:not(.dc-win)[data-mode=right]{right:var(--dc-side, 440
   width:max(50%, min(100%, 380px));
   border:1px solid var(--line-2); border-radius:var(--rad-md); background:var(--panel); overflow:hidden}
 .hp-task .hp{flex:1 1 auto; min-height:0}
-.hp-taskout{display:inline-block; margin:6px 0 0; font-size:var(--text-sm); font-weight:600; color:var(--amber)}
 
 /* help.html */
 body.hp-page{height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden}
 .hp-pagebody{flex:1 1 auto; min-height:0; width:100%; max-width:760px; margin:0 auto; padding-bottom:env(safe-area-inset-bottom)}
 
-/* ---- the console's Help questions screen ---- */
-.hq-row{display:flex; align-items:center; gap:12px; padding:10px 12px; margin:0 0 8px; background:var(--panel); border:1px solid var(--line); border-radius:var(--rad-md)}
-.hq-row.done{opacity:.6}
-.hq-words{flex:1; min-width:0}
-.hq-q{font-weight:600; overflow-wrap:anywhere}
-.hq-meta{font-size:var(--text-sm); color:var(--muted); margin-top:2px}
-.hq-tools{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 10px}
-.hq-tools .btn-ghost{font-size:var(--text-sm); padding:6px 12px}
-.hq-list .hq-row{background:var(--panel-2)}
 /* Results in the console. The markbook is the page: one row of drop-downs
    over it, and the grade boundaries in a panel beside it that stays shut
    until it is asked for. The page is let out wider than the console's usual
@@ -7914,3 +7935,26 @@ button.piclib-card:hover{border-color:var(--amber)}
 .piclib-foot.modal-cta{width:auto; padding:10px 0 0; font-size:var(--text-base); border-radius:0; background:var(--panel)}
 .piclib-warn{flex:1 1 220px; font-weight:600; color:var(--text)}
 @media (max-width:640px){ .piclib-grid{grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:8px} }
+
+/* ---------- Photoshop help, floating ----------
+   A help task set to float (floatHelp in lesson.html): a Help button in the
+   corner above the bottom bar, and the chat in a panel over it. Both keep
+   clear of a docked document or slides, which take the right-hand edge. */
+.hp-fab{position:fixed; right:16px; bottom:calc(var(--bars-bottom, 0px) + 16px); z-index:70;
+  display:flex; align-items:center; gap:8px; min-height:44px; padding:10px 18px; border-radius:999px;
+  box-shadow:0 4px 14px rgba(0,0,0,.22)}
+.hp-float{position:fixed; right:16px; bottom:calc(var(--bars-bottom, 0px) + 72px); z-index:70;
+  width:min(400px, calc(100vw - var(--dock-w, 0px) - 32px));
+  height:min(560px, calc(100vh - var(--bars-top, 0px) - var(--bars-bottom, 0px) - 96px));
+  height:min(560px, calc(100dvh - var(--bars-top, 0px) - var(--bars-bottom, 0px) - 96px));
+  display:flex; flex-direction:column; overflow:hidden;
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--rad-lg); box-shadow:0 10px 32px rgba(0,0,0,.25)}
+.hp-float[hidden]{display:none}
+.hp-float-bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 8px 8px 16px; border-bottom:1px solid var(--line)}
+.hp-float-task{margin:10px 16px 0; color:var(--muted); font-size:var(--text-base)}
+.hp-float > .helpertask{flex:1 1 auto; min-height:0; overflow:auto; padding:10px 12px}
+.hp-float .hp-task{height:100%}
+body.dc-pin-right .hp-fab, body.dc-pin-right .hp-float{right:calc(var(--dc-side, 440px) + 16px)}
+body.sl-pin-right .hp-fab, body.sl-pin-right .hp-float{right:calc(var(--sl-side, 420px) + 16px)}
+body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float{right:calc(var(--dc-side, 440px) + var(--sl-side, 420px) + 16px)}
+@media print{ .hp-fab, .hp-float{display:none !important} }

@@ -816,22 +816,18 @@
      { type:"helper", title, task, topic:"photoshop" }
      The help chat from helper.js, on the page like any other task, for a
      lesson done in Photoshop. Nothing is saved and nothing is marked: it is
-     there to be asked. What it cannot answer goes to the teacher, filed
-     against this lesson and this task, and shows in the builder under this
-     task (author-editors.js). The answers are fetched the first time one
-     of these is drawn, so a lesson without one never loads them.
+     there to be asked, and what it is asked stays on the student's computer.
+     Set to float, lesson.html puts this same section in a panel behind a
+     Help button rather than on its page. The answers are fetched the first
+     time one of these is drawn, so a lesson without one never loads them.
      =================================================================== */
-  window.rHelper = function(b, ctx){
+  window.rHelper = function(b){
     const s = make("section", "helpertask");
     const box = make("div", "hp-task");
     s.appendChild(box);
-    const out = make("a", "hp-taskout", "Open the help in its own window");
-    out.href = "help.html"; out.target = "hubPhotoshopHelp";
-    out.title = "Keep it open beside Photoshop";
-    s.appendChild(out);
     const start = () => {
       box.textContent = "";
-      window.hubHelper.mount(box, window.HELP_PHOTOSHOP, { lesson: ctx.lessonId || "", task: b.id || "" });
+      window.hubHelper.mount(box, window.HELP_PHOTOSHOP, {});
     };
     if (!window.hubHelper) box.textContent = "The help could not be loaded.";
     else if (window.HELP_PHOTOSHOP) start();

@@ -1242,10 +1242,39 @@ function hideWaitModal(){ $("waitModal").hidden = true; }
    a student can float, pin beside the work or fill the screen with
    (slides.js). Never on a page made for marking or for the PDF, where
    there is nobody to move it about. */
+/* Slides and documents dock between the bars, not over them: from the
+   bottom of the progress strip to the top of the Back and Continue bar.
+   Measured rather than worked out, because the strip grows when it is
+   pointed at and the bottom bar is hidden on the summary. */
+let barsWatched = false;
+function watchBars(){
+  if (barsWatched) return;
+  barsWatched = true;
+  const measure = () => {
+    const tracker = $("tracker"), top = document.querySelector(".topbar"), dock = $("dock");
+    const above = tracker && tracker.offsetParent ? tracker : top;
+    const topEdge = above ? Math.max(0, Math.round(above.getBoundingClientRect().bottom)) : 0;
+    const dockOn = dock && dock.offsetParent && !dock.classList.contains("gone");
+    const bottomEdge = dockOn ? Math.max(0, Math.round(innerHeight - dock.getBoundingClientRect().top)) : 0;
+    const root = document.documentElement.style;
+    root.setProperty("--bars-top", topEdge + "px");
+    root.setProperty("--bars-bottom", bottomEdge + "px");
+  };
+  measure();
+  if ("ResizeObserver" in window){
+    const ro = new ResizeObserver(measure);
+    [document.querySelector(".topbar"), $("tracker"), $("dock")].forEach(x => { if (x) ro.observe(x); });
+  }
+  addEventListener("resize", measure);
+  /* the summary hides the bottom bar with a class, which resizes nothing */
+  if ($("dock")) new MutationObserver(measure).observe($("dock"), { attributes: true, attributeFilter: ["class", "hidden"] });
+}
+
 let slideViewer = null;
 function startSlides(l){
   if (!window.hubSlides || !window.hubSlides.has(l)) return;
   if (embedParam !== null || pdfParam !== null || allParam !== null) return;
+  watchBars();
   const teacher = spectate || !!(window.teacherAuth && window.teacherAuth.have() && !token);
   slideViewer = window.hubSlides.viewer({
     deck: l.slides, lessonId, before: $("setBtn"),
@@ -1331,6 +1360,7 @@ let docViewer = null;
 function startDocs(l){
   if (!window.hubDocs || !window.hubDocs.has(l)) return;
   if (embedParam !== null || pdfParam !== null || allParam !== null) return;
+  watchBars();
   docViewer = window.hubDocs.viewer({
     docs: l.docs, lessonId, before: $("setBtn"),
     docForPage: (i) => { const b = l.blocks && l.blocks[i]; return b && b.doc ? b.doc : null; }
@@ -4393,7 +4423,11 @@ function buildBlock(b, i){
               exam:rExamTask, table:rTableTask, hotspot:rHotspotTask,
               extension:rExtension, group:rGroup, choice:rChoice }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
-  try { return R(b); }
+  try {
+    const made = R(b);
+    if (made && made.section && ZOOM_TYPES.indexOf(b.type) >= 0) zoomablePictures(made.section);
+    return made;
+  }
   catch (err){
     console.error("Block " + (i+1) + " (" + b.type + ") failed:", err);
     const s = el("section","station");
@@ -4680,6 +4714,8 @@ function rPage(b){
       if (child.waitForPage === true && built.waitFor) waiting.push(built);
       return;
     }
+    /* A floating help task is in the corner of every page, not on this one. */
+    if (built.floating) return;
     if (child.required === false){
       built.check = () => ({ ok:true });
       /* A task nobody has to do must not hold the page shut either. */
@@ -8038,10 +8074,53 @@ const rNotesTask   = (b) => wrapExtra(b, window.rNotes,   "Notes");
 /* The Photoshop help chat. It needs to know the lesson, so what it could
    not answer reaches this lesson's teacher, which wrapExtra does not pass. */
 function rHelperTask(b){
-  const made = window.rHelper(b, { lessonId: lessonId === "__preview" ? "" : lessonId });
+  const made = window.rHelper(b);
   fields[b.id] = { get: made.get, set: made.set };
+  if (b.floating === true && floatHelp(b, made.section))
+    return { section: el("section"), floating: true, check: () => ({ ok:true }), brief: {} };
   return { section: made.section, check: () => ({ ok:true }),
            brief: { eyebrow: "Photoshop help", title: b.title || "", text: b.task || "" } };
+}
+/* A help task set to float: a Help button in the corner of every page,
+   above the bottom bar and clear of a docked document, which opens the chat
+   in a panel. It is still the lesson's task, so it is built where the task
+   is; it just does not take a place on that page. One per lesson: a second
+   floating one would be a second button saying the same thing. */
+let helpFloat = null;
+function floatHelp(b, section){
+  if (helpFloat || embedParam !== null || pdfParam !== null || allParam !== null) return !!helpFloat;
+  watchBars();
+  const fab = el("button","btn-primary hp-fab no-print",
+    '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.2-.8.6-.8 1.1"/>' +
+    '<path d="M12 14h.01"/></svg><span>Help</span>');
+  fab.type = "button";
+  fab.setAttribute("aria-expanded", "false");
+  const panel = el("div","hp-float no-print");
+  panel.hidden = true;
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", b.title || "Photoshop help");
+  const bar = el("div","hp-float-bar");
+  bar.appendChild(el("b","", b.title || "Photoshop help"));
+  const x = el("button","btn-ghost iconbtn","✕");
+  x.type = "button"; x.title = "Close"; x.setAttribute("aria-label", "Close the help");
+  bar.appendChild(x);
+  panel.appendChild(bar);
+  if (b.task) panel.appendChild(el("p","hp-float-task", b.task));
+  panel.appendChild(section);
+  const set = (open) => {
+    panel.hidden = !open;
+    fab.classList.toggle("on", open);
+    fab.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open){ const box = panel.querySelector("input, textarea"); if (box) box.focus(); }
+  };
+  fab.addEventListener("click", () => set(panel.hidden));
+  x.addEventListener("click", () => { set(false); fab.focus(); });
+  panel.addEventListener("keydown", (e) => { if (e.key === "Escape"){ set(false); fab.focus(); } });
+  document.body.appendChild(panel);
+  document.body.appendChild(fab);
+  helpFloat = fab;
+  return true;
 }
 const rMindmapTask = (b) => wrapExtra(b, window.rMindmap, "Mind map");
 
@@ -8781,6 +8860,32 @@ function fullScreenButton(getSrc, getPsd){
   });
   return btn;
 }
+/* Every picture a student reads can go full screen the way a screenshot
+   does: the same button over its corner, the same viewer with its zoom.
+   Only the task types where a picture is something to look at; on a Label
+   or Click the right spot task the picture is the answer and a click on it
+   means something else, and a screenshot has its button already. A picture
+   too small to need it (an icon, a key) is left as it is, which can only be
+   told once it has loaded. */
+const ZOOM_TYPES = ["text","picture","quiz","mc","short","question","order","blanks","table","keywords","exam"];
+function zoomablePictures(root){
+  if (!root) return;
+  root.querySelectorAll("img").forEach(img => {
+    if (img.dataset.zoomable || img.closest(".shot, a, button, .zoomwrap, .shot-viewer")) return;
+    img.dataset.zoomable = "1";
+    const add = () => {
+      if ((img.naturalWidth || 0) < 120 || (img.naturalHeight || 0) < 60) return;
+      if (img.parentElement && img.parentElement.classList.contains("zoomwrap")) return;
+      const wrap = el("span","zoomwrap");
+      if (img.classList.contains("picimg") || getComputedStyle(img).display === "block") wrap.classList.add("block");
+      img.parentNode.insertBefore(wrap, img);
+      wrap.appendChild(img);
+      wrap.appendChild(fullScreenButton(() => img.currentSrc || img.src));
+    };
+    if (img.complete && img.naturalWidth) add(); else img.addEventListener("load", add, { once: true });
+  });
+}
+window.hubZoomable = zoomablePictures;
 /* View Work loads this page afresh for every student, so it is told which
    task's picture was open (&full=) and opens this student's. One who has not
    handed a picture in for it is simply shown their page. Tried a few times

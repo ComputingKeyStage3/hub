@@ -1397,7 +1397,8 @@ function compileOne(b, id, target){
       push(keepArrays({ type:"notes", id, title: b.title || "", task: b.task || "",
         starter: b.starter || "" }));
     else if (b.type === "helper")
-      push({ type:"helper", id, title: b.title || "", task: b.task || "", topic: "photoshop" });
+      push(keepArrays({ type:"helper", id, title: b.title || "", task: b.task || "", topic: "photoshop",
+             floating: b.floating === true ? true : undefined }));
     else if (b.type === "mindmap")
       push(keepArrays({ type:"mindmap", id, title: b.title || "", task: b.task || "",
         centre: b.centre || "", lockCentre: b.lockCentre === true,

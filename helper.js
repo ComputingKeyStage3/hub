@@ -250,7 +250,6 @@ function mount(holder, pack, opts){
     });
     bad.addEventListener("click", () => {
       acts.remove(); mark(e.id, false);
-      tell("not-quite", e.id);
       botTurn(e.fix && e.fix.length ? e.fix.join(" ").length : 120, () => { if (e.fix && e.fix.length) fixes(e); else unsure([]); });
     });
     card.appendChild(acts);
@@ -287,44 +286,9 @@ function mount(holder, pack, opts){
     bubble("bot", box);
   }
   function askTeacher(){
-    const sent = tell("still-stuck", state.last);
     const words = opts.teacherWords ||
-      ((sent ? "I've sent your question to your teacher, so they can teach me the answer. " : "") +
-       "Put your hand up and show your teacher what you asked. While you wait, try Ctrl + Z to undo the last thing, and Ctrl + D to clear any selection.");
+      ("Put your hand up and show your teacher what you asked. While you wait, try Ctrl + Z to undo the last thing, and Ctrl + D to clear any selection.");
     botTurn(words.length, () => bubble("bot", words));
-  }
-
-  /* ---- passing a question on ----
-     What the helper could not answer goes to the teacher, through the
-     help-ask action, filed against the lesson and the task it was asked in,
-     so it shows under that task in the builder and the answers file can
-     learn the words students really use. Only the question, what it was
-     matched to and why it is being sent: never a name. Only for a
-     signed-in student, because the class is read from their sign-in; never
-     in offline mode; and never from help.html, which belongs to no lesson
-     and so to no task anybody would read it under. One send per question,
-     whichever reason comes first. */
-  let asked = "";
-  const sentFor = new Set();
-  function canTell(){
-    const hub = window.HUB || {};
-    let token = "";
-    try{ token = localStorage.getItem("hub_token") || ""; }catch(e){}
-    return !hub.OFFLINE && !!hub.API && hub.API.indexOf("PASTE_") !== 0 && !!token && !!asked && !!opts.lesson;
-  }
-  function tell(how, matched){
-    if (!canTell()) return false;
-    const key = asked.toLowerCase();
-    if (sentFor.has(key)) return true;
-    sentFor.add(key);
-    let token = "";
-    try{ token = localStorage.getItem("hub_token") || ""; }catch(e){}
-    fetch(window.HUB.API + "/api/teacher/help-ask", { method: "POST", keepalive: true,
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-      body: JSON.stringify({ question: asked, matched: matched || "", how, topic: pack.topic || "photoshop",
-                             lesson: opts.lesson, task: opts.task || "" })
-    }).catch(() => {});
-    return true;
   }
 
   /* what was asked and how it went, in this browser only */
@@ -349,11 +313,9 @@ function mount(holder, pack, opts){
     const t = String(text || "").trim();
     if (!t) return;
     bubble("me", t);
-    asked = t.slice(0, 200);
     const r = reply(ix, state, t);
     if (!r) return;
     note(t, r.e ? r.e.id : null, r.kind);
-    if (r.kind === "unsure") tell("unsure", null);
     const size = r.kind === "say" ? r.text.length : r.kind === "answer" ? sizeOf(r.e)
                : r.kind === "fixes" ? (r.e.fix || []).join(" ").length : 80;
     botTurn(size, () => {
@@ -368,7 +330,9 @@ function mount(holder, pack, opts){
 
   botTurn(String(pack.greeting || "").length, () => {
     bubble("bot", pack.greeting);
-    log.appendChild(chips((pack.starters || []).map(id => ix.byId[id]), "People often ask:"));
+    /* A few to start from, not the whole list: a wall of buttons before
+       anything has been typed was more than anyone read. */
+    log.appendChild(chips((pack.starters || []).slice(0, 4).map(id => ix.byId[id]), "People often ask:"));
   });
   return { ask, focus: () => input.focus() };
 }
