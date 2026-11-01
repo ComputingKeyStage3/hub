@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"15.6.2", text:"Photoshop help: every answer now uses the same tools and keys as the Year 7 and Year 8 lessons, in fewer steps, with new answers for shapes, Warp Text, clipping masks, text behind a picture, colour pop, blur, the Lomo effect, filters and handing in." },
   { v:"15.6.1", text:"Photoshop help: its Help button is purple and gently pulses until it is opened, replies are shown from their first line, and it no longer mentions tutorial numbers." },
   { v:"15.6", text:"Documents and slides dock between the top and bottom bars, and open at a task page's own document. Every picture can go full screen. Photoshop help can float as a Help button, shows fewer suggestions, and no longer sends what it could not answer." },
   { v:"15.5.1", text:"Pictures in the lesson builder's ⋯ menu shows every uploaded picture and where it is used, and deletes the ones nothing uses. A picture task can also reuse one already uploaded." },

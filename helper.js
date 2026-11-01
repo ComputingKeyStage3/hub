@@ -163,7 +163,7 @@ function el(tag, cls, text){ const n = document.createElement(tag); if (cls) n.c
 /* Keys written in an answer ("Ctrl + T") are drawn as keys. Done on the
    escaped text, so nothing in an answer can become markup. */
 function keys(text){
-  return esc(text).replace(/\b(Ctrl|Alt|Shift|Space|Enter|Esc|Backspace|Delete|Tab|F\d{1,2})\b(?:\s\+\s(?:Ctrl|Alt|Shift|[A-Z0-9\[\]+\-]|Enter|Space))*|(?<=\s|^)\[(?=\s|$)|(?<=\s|^)\](?=\s|$)/g,
+  return esc(text).replace(/\b(Ctrl|Alt|Shift|Windows|Space|Enter|Esc|Backspace|Delete|Tab|F\d{1,2})\b(?:\s\+\s(?:Ctrl|Alt|Shift|[A-Z0-9\[\]+\-]|Enter|Space))*|(?<=\s|^)\[(?=\s|$)|(?<=\s|^)\](?=\s|$)/g,
     (m) => m.split(/\s\+\s/).map(k => "<kbd>" + k + "</kbd>").join(" + "));
 }
 function mount(holder, pack, opts){
