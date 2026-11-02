@@ -7879,9 +7879,15 @@ body.hp-page{height:100vh; height:100dvh; display:flex; flex-direction:column; o
 .resbook .mbscroll{max-height:none; height:calc(100vh - 250px); height:calc(100dvh - 250px); min-height:380px; margin:0 0 10px}
 .restable th{vertical-align:bottom}
 .restable .mbsort{white-space:normal}
-.restable th.resth{min-width:4.5em; max-width:9em}
-.resth-name{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
-  font-weight:600; color:var(--dim); line-height:1.25; margin-bottom:2px}
+.restable th.resth{min-width:4em; max-width:9em}
+.resth-icon{display:inline-flex; margin-bottom:2px; color:var(--dim); cursor:help}
+.resth-icon.practical{color:var(--amber-dark)}
+.resth-icon:hover{color:var(--text)}
+/* the Continue tooltip's look, hung from the page under a column's symbol */
+.tip.restip{position:fixed; bottom:auto; right:auto; z-index:1000; transform:translateX(-50%); text-align:center;
+  white-space:normal; width:max-content; max-width:min(280px, calc(100vw - 32px)); font-size:var(--text-sm)}
+.tip.restip::after{top:auto; bottom:100%; right:auto; left:var(--arrow, 50%); margin-left:-6px;
+  border-top-color:transparent; border-bottom-color:var(--line-2)}
 .resth-what{display:block; white-space:nowrap}
 .restable td{white-space:nowrap}
 /* Username and display name stay put while the marks scroll under them.
@@ -7900,19 +7906,21 @@ body.hp-page{height:100vh; height:100dvh; display:flex; flex-direction:column; o
 .resmea-letter.l-A{color:var(--mint)}
 .resmea-letter.l-B{color:var(--amber-dark)}
 .resmea-letter.l-S{color:var(--red)}
-.modal.resmea-modal{text-align:left; max-width:620px}
-.resmea-against{display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0 0 10px; font-size:14.5px; color:var(--muted)}
-.resmea-against .resselect{flex:1 1 220px; min-width:0}
-.modal textarea.resmea-paste{display:block; width:100%; box-sizing:border-box; min-height:120px; font-family:var(--mono);
-  font-size:13.5px; resize:vertical}
-.resmea-said{margin:8px 0; font-size:14px; color:var(--muted)}
-.resmea-said.bad{color:var(--amber-dark)}
-.resmea-list{overflow-x:auto}
-.resmea-table{width:100%}
-.resmea-table th, .resmea-table td{text-align:left; white-space:nowrap}
-.resmea-table td.resmea-letter{text-align:center}
-.resmea-lost td{color:var(--dim); font-style:italic}
-.resmea-key{margin:8px 0 0}
+/* Mark, Grade or All, beside the filters */
+.resview{display:flex; gap:6px; flex-wrap:wrap}
+.resview .chip-filter{min-height:0; padding:6px 14px}
+/* Results has more in its bar than other markbooks, so on a narrow window
+   whole buttons go onto the next line instead of their words wrapping. */
+.resbook .mbtools{flex-wrap:wrap; justify-content:flex-end}
+.resbook .mbtools > .bmini2{white-space:nowrap}
+.resmea-against{display:flex; align-items:center; gap:6px; font-size:14px; color:var(--muted); white-space:nowrap}
+.resmea-against .resselect{flex:none; width:auto; max-width:220px}
+/* a box to paste into, as narrow as an MEA */
+.mbtable td.resmea-cell{padding:2px 4px}
+.mbtable input.resmea-in{width:4.5em; min-width:0; min-height:0; margin:0; padding:3px 6px; font-size:14px;
+  border:1px solid var(--line-2); border-radius:var(--rad-xs); background:var(--panel); color:var(--text)}
+.mbtable input.resmea-in:focus{border-color:var(--amber); outline:none; box-shadow:0 0 0 2px color-mix(in srgb, var(--amber) 20%, transparent)}
+.resmea-said{margin:0 0 8px; padding:8px 12px; font-size:14px}
 .resdrawer{position:sticky; top:12px; display:flex; flex-direction:column; gap:10px; padding:14px 16px;
   border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);
   max-height:calc(100vh - 40px); max-height:calc(100dvh - 40px); overflow-y:auto; min-width:0}

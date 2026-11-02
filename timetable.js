@@ -618,7 +618,9 @@
     const fit = (p, b0, b1) => {
       const early = overlap(b0, b1, span(p, false));
       const late = p.late ? overlap(b0, b1, span(p, true)) : 0;
-      const use = !!p.late && late > early;
+      /* a box that starts when the late lunch's lesson starts is on the
+         late lunch even when it covers no more of it than of the early */
+      const use = !!p.late && (late > early || (late === early && b0 === toMins(p.late.start)));
       const [s0, s1] = span(p, use);
       return { p, late: use, o: use ? late : early, len: s1 - s0 };
     };

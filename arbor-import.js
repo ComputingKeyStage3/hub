@@ -13,6 +13,12 @@
                     boxes: [ { day:1-5, start:"HH:MM", end:"HH:MM",
                                lines:[ "Computing: Year 07: 7y/Co2", "IT1", ... ] } ] } ] }
 
+   A lesson's text is written once, in the first column it starts in, but
+   its coloured box is drawn as wide as every column it runs through: a
+   double, or a late P4 that crosses the 12:55 and 13:10 columns. So a box
+   ends where the rectangle under its text ends, not where its first
+   column does.
+
    There is no PDF library behind this, so nothing has to be fetched from
    anywhere the school's filter might block. A PDF is objects and
    compressed streams; the browser's own DecompressionStream opens the
@@ -193,6 +199,21 @@
     return runs;
   }
 
+  /* The filled rectangles on a page, as x, y, width, height. Arbor fills
+     each lesson's box this way; outlines and lines are not filled. */
+  function rectsOf(content){
+    const out = [];
+    const re = /(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+re\s+f\*?(?![A-Za-z])/g;
+    let m;
+    while ((m = re.exec(content))){
+      let x = +m[1], y = +m[2], w = +m[3], h = +m[4];
+      if (w < 0){ x += w; w = -w; }
+      if (h < 0){ y += h; h = -h; }
+      out.push({ x, y, w, h });
+    }
+    return out;
+  }
+
   /* ---------- Arbor's grid ---------- */
   const TIME = /(\d{1,2}:\d\d)\s*-\s*(\d{1,2}:\d\d)/g;
   const DAYNAMES = ["monday","tuesday","wednesday","thursday","friday"];
@@ -207,7 +228,7 @@
      words did have a space between them, the PDF draws the space. */
   function lineText(runs){ return runs.slice().sort((a, b) => a.x - b.x).map(r => r.text).join("").replace(/\s+/g, " ").trim(); }
 
-  function readWeek(runs){
+  function readWeek(runs, rects){
     const ys = [...new Set(runs.map(r => Math.round(r.y * 10) / 10))].sort((a, b) => b - a);
     const atY = (y) => runs.filter(r => near(r.y, y));
     /* The title is the top line: which week, and the Monday it starts. */
@@ -264,9 +285,23 @@
         const day = days.slice().sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y))[0];
         if (!col || Math.abs(day.y - y) > band / 2) return;
         const k = day.day + "|" + col.start;
-        if (!boxes.has(k)) boxes.set(k, { day: day.day, start: col.start, end: col.end, lines: [] });
+        if (!boxes.has(k)) boxes.set(k, { day: day.day, start: col.start, end: col.end, lines: [], at: { x: p.x, y } });
         boxes.get(k).lines.push(lineText(p.runs));
       });
+    });
+    /* A lesson's own box: the smallest filled rectangle under its first
+       line that is about a column wide or more and shorter than a day's
+       row, which leaves out the row's own background. It ends with the
+       last column whose time is written inside it. */
+    const lessonRects = (rects || []).filter(r => r.w >= colW * 0.8 && r.h >= band * 0.4 && r.h < band * 0.98);
+    boxes.forEach(b => {
+      const under = lessonRects.filter(r => r.x - 1 <= b.at.x && b.at.x <= r.x + r.w && r.y - 1 <= b.at.y && b.at.y <= r.y + r.h)
+                               .sort((r1, r2) => r1.w * r1.h - r2.w * r2.h)[0];
+      if (under){
+        const inside = cols.filter(c => c.x >= under.x - 1 && c.x < under.x + under.w);
+        if (inside.length > 1 && inside[0].start === b.start) b.end = inside[inside.length - 1].end;
+      }
+      delete b.at;
     });
     return { week: wk ? wk[1].toUpperCase() : "", monday, boxes: [...boxes.values()] };
   }
@@ -297,7 +332,7 @@
       if (!c) return;
       const refs = c[1] ? [...c[1].matchAll(/(\d+)\s+0\s+R/g)].map(r => +r[1]) : [+c[2]];
       const content = refs.map(r => (all[r] || {}).text || "").join("\n");
-      const week = readWeek(runsOf(content));
+      const week = readWeek(runsOf(content), rectsOf(content));
       if (week) weeks.push(week);
     });
     if (!weeks.length) throw readError("That does not look like a timetable from Arbor. Download it from Arbor as a PDF and choose that file.");

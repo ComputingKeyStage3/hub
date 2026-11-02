@@ -843,6 +843,15 @@
       mbPaintSel();
       return mbCopyOut();
     },
+    /* one stretch of a table, [row, cell] to [row, cell], picked on screen
+       as well as copied, so Ctrl+C can still take it if the clipboard is
+       switched off */
+    copyRange: async (t, a, b) => {
+      if (!t || !t.rows[a[0]] || !t.rows[b[0]]) return false;
+      mbSel = { table: t, a: a, b: b };
+      mbPaintSel();
+      return mbCopyOut();
+    },
     save: mbSave
   };
   /* selectable, copyTable and dragged are the names resultsbook.js, from
