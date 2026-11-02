@@ -12,10 +12,13 @@
    and the numbers in it are read as numbers: 9.1.10 comes after 9.1.9
    rather than between 9.1.1 and 9.1.2.
 
-   position stays the first thing asked. Nothing writes anything but 0
-   into it, so today the title decides every time, but that column is
-   where an order a teacher drags into place would live and this is where
-   it would take effect.
+   Units go the same way, by name. They used to go by the position column
+   first, and a unit made by saving a lesson into it is written with
+   position 0, so the new 9.2 Animation & Modelling went in front of 9.1,
+   which had been given 1. The order is now always the names, read as
+   numbers where they are numbers, and position is not asked at all, for
+   units or for lessons: an order dragged into place is a second order to
+   keep right, and the numbers in the names already say what it should be.
    --------------------------------------------------------------------- */
 (function(){
   "use strict";
@@ -48,12 +51,18 @@
        its own list of lessons rather than from the row being sorted. */
     compare: function(a, b, titleFor){
       var name = titleFor || titleOf;
-      return (((a && a.position) || 0) - ((b && b.position) || 0)) ||
-             compareText(name(a), name(b));
+      return compareText(name(a), name(b));
     },
     sort: function(list, titleFor){
       return (list || []).sort(function(a, b){
         return window.lessonOrder.compare(a, b, titleFor);
+      });
+    },
+    /* In place, because every page keeps the catalogue's units list and
+       reads its order straight off it for tiles, headings and pickers. */
+    sortUnits: function(units){
+      return (units || []).sort(function(a, b){
+        return compareText(String((a && a.name) || ""), String((b && b.name) || ""));
       });
     }
   };

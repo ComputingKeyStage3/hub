@@ -58,11 +58,22 @@ function paper(doc){
 }
 
 const NARROW = "(max-width: 760px)";
+/* 440 was too narrow for a help sheet's screenshots to be read beside the
+   work, so it starts at 700, but never more than half the screen: on a
+   1024 wide school laptop 700 left the lesson itself under 400.
+   side stays null until a student drags it, so the default can follow the
+   window. Every view is saved the moment a document opens, so 440 is in
+   the browser of everyone who opened one without touching the width; that
+   is read as the old default rather than a choice. A width a student
+   dragged to is kept. */
+const SIDE = 700, OLD_SIDE = 440;
+const startSide = () => Math.min(SIDE, Math.round(innerWidth / 2));
 function viewer(o){
   const docs = o.docs;
   const list = docs.list;
   const KEY = "hub_docs_view_" + (o.lessonId || "x");
-  let view = Object.assign({ mode: "right", side: 440, zoom: 1, at: 0, tops: {} }, store(KEY) || {});
+  let view = Object.assign({ mode: "right", side: null, zoom: 1, at: 0, tops: {} }, store(KEY) || {});
+  if (view.side === OLD_SIDE) view.side = null;
   /* only the right or full screen now; anything else saved from before
      (left, floating, the bubble) is the right */
   if (!/^(right|full)$/.test(view.mode)) view.mode = "right";
@@ -194,7 +205,7 @@ function viewer(o){
     open.setAttribute("aria-pressed", shown ? "true" : "false");
     try{ window.dispatchEvent(new Event("resize")); }catch(e){}
   }
-  function clampSide(w){ return Math.round(Math.min(Math.max(280, w || 440), Math.max(300, innerWidth - 380))); }
+  function clampSide(w){ return Math.round(Math.min(Math.max(280, w || startSide()), Math.max(300, innerWidth - 380))); }
   function show(){
     shown = true;
     win.hidden = false;
@@ -226,7 +237,7 @@ function viewer(o){
   /* The width is the student's to choose: dragging the inside edge. */
   let start = null;
   split.addEventListener("pointerdown", (e) => {
-    start = { x: e.clientX, side: view.side };
+    start = { x: e.clientX, side: clampSide(view.side) };   // side is null until the first drag
     split.setPointerCapture(e.pointerId); e.preventDefault();
     win.classList.add("sl-dragging");
   });

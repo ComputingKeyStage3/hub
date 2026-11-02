@@ -2555,22 +2555,8 @@ function paintHubUnits(){
     t.addEventListener("click", () => openHubUnit(u));
     g.appendChild(t);
   });
-  makeSortable(g, units, (moved) => {
-    /* As with the year groups: shown moved at once, saved behind the scenes.
-       Only this year's units are reordered, and they are put back into the
-       slots they already held, so units filed under other years keep their
-       own order however this one is rearranged. */
-    const mine = new Set(moved);
-    const held = new Map(unitsOfYear(hubYear).map(u => [u.name, u]));
-    let k = 0;
-    cat.units = (cat.units || []).map(u =>
-      ((u.year || "") === hubYear && mine.has(u.name)) ? held.get(moved[k++]) : u);
-    paintHubUnits();
-    catPost({ op:"reorder", kind:"unit", names: moved }).catch(e => {
-      say("Could not reorder those", e.message);
-      loadCatalogue().then(paintHubUnits).catch(() => {});
-    });
-  });
+  /* Not draggable. Units are always in number order (lessonorder.js), so a
+     unit dragged elsewhere would only jump back. */
   const unfiled = (cat.lessons || []).filter(l => !l.unit && !l.version_of).length;
   if (!hubYear && unfiled){
     const t = el("button","classtile");
@@ -3474,8 +3460,8 @@ async function unitProgressFor(unitName, group, force){
   const key = unitName + "\u0000" + group;
   const cached = !force && progUnitCache.get(key);
   if (cached && Date.now() - cached.at < 30000) return cached.result;
-  const lessonsInUnit = classLessonsFor(group).filter(l => (l.unit || "") === unitName)
-                          .slice().sort((a, b) => (a.position || 0) - (b.position || 0));
+  const lessonsInUnit = inOrder(classLessonsFor(group).filter(l => (l.unit || "") === unitName),
+                                l => titleOf(l.lesson_id));
   const roster = await fetchClassRoster(group);
   const per = await Promise.all(lessonsInUnit.map(async (l) => {
     const [lessonR, workR] = await Promise.all([
@@ -4249,6 +4235,9 @@ let catLoaded = false;
 async function loadCatalogue(force){
   if (catLoaded && !force) return;
   await fetchCatalogue();
+  /* Sorted here, once, for both ways in. Every tile, heading and list on the
+     console reads the units in the order this list holds them. */
+  if (window.lessonOrder) window.lessonOrder.sortUnits(cat.units);
   catLoaded = true;
 }
 async function fetchCatalogue(){

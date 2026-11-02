@@ -526,6 +526,9 @@ async function fetchLessons(){
     : Promise.resolve(null);
   try{
     catalogue = await catalogueComing;
+    /* The lessons and the results are both grouped under units in this
+       list's order, so it is put in number order before either is drawn. */
+    if (catalogue && window.lessonOrder) window.lessonOrder.sortUnits(catalogue.units);
 
     const byId = {};
     (catalogue.lessons || []).forEach(c => {

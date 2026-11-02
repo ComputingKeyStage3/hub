@@ -100,7 +100,7 @@
      year group is everybody who sat any version of it. */
   function assessmentsOf(unit){
     const list = lessonsIn(unit).filter(l => Number(l.assessment) && !l.version_of);
-    list.sort((a, b) => (a.position || 0) - (b.position || 0));
+    if (window.lessonOrder) window.lessonOrder.sort(list);
     return list;
   }
   function familyOf(id){

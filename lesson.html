@@ -4378,6 +4378,29 @@ function picColumn(b){
   const w = picWidth(b);
   return w === "100%" ? "minmax(0,1fr)" : w;
 }
+/* A row goes back to the picture above the task once there is not room for
+   the picture and a readable column of words beside it. The phone rule in
+   style.css asks how wide the screen is, but the row is only as wide as the
+   lesson, and with a document docked beside it a laptop's lesson column is
+   phone narrow: the words went one to a line and then under the picture.
+   Measured on the row itself, so it follows the document being dragged. */
+const PAIR_WORDS = 200, PAIR_GAP = 22;
+const pairFits = new WeakMap();
+const pairWatch = window.ResizeObserver ? new ResizeObserver(list => list.forEach(e => {
+  const need = pairFits.get(e.target);
+  if (need) e.target.classList.toggle("pg-stack", e.contentRect.width > 0 && e.contentRect.width < need);
+})) : null;
+function watchPair(row, b){
+  if (!pairWatch) return;
+  const px = parseFloat(picWidth(b));
+  const sized = /px$/.test(picWidth(b)) && px > 0;
+  const pic = sized ? px : PAIR_WORDS;   // an even share wants the same again
+  pairFits.set(row, pic + PAIR_GAP + PAIR_WORDS);
+  /* Stacked, a picture is no bigger than the size it was given. Filling the
+     row made a medium picture half the height of the screen. */
+  if (sized) row.style.setProperty("--pic-max", px + "px");
+  pairWatch.observe(row);
+}
 
 /* Where a built activity goes on a page. Two of them can only share a line if
    something puts them in a row together: each .pg-item is a block of its own.
@@ -4400,6 +4423,7 @@ function pageSlot(container){
       container.replaceChild(open, item);
       open.appendChild(item);
       rows.push(open);
+      watchPair(open, child);
     }
   }
   return { place, rows };

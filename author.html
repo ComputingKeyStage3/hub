@@ -13,6 +13,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="lessonorder.js"></script>
 <script src="lessoncompat.js"></script>
 <script src="shortmatch.js"></script>
 <script>window.richTextBarOnFocus = true;   /* see richtext.js */</script>
@@ -4965,6 +4966,9 @@ function paintSpecPickers(us, sub){
 }
 function paintPickers(){
   const ys = $("lYear"), us = $("lUnit"), sub = $("lSub");
+  /* Here rather than where the catalogue is read, because a unit made in
+     this builder is added to the list afterwards and has to take its place. */
+  if (window.lessonOrder) window.lessonOrder.sortUnits(cat.units);
   const years = (cat.years || []).map(y => y.name);
   (cat.units || []).forEach(u => { if (u.year && years.indexOf(u.year) < 0) years.push(u.year); });
   ys.innerHTML = "";

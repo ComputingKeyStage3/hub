@@ -5055,6 +5055,13 @@ html[data-build=compact] .pagestrip{top:var(--buildbar-h); margin:-14px -14px 12
   .pg-pair > .pg-item{margin-bottom:16px}
   .pg-pair > .pg-item:last-child{margin-bottom:0}
 }
+/* The same, for a row that is narrow because of what is docked beside the
+   lesson rather than the screen: lesson.html adds pg-stack when the row has
+   no room for the picture and a column of words. */
+.pg-pair.pg-stack{display:block}
+.pg-pair.pg-stack > .pg-item{margin-bottom:16px}
+.pg-pair.pg-stack > .pg-item:last-child{margin-bottom:0}
+.pg-pair.pg-stack .picfig{max-width:var(--pic-max, 100%)}
 
 /* The summary row in Manage lesson. It is one more page under the real ones,
    but it is not one of the teacher's own pages, so it says so: a dashed edge
@@ -6489,12 +6496,10 @@ html[data-ui-skeletons=on] .loading.mid > span:not(.skel){display:none}
 .richgrid .richcard{cursor:pointer; display:flex; flex-direction:column; transition:border-color .15s, box-shadow .15s}
 .richgrid .richcard:hover, .richgrid .richcard:focus-visible{border-color:var(--amber); outline:none;
   box-shadow:0 2px 10px rgba(0,0,0,.06)}
-.richcard.dragging{opacity:.45}
 .rc-meta{margin:2px 0 8px; font-size:var(--text-base); color:var(--muted); font-weight:600}
 .rc-dim{color:var(--dim); font-weight:600; font-size:var(--text-sm)}
 .richcard .lp-acts{margin-top:auto; padding-top:12px; align-items:center}
 .richcard .rc-more{margin-left:auto}
-.rc-hint{margin-top:10px}
 
 /* search results under their year and unit */
 .search-group{display:flex; align-items:center; gap:8px; margin:22px 0 10px; font-size:var(--text-md)}
@@ -7528,9 +7533,12 @@ button.mbvoice-row.on .mbvoice-opt{color:var(--text); font-weight:700}
 .sl-corner-se::before{right:3px; bottom:3px; border-width:0 1.5px 1.5px 0}
 .sl-win[data-mode=float]:hover .sl-corner::before, .sl-win.sl-dragging .sl-corner::before{opacity:1}
 .sl-corner:hover::before{border-color:var(--amber)}
-.sl-split{position:absolute; top:0; bottom:0; width:10px; cursor:ew-resize; touch-action:none; display:none; z-index:3}
-.sl-split::after{content:""; position:absolute; top:50%; left:3px; width:4px; height:44px; margin-top:-22px; border-radius:4px; background:var(--line-2)}
-.sl-split:hover::after{background:var(--amber)}
+/* The edge that changes the width. 10px wide with a 4px grip was hard to
+   land on and easy to slip off mid-drag, so the strip that takes the
+   pointer is twice that and the grip a good deal bigger. */
+.sl-split{position:absolute; top:0; bottom:0; width:20px; cursor:ew-resize; touch-action:none; display:none; z-index:3}
+.sl-split::after{content:""; position:absolute; top:50%; left:6px; width:8px; height:72px; margin-top:-36px; border-radius:6px; background:var(--line-2)}
+.sl-split:hover::after, .sl-dragging > .sl-split::after{background:var(--amber)}
 
 /* where it is */
 .sl-win[data-mode=float] .sl-stage{aspect-ratio:var(--r); flex:none}
@@ -7545,7 +7553,7 @@ button.mbvoice-row.on .mbvoice-opt{color:var(--text); font-weight:700}
 .sl-win[data-mode=full] .sl-thumbs{flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; flex-wrap:wrap; align-content:flex-start}
 .sl-win[data-mode=right] .sl-thumb{width:calc(50% - 4px)}
 .sl-win[data-mode=full] .sl-thumbs{flex:0 1 auto; max-height:30%}
-.sl-win[data-mode=right] .sl-split{display:block; left:-5px}
+.sl-win[data-mode=right] .sl-split{display:block; left:-10px}
 .sl-win[data-mode=full]{inset:0; z-index:95; border-radius:0; border:0}
 .sl-win[data-mode=full] .sl-bar{cursor:default}
 .sl-win[data-mode=sheet]{left:0; right:0; bottom:0; height:46vh; height:46dvh; border-radius:var(--rad-lg) var(--rad-lg) 0 0;
@@ -7677,13 +7685,13 @@ body.sl-start{min-height:100vh; min-height:100dvh}
 .dc-open-ic{width:12px; height:15px; border:2px solid currentColor; border-radius:2px; position:relative;
   background:linear-gradient(currentColor, currentColor) 2px 3px / 5px 2px no-repeat,
              linear-gradient(currentColor, currentColor) 2px 7px / 5px 2px no-repeat}
-.dc-win[data-mode=right]{width:var(--dc-side, 440px)}
+.dc-win[data-mode=right]{width:var(--dc-side, 700px)}
 /* nothing about a document is dragged but its inside edge */
 .dc-win .sl-bar{cursor:default}
-body.lesson.dc-pin-right{--dock-w:var(--dc-side, 440px)}
-body.lesson.dc-pin-right > .stage{margin-right:var(--dc-side, 440px)}
+body.lesson.dc-pin-right{--dock-w:var(--dc-side, 700px)}
+body.lesson.dc-pin-right > .stage{margin-right:var(--dc-side, 700px)}
 body.lesson.dc-sheet > .stage{margin-bottom:46vh; margin-bottom:46dvh}
-body.lesson.dc-pin-right.sl-pin-right{--dock-w:calc(var(--dc-side, 440px) + var(--sl-side, 420px))}
+body.lesson.dc-pin-right.sl-pin-right{--dock-w:calc(var(--dc-side, 700px) + var(--sl-side, 420px))}
 body.lesson.dc-pin-right.sl-pin-right > .stage{margin-right:var(--dock-w)}
 /* The brief has a width of its own (up to 760px, centred), which a margin
    alone does not beat: it is sized and centred in what the window leaves.
@@ -7694,7 +7702,7 @@ body.lesson.dc-pin-right.sl-pin-right > .stage{margin-right:var(--dock-w)}
   width:var(--brief-w); margin-left:max(20px, calc((100% - var(--dock-w) - var(--brief-w)) / 2)); margin-right:auto}
 /* the slides window moves inwards, never the document window, which is an
    sl-win as well and would otherwise be pushed off its own edge */
-body.dc-pin-right .sl-win:not(.dc-win)[data-mode=right]{right:var(--dc-side, 440px)}
+body.dc-pin-right .sl-win:not(.dc-win)[data-mode=right]{right:var(--dc-side, 700px)}
 .dc-win[data-mode=sheet]{z-index:61}
 /* Floating slides are above a docked document. Both are sl-win at 60 and
    the document comes later on the page, so slides dragged over it went
@@ -8073,7 +8081,7 @@ button.piclib-card:hover{border-color:var(--amber)}
 .hp-float-task{margin:10px 16px 0; color:var(--muted); font-size:var(--text-base)}
 .hp-float > .helpertask{flex:1 1 auto; min-height:0; overflow:auto; padding:10px 12px}
 .hp-float .hp-task{height:100%}
-body.dc-pin-right .hp-fab, body.dc-pin-right .hp-float{right:calc(var(--dc-side, 440px) + 16px)}
+body.dc-pin-right .hp-fab, body.dc-pin-right .hp-float{right:calc(var(--dc-side, 700px) + 16px)}
 body.sl-pin-right .hp-fab, body.sl-pin-right .hp-float{right:calc(var(--sl-side, 420px) + 16px)}
-body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float{right:calc(var(--dc-side, 440px) + var(--sl-side, 420px) + 16px)}
+body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float{right:calc(var(--dc-side, 700px) + var(--sl-side, 420px) + 16px)}
 @media print{ .hp-fab, .hp-float{display:none !important} }

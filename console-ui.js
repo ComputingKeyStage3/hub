@@ -351,66 +351,16 @@
     seen.observe(node);
   }
 
-  /* A teacher's own order for the lessons in a unit. Offered to the server
-     first; if it will not keep it, this browser does, and says so. */
-  function localOrder(){ try{ return JSON.parse(localStorage.getItem("hub_lesson_order") || "{}"); }catch(e){ return {}; } }
-  function applyOrder(list, key){
-    const order = localOrder()[key];
-    if (!order || !order.length) return list;
-    const at = (id) => { const i = order.indexOf(id); return i < 0 ? 9999 : i; };
-    return list.slice().sort((a, b) => at(a.lesson_id) - at(b.lesson_id));
-  }
-  async function saveOrder(key, ids){
-    const all = localOrder(); all[key] = ids;
-    try{ localStorage.setItem("hub_lesson_order", JSON.stringify(all)); }catch(e){}
-    try{
-      await catPost({ op:"reorder", kind:"lesson", unit: key, names: ids });
-      UI.toast("Order saved");
-    }catch(e){
-      UI.toast("Order kept in this browser. The server does not store lesson order yet, so students still see them by number.");
-    }
-  }
-  function sortableCards(grid, ids, onDrop){
-    const cards = () => Array.from(grid.children).filter(c => c.classList.contains("lessonpill"));
-    let from = null;
-    cards().forEach((card, i) => {
-      card.draggable = true;
-      card.addEventListener("dragstart", (e) => {
-        if (e.target.closest && e.target.closest("button")) { e.preventDefault(); return; }
-        from = i; card.classList.add("dragging");
-        if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); }
-      });
-      card.addEventListener("dragend", () => { card.classList.remove("dragging"); window.dragLine.hide(); from = null; });
-    });
-    grid.addEventListener("dragover", (e) => {
-      if (from === null) return;
-      e.preventDefault();
-      window.dragLine.mark(grid, cards(), e, { across: true });
-    });
-    grid.addEventListener("dragleave", (e) => { if (window.dragLine.left(grid, e)) window.dragLine.hide(); });
-    grid.addEventListener("drop", (e) => {
-      e.preventDefault();
-      const hit = window.dragLine.mark(grid, cards(), e, { across: true });
-      window.dragLine.hide();
-      const f = from; from = null;
-      if (f === null) return;
-      let at = hit.slot > f ? hit.slot - 1 : hit.slot;
-      at = Math.max(0, Math.min(ids.length - 1, at));
-      if (at === f) return;
-      const moved = ids.slice();
-      moved.splice(at, 0, moved.splice(f, 1)[0]);
-      onDrop(moved);
-    });
-  }
-
+  /* Lessons are always in the order of their numbers (lessonorder.js).
+     They could once be dragged into a teacher's own order, kept in that
+     browser alone, which put them out of number order for that teacher and
+     nobody else. */
   const baseLessonCards = lessonCards;
-  window.lessonCards = function(list, box, opts){
+  window.lessonCards = function(list, box){
     if (!on("richCards")) return baseLessonCards.apply(this, arguments);
-    const o = opts || {};
     box.innerHTML = "";
     if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build a new lesson”.")); return; }
     inOrder(list, (l) => titleOf(l.lesson_id));
-    if (o.orderKey) list = applyOrder(list, o.orderKey);
     const grid = el("div","lessongrid richgrid");
     list.forEach(l => {
       const id = l.lesson_id;
@@ -493,18 +443,6 @@
       grid.appendChild(card);
     });
     box.appendChild(grid);
-    if (o.orderKey && list.length > 1){
-      box.appendChild(el("p","hint rc-hint","Drag the cards to put them in order."));
-      sortableCards(grid, list.map(l => l.lesson_id), (moved) => {
-        saveOrder(o.orderKey, moved).then(() => {});
-        window.lessonCards(list, box, o);
-      });
-    }
-  };
-  /* A unit's own list is the one place lessons can be put in order. */
-  window.paintHub = function(){
-    const list = lessonsOfUnit(hubUnit);
-    window.lessonCards(list, $("hubList"), { orderKey: (hubYear || "") + "\u0000" + (hubUnit || "") });
   };
 
   /* ================= lesson hub: search ================= */
