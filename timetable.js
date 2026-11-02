@@ -4,6 +4,12 @@
      Timetable    the periods of the day, which class is in each one, a
                   Week A and a Week B, and the holidays. Opened from the
                   Timetable button on the Classes screen.
+     Lunch        P4 is always split, as the school's lunch is fixed: 12:10 to 13:10 for the
+                  early lunch, 12:55 to 13:55 for the late one. The period holds
+                  both sets of times and each lesson in it says which.
+     Doubles      nothing is stored for one. Two periods in a row with the
+                  same class, no more than five minutes apart, are shown as
+                  one lesson on Home.
      Week A / B   the weeks alternate, but a holiday week does not count:
                   Week A, then half term, then Week B.
      Holidays     one day or many. A single day off leaves the week as it
@@ -58,9 +64,11 @@
   const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
   /* ================= the timetable itself ================= */
+  /* The late lunch's P4, for the school's split lunch. */
+  const LATE_P4 = { start:"12:55", end:"13:55" };
   function blank(){
     return {
-      v: 1,
+      v: 2,
       twoWeek: true,
       anchor: isoDay(mondayOf(new Date())),   // a Monday...
       anchorWeek: "A",     // ...and which week it is
@@ -68,7 +76,7 @@
         { id:"p1", name:"P1", start:"08:50", end:"09:50" },
         { id:"p2", name:"P2", start:"09:50", end:"10:50" },
         { id:"p3", name:"P3", start:"11:10", end:"12:10" },
-        { id:"p4", name:"P4", start:"12:10", end:"13:10" },
+        { id:"p4", name:"P4", start:"12:10", end:"13:10", late: { start: LATE_P4.start, end: LATE_P4.end } },
         { id:"p5", name:"P5", start:"14:00", end:"15:00" }
       ],
       slots: { A:{}, B:{} },   // slots[week][day 1-5][period id] = { cls | text }
@@ -84,13 +92,17 @@
     const b = blank();
     if (!t || typeof t !== "object") return b;
     const out = {
-      v: 1,
+      v: 2,
       twoWeek: t.twoWeek !== false,
       anchor: parseDay(t.anchor) ? t.anchor : b.anchor,
       anchorWeek: t.anchorWeek === "B" ? "B" : "A",
-      periods: Array.isArray(t.periods) ? t.periods.filter(p => p && p.id).map(p => ({
-        id: String(p.id), name: String(p.name || ""), start: toMins(p.start) === null ? "" : p.start,
-        end: toMins(p.end) === null ? "" : p.end })) : b.periods,
+      periods: Array.isArray(t.periods) ? t.periods.filter(p => p && p.id).map(p => {
+        const q = { id: String(p.id), name: String(p.name || ""), start: toMins(p.start) === null ? "" : p.start,
+                    end: toMins(p.end) === null ? "" : p.end };
+        if (p.late && toMins(p.late.start) !== null && toMins(p.late.end) !== null)
+          q.late = { start: p.late.start, end: p.late.end };
+        return q;
+      }) : b.periods,
       slots: { A:{}, B:{} },
       holidays: Array.isArray(t.holidays) ? t.holidays.filter(h => h && parseDay(h.start)).map(h => ({
         id: String(h.id || newId("h")), name: String(h.name || "Holiday"),
@@ -111,11 +123,17 @@
         Object.keys(day).forEach(pid => {
           const s = day[pid];
           if (!s || (!s.cls && !s.text)) return;
-          (out.slots[w][d] = out.slots[w][d] || {})[pid] = {
-            cls: s.cls ? String(s.cls) : "", text: s.cls ? "" : String(s.text || "") };
+          const keep = { cls: s.cls ? String(s.cls) : "", text: s.cls ? "" : String(s.text || "") };
+          if (s.late) keep.late = true;
+          (out.slots[w][d] = out.slots[w][d] || {})[pid] = keep;
         });
       }
     });
+    /* P4 is always split: the school's lunch is fixed, so there is no
+       switch for it. A timetable saved before the split had P4 at the
+       early times only, and is given the late ones here. */
+    const p4 = out.periods.find(p => /^p\s*4$/i.test(p.name.trim()));
+    if (p4 && !p4.late) p4.late = { start: LATE_P4.start, end: LATE_P4.end };
     return out;
   }
   const sortedPeriods = (t) => t.periods.slice().sort((a, b) => (toMins(a.start) ?? 9999) - (toMins(b.start) ?? 9999));
@@ -158,8 +176,15 @@
     for (let i = 0; i < 60 && holidayWeek(t, w); i++) w = addDays(w, 7);
     return w;
   }
+  /* When a lesson in a period starts and ends: the late lunch's times when
+     the period is split and the lesson is on the late one. */
+  function timesOf(period, slot){
+    const late = !!(slot && slot.late && period.late);
+    return late ? { start: period.late.start, end: period.late.end, late }
+                : { start: period.start, end: period.end, late };
+  }
   /* What a day holds: nothing because it is a weekend or a holiday, or the
-     lessons in period order. */
+     lessons in period order, each with its own times. */
   function dayPlan(t, date){
     const dow = date.getDay();
     if (dow === 0 || dow === 6) return { kind:"weekend", list:[] };
@@ -167,7 +192,7 @@
     if (hol) return { kind:"holiday", holiday: hol, list:[] };
     const week = weekOf(t, date);
     const table = t.slots[week === "B" ? "B" : "A"][dow] || {};
-    const list = sortedPeriods(t).filter(p => table[p.id]).map(p => ({ period: p, slot: table[p.id] }));
+    const list = sortedPeriods(t).filter(p => table[p.id]).map(p => Object.assign({ period: p, slot: table[p.id] }, timesOf(p, table[p.id])));
     return { kind:"school", week, list };
   }
   function nextSchoolDay(t, from){
@@ -180,6 +205,39 @@
   }
   const hasLessons = (t) => ["A","B"].some(w => Object.keys(t.slots[w]).some(d => Object.keys(t.slots[w][d] || {}).length));
   const slotName = (s) => s.cls || s.text || "";
+  /* Two lessons in a row with the same class make a double, as long as
+     nothing longer than a changeover sits between them: P2 and P3 have
+     break between them and stay two lessons. Late P4 into P5 is a double,
+     five minutes apart. */
+  const DOUBLE_GAP = 5;
+  const sameLesson = (a, b) => !!slotName(a) && (a.cls ? a.cls === b.cls : !b.cls && a.text === b.text);
+  function doubled(a, b){
+    const end = toMins(a.end), start = toMins(b.start);
+    return sameLesson(a.slot, b.slot) && end !== null && start !== null && start >= end && start - end <= DOUBLE_GAP;
+  }
+  /* A day's list with each double made one entry, from the first period's
+     start to the second one's end. */
+  function withDoubles(list){
+    const out = [];
+    list.forEach(x => {
+      const last = out[out.length - 1];
+      if (last && doubled(last, x)){
+        last.end = x.end;
+        last.parts.push(x.period);
+        return;
+      }
+      out.push(Object.assign({}, x, { parts: [x.period] }));
+    });
+    return out;
+  }
+  function partsName(parts){
+    const first = parts[0].name || "Period";
+    if (parts.length < 2) return first;
+    const last = parts[parts.length - 1].name || "";
+    /* "P1–2" fits where "P1–P2" would wrap */
+    const m = /^([A-Za-z]+)\s*(\d+)$/.exec(first), n = /^([A-Za-z]+)\s*(\d+)$/.exec(last);
+    return m && n && m[1].toLowerCase() === n[1].toLowerCase() ? first + "–" + n[2] : first + "–" + last;
+  }
 
   /* ================= keeping it ================= */
   let tt = null, ttFor = null, loading = null;
@@ -274,11 +332,67 @@
     else if (tt.savedAt) savedNote("Saved");
     else savedNote("");
     box.innerHTML = "";
-    box.appendChild(weeksSection());
-    box.appendChild(gridSection());
-    box.appendChild(periodsSection());
-    box.appendChild(holidaysSection());
+    /* A teacher with nothing on their timetable yet is asked one thing:
+       import it, or fill it in. Admin keeps the school holidays here, so
+       goes straight to the page. */
+    if (who() && !hasLessons(tt) && !byHand) box.appendChild(landing());
+    else {
+      box.appendChild(gridSection());
+      /* The rest is set once and rarely looked at again, so it is folded
+         away under the lessons with a line saying where it stands. */
+      box.appendChild(weeksSection());
+      box.appendChild(periodsSection());
+      box.appendChild(holidaysSection());
+    }
     if (UI && UI.swapEmoji) UI.swapEmoji(box);
+  }
+  /* Set when a teacher chooses to fill the timetable in themselves, so an
+     empty grid is not taken back to the landing page on the next repaint. */
+  let byHand = false;
+  function landing(){
+    const s = el("section","tt-section tt-start");
+    s.appendChild(el("h3","tt-start-title","Set up your timetable"));
+    s.appendChild(el("p","hint tt-note","Once it is set up, Home shows the classes you teach today in order."));
+    const choices = el("div","tt-choices");
+    const arbor = el("div","tt-choice main");
+    const ah = el("b","tt-choice-head");
+    ah.innerHTML = ic("upload", 20);
+    ah.appendChild(el("span","", "Import from Arbor"));
+    arbor.appendChild(ah);
+    arbor.appendChild(el("p","tt-choice-words",
+      "Choose the two week timetable PDF from Arbor. Your classes, double lessons and early or late lunch are filled in for you."));
+    arbor.appendChild(arborButton("Choose the PDF", "btn-primary bmini2"));
+    const hand = el("div","tt-choice");
+    const hh = el("b","tt-choice-head");
+    hh.innerHTML = ic("edit", 20);
+    hh.appendChild(el("span","", "Fill it in yourself"));
+    hand.appendChild(hh);
+    hand.appendChild(el("p","tt-choice-words", "Pick the class you teach in each period of Week A and Week B."));
+    const go = el("button","btn-ghost bmini2","Start");
+    go.type = "button";
+    go.addEventListener("click", () => { byHand = true; paintEditor(); });
+    hand.appendChild(go);
+    choices.appendChild(arbor);
+    choices.appendChild(hand);
+    s.appendChild(choices);
+    return s;
+  }
+  /* A section folded shut under its title, with a few words on the right
+     saying what is in it. Which ones are open survives the repaint that
+     every change makes. */
+  const openFolds = new Set();
+  function fold(key, icon, title, summary){
+    const d = el("details","tt-section tt-fold");
+    if (openFolds.has(key)) d.open = true;
+    const sum = el("summary","tt-fold-head");
+    const h = el("span","dash-head tt-fold-title");
+    h.innerHTML = ic(icon, 18);
+    h.appendChild(el("span","", title));
+    sum.appendChild(h);
+    if (summary) sum.appendChild(el("span","tt-fold-sum", summary));
+    d.appendChild(sum);
+    d.addEventListener("toggle", () => { if (d.open) openFolds.add(key); else openFolds.delete(key); });
+    return d;
   }
   function section(icon, title, note){
     const s = el("section","tt-section");
@@ -313,23 +427,13 @@
 
   /* ---------- Week A and Week B ---------- */
   function weeksSection(){
-    const s = section("calendar", "Weeks");
+    const now = weekOf(tt, nextSchoolMonday(tt, new Date()));
+    const s = fold("weeks", "calendar", "Weeks",
+      tt.twoWeek ? "Two weeks" + (now ? ", this week is Week " + now : "") : "The same every week");
     s.appendChild(switchBtn("Two-week timetable",
       "Week A and Week B take turns. Holiday weeks are skipped, so the week after a holiday carries on from the week before it.",
       tt.twoWeek, () => { tt.twoWeek = !tt.twoWeek; if (!tt.twoWeek) editWeek = "A"; save(); paintEditor(); }));
     const today = new Date();
-    if (tt.twoWeek){
-      const base = nextSchoolMonday(tt, today);
-      const thisWeek = +base === +mondayOf(today);
-      const now = weekOf(tt, base);
-      const row = el("div","tt-row");
-      row.appendChild(el("span","tt-label", thisWeek ? "This week is" : "Week commencing " + shortDate(base) + " is"));
-      ["A","B"].forEach(w => row.appendChild(chip("Week " + w, now === w, () => {
-        tt.anchor = isoDay(base); tt.anchorWeek = w; save(); paintEditor(); paintHome();
-      })));
-      s.appendChild(row);
-      if (!thisWeek) s.appendChild(el("p","hint tt-note","This week is a holiday, so the choice is for the next week back at school."));
-    }
     /* The next few weeks, so a teacher can see the holidays doing their job. */
     const ahead = el("div","tt-ahead");
     const from = mondayOf(today);
@@ -351,13 +455,31 @@
     return mine.map(g => g.name).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric:true }));
   }
   function gridSection(){
-    const s = section("classes", "Lessons",
-      "Choose the class you teach in each period. Leave a period empty when you are free.");
-    s.appendChild(arborRow());
+    const s = section("classes", "Lessons");
+    /* Import sits in the heading, out of the way of the grid, since it is
+       done once a year. */
+    s.querySelector(".dash-head").appendChild(arborButton("Import from Arbor", "btn-ghost bmini2 tt-import"));
+    s.appendChild(el("p","hint tt-note","Pick the class you teach in each period. Leave it empty when you are free."));
     if (importNote) s.appendChild(el("p","hint tt-note tt-importnote", importNote));
     if (tt.twoWeek){
       const tabs = el("div","tt-row");
       ["A","B"].forEach(w => tabs.appendChild(chip("Week " + w, editWeek === w, () => { editWeek = w; paintEditor(); })));
+      /* Which week this is, the one thing about the weeks that has to be
+         right for Home to be right, so it is here rather than folded away. */
+      const base = nextSchoolMonday(tt, new Date());
+      const thisWeek = +base === +mondayOf(new Date());
+      const now = weekOf(tt, base);
+      const which = el("label","tt-which");
+      which.appendChild(el("span","", thisWeek ? "This week is" : "Back after the holiday on " + shortDate(base) + " is"));
+      const pickWeek = document.createElement("select");
+      pickWeek.className = "tt-sel tt-whichsel";
+      ["A","B"].forEach(w => { const o = document.createElement("option"); o.value = w; o.textContent = "Week " + w; pickWeek.appendChild(o); });
+      pickWeek.value = now || "A";
+      pickWeek.addEventListener("change", () => {
+        tt.anchor = isoDay(base); tt.anchorWeek = pickWeek.value; save(); paintEditor(); paintHome();
+      });
+      which.appendChild(pickWeek);
+      tabs.appendChild(which);
       const other = editWeek === "A" ? "B" : "A";
       const copy = el("button","btn-ghost bmini2 tt-copy","Copy Week " + editWeek + " to Week " + other);
       copy.type = "button";
@@ -375,7 +497,7 @@
     const week = tt.twoWeek ? editWeek : "A";
     const periods = sortedPeriods(tt);
     if (!periods.length){
-      s.appendChild(el("p","hint","Add the periods of your day below first."));
+      s.appendChild(el("p","hint","Add the periods of your day under Period times first."));
       return s;
     }
     const classes = classList();
@@ -397,7 +519,11 @@
       const tr = el("tr");
       const th = el("th","tt-period");
       th.appendChild(el("b","", p.name || "Period"));
-      if (p.start || p.end) th.appendChild(el("span","", (p.start || "?") + "–" + (p.end || "?")));
+      const times = (p.start || "?") + "–" + (p.end || "?");
+      if (p.late){
+        th.appendChild(el("span","tt-period-late", "Early " + times));
+        th.appendChild(el("span","tt-period-late", "Late " + p.late.start + "–" + p.late.end));
+      } else if (p.start || p.end) th.appendChild(el("span","", times));
       tr.appendChild(th);
       for (let d = 1; d <= 5; d++) tr.appendChild(cell(week, d, p, classes));
       table.appendChild(tr);
@@ -416,16 +542,17 @@
      what was there. */
   let importNote = "";
   const SKIP = /\b(duty|duties|club|registration|reg|tutor time|form time|detention|assembly|extra[- ]?curricular|after school)\b/i;
-  function arborRow(){
-    const row = el("div","tt-row tt-import");
+  function arborButton(words, cls){
+    const wrap = el("span","tt-importwrap");
     const file = document.createElement("input");
     file.type = "file";
     file.accept = ".pdf,application/pdf";
     file.hidden = true;
-    const b = el("button","btn-ghost bmini2","");
+    const b = el("button", cls, "");
     b.type = "button";
+    b.title = "The two week timetable PDF from Arbor";
     b.innerHTML = ic("upload", 16);
-    b.appendChild(el("span","", "Import from Arbor"));
+    b.appendChild(el("span","", words));
     b.addEventListener("click", () => file.click());
     file.addEventListener("change", async () => {
       const f = file.files && file.files[0];
@@ -436,10 +563,9 @@
       catch(e){ toast(e && e.readable ? e.message : "That timetable could not be read."); }
       finally{ b.disabled = false; }
     });
-    row.appendChild(b);
-    row.appendChild(el("span","hint", "The two week timetable PDF from Arbor"));
-    row.appendChild(file);
-    return row;
+    wrap.appendChild(b);
+    wrap.appendChild(file);
+    return wrap;
   }
   async function importArbor(f){
     if (!window.arborTimetable) throw new Error("no reader");
@@ -456,41 +582,65 @@
       : "";
     editWeek = "A";
     save(); paintEditor(); paintHome();
-    toast("Timetable imported: " + got.count + " period" + (got.count === 1 ? "" : "s"), { action:"Undo", onAction: () => {
+    const said = [got.count + " period" + (got.count === 1 ? "" : "s")];
+    if (got.doubles) said.push(got.doubles + " double" + (got.doubles === 1 ? "" : "s"));
+    if (got.late) said.push(got.late + " on late lunch");
+    toast("Timetable imported: " + said.join(", "), { action:"Undo", onAction: () => {
       const back = JSON.parse(was);
       Object.assign(tt, back);
       importNote = "";
       save(); paintEditor(); paintHome();
     } });
   }
-  /* Arbor's boxes onto this timetable's periods. A box goes in the period
-     its time overlaps most, if that is at least half of the box: Arbor
-     sometimes cuts a lesson at lunch into two columns, and both halves land
-     in the same period. */
+  /* Arbor's boxes onto this timetable's periods. A box fills every period
+     it covers at least half of, so a double from 08:50 to 10:50 fills P1
+     and P2, and late P4 into P5, 12:55 to 15:00, fills both of those. A
+     split period is matched against its early and its late times and
+     takes whichever the box covers more of, which is how a lesson comes
+     in on the right lunch.
+
+     A box too short to cover half of any period goes in the one it
+     overlaps most, if that is at least half of the box: Arbor sometimes
+     cuts a lesson at lunch into two columns, and both halves belong to the
+     same period. Those are placed after every whole box, and only where
+     nothing is yet, so a sliver of a late lesson from 12:55 to 13:10 cannot
+     put it on the early lunch before the rest of it is seen. */
   function fromArbor(weeks){
     let periods = sortedPeriods(tt).filter(p => /^p\s*[1-5]$/i.test(String(p.name || "").trim()));
     if (!periods.length) periods = sortedPeriods(tt);
     const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     const names = (typeof allClasses === "function" ? allClasses().map(g => g.name) : []).concat(classList());
     const byKey = new Map(names.map(n => [norm(n), n]));
-    const out = { A: null, B: null, anchor: null, count: 0, unmatched: [] };
+    const out = { A: null, B: null, anchor: null, count: 0, doubles: 0, late: 0, unmatched: [] };
+    const span = (p, late) => late ? [toMins(p.late.start), toMins(p.late.end)] : [toMins(p.start), toMins(p.end)];
+    const overlap = (a0, a1, [b0, b1]) => Math.min(a1, b1) - Math.max(a0, b0);
+    /* how much of a period the box covers, on whichever lunch it covers more */
+    const fit = (p, b0, b1) => {
+      const early = overlap(b0, b1, span(p, false));
+      const late = p.late ? overlap(b0, b1, span(p, true)) : 0;
+      const use = !!p.late && late > early;
+      const [s0, s1] = span(p, use);
+      return { p, late: use, o: use ? late : early, len: s1 - s0 };
+    };
     const unmatched = new Set();
     weeks.slice(0, 2).forEach((w, i) => {
       const letter = w.week === "A" || w.week === "B" ? w.week : (i === 0 ? "A" : "B");
       if (out[letter]) return;
-      const slots = {};
+      const slots = {}, slivers = [];
       w.boxes.forEach(box => {
         const lines = box.lines || [];
         const head = String(lines[0] || "").trim();
         if (!head || /^year\s*\d+\s*:/i.test(head)) return;           // a form group's registration
         if (SKIP.test(lines.slice(0, 2).join(" "))) return;
         const b0 = toMins(box.start), b1 = toMins(box.end);
-        let best = null, most = 0;
-        periods.forEach(p => {
-          const o = Math.min(b1, toMins(p.end)) - Math.max(b0, toMins(p.start));
-          if (o > most){ most = o; best = p; }
-        });
-        if (!best || most * 2 < b1 - b0) return;
+        if (b0 === null || b1 === null) return;
+        const fits = periods.map(p => fit(p, b0, b1));
+        const whole = fits.filter(f => f.len > 0 && f.o * 2 >= f.len);
+        let best = null;
+        if (!whole.length){
+          fits.forEach(f => { if (f.o > 0 && (!best || f.o > best.o)) best = f; });
+          if (!best || best.o * 2 < b1 - b0) return;
+        }
         /* "Computing: Year 07: 7y/Co2", wrapped over as many lines as the
            box needed. The class is what follows the year. */
         let lesson = null, acc = "";
@@ -510,11 +660,22 @@
           const known = OTHERS.find(n => n.toLowerCase() === head.toLowerCase());
           slot = { cls:"", text: known || head.slice(0, 30) };
         }
-        const day = slots[box.day] = slots[box.day] || {};
-        const there = day[best.id];
-        if (there && (there.cls || !slot.cls)) return;                 // a class beats anything else
+        if (whole.length) whole.forEach(f => place(box.day, f, slot, false));
+        else slivers.push([box.day, best, slot]);
+      });
+      slivers.forEach(([day, f, slot]) => place(day, f, slot, true));
+      function place(d, f, slot, onlyEmpty){
+        const day = slots[d] = slots[d] || {};
+        const there = day[f.p.id];
+        if (there && (onlyEmpty || there.cls || !slot.cls)) return;   // a class beats anything else
         if (!there) out.count++;
-        day[best.id] = slot;
+        day[f.p.id] = f.p.late && f.late ? Object.assign({ late: true }, slot) : Object.assign({}, slot);
+      }
+      /* What the toast reports: lunches by the late flag, doubles by the
+         same rule Home uses to join them. */
+      Object.keys(slots).forEach(d => {
+        const list = periods.filter(p => slots[d][p.id]).map(p => Object.assign({ slot: slots[d][p.id] }, timesOf(p, slots[d][p.id])));
+        list.forEach((x, i) => { if (x.late) out.late++; if (i && doubled(list[i - 1], x)) out.doubles++; });
       });
       out[letter] = slots;
       if (!out.anchor && /^\d{4}-\d\d-\d\d$/.test(w.monday || "")) out.anchor = { day: w.monday, week: letter };
@@ -529,6 +690,8 @@
     const days = tt.slots[week];
     const slot = (days[day] && days[day][period.id]) || null;
     const put = (next) => {
+      /* changing the class keeps the lunch it was on */
+      if (next && slot && slot.late && period.late) next.late = true;
       days[day] = days[day] || {};
       if (!next || (!next.cls && !next.text)){
         delete days[day][period.id];
@@ -567,9 +730,42 @@
     text.hidden = !custom;
     td.appendChild(text);
 
+    /* A split period asks which lunch, quietly, under the class. Early is
+       the starting point and is what an empty pick goes back to. */
+    let lunch = null;
+    if (period.late){
+      lunch = el("div","tt-lunch");
+      lunch.setAttribute("role","group");
+      lunch.setAttribute("aria-label","Which lunch");
+      const isLate = () => !!(days[day] && days[day][period.id] && days[day][period.id].late);
+      const paintLunch = () => lunch.querySelectorAll("button").forEach(b => {
+        const on = (b.dataset.late === "1") === isLate();
+        b.classList.toggle("on", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      const pn = period.name || "";
+      [["Early " + pn, period.start + "–" + period.end, false], ["Late " + pn, period.late.start + "–" + period.late.end, true]].forEach(([words, times, late]) => {
+        const b = el("button","tt-lunch-btn", words.trim());
+        b.type = "button";
+        b.dataset.late = late ? "1" : "0";
+        b.title = words.trim() + ", " + times;
+        b.addEventListener("click", () => {
+          const cur = days[day] && days[day][period.id];
+          if (!cur) return;
+          if (late) cur.late = true; else delete cur.late;
+          save(); paintHome(); paintLunch();
+        });
+        lunch.appendChild(b);
+      });
+      lunch.hidden = !slot;
+      paintLunch();
+      td.appendChild(lunch);
+    }
+
     td.classList.toggle("filled", !!slot);
     sel.addEventListener("change", () => {
       const v = sel.value;
+      if (lunch) lunch.hidden = !v;
       if (!v){ put(null); text.hidden = true; td.classList.remove("filled"); return; }
       if (v === "other"){
         text.hidden = false; td.classList.add("filled");
@@ -591,10 +787,13 @@
 
   /* ---------- the periods of the day ---------- */
   function periodsSection(){
-    const s = section("progress", "Periods",
-      "The same periods every day. Names and times can be anything your school uses.");
-    const list = el("div","tt-list");
     const periods = sortedPeriods(tt);
+    const split = periods.filter(p => p.late).map(p => p.name || "A period");
+    const s = fold("periods", "progress", "Period times",
+      (periods.length ? periods.length + " period" + (periods.length === 1 ? "" : "s") : "None yet") +
+      (split.length ? ", " + split.join(" and ") + " with an early and a late lunch" : ""));
+    s.appendChild(el("p","hint tt-note","The same periods every day. Names and times can be anything your school uses."));
+    const list = el("div","tt-list");
     periods.forEach(p => {
       const row = el("div","tt-line");
       const name = el("input","tt-in tt-pname");
@@ -628,6 +827,23 @@
       row.appendChild(end);
       row.appendChild(x);
       list.appendChild(row);
+      if (p.late){
+        const lr = el("div","tt-line tt-lateline");
+        lr.appendChild(el("span","tt-pname tt-latename", "Late " + (p.name || "period")));
+        const ls = timeIn(p.late.start, "Late " + (p.name || "period") + " starts");
+        const le = timeIn(p.late.end, "Late " + (p.name || "period") + " ends");
+        const fixLate = () => {
+          p.late.start = ls.value || p.late.start; p.late.end = le.value || p.late.end;
+          if (toMins(p.late.end) <= toMins(p.late.start)) p.late.end = fromMins(toMins(p.late.start) + 60);
+          save(); paintEditor(); paintHome();
+        };
+        ls.addEventListener("change", fixLate);
+        le.addEventListener("change", fixLate);
+        lr.appendChild(ls);
+        lr.appendChild(el("span","tt-dash","to"));
+        lr.appendChild(le);
+        list.appendChild(lr);
+      }
     });
     s.appendChild(list);
     const addBtn = el("button","btn-ghost bmini2","+ Add a period");
@@ -661,11 +877,18 @@
     const admin = !who();
     const school = schoolHols || [];
     const useSchool = !admin && tt.holidayMode !== "own";
-    const s = section("calendar", admin ? "School holidays" : "Holidays",
+    const today = isoDay(new Date());
+    const ahead = (useSchool ? school : tt.holidays).filter(h => h.end >= today).length;
+    const s = fold("holidays", "calendar", admin ? "School holidays" : "Holidays",
+      (useSchool ? "The school's, " : admin ? "" : "Your own, ") +
+      (ahead === 1 ? "1 still to come" : ahead ? ahead + " still to come" : "none still to come"));
+    /* Admin opens this page for the school holidays, so they start open. */
+    if (admin && !openFolds.has("holidays-shut")) s.open = true;
+    s.addEventListener("toggle", () => { if (admin){ if (s.open) openFolds.delete("holidays-shut"); else openFolds.add("holidays-shut"); } });
+    s.appendChild(el("p","hint tt-note",
       "Half terms, INSET days, bank holidays: anything from one day upwards. There are no lessons on a holiday, " +
       "and a week that is all holiday does not count as Week A or Week B." +
-      (admin ? " These are the school's holidays: every teacher uses them unless they customise their own." : ""));
-    const today = isoDay(new Date());
+      (admin ? " These are the school's holidays: every teacher uses them unless they customise their own." : "")));
 
     /* A teacher on the school's holidays sees them, but changes nothing
        until they choose to have their own. */
@@ -954,7 +1177,7 @@
     const mins = now.getHours() * 60 + now.getMinutes();
     let list = plan.list, when = now, label = "Today";
     const done = plan.kind === "school" && list.length &&
-                 list.every(x => toMins(x.period.end) !== null && toMins(x.period.end) <= mins);
+                 list.every(x => toMins(x.end) !== null && toMins(x.end) <= mins);
     if (plan.kind !== "school" || !list.length || done){
       const why = plan.kind === "weekend" ? "No lessons today, it is the weekend."
                 : plan.kind === "holiday" ? "No lessons today: " + plan.holiday.name + "."
@@ -972,11 +1195,12 @@
       if (!list.length) p.appendChild(el("p","hint","Nothing on your timetable that day."));
     }
     if (head) head.textContent = label;
+    list = withDoubles(list);
     count(p, list.filter(x => x.slot.cls).length);
     const isToday = when === now;
     let nextMarked = false;
     list.forEach(x => {
-      const a = toMins(x.period.start), b = toMins(x.period.end);
+      const a = toMins(x.start), b = toMins(x.end);
       let state = "";
       if (isToday && a !== null && b !== null){
         if (mins >= b) state = "done";
@@ -985,15 +1209,16 @@
       }
       const r = el("div","dash-row tt-lesson" + (state ? " " + state : ""));
       const time = el("div","tt-when");
-      time.appendChild(el("b","", x.period.name || "Period"));
-      time.appendChild(el("span","", x.period.start || ""));
+      time.appendChild(el("b","", partsName(x.parts)));
+      time.appendChild(el("span","", x.start || ""));
       r.appendChild(time);
       const t = el("div","dash-words");
       const title = el("b","", slotName(x.slot));
       if (state === "now") title.appendChild(el("span","home-chip now","Now"));
       if (state === "next") title.appendChild(el("span","home-chip next", a !== null ? "In " + until(a - mins) : "Next"));
       t.appendChild(title);
-      const sub = (x.period.start && x.period.end) ? x.period.start + "–" + x.period.end : "";
+      const sub = [(x.start && x.end) ? x.start + "–" + x.end : "",
+                   x.parts.length > 1 ? "Double" : "", x.late ? "Late lunch" : ""].filter(Boolean).join("  ·  ");
       if (sub) t.appendChild(el("span","", sub));
       r.appendChild(t);
       if (x.slot.cls) r.appendChild(btn("View class", "btn-ghost bmini2", () => openClass(x.slot.cls)));
@@ -1071,9 +1296,10 @@
       if (plan.kind !== "school") continue;
       for (const x of plan.list){
         if (String(x.slot.cls || "").toLowerCase() !== k) continue;
-        const a = toMins(x.period.start), b = toMins(x.period.end);
+        const a = toMins(x.start), b = toMins(x.end);
         if (i === 0 && b !== null && b <= mins) continue;
-        return { date: d, period: x.period, week: plan.week,
+        /* the period with this lesson's own times, so a late P4 says 12:55 */
+        return { date: d, period: Object.assign({}, x.period, { start: x.start, end: x.end }), week: plan.week,
                  today: i === 0, now: i === 0 && a !== null && a <= mins,
                  tomorrow: i === 1 };
       }
@@ -1097,5 +1323,5 @@
   window.timetable = { open, paintEditor, paintHome, load, nextLessonFor,
                        hasLessons: () => !!tt && hasLessons(tt),
                        weekOf: (d) => tt ? weekOf(tt, d || new Date()) : undefined,
-                       _test: { normal, weekOf, holsOf, dayPlan, holidayWeek, nextSchoolDay } };
+                       _test: { normal, weekOf, holsOf, dayPlan, holidayWeek, nextSchoolDay, fromArbor, withDoubles } };
 })();

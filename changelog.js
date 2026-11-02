@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"15.8", text:"Timetable: a first page that offers Import from Arbor or filling it in yourself, with the settings folded away under the lessons. Each P4 lesson is Early P4 or Late P4, and importing from Arbor picks the right one and fills in double lessons. Home shows a double as one lesson. Results: paste MEAs from Arbor to get A, O, B or S for each student, in the same order, ready to paste back." },
   { v:"15.7.1", text:"Photoshop help set to float now shows its Help button only on the page the help task is on, not on every page. Put one on each page that needs it." },
   { v:"15.7", text:"Tables: any cell can hold a picture, a box can accept more than one answer, and the builder's table editor is simpler: type straight into the grid, pick a cell to change it, and paste a table in from Word or Excel." },
   { v:"15.6.2", text:"Photoshop help: every answer now uses the same tools and keys as the Year 7 and Year 8 lessons, in fewer steps, with new answers for shapes, Warp Text, clipping masks, text behind a picture, colour pop, blur, the Lomo effect, filters and handing in." },

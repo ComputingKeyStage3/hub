@@ -24,7 +24,13 @@
    changing while the marks are moved.
 
    The table is drawn with the markbook's own pieces from markbook.js, so
-   cells pick, copy and sort the same way as on every other markbook. */
+   cells pick, copy and sort the same way as on every other markbook.
+
+   MEAs (each student's target grade range) are pasted in from Arbor, and
+   one grade column is compared with them: A above the range, O on it, B a
+   grade below it, S two or more below. The letters come back out in the
+   order they were pasted in, so they go straight back into Arbor's column
+   beside the names they came from. MEAs are kept in this browser only. */
 (function(){
   const BANDS = ["1-3", "4-5", "6-7", "8-9"];
   const CUT_KEYS = ["4-5", "6-7", "8-9"];
@@ -57,6 +63,12 @@
      what is picked straight away but leaves the row alone until it shuts,
      because redrawing the row would shut it under the pointer. */
   let drop = null;               // { wrap, panel, btn, dirty }
+  /* MEAs by username, lower case, as they were pasted: "5-6", "7". */
+  let mea = {};
+  try{ mea = JSON.parse(localStorage.getItem("hub_mea") || "{}") || {}; }catch(e){ mea = {}; }
+  /* Which grade column the MEAs are compared with, as a column key, and
+     what was last pasted, so the pop-up opens on it again. */
+  let meaAgainst = "", meaText = "";
 
   function el(tag, cls, text){
     const e = document.createElement(tag);
@@ -773,6 +785,205 @@
     return card;
   }
 
+  /* ---------- MEAs ---------- */
+  const MEA_SAYS = { A: "above their MEA", O: "on their MEA", B: "one grade below their MEA", S: "two or more grades below their MEA" };
+  /* The grade numbers in an MEA, as the four grades this page gives: an
+     MEA of 5-6 spans 4-5 and 6-7, and on either is on target. */
+  function meaBands(text){
+    const nums = (String(text || "").match(/\d+/g) || []).map(Number).filter(n => n >= 1 && n <= 9);
+    if (!nums.length) return null;
+    const band = (n) => n <= 3 ? 0 : n <= 5 ? 1 : n <= 7 ? 2 : 3;
+    return [band(Math.min.apply(null, nums)), band(Math.max.apply(null, nums))];
+  }
+  function meaLetter(band, text){
+    const m = meaBands(text);
+    if (!m || band < 0) return "";
+    if (band > m[1]) return "A";
+    if (band >= m[0]) return "O";
+    return m[0] - band === 1 ? "B" : "S";
+  }
+  /* The columns an MEA can be compared with: every grade, and Combined. */
+  function meaChoices(){
+    const out = pick.lessons.map(id => ({ key: "g:" + id, label: titleOf(id) }));
+    if (pick.lessons.length > 1) out.push({ key: "combined", label: "Combined grade" });
+    return out;
+  }
+  /* Combined when there is one, since it is the grade that says most. */
+  function meaKey(){
+    const list = meaChoices();
+    if (!list.some(c => c.key === meaAgainst)) meaAgainst = list.length ? list[list.length - 1].key : "";
+    return meaAgainst;
+  }
+  function bandFor(r, key){
+    if (key === "combined") return r.combined;
+    const c = r.cells[key.slice(2)];
+    return c ? c.band : -1;
+  }
+  function saveMea(){
+    try{ localStorage.setItem("hub_mea", JSON.stringify(mea)); }catch(e){}
+  }
+
+  /* Reading what was pasted. A line from Arbor is cells split by tabs; one
+     typed by hand may be "Jane Smith 5-6". The MEA is the last cell that
+     looks like a grade, and the name is the words in the rest. */
+  const GRADE_TEXT = "(?:grade\\s*)?[1-9][+\\-]?(?:\\s*(?:-|–|to|\\/)\\s*[1-9][+\\-]?)?";
+  const GRADE = new RegExp("^" + GRADE_TEXT + "$", "i");
+  const ENDS_IN_GRADE = new RegExp("^(.*?)[\\s,]+(" + GRADE_TEXT + ")$", "i");
+  function readLine(line){
+    const cells = line.split("\t").map(c => c.trim()).filter(Boolean);
+    let grade = "", name = "";
+    if (cells.length > 1){
+      for (let i = cells.length - 1; i >= 0; i--) if (GRADE.test(cells[i])){ grade = cells[i]; cells.splice(i, 1); break; }
+      name = cells.filter(c => /[a-z]/i.test(c) && !GRADE.test(c)).join(" ");
+    } else {
+      const m = ENDS_IN_GRADE.exec(line.trim());
+      if (m){ name = m[1]; grade = m[2]; } else name = line.trim();
+    }
+    return { name: name.trim(), grade: grade.replace(/^grade\s*/i, "").replace(/\s+/g, "") };
+  }
+  const words = (s) => low(s).replace(/['’.]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
+  /* Every word of one name found in the other, a single letter standing
+     for any word it starts: "Jane S" is "Smith, Jane". Order does not
+     matter, so Arbor's "Surname, Forename" matches either way round. */
+  function within(few, many){
+    const left = many.slice();
+    return few.every(w => {
+      const i = left.findIndex(x => x === w || (w.length === 1 && x[0] === w) || (x.length === 1 && w[0] === x));
+      if (i < 0) return false;
+      left.splice(i, 1);
+      return true;
+    });
+  }
+  /* The one student a pasted name belongs to, or null when none or more
+     than one could be. A username anywhere on the line settles it. */
+  function whoIs(name, students){
+    const line = words(name);
+    if (!line.length) return null;
+    const byUser = students.filter(st => line.indexOf(low(st.username).replace(/[^a-z0-9]/g, "")) >= 0);
+    if (byUser.length === 1) return byUser[0];
+    const hits = students.filter(st => {
+      const own = words(st.name);
+      if (!own.length) return false;
+      const few = own.length <= line.length ? own : line, many = few === own ? line : own;
+      return few.length >= 2 && within(few, many);
+    });
+    if (hits.length === 1) return hits[0];
+    /* two hits where one has exactly the words pasted: that one */
+    const exact = hits.filter(st => words(st.name).sort().join(" ") === line.slice().sort().join(" "));
+    return exact.length === 1 ? exact[0] : null;
+  }
+  /* The pasted lines read and matched. A line with no grade and no student
+     on it, such as the heading, is left out, and so is left out of what is
+     copied back: Arbor is pasted into from its first student. */
+  function readPaste(text, rows){
+    const out = [];
+    String(text || "").split(/\r?\n/).forEach(line => {
+      if (!line.trim()) return;
+      const got = readLine(line);
+      const st = got.name ? whoIs(got.name, rows) : null;
+      if (!st && !got.grade) return;
+      out.push({ name: got.name, grade: got.grade, row: st });
+    });
+    return out;
+  }
+
+  function openMea(){
+    const rows = tableRows();
+    ctx.openModal(box => {
+      box.classList.add("resmea-modal");
+      box.appendChild(el("h2", "", "Compare with MEAs"));
+      box.appendChild(el("p", "modal-text",
+        "In Arbor, copy the student names and MEAs for a class and paste them below. The letters come out in the same order, ready to paste back into Arbor."));
+      const choices = meaChoices();
+      if (choices.length > 1){
+        const lab = el("label", "resmea-against");
+        lab.appendChild(el("span", "", "Compare with"));
+        const sel = el("select", "sel resselect");
+        choices.forEach(c => { const o = el("option", "", c.label); o.value = c.key; sel.appendChild(o); });
+        sel.value = meaKey();
+        sel.addEventListener("change", () => { meaAgainst = sel.value; paint(); paintTable(); });
+        lab.appendChild(sel);
+        box.appendChild(lab);
+      } else box.appendChild(el("p", "resmea-against", "Compared with the grade for " + (choices[0] ? choices[0].label : "this assessment") + "."));
+      const area = el("textarea", "resmea-paste");
+      area.rows = 6;
+      area.placeholder = "Smith, Jane\t5-6\nKhan, Ali\t7-8";
+      area.setAttribute("aria-label", "Names and MEAs from Arbor");
+      area.value = meaText;
+      box.appendChild(area);
+      const said = el("p", "resmea-said");
+      box.appendChild(said);
+      const list = el("div", "resmea-list");
+      box.appendChild(list);
+      box.appendChild(el("p", "subnote resmea-key", "A above their MEA  ·  O on it  ·  B one grade below  ·  S two or more below"));
+      const copy = el("button", "btn-primary modal-cta", "Copy the letters");
+      copy.type = "button";
+      const done = el("button", "btn-ghost modal-stay", "Done");
+      done.type = "button";
+      done.addEventListener("click", () => ctx.closeModal());
+      box.appendChild(copy);
+      box.appendChild(done);
+
+      let read = [];
+      function paint(){
+        const key = meaKey();
+        list.innerHTML = "";
+        if (!read.length){
+          said.textContent = "";
+          copy.disabled = true;
+          return;
+        }
+        const t = el("table", "mbtable resmea-table");
+        const head = el("tr");
+        ["Pasted", "Student", "MEA", "Grade", "Result"].forEach(h => head.appendChild(el("th", "", h)));
+        t.appendChild(head);
+        let found = 0, lost = 0;
+        read.forEach(x => {
+          const tr = el("tr", x.row ? "" : "resmea-lost");
+          tr.appendChild(el("td", "", x.name || "(no name)"));
+          tr.appendChild(el("td", "", x.row ? x.row.name : "Not found"));
+          tr.appendChild(el("td", "", x.grade));
+          const band = x.row ? bandFor(x.row, key) : -1;
+          tr.appendChild(el("td", "", band >= 0 ? BANDS[band] : ""));
+          const letter = x.row ? meaLetter(band, x.grade) : "";
+          tr.appendChild(el("td", "resmea-letter" + (letter ? " l-" + letter : ""), letter));
+          t.appendChild(tr);
+          if (x.row) found++; else lost++;
+        });
+        list.appendChild(t);
+        said.textContent = (found === 1 ? "1 student" : found + " students") + " matched" +
+          (lost ? ". " + (lost === 1 ? "1 name was" : lost + " names were") + " not found in the classes picked, so " +
+                  (lost === 1 ? "its line is" : "their lines are") + " left empty." : ".");
+        said.classList.toggle("bad", !!lost);
+        copy.disabled = false;
+      }
+      function take(){
+        meaText = area.value;
+        read = readPaste(meaText, rows);
+        read.forEach(x => { if (x.row && x.grade) mea[low(x.row.username)] = x.grade; });
+        saveMea();
+        paint();
+        paintTable();
+      }
+      area.addEventListener("input", take);
+      copy.addEventListener("click", async () => {
+        const key = meaKey();
+        const text = read.map(x => x.row ? meaLetter(bandFor(x.row, key), x.grade) : "").join("\n");
+        let ok = false;
+        try{ await navigator.clipboard.writeText(text); ok = true; }catch(e){}
+        if (!ok){
+          /* a school can switch the clipboard off for scripts: the letters
+             go in the box, chosen, for Ctrl+C */
+          area.value = text; area.focus(); area.select();
+        }
+        copy.textContent = ok ? "Copied" : "Press Ctrl+C";
+        setTimeout(() => { copy.textContent = "Copy the letters"; }, 1600);
+      });
+      if (meaText) take();
+      setTimeout(() => area.focus(), 0);
+    });
+  }
+
   /* ---------- the markbook ---------- */
   /* One row per student in the classes picked, whether or not they have sat
      anything, the same as every markbook: a gap is worth seeing. */
@@ -817,6 +1028,8 @@
       if (k === "name") return low(r.name);
       if (k === "group") return low(r.group);
       if (k === "combined") return r.combined;
+      if (k === "mea"){ const m = meaBands(mea[low(r.username)]); return m ? m[0] * 4 + m[1] : -1; }
+      if (k === "vsmea") return "SBOA".indexOf(meaLetter(bandFor(r, meaKey()), mea[low(r.username)]) || "-");
       const id = k.slice(2), c = r.cells[id];
       if (k.indexOf("m:") === 0) return c ? c.pct : -1;
       return c ? c.band : -2;
@@ -858,10 +1071,20 @@
     });
     if (pick.lessons.length > 1) cols.push({ what: "combined", label: "Combined", key: "combined",
       tip: "The average of the grades, to the nearest grade" });
+    /* Once there are MEAs for anybody on screen, theirs and how the grade
+       compares sit at the end, the letters ready to copy into Arbor. */
+    if (book && (book.students || []).some(st => mea[low(st.username)])){
+      const against = meaChoices().find(c => c.key === meaKey());
+      cols.push({ what: "mea", label: "MEA", key: "mea", tip: "Their MEA, the target grade range from Arbor" });
+      cols.push({ what: "vsmea", label: "vs MEA", key: "vsmea", copy: "vs MEA",
+        tip: (against ? against.label + " against their MEA. " : "") + "A above, O on, B one grade below, S two or more below" });
+    }
     return cols;
   }
   function cellText(r, col){
     if (col.what === "combined") return r.combined >= 0 ? BANDS[r.combined] : "";
+    if (col.what === "mea") return mea[low(r.username)] || "";
+    if (col.what === "vsmea") return meaLetter(bandFor(r, meaKey()), mea[low(r.username)]);
     const c = r.cells[col.id];
     if (!c) return "";
     if (col.what === "mark") return c.score + " / " + c.outOf;
@@ -887,6 +1110,13 @@
       if (graded.some(needsLook)){ gb.appendChild(el("span", "resgb-dot", "!")); gb.title = "Some grades need checking"; }
       gb.addEventListener("click", () => { if (drawer.open) shutDrawer(); else openDrawer(); });
       tools.appendChild(gb);
+    }
+    if (pick.classes.length){
+      const mb = el("button", "btn-ghost bmini2 resmea-btn", "MEAs");
+      mb.type = "button";
+      mb.title = "Paste MEAs from Arbor and compare them with a grade";
+      mb.addEventListener("click", openMea);
+      tools.appendChild(mb);
     }
     bar.appendChild(tools);
     holder.appendChild(bar);
@@ -929,7 +1159,9 @@
       tr.appendChild(user); tr.appendChild(name);
       tr.appendChild(el("td", "", r.group || ""));
       cols.forEach(c => {
-        const td = el("td", c.what === "combined" ? "rescombined" : "", cellText(r, c));
+        const text = cellText(r, c);
+        const td = el("td", c.what === "combined" ? "rescombined" : c.what === "vsmea" ? "resmea-letter" + (text ? " l-" + text : "") : "", text);
+        if (c.what === "vsmea" && text) td.title = r.name + " is " + MEA_SAYS[text];
         /* the mark alone, the same as the markbook: "7 / 10" pasted into
            Excel is text, and "7/10" turns into a date */
         if (c.what === "mark" && r.cells[c.id]) td.dataset.copy = String(r.cells[c.id].score);
@@ -948,7 +1180,7 @@
     const head = ["Username", "Display name", "Class"];
     cols.forEach(c => {
       if (c.what === "mark") head.push(titleOf(c.id) + " mark", titleOf(c.id) + " out of");
-      else head.push(c.what === "combined" ? "Combined grade" : titleOf(c.id) + " grade");
+      else head.push(c.what === "combined" ? "Combined grade" : c.what === "mea" ? "MEA" : c.what === "vsmea" ? "vs MEA" : titleOf(c.id) + " grade");
     });
     const out = [head];
     rows.forEach(r => {

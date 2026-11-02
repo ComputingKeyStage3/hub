@@ -6777,6 +6777,39 @@ body.entry-open .page{min-height:70vh}
 .tt-suggest-head{display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:6px}
 .tt-suggest-head b{flex:1 1 200px}
 .tt-suggest .tt-line{padding:5px 0; border-top:1px solid var(--line)}
+/* the first visit: import or fill it in */
+.tt-start-title{margin:0 0 6px; font-size:var(--text-lg)}
+.tt-choices{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-top:6px}
+.tt-choice{display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding:14px 16px;
+  border:1.5px solid var(--line-2); border-radius:var(--rad-md); background:var(--panel-2)}
+.tt-choice.main{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 6%, var(--panel))}
+.tt-choice-head{display:flex; align-items:center; gap:8px; font-size:var(--text-md)}
+.tt-choice-words{margin:0; flex:1; color:var(--muted); font-size:var(--text-sm); line-height:1.45}
+/* the settings under the lessons, folded */
+.tt-fold{padding:0}
+.tt-fold > :not(summary){margin-left:16px; margin-right:16px}
+.tt-fold[open]{padding-bottom:6px}
+.tt-fold-head{display:flex; align-items:center; flex-wrap:wrap; gap:4px 12px; padding:12px 16px; cursor:pointer; list-style:none}
+.tt-fold-head::-webkit-details-marker{display:none}
+.tt-fold-head::after{content:"\203A"; margin-left:auto; font-size:20px; line-height:1; color:var(--dim); transition:transform .15s}
+.tt-fold[open] > .tt-fold-head::after{transform:rotate(90deg)}
+.tt-fold-title{margin:0}
+.tt-fold-sum{font-size:var(--text-sm); color:var(--muted)}
+.tt-section > .dash-head .tt-importwrap{margin-left:auto}
+.tt-section > .dash-head .tt-import{font-size:var(--text-sm)}
+.tt-which{display:flex; align-items:center; gap:6px; margin-left:auto; font-size:var(--text-sm); color:var(--muted)}
+.tt-which + .tt-copy{margin-left:0}
+.tt-section select.tt-whichsel{width:auto; padding:4px 8px; font-size:var(--text-sm); border-radius:var(--rad-sm)}
+/* early or late lunch, under the class in a split period */
+.tt-period-late{margin-top:2px}
+.tt-lunch{display:flex; flex-direction:column; gap:2px; margin-top:5px; padding:2px; border-radius:var(--rad-sm); background:var(--panel-2)}
+.tt-lunch[hidden]{display:none}
+.tt-lunch-btn{min-height:0; padding:3px 6px; white-space:nowrap; text-align:left; border:none; border-radius:var(--rad-xs); background:transparent;
+  color:var(--dim); font:inherit; font-size:var(--text-xs); font-weight:600; cursor:pointer}
+.tt-lunch-btn:hover{color:var(--text)}
+.tt-lunch-btn.on{background:var(--panel); color:var(--text); box-shadow:0 0 0 1px var(--line-2)}
+.tt-lateline{padding-left:0}
+.tt-latename{font-size:var(--text-sm); color:var(--muted)}
 
 /* ---------- lesson builder: what a warning triangle is about ---------- */
 .probdot{cursor:pointer; border-radius:var(--rad-xs)}
@@ -7862,6 +7895,24 @@ body.hp-page{height:100vh; height:100dvh; display:flex; flex-direction:column; o
   box-shadow:inset -1px 0 0 var(--line-2)}
 .restable td.mbsel:nth-child(-n+2),.restable th.mbsel:nth-child(-n+2){background:color-mix(in srgb, var(--amber) 22%, var(--panel))}
 .mbtable td.rescombined{font-weight:800}
+/* MEAs: the letters, and the pop-up they are pasted into */
+.mbtable td.resmea-letter{font-weight:800; text-align:center}
+.resmea-letter.l-A{color:var(--mint)}
+.resmea-letter.l-B{color:var(--amber-dark)}
+.resmea-letter.l-S{color:var(--red)}
+.modal.resmea-modal{text-align:left; max-width:620px}
+.resmea-against{display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0 0 10px; font-size:14.5px; color:var(--muted)}
+.resmea-against .resselect{flex:1 1 220px; min-width:0}
+.modal textarea.resmea-paste{display:block; width:100%; box-sizing:border-box; min-height:120px; font-family:var(--mono);
+  font-size:13.5px; resize:vertical}
+.resmea-said{margin:8px 0; font-size:14px; color:var(--muted)}
+.resmea-said.bad{color:var(--amber-dark)}
+.resmea-list{overflow-x:auto}
+.resmea-table{width:100%}
+.resmea-table th, .resmea-table td{text-align:left; white-space:nowrap}
+.resmea-table td.resmea-letter{text-align:center}
+.resmea-lost td{color:var(--dim); font-style:italic}
+.resmea-key{margin:8px 0 0}
 .resdrawer{position:sticky; top:12px; display:flex; flex-direction:column; gap:10px; padding:14px 16px;
   border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);
   max-height:calc(100vh - 40px); max-height:calc(100dvh - 40px); overflow-y:auto; min-width:0}
