@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"15.9.3", text:"Results: Add the missing student no longer adds anyone to the class. Type their first name and surname and they go into the markbook for now, in the right place, with the MEAs pasted again to match Arbor. The cross beside their name takes them out." },
   { v:"15.9.2", text:"Units and lessons are always in number order, so a new 9.2 unit goes after 9.1, and they can no longer be dragged out of it. A document opens wider beside the lesson, with a bigger edge to drag, and a picture moves above its task when there is not room for both side by side." },
   { v:"15.9.1", text:"Results: MEAs are compared with a test to start with, not Combined or a practical. Pasting more MEAs than there are students says so in red above the markbook, and Add the missing student puts them in the class and pastes the MEAs again so it matches Arbor." },
   { v:"15.9", text:"Results: MEA is a column of its own. Paste Arbor's MEAs into the first box and they fill down, with A, O, B or S beside them and Copy vs MEA to take that column back to Arbor. MEAs of 1, 2 or 3 count as 1-3. Assessment names are symbols, one for a test and one for a practical, with the full name on hover, and Mark, Grade or All picks the columns, showing grades to start with. Timetable: importing from Arbor reads late P4 lessons and doubles from how wide Arbor draws each lesson." },

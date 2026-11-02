@@ -494,13 +494,6 @@
       }
       pick.lessons.forEach(id => { if (kindOf(id) !== "rubric") settle(id); });
       paintBody();
-      /* a student was just added to make the class match Arbor */
-      if (pasteAgain){
-        const again = pasteAgain;
-        pasteAgain = null;
-        const rows = orderedRows();
-        if (rows[again.from]) pasteMea(rows, again.from, again.text);
-      }
     }catch(e){
       if (fetching !== key) return;
       body.innerHTML = "";
@@ -867,8 +860,10 @@
 
      More lines than students means Arbor has somebody this class does not,
      and every letter from the line where they should be onwards sits
-     beside the wrong student. That is said in red, with a way to add them,
-     and the paste is kept so it can be made again once they are here. */
+     beside the wrong student. That is said in red, with a way to put them
+     in the table for now, and the paste is kept so it can be made again
+     once they are. It starts again from the same student, not the same
+     row number, since the one put in may sort above them. */
   function pasteMea(rows, from, text){
     const lines = String(text || "").split(/\r?\n/);
     if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
@@ -876,14 +871,22 @@
     for (let i = 0; i < fits; i++) setMea(rows[from + i], lines[i].split("\t")[0]);
     saveMea();
     const over = lines.length - fits;
-    meaSaid = { over, text, from, group: (rows[from + fits - 1] || rows[from]).group,
+    meaSaid = { over, text, fromUser: low(rows[from].username), group: (rows[from + fits - 1] || rows[from]).group,
       words: (fits === 1 ? "1 MEA" : fits + " MEAs") + " pasted, from " + rows[from].name + " down." };
     if (over) meaSaid.words = (over === 1 ? "1 more MEA was" : over + " more MEAs were") +
       " pasted than there are students" + (from ? " below " + rows[from].name : "") +
       ". Arbor has " + (over === 1 ? "a student" : over + " students") +
       " this class does not have here, so the letters from there down are next to the wrong students." +
-      " Find who is missing in Arbor, add them here, and the MEAs are pasted again.";
+      " Find who is missing in Arbor and add them here.";
     paintTable();
+  }
+  /* The last paste made again, after the table has changed under it. */
+  function pasteAgain(){
+    if (!meaSaid || !meaSaid.text) return paintTable();
+    const rows = orderedRows();
+    const from = rows.findIndex(r => low(r.username) === meaSaid.fromUser);
+    if (from < 0) return paintTable();
+    pasteMea(rows, from, meaSaid.text);
   }
   /* The rows in the order the table shows them. */
   function orderedRows(){
@@ -891,18 +894,19 @@
     sortRows(rows);
     return rows;
   }
-  /* Adding the student Arbor has and this class does not, the same way the
-     class's own + Add student does. Once they are in, the results are
-     fetched again, which brings them into the table, and the last paste is
-     made again from the same row so the two markbooks line up. */
-  let pasteAgain = null;
+  /* Students Arbor has and the class does not, put in the table only so
+     the MEAs line up with Arbor. Nothing is saved: they are gone when the
+     page is reloaded, and they never reach the class. Each has a username
+     made the way the school's are, surname then first initial, so sorting
+     by username puts them where Arbor's surname order has them. */
+  let extras = [];
   function addMissing(){
     const said = meaSaid;
     const groups = pick.classes.slice();
     ctx.openModal(box => {
       box.appendChild(el("h2", "", "Add the missing student"));
       box.appendChild(el("p", "modal-text",
-        "Find the student in Arbor who is not in this list, and add them with the same username as their school email: doej26@… is doej26."));
+        "They are added to this table for now so the MEAs line up with Arbor. They are not added to the class."));
       const field = (label, input) => { const l = el("label", "resadd-field"); l.appendChild(el("span", "", label)); l.appendChild(input); box.appendChild(l); return input; };
       let groupPick = null;
       if (groups.length > 1){
@@ -911,39 +915,38 @@
         if (groups.indexOf(said.group) >= 0) groupPick.value = said.group;
         field("Class", groupPick);
       }
-      const name = field("Display name", el("input", "resadd-in"));
-      const user = field("Username", el("input", "resadd-in"));
-      name.type = user.type = "text";
-      user.autocapitalize = "off"; user.spellcheck = false;
-      box.appendChild(el("p", "subnote", "They pick their own password the first time they sign in."));
+      const first = field("First name", el("input", "resadd-in"));
+      const last = field("Surname", el("input", "resadd-in"));
+      first.type = last.type = "text";
       const msg = el("p", "hint", "");
-      const go = el("button", "btn-primary modal-cta", "Add student");
+      const go = el("button", "btn-primary modal-cta", "Add and paste again");
       go.type = "button";
-      go.addEventListener("click", async () => {
-        const username = user.value.trim().replace(/@.*$/, "");
-        if (!username){ msg.textContent = "A username is needed."; return; }
-        const group = groupPick ? groupPick.value : groups[0];
-        go.disabled = true;
-        msg.textContent = "Adding…";
-        try{
-          const r = await fetch(ctx.api() + "/api/teacher/students", { method: "POST", headers: ctx.jsonHeaders(),
-            body: JSON.stringify({ students: [{ group: group, username: username, password: "", displayName: name.value.trim() || username }] }) });
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(j.error || "They could not be added.");
-          pasteAgain = { text: said.text, from: said.from };
-          ctx.closeModal();
-          refresh(true);
-        }catch(e){
-          msg.textContent = e.message;
-          go.disabled = false;
-        }
-      });
+      const add = () => {
+        const f = first.value.trim(), s = last.value.trim();
+        if (!f || !s){ msg.textContent = "Their first name and surname are both needed."; return; }
+        const letters = (t) => low(t).replace(/[^a-z]/g, "");
+        let username = letters(s) + letters(f).charAt(0);
+        /* never the same as somebody already in the table */
+        const taken = new Set(orderedRows().map(r => low(r.username)));
+        for (let n = 2; taken.has(username); n++) username = letters(s) + letters(f).charAt(0) + n;
+        extras.push({ username: username, display_name: f + " " + s, group_name: groupPick ? groupPick.value : groups[0] });
+        ctx.closeModal();
+        pasteAgain();
+      };
+      go.addEventListener("click", add);
+      [first, last].forEach(i => i.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); add(); } }));
       const no = el("button", "btn-ghost modal-stay", "Cancel");
       no.type = "button";
       no.addEventListener("click", () => ctx.closeModal());
       box.appendChild(go); box.appendChild(no); box.appendChild(msg);
-      setTimeout(() => name.focus(), 0);
+      setTimeout(() => first.focus(), 0);
     });
+  }
+  function removeExtra(username){
+    extras = extras.filter(x => x.username !== username);
+    delete mea[low(username)];
+    saveMea();
+    pasteAgain();
   }
 
   /* ---------- the markbook ---------- */
@@ -953,6 +956,10 @@
     const byUser = new Map();
     (book.students || []).forEach(st => byUser.set(low(st.username), {
       username: st.username, name: st.display_name || st.username, group: st.group_name, cells: {} }));
+    /* the ones put in only to line the MEAs up, for the classes on screen */
+    const shown = new Set(pick.classes.map(low));
+    extras.filter(x => shown.has(low(x.group_name)) && !byUser.has(low(x.username))).forEach(x => byUser.set(low(x.username), {
+      username: x.username, name: x.display_name, group: x.group_name, cells: {}, extra: true }));
     pick.lessons.forEach(id => {
       const fam = familyOf(id), kind = kindOf(id), outOf = outOfFor(id);
       const json = lessonJson[id];
@@ -1200,6 +1207,17 @@
          short, so each says its whole self on hover. */
       const user = el("td", "", r.username || ""); user.title = r.username || "";
       const name = el("td", "", r.name); name.title = r.name;
+      if (r.extra){
+        tr.className = "resextra";
+        name.title = r.name + " is only here to line the MEAs up with Arbor. They are not in the class.";
+        const x = el("button", "btn-ghost iconbtn resextra-x", "✕");
+        x.type = "button";
+        x.title = "Take " + r.name + " out of the table";
+        x.setAttribute("aria-label", x.title);
+        x.addEventListener("mousedown", (e) => e.stopPropagation());
+        x.addEventListener("click", () => removeExtra(r.username));
+        name.insertBefore(x, name.firstChild);       // before the name, which can be cut short
+      }
       tr.appendChild(user); tr.appendChild(name);
       tr.appendChild(el("td", "", r.group || ""));
       cols.forEach(c => {
