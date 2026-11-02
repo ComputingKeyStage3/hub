@@ -71,8 +71,9 @@
   try{ mea = JSON.parse(localStorage.getItem("hub_mea") || "{}") || {}; }catch(e){ mea = {}; }
   /* Which grade column the MEAs are compared with, as a column key. */
   let meaAgainst = "";
-  /* What the last paste did, said under the table until the next one. */
-  let meaSaid = "";
+  /* What the last paste did, said under the table until the next one:
+     { words, over, text, from, group }, or null. */
+  let meaSaid = null;
 
   function el(tag, cls, text){
     const e = document.createElement(tag);
@@ -493,6 +494,13 @@
       }
       pick.lessons.forEach(id => { if (kindOf(id) !== "rubric") settle(id); });
       paintBody();
+      /* a student was just added to make the class match Arbor */
+      if (pasteAgain){
+        const again = pasteAgain;
+        pasteAgain = null;
+        const rows = orderedRows();
+        if (rows[again.from]) pasteMea(rows, again.from, again.text);
+      }
     }catch(e){
       if (fetching !== key) return;
       body.innerHTML = "";
@@ -829,10 +837,15 @@
     if (pick.lessons.length > 1) out.push({ key: "combined", label: "Combined grade" });
     return out;
   }
-  /* Combined when there is one, since it is the grade that says most. */
+  /* A test to start with, the first one there is: an MEA is a grade for
+     the subject, which a test measures more squarely than a practical,
+     and Combined would hide which assessment a letter came from. */
   function meaKey(){
     const list = meaChoices();
-    if (!list.some(c => c.key === meaAgainst)) meaAgainst = list.length ? list[list.length - 1].key : "";
+    if (!list.some(c => c.key === meaAgainst)){
+      const test = pick.lessons.find(id => kindOf(id) === "test");
+      meaAgainst = test ? "g:" + test : list.length ? list[0].key : "";
+    }
     return meaAgainst;
   }
   function bandFor(r, key){
@@ -850,8 +863,12 @@
   /* A column pasted into one box fills it and the boxes below it, in the
      order the table is in. Arbor copies a student with no MEA as an empty
      line, which empties that box, so every line after it still lands
-     beside the right student. Lines past the bottom of the table are not
-     lost quietly: the note under the table says how many. */
+     beside the right student.
+
+     More lines than students means Arbor has somebody this class does not,
+     and every letter from the line where they should be onwards sits
+     beside the wrong student. That is said in red, with a way to add them,
+     and the paste is kept so it can be made again once they are here. */
   function pasteMea(rows, from, text){
     const lines = String(text || "").split(/\r?\n/);
     if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
@@ -859,10 +876,74 @@
     for (let i = 0; i < fits; i++) setMea(rows[from + i], lines[i].split("\t")[0]);
     saveMea();
     const over = lines.length - fits;
-    meaSaid = (fits === 1 ? "1 MEA" : fits + " MEAs") + " pasted, from " + rows[from].name + " down." +
-      (over ? " " + (over === 1 ? "1 line was" : over + " lines were") +
-              " left over, more than there are students below that row. Check the table is in the same order as Arbor." : "");
+    meaSaid = { over, text, from, group: (rows[from + fits - 1] || rows[from]).group,
+      words: (fits === 1 ? "1 MEA" : fits + " MEAs") + " pasted, from " + rows[from].name + " down." };
+    if (over) meaSaid.words = (over === 1 ? "1 more MEA was" : over + " more MEAs were") +
+      " pasted than there are students" + (from ? " below " + rows[from].name : "") +
+      ". Arbor has " + (over === 1 ? "a student" : over + " students") +
+      " this class does not have here, so the letters from there down are next to the wrong students." +
+      " Find who is missing in Arbor, add them here, and the MEAs are pasted again.";
     paintTable();
+  }
+  /* The rows in the order the table shows them. */
+  function orderedRows(){
+    const rows = tableRows();
+    sortRows(rows);
+    return rows;
+  }
+  /* Adding the student Arbor has and this class does not, the same way the
+     class's own + Add student does. Once they are in, the results are
+     fetched again, which brings them into the table, and the last paste is
+     made again from the same row so the two markbooks line up. */
+  let pasteAgain = null;
+  function addMissing(){
+    const said = meaSaid;
+    const groups = pick.classes.slice();
+    ctx.openModal(box => {
+      box.appendChild(el("h2", "", "Add the missing student"));
+      box.appendChild(el("p", "modal-text",
+        "Find the student in Arbor who is not in this list, and add them with the same username as their school email: doej26@… is doej26."));
+      const field = (label, input) => { const l = el("label", "resadd-field"); l.appendChild(el("span", "", label)); l.appendChild(input); box.appendChild(l); return input; };
+      let groupPick = null;
+      if (groups.length > 1){
+        groupPick = el("select", "sel resselect");
+        groups.forEach(g => { const o = el("option", "", g); o.value = g; groupPick.appendChild(o); });
+        if (groups.indexOf(said.group) >= 0) groupPick.value = said.group;
+        field("Class", groupPick);
+      }
+      const name = field("Display name", el("input", "resadd-in"));
+      const user = field("Username", el("input", "resadd-in"));
+      name.type = user.type = "text";
+      user.autocapitalize = "off"; user.spellcheck = false;
+      box.appendChild(el("p", "subnote", "They pick their own password the first time they sign in."));
+      const msg = el("p", "hint", "");
+      const go = el("button", "btn-primary modal-cta", "Add student");
+      go.type = "button";
+      go.addEventListener("click", async () => {
+        const username = user.value.trim().replace(/@.*$/, "");
+        if (!username){ msg.textContent = "A username is needed."; return; }
+        const group = groupPick ? groupPick.value : groups[0];
+        go.disabled = true;
+        msg.textContent = "Adding…";
+        try{
+          const r = await fetch(ctx.api() + "/api/teacher/students", { method: "POST", headers: ctx.jsonHeaders(),
+            body: JSON.stringify({ students: [{ group: group, username: username, password: "", displayName: name.value.trim() || username }] }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || "They could not be added.");
+          pasteAgain = { text: said.text, from: said.from };
+          ctx.closeModal();
+          refresh(true);
+        }catch(e){
+          msg.textContent = e.message;
+          go.disabled = false;
+        }
+      });
+      const no = el("button", "btn-ghost modal-stay", "Cancel");
+      no.type = "button";
+      no.addEventListener("click", () => ctx.closeModal());
+      box.appendChild(go); box.appendChild(no); box.appendChild(msg);
+      setTimeout(() => name.focus(), 0);
+    });
   }
 
   /* ---------- the markbook ---------- */
@@ -943,7 +1024,7 @@
     box.addEventListener("change", () => {
       setMea(r, box.value);
       saveMea();
-      meaSaid = "";
+      meaSaid = null;
       const keep = rows.indexOf(r);
       paintTable();
       focusMea(keep + 1);
@@ -1139,7 +1220,19 @@
     const scroll = el("div", "mbscroll");
     scroll.appendChild(table);
     holder.appendChild(scroll);
-    if (meaSaid) holder.appendChild(el("p", "warnline resmea-said", meaSaid));
+    if (meaSaid){
+      const note = el("div", "warnline resmea-said" + (meaSaid.over ? " bad" : ""));
+      note.setAttribute("role", meaSaid.over ? "alert" : "status");
+      note.appendChild(el("span", "", meaSaid.words));
+      if (meaSaid.over){
+        const add = el("button", "btn-ghost bmini2", "Add the missing student");
+        add.type = "button";
+        add.addEventListener("click", addMissing);
+        note.appendChild(add);
+      }
+      /* above the table, which fills the window, or it is never seen */
+      holder.insertBefore(note, scroll);
+    }
     /* The letters column, top to bottom, picked the way a drag would pick
        it, so if the clipboard is switched off Ctrl+C still takes it. */
     const vsAt = 3 + cols.findIndex(c => c.what === "vsmea");

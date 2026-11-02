@@ -7920,7 +7920,13 @@ body.hp-page{height:100vh; height:100dvh; display:flex; flex-direction:column; o
 .mbtable input.resmea-in{width:4.5em; min-width:0; min-height:0; margin:0; padding:3px 6px; font-size:14px;
   border:1px solid var(--line-2); border-radius:var(--rad-xs); background:var(--panel); color:var(--text)}
 .mbtable input.resmea-in:focus{border-color:var(--amber); outline:none; box-shadow:0 0 0 2px color-mix(in srgb, var(--amber) 20%, transparent)}
-.resmea-said{margin:0 0 8px; padding:8px 12px; font-size:14px}
+.resmea-said{display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0 0 8px; padding:8px 12px; font-size:14px}
+.resmea-said > span{flex:1 1 260px}
+/* more MEAs than students: the letters are out of line, so it is red */
+.resmea-said.bad{border-color:var(--red); background:var(--red-dim); color:var(--text)}
+.resmea-said.bad > span{font-weight:600}
+.resadd-field{display:flex; flex-direction:column; gap:4px; margin:0 0 10px; font-size:14px; font-weight:600; text-align:left}
+.resadd-field .resselect, .resadd-field .resadd-in{width:100%; box-sizing:border-box}
 .resdrawer{position:sticky; top:12px; display:flex; flex-direction:column; gap:10px; padding:14px 16px;
   border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);
   max-height:calc(100vh - 40px); max-height:calc(100dvh - 40px); overflow-y:auto; min-width:0}
