@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"16.0", text:"Blender work: a new hand-in task where students choose their .blend file. The file stays on their computer. Its objects, models, materials, modifiers, lights, camera and animation are read and kept, with Blender's preview as the picture or their render if they add one. It can carry a checklist ticked from the file, and full screen in View Work opens it in a Blender-style window with an Outliner." },
   { v:"15.9.3", text:"Results: Add the missing student no longer adds anyone to the class. Type their first name and surname and they go into the markbook for now, in the right place, with the MEAs pasted again to match Arbor. The cross beside their name takes them out." },
   { v:"15.9.2", text:"Units and lessons are always in number order, so a new 9.2 unit goes after 9.1, and they can no longer be dragged out of it. A document opens wider beside the lesson, with a bigger edge to drag, and a picture moves above its task when there is not room for both side by side." },
   { v:"15.9.1", text:"Results: MEAs are compared with a test to start with, not Combined or a practical. Pasting more MEAs than there are students says so in red above the markbook, and Add the missing student puts them in the class and pastes the MEAs again so it matches Arbor." },

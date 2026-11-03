@@ -768,6 +768,34 @@ html[data-bg=dark] .shot-full-btn:hover,html[data-bg=night] .shot-full-btn:hover
 .ps-facts{display:grid; grid-template-columns:max-content minmax(0,1fr); gap:4px 12px; margin:0}
 .ps-facts dt{color:var(--ps-dim)}
 .ps-facts dd{margin:0; overflow-wrap:anywhere}
+/* The same window for a Blender file, in Blender's greys and its blue for
+   what is picked. Three classes so these beat the Photoshop ones above. */
+.shot-viewer.ps-win.bl-win{
+  --ps-app:#232323; --ps-panel:#303030; --ps-head:#2a2a2a; --ps-line:#1d1d1d; --ps-field:#3d3d3d;
+  --ps-text:#d9d9d9; --ps-dim:#999; --ps-sel:#334d80; --ps-work:#393939; --ps-hover:#3a3a3a;
+  --ps-chip:#3a4a63; --ps-chip-ink:#e8eefa; --bl-orange:#e87d0d;
+  --bl-mesh:#f19c4b; --bl-light:#e9d35b; --bl-camera:#a3b8d8; --bl-text:#8fc98f; --bl-tool:#79a8e8;
+}
+.bl-logo{width:26px; background:var(--bl-orange); border:0; color:#fff}
+.bl-logo svg{width:16px; height:16px; display:block}
+.bl-title{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ps-bright)}
+.bl-ob{min-height:30px}
+.bl-ico{flex:none; width:18px; height:18px; display:flex; align-items:center; justify-content:center; color:var(--bl-mesh)}
+.bl-ico svg{width:15px; height:15px; display:block}
+.bl-ico.k-light{color:var(--bl-light)}
+.bl-ico.k-camera,.bl-ico.k-empty{color:var(--bl-camera)}
+.bl-ico.k-text{color:var(--bl-text)}
+.bl-tags{flex:none; display:flex; align-items:center; gap:4px; margin-left:auto}
+.bl-tag{display:flex; color:var(--bl-tool)}
+.bl-tag svg{width:13px; height:13px; display:block}
+.bl-tag.bl-key{color:var(--bl-light)}
+.bl-swatch{flex:none; display:inline-block; width:12px; height:12px; border-radius:50%; border:1px solid rgba(255,255,255,.35)}
+.bl-props-name{display:block; margin-bottom:6px; color:var(--ps-bright)}
+.bl-mat{display:flex; align-items:flex-start; gap:8px; padding:4px 0}
+.bl-mat .bl-swatch{width:14px; height:14px; margin-top:2px}
+.bl-mat-words{min-width:0; overflow-wrap:anywhere}
+.bl-mat-words b{display:block; font-weight:600; color:var(--ps-bright)}
+.bl-mat-words span{display:block; font-size:12px; color:var(--ps-dim)}
 /* Narrow, as in View Work's frame beside the marking column or on a phone:
    the panels go under the picture rather than squeezing it to a strip. */
 @media (max-width:760px){

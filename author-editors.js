@@ -406,6 +406,8 @@ const TASK_ICONS = {
   image:     '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/>',
   /* a stack of layers: a Photoshop file is read for its layers */
   photoshop: '<path d="M12 3.5l8.5 4.5L12 12.5 3.5 8z"/><path d="M3.5 12L12 16.5 20.5 12"/><path d="M3.5 16L12 20.5 20.5 16"/>',
+  /* a cube: a Blender file is read for the models in it */
+  blender:   '<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/>',
   pastelink: '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9.5 4V3h5v1M10 13.5a2 2 0 0 0 2.8 0l1.5-1.5a2 2 0 0 0-2.8-2.8M14 13.5"/><path d="M12.5 12.3a2 2 0 0 0-2.8 0l-1 1a2 2 0 0 0 2.8 2.8"/>',
   exam:      '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 15l1.5-4.5L12 15M9.5 13.5h2M15.5 11.5v3M14 13h3"/>',
   paste:     '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9.5 4V3h5v1M9 11h6M9 15h4"/>',
@@ -1453,11 +1455,22 @@ EDITORS.choice = function(b, k){
 };
 
 EDITORS.image = function(b, k){
-  const { F, toggleRow, settings } = k;
+  const { F, toggleRow, pickRow, settings } = k;
+  /* A Screenshot task takes a picture, a Photoshop file or a Blender file,
+     never two at once. The choice is saved as the psd and blend flags the
+     lesson page reads, so `handin` only lives between a press and the
+     redraw it causes. */
+  if (b.handin !== undefined){
+    if (b.handin === "psd") b.psd = true; else delete b.psd;
+    if (b.handin === "blend") b.blend = true; else delete b.blend;
+    delete b.handin;
+  }
+  if (b.psd === true) delete b.blend;
+  const fromFile = b.psd === true ? "psd" : b.blend === true ? "blend" : "";
   F("Heading (optional)", "title"); F("Instruction (optional)", "task", { area:true, rows:2 });
   /* A checklist only means something on a task that takes a file: a
      plain screenshot has nothing in it to tick a line off. */
-  if (b.psd === true) checklistField(b, k, true);
+  if (fromFile) checklistField(b, k, fromFile);
   /* For a screenshot taken again, after feedback: Original and Updated
      tabs over the new picture, the original being the first other
      screenshot in the lesson the student has one for. Off unless asked. */
@@ -1467,10 +1480,14 @@ EDITORS.image = function(b, k){
       "Nothing changes for a student who has no earlier screenshot.");
     /* The file stays on their computer: only the picture read from it, and
        a short account of its layers, are saved. */
-    toggleRow([["psd","Photoshop file", false]], "What they hand in",
-      "The student chooses their .psd file instead of pasting. The picture is read from it on their computer and " +
-      "only that is saved, never the file. In View Work and Mark work, Photoshop details lists its layers, " +
-      "layer styles, masks, text and history.");
+    b.handin = fromFile || "picture";
+    pickRow("What they hand in", "handin",
+      [["picture","A screenshot"], ["psd","Photoshop file"], ["blend","Blender file"]],
+      "With a file, the student chooses it instead of pasting. It is read on their computer and never saved: " +
+      "only a picture and a short account of what is in it are. For Photoshop that is its layers, layer styles, " +
+      "masks, text and history. For Blender it is the objects, modifiers, materials, lights, camera and animation, " +
+      "and the student can add their render as the picture.");
+    delete b.handin;
   });
 };
 
@@ -1579,8 +1596,9 @@ EDITORS.order = function(b, k){
 };
 
 /* The checklist is the same button on both kinds of coding task, and on a
-   Photoshop task, whose lines are ticked from the file it is handed. */
-function checklistField(b, k, psd){
+   Photoshop or Blender task, whose lines are ticked from the file it is
+   handed. `fromFile` says which of those two it is, empty for code. */
+function checklistField(b, k, fromFile){
   const { add, toggleRow } = k;
   // once Python or web has been chosen
   const isWeb = b.type === "web";
@@ -1590,10 +1608,13 @@ function checklistField(b, k, psd){
   const n = b.checks.length;
   const open2 = el("button","btn-ghost bmini2",
     n ? "Edit the checklist (" + n + ")" : "+ Add a checklist");
-  open2.addEventListener("click", () => checklistPopup(b, isWeb, psd));
+  open2.addEventListener("click", () => checklistPopup(b, isWeb, fromFile));
   const checkRow = el("div","brow");
   checkRow.appendChild(open2);
-  checkRow.appendChild(helpDot(psd
+  checkRow.appendChild(helpDot(fromFile === "blend"
+    ? "Ticked from the Blender file they choose: how many models, materials, modifiers, lights, keyframes and so on. " +
+      "A line can be yours to tick instead, for anything the file cannot show, like whether the scene suits the brief."
+    : fromFile
     ? "Ticked from the Photoshop file they choose: how many text layers, shapes, layer styles and so on. " +
       "A line can be yours to tick instead, for anything the file cannot show, like whether the design suits the brief."
     : "Students see these above the editor and press Check my work. Leave empty for no checklist."));

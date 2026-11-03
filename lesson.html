@@ -23,6 +23,7 @@
 <script src="teacher.js"></script>
 <script src="tasks-extra.js"></script>
 <script src="psd.js"></script>
+<script src="blend.js"></script>
 <script src="dragline.js"></script>
 <script src="config.js"></script>
 <script src="worklink.js"></script>
@@ -586,7 +587,10 @@ let voiceAnswers = null;          // question id -> option picked, once they ans
    Work's thumbnails, Original and Updated) reads a string there, and none of
    it had to change. psdLive holds what was picked on this visit, null where
    a picture without a file replaced one, over what was restored. Work held
-   since feedback keeps the stats it was marked with. */
+   since feedback keeps the stats it was marked with.
+
+   A Blender file's account is kept here too, marked fmt: "blend". The key
+   keeps its name because work already handed in is stored under it. */
 const psdLive = {};
 function psdAll(){
   const out = Object.assign({}, (restoredData && restoredData.__psd) || {});
@@ -4517,11 +4521,14 @@ function taskGate(b){
 }
 /* The tasks marked by a checklist: Python, a web page, and block coding. */
 function isCodeTask(b){ return !!b && (b.type === "ide" || b.type === "web" || b.type === "scratch"); }
+/* A Screenshot task set to take a Photoshop or Blender file, whose
+   checklist is ticked from the file. */
+function isFileTask(b){ return !!b && b.type === "image" && (b.psd === true || b.blend === true); }
 /* A checklist line a teacher ticks by hand is not the student's to finish,
    so Full on a coding task asks for every line the code can tick itself,
    and counts the teacher's ticks only once they are there. */
 function gateScore(b, v){
-  if ((isCodeTask(b) || (b.type === "image" && b.psd === true)) && Array.isArray(b.checks) && b.checks.length){
+  if ((isCodeTask(b) || isFileTask(b)) && Array.isArray(b.checks) && b.checks.length){
     const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
     const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
     let got = 0, own = 0, ownGot = 0;
@@ -8578,6 +8585,7 @@ function psdWhen(s){
          d.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
 }
 function psdOneLine(st){
+  if (st && st.fmt === "blend") return blendOneLine(st);
   const sum = psdSummary(st);
   const bits = [sum.layers + (sum.layers === 1 ? " layer" : " layers")];
   if (sum.styled) bits.push(sum.styled + " with a layer style");
@@ -8850,6 +8858,285 @@ function psWindow(st, picture){
   };
 }
 
+/* ---------- what a Blender file was made of ----------
+   Everything blend.js read, for a teacher marking it, the way the
+   Photoshop window above shows a .psd: worked out here from the object
+   list rather than stored as totals, so a better way of counting later
+   applies to work already handed in. */
+const BL_KIND = { mesh:"Mesh", curve:"Curve", surface:"Surface", text:"Text", metaball:"Metaball", light:"Light",
+                  camera:"Camera", empty:"Empty", speaker:"Speaker", probe:"Light probe", lattice:"Lattice",
+                  armature:"Armature", pencil:"Grease Pencil", hair:"Hair", points:"Point cloud", volume:"Volume",
+                  other:"Object" };
+function blendSummary(st){
+  const O = Array.isArray(st.objects) ? st.objects : [];
+  const M = Array.isArray(st.materials) ? st.materials : [];
+  const of = (k) => O.filter(o => o.k === k).length;
+  const tally = (pick) => {
+    const t = {};
+    O.forEach(o => (pick(o) || []).forEach(x => { t[x] = (t[x] || 0) + 1; }));
+    return Object.keys(t).sort((a, b) => t[b] - t[a]).map(k => [k, t[k]]);
+  };
+  return {
+    objects: st.objectCount || O.length,
+    meshes: of("mesh"), lights: of("light"), cameras: of("camera"), text: of("text"),
+    materials: M.length,
+    textured: M.filter(m => (m.im && m.im.length) || (m.k || []).some(k => /Texture/.test(k))).length,
+    modified: O.filter(o => o.mods && o.mods.length).length,
+    mods: tally(o => (o.mods || []).map(m => m.replace(/ \d+$/, ""))),
+    cons: tally(o => o.cons),
+    animated: O.filter(o => o.anim).length,
+    parented: O.filter(o => o.p).length,
+    particles: O.reduce((n, o) => n + (o.ps || 0), 0),
+    hidden: O.filter(o => o.h).length,
+    verts: O.reduce((n, o) => n + (o.v || 0), 0),
+    faces: O.reduce((n, o) => n + (o.f || 0), 0)
+  };
+}
+function blendOneLine(st){
+  const sum = blendSummary(st);
+  const bits = [sum.objects + (sum.objects === 1 ? " object" : " objects")];
+  if (sum.materials) bits.push(sum.materials + (sum.materials === 1 ? " material" : " materials"));
+  if (sum.modified) bits.push(sum.modified + " with a modifier");
+  if (sum.animated) bits.push(sum.animated + " animated");
+  return "From " + (st.file || "a Blender file") + ": " + bits.join(", ");
+}
+/* Blender's own preview is 128 pixels square. Scaled up smoothly, so it is
+   something to look at on the page rather than a postage stamp, at a size
+   that costs the database less than an ordinary screenshot. */
+function blendPreviewPicture(canvas){
+  const side = 512;
+  const c = document.createElement("canvas");
+  c.width = c.height = side;
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(canvas, 0, 0, side, side);
+  return c;
+}
+/* A file saved without a preview still needs a picture to hand in, or
+   nothing on the page would show it had been. A plain card saying which
+   file and what is in it, until they add their render. */
+function blendNoPreview(st){
+  const c = document.createElement("canvas");
+  c.width = 640; c.height = 360;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#3d3d3d"; ctx.fillRect(0, 0, 640, 360);
+  ctx.fillStyle = "#e6e6e6"; ctx.textAlign = "center";
+  ctx.font = "600 26px system-ui, sans-serif";
+  ctx.fillText(String(st.file || "Blender file").slice(0, 40), 320, 160);
+  ctx.fillStyle = "#a8a8a8"; ctx.font = "18px system-ui, sans-serif";
+  ctx.fillText(blendOneLine(st).replace(/^From [^:]*: /, ""), 320, 200);
+  ctx.fillText("No preview was saved in this file", 320, 232);
+  return c;
+}
+/* Small pictures for the Outliner, one per kind of object, drawn the way
+   the Photoshop icons above are. */
+const BL_ICON = {
+  mesh:   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 14 5v6L8 14.2 2 11V5z M2 5l6 3.2L14 5M8 8.2v6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  light:  '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="7" r="3.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.3 12.5h3.4M6.8 14.5h2.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  camera: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="4.5" width="9" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 7 14.5 5v6l-4-2z" fill="currentColor"/></svg>',
+  text:   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10M8 3.5v10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  empty:  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12M3.8 3.8l8.4 8.4M12.2 3.8l-8.4 8.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>',
+  other:  '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+  wrench: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2a3.5 3.5 0 0 0-3.3 4.6L2.4 11.4a1.4 1.4 0 0 0 2 2l4.8-4.8A3.5 3.5 0 0 0 13.9 5l-2.2 2.2-2-.5-.5-2L11.4 2.5A3.5 3.5 0 0 0 10.5 2z" fill="currentColor"/></svg>',
+  key:    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5 13.5 8 8 13.5 2.5 8z" fill="currentColor"/></svg>'
+};
+function blendWindow(st, picture){
+  const sum = blendSummary(st);
+  const objects = Array.isArray(st.objects) ? st.objects : [];
+  const materials = Array.isArray(st.materials) ? st.materials : [];
+  const sc = st.scene || {};
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+
+  const menu = el("div","ps-menu");
+  menu.appendChild(el("span","ps-logo bl-logo", BL_ICON.mesh));
+  menu.appendChild(tel("span","bl-title", (st.file || "Untitled.blend") + (st.ver ? "  (Blender " + st.ver + ")" : "")));
+
+  const doc = el("div","ps-doc");
+  const tab = el("div","ps-tab");
+  tab.appendChild(tel("span","ps-tab-name", st.shot === "render" ? "Their render" :
+                      st.shot === "none" ? "No preview in the file" : "Blender's preview of the 3D view"));
+  const stage = el("div","ps-canvas");
+  stage.appendChild(picture);
+  /* Blender's status bar says what is in the scene in the same words. */
+  const status = el("div","ps-status");
+  const statusZoom = tel("span","ps-zoom","");
+  [sc.n || "Scene", "Objects " + sum.objects.toLocaleString("en-GB"),
+   "Verts " + sum.verts.toLocaleString("en-GB"), "Faces " + sum.faces.toLocaleString("en-GB"),
+   st.bytes ? (st.bytes / 1048576).toFixed(st.bytes < 10485760 ? 1 : 0) + " MB" : ""]
+    .filter(Boolean).forEach(words => status.appendChild(tel("span","", words)));
+  status.appendChild(statusZoom);
+  doc.appendChild(tab); doc.appendChild(stage); doc.appendChild(status);
+
+  const side = el("aside","ps-side");
+  side.setAttribute("aria-label","Blender details");
+  const panel = (title, cls) => {
+    const p = el("section","ps-panel" + (cls ? " " + cls : ""));
+    const head = el("div","ps-panel-head");
+    head.appendChild(tel("span","ps-panel-tab", title));
+    p.appendChild(head);
+    const body = el("div","ps-panel-body");
+    p.appendChild(body);
+    side.appendChild(p);
+    return body;
+  };
+  const facts = (into, rows) => {
+    const dl = el("dl","ps-facts");
+    rows.filter(r => r[1] !== "" && r[1] !== undefined && r[1] !== null && r[1] !== 0).forEach(([k, v]) => {
+      dl.appendChild(tel("dt","", k));
+      dl.appendChild(tel("dd","", String(v)));
+    });
+    into.appendChild(dl);
+    return dl;
+  };
+  const note = (into, words) => into.appendChild(tel("p","ps-note", words));
+  const swatch = (colour) => { const s = el("span","bl-swatch"); s.style.background = colour || "#888"; return s; };
+
+  /* ---- Techniques ----
+     Not a Blender panel: the marking question, what did they use, answered
+     once. Hidden objects are counted, as hidden layers are in Photoshop. */
+  const tp = panel("Techniques");
+  const counts = el("div","ps-counts");
+  [["Objects", sum.objects], ["Models", sum.meshes], ["Materials", sum.materials],
+   ["With a modifier", sum.modified], ["Lights", sum.lights], ["Animated", sum.animated]]
+    .forEach(([k, n]) => {
+      const c = el("div","ps-count" + (n ? "" : " none"));
+      c.appendChild(tel("b","", String(n)));
+      c.appendChild(tel("span","", k));
+      counts.appendChild(c);
+    });
+  tp.appendChild(counts);
+  const used = [];
+  sum.mods.forEach(([n, k]) => used.push([n, k]));
+  sum.cons.forEach(([n, k]) => used.push(["Constraint: " + n, k]));
+  if (sum.textured) used.push(["Textured material", sum.textured]);
+  if (sum.text) used.push(["3D text", sum.text]);
+  if (sum.parented) used.push(["Parented", sum.parented]);
+  if (sum.particles) used.push(["Particle system", sum.particles]);
+  if (st.anim && st.anim.keys) used.push(["Keyframes", st.anim.keys]);
+  if (used.length){
+    const chips = el("div","ps-chips");
+    used.forEach(([n, k]) => chips.appendChild(tel("span","ps-chip", k > 1 ? n + " ×" + k : n)));
+    tp.appendChild(chips);
+  } else note(tp, "No modifiers, textures, constraints or animation.");
+  if (sum.hidden) note(tp, plural(sum.hidden, "object is", "objects are") + " switched off for rendering, and counted.");
+
+  /* ---- Outliner, and the picked object's properties under it ---- */
+  const op = panel("Outliner", "ps-layers-panel");
+  const list = el("ol","ps-layers");
+  const pp = el("div","bl-props");
+  let selected = null;
+  function pick(row, o){
+    if (selected) selected.classList.remove("ps-on");
+    selected = row;
+    row.classList.add("ps-on");
+    pp.innerHTML = "";
+    pp.appendChild(tel("b","bl-props-name", o.n || "(no name)"));
+    facts(pp, [
+      ["Kind", (o.a ? o.a + " " : "") + (BL_KIND[o.k] || o.k)],
+      ["Data", o.d && o.d !== o.n ? o.d : ""],
+      ["Vertices", o.v !== undefined ? o.v.toLocaleString("en-GB") : ""],
+      ["Faces", o.f !== undefined ? o.f.toLocaleString("en-GB") : ""],
+      ["Modifiers", (o.mods || []).join(", ")],
+      ["Materials", (o.m || []).join(", ")],
+      ["Constraints", (o.cons || []).join(", ")],
+      ["Keyframes", o.anim > 1 ? o.anim : o.anim ? "Animated" : ""],
+      ["Parent", o.p || ""],
+      ["Power", o.k === "light" && o.w !== undefined ? o.w + (o.a === "Sun" ? "" : " W") : ""],
+      ["Lens", o.lens ? (o.ortho ? "Orthographic" : o.lens + " mm") : ""],
+      ["Text", o.t || ""],
+      ["Rendering", o.h ? "Switched off" : ""]
+    ]);
+  }
+  objects.forEach(o => {
+    const row = el("li","ps-layer bl-ob" + (o.h ? " hid" : ""));
+    const body = el("span","ps-lbody");
+    body.appendChild(el("span","bl-ico k-" + o.k, BL_ICON[o.k] || BL_ICON.other));
+    body.appendChild(tel("span","ps-lname", o.n || "(no name)"));
+    const tags = el("span","bl-tags");
+    if (o.mods && o.mods.length){ const w = el("span","bl-tag", BL_ICON.wrench); w.title = o.mods.join(", "); tags.appendChild(w); }
+    if (o.anim){ const a = el("span","bl-tag bl-key", BL_ICON.key); a.title = "Animated"; tags.appendChild(a); }
+    (o.m || []).slice(0, 4).forEach(name => {
+      const m = materials.find(x => x.n === name);
+      const s = swatch(m && m.c); s.title = name; tags.appendChild(s);
+    });
+    if (o.k === "light" && o.c) tags.appendChild(swatch(o.c));
+    body.appendChild(tags);
+    row.appendChild(body);
+    row.addEventListener("click", () => pick(row, o));
+    list.appendChild(row);
+    if (!selected) pick(row, o);
+  });
+  if (objects.length) op.appendChild(list);
+  else note(op, "The scene is empty.");
+  op.appendChild(tel("div","ps-lfoot", plural(sum.objects, "object", "objects") +
+    (sum.objects > objects.length ? ". Only the first " + objects.length + " are listed." : "")));
+  if (objects.length){
+    const props = panel("Object");
+    props.appendChild(pp);
+  }
+
+  /* ---- Materials ---- */
+  if (materials.length || st.unusedMaterials){
+    const mp = panel("Materials");
+    materials.forEach(m => {
+      const r = el("div","bl-mat");
+      r.appendChild(swatch(m.c));
+      const words = el("span","bl-mat-words");
+      words.appendChild(tel("b","", m.n));
+      const extra = [].concat(m.k || [], (m.im || []).map(n => "Picture: " + n));
+      if (extra.length) words.appendChild(tel("span","", extra.join(", ")));
+      r.appendChild(words);
+      mp.appendChild(r);
+    });
+    if (st.unusedMaterials) note(mp, plural(st.unusedMaterials, "more material is", "more materials are") +
+                                     " in the file but on nothing.");
+  }
+
+  /* ---- Render: what F12 would make ---- */
+  const rp = panel("Render");
+  const frames = sc.end >= sc.start ? sc.end - sc.start + 1 : 0;
+  facts(rp, [
+    ["Engine", sc.engine || ""],
+    ["Resolution", sc.w && sc.h ? sc.w + " × " + sc.h + (sc.pct && sc.pct !== 100 ? " at " + sc.pct + "%" : "") : ""],
+    ["Camera", sc.cam || (sum.cameras ? "" : "None")],
+    ["Frames", frames ? sc.start + " to " + sc.end + " (" + plural(frames, "frame", "frames") +
+                        (sc.fps ? ", " + Math.round(frames / sc.fps * 10) / 10 + " seconds" : "") + ")" : ""],
+    ["Frame rate", sc.fps ? sc.fps + " fps" : ""]
+  ]);
+  if (st.world){
+    const w = el("div","bl-mat");
+    w.appendChild(swatch(st.world.c));
+    w.appendChild(tel("span","bl-mat-words", "World: " + st.world.n));
+    rp.appendChild(w);
+  }
+
+  /* ---- Pictures the file uses ----
+     One linked from the student's own computer is not in the file, and a
+     render done on another computer will be missing it. */
+  if (Array.isArray(st.images) && st.images.length){
+    const ip = panel("Images");
+    facts(ip, st.images.map(im => [im.n, im.packed ? "Packed in the file" : im.made ? "Made in Blender"
+                                         : "Linked from " + (im.path || "their computer")]));
+  }
+
+  /* ---- File ---- */
+  const fp = panel("File");
+  facts(fp, [
+    ["Saved by", st.ver ? "Blender " + st.ver : ""],
+    ["Last saved", st.modified ? psdWhen(st.modified) : ""],
+    ["Scenes", st.scenes || ""],
+    ["Collections", st.collections > 1 ? st.collections : ""],
+    ["Picture", st.shot === "render" ? "Their render" : st.shot === "none" ? "None in the file" : "Blender's preview"]
+  ]);
+
+  const main = el("div","ps-main");
+  main.appendChild(doc); main.appendChild(side);
+  return {
+    menu, main, stage,
+    zoomed(pct){ statusZoom.textContent = (pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10) + "%"; }
+  };
+}
+
 /* ---------- IMAGE: paste a screenshot, or pick a file ----------
    Pictures are shrunk in the browser before they are stored. A raw screenshot
    can be 2 MB; browser storage only has about 5 MB in total, so we scale the
@@ -8970,11 +9257,14 @@ function showPictureFull(src, blockId, psd){
      its layers down the right. Its way out is the full screen button the
      picture had on the page, turned inside out, at the top right of the
      window, where a window is closed. */
-  const ps = psd ? psWindow(psd, big) : null;
+  /* A Blender file goes into the same frame dressed as Blender. */
+  const isBlend = !!psd && psd.fmt === "blend";
+  const ps = psd ? (isBlend ? blendWindow(psd, big) : psWindow(psd, big)) : null;
   if (ps){
     view.classList.add("ps-win");
-    view.setAttribute("aria-label","Photoshop file, full screen");
-    big.alt = "The Photoshop file's picture, full screen";
+    if (isBlend) view.classList.add("bl-win");
+    view.setAttribute("aria-label", (isBlend ? "Blender" : "Photoshop") + " file, full screen");
+    big.alt = "The " + (isBlend ? "Blender" : "Photoshop") + " file's picture, full screen";
     x.className = "shot-full-btn ps-exit";
     x.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" ' +
       'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
@@ -9161,35 +9451,42 @@ function rImage(b){
   /* Set to take a Photoshop file, the two steps are saving it and choosing
      it. Pasting still works underneath, for a student whose file will not
      open: a screenshot is better than nothing handed in. */
-  if (b.psd){
+  /* Which file the task takes, if any. A Blender task works the same way,
+     and its file's details are kept in the same place, __psd, beside the
+     picture: see psdAll. */
+  const fromFile = b.psd === true ? "psd" : b.blend === true ? "blend" : "";
+  const app = fromFile === "blend" ? "Blender" : "Photoshop";
+  if (fromFile){
+    howTo.appendChild(el("li","", fromFile === "blend"
+      ? '<span class="paste-num">1</span><span><b>Save your work in Blender.</b> Press <kbd>Ctrl</kbd> + <kbd>S</kbd>.</span>'
+      : '<span class="paste-num">1</span><span><b>Save your work in Photoshop.</b> Press <kbd>Ctrl</kbd> + <kbd>S</kbd>. ' +
+        'If it asks about Maximise compatibility, leave it ticked.</span>'));
     howTo.appendChild(el("li","",
-      '<span class="paste-num">1</span><span><b>Save your work in Photoshop.</b> Press <kbd>Ctrl</kbd> + <kbd>S</kbd>. ' +
-      'If it asks about Maximise compatibility, leave it ticked.</span>'));
-    howTo.appendChild(el("li","",
-      '<span class="paste-num">2</span><span><b>Come back here.</b> Press the button below and choose your Photoshop file. ' +
-      'Its name ends in <b>.psd</b>.</span>'));
+      '<span class="paste-num">2</span><span><b>Come back here.</b> Press the button below and choose your ' + app + ' file. ' +
+      'Its name ends in <b>' + (fromFile === "blend" ? ".blend" : ".psd") + '</b>.</span>'));
   } else
   howTo.appendChild(el("li","",
     '<span class="paste-num">1</span><span><b>Go to your work.</b> Hold <kbd>' + KEY_WINDOWS + 'Windows</kbd> + ' +
     '<kbd>' + KEY_SHIFT + 'Shift</kbd> + <kbd>S</kbd> and draw a box around your work</span>'));
   const stepTwo = el("li","",
     '<span class="paste-num">2</span><span><b>Come back here.</b> Press <kbd>Ctrl</kbd> + <kbd>V</kbd> to paste the screenshot of your work.</span>');
-  if (!b.psd) howTo.appendChild(stepTwo);
+  if (!fromFile) howTo.appendChild(stepTwo);
   zone.appendChild(howTo);
   /* Ctrl + V is not something every child finds, so the clipboard has a
      button of its own, under the step it belongs to. */
   const pasteRow = el("div","paste-or");
-  const pasteBtn = el("button", b.psd ? "btn-ghost" : "btn-primary","Paste screenshot");
+  const pasteBtn = el("button", fromFile ? "btn-ghost" : "btn-primary","Paste screenshot");
   pasteBtn.type = "button";
   pasteRow.appendChild(pasteBtn);
   const orRow = el("div","paste-or");
-  const fileBtn = el("button", b.psd ? "btn-primary" : "btn-ghost", b.psd ? "Choose your Photoshop file" : "Browse pictures");
+  const fileBtn = el("button", fromFile ? "btn-primary" : "btn-ghost", fromFile ? "Choose your " + app + " file" : "Browse pictures");
   fileBtn.type = "button";
   const fileInp = el("input"); fileInp.type = "file";
-  fileInp.accept = b.psd ? ".psd,image/vnd.adobe.photoshop,image/*" : "image/*,.psd";
+  fileInp.accept = fromFile === "blend" ? ".blend,image/*"
+                 : fromFile ? ".psd,image/vnd.adobe.photoshop,image/*" : "image/*,.psd";
   fileInp.style.display = "none";
   orRow.appendChild(fileBtn); orRow.appendChild(fileInp);
-  if (b.psd){
+  if (fromFile){
     zone.appendChild(orRow);
     zone.appendChild(el("p","paste-sub","Something not working? Take a screenshot of your work and paste it instead:"));
     zone.appendChild(pasteRow);
@@ -9198,7 +9495,7 @@ function rImage(b){
     zone.appendChild(el("p","paste-sub","Something not working? Try attaching your screenshot instead:"));
     zone.appendChild(orRow);
   }
-  const reading = el("p","paste-sub psd-reading","Reading your Photoshop file\u2026");
+  const reading = el("p","paste-sub psd-reading","Reading your " + app + " file\u2026");
   reading.hidden = true;
   zone.appendChild(reading);
   s.appendChild(zone);
@@ -9241,16 +9538,38 @@ function rImage(b){
   const shotRow = el("div","row");
   const redo = el("button","btn-ghost","Replace picture");
   shotRow.appendChild(redo);
-  /* The Photoshop details are reached by the picture's own full screen
-     button, which a teacher opens into the Photoshop window. */
-  const fromFile = el("p","psd-from");
-  fromFile.hidden = true;
+  /* A Blender file's own preview is a small square of the 3D view, so a
+     student who has rendered their scene can put the render in its place.
+     The file's details stay: it is still the file's work, with a better
+     picture of it. */
+  const renderBtn = el("button","btn-ghost","Add your render");
+  renderBtn.type = "button";
+  renderBtn.hidden = true;
+  const renderInp = el("input"); renderInp.type = "file"; renderInp.accept = "image/*";
+  renderInp.style.display = "none";
+  shotRow.appendChild(renderBtn); shotRow.appendChild(renderInp);
+  /* The file's details are reached by the picture's own full screen
+     button, which a teacher opens into a window dressed as the program
+     the file came from. */
+  const fileNote = el("p","psd-from");
+  fileNote.hidden = true;
   function paintFromFile(){
     const st = dataUrl ? psdStatsFor(b.id) : null;
-    fromFile.hidden = !st;
-    fromFile.textContent = st ? "From the Photoshop file " + (st.file || "") : "";
+    const isBlend = !!st && st.fmt === "blend";
+    fileNote.hidden = !st;
+    renderBtn.hidden = !isBlend || showingOriginal;
+    renderBtn.textContent = isBlend && st.shot === "render" ? "Change your render" : "Add your render";
+    if (!st){ fileNote.textContent = ""; return; }
+    if (!isBlend){ fileNote.textContent = "From the Photoshop file " + (st.file || ""); return; }
+    fileNote.textContent = "From the Blender file " + (st.file || "") + (st.shot === "render"
+      ? ", with your render."
+      : st.shot === "none"
+      ? ". Blender did not save a picture in it. Render your scene with F12, choose Image, then Save As, " +
+        "and press Add your render."
+      : ". This is Blender's small preview. For a clearer picture, render your scene with F12, choose Image, " +
+        "then Save As, and press Add your render.");
   }
-  shot.appendChild(tabs); shot.appendChild(shotFrame); shot.appendChild(fromFile); shot.appendChild(shotRow);
+  shot.appendChild(tabs); shot.appendChild(shotFrame); shot.appendChild(fileNote); shot.appendChild(shotRow);
   s.appendChild(shot);
 
   const err = el("p","err");
@@ -9284,8 +9603,25 @@ function rImage(b){
       }).then(() => { reading.hidden = true; fileBtn.disabled = false; });
       return;
     }
-    if (b.psd && file && !/^image\//.test(file.type)){
-      err.textContent = "That is not a Photoshop file. Choose a file whose name ends in .psd.";
+    if (window.isBlendFile && window.isBlendFile(file)){
+      reading.textContent = "Reading your Blender file…";
+      reading.hidden = false;
+      fileBtn.disabled = true;
+      window.readBlend(file).then(({ canvas, stats }) => {
+        stats.shot = canvas ? "preview" : "none";
+        psdLive[b.id] = stats;
+        const pic = canvas ? blendPreviewPicture(canvas) : blendNoPreview(stats);
+        keep(shrinkDrawn(pic, pic.width, pic.height));
+        if (checklist) checklist.refresh(shotFrame);
+      }).catch(e => {
+        err.textContent = (e && e.forStudent) ? e.message : "That file could not be read. Try saving it again in Blender.";
+      }).then(() => { reading.hidden = true; fileBtn.disabled = false; });
+      return;
+    }
+    if (fromFile && file && !/^image\//.test(file.type)){
+      err.textContent = fromFile === "blend"
+        ? "That is not a Blender file. Choose a file whose name ends in .blend."
+        : "That is not a Photoshop file. Choose a file whose name ends in .psd.";
       return;
     }
     shrinkImage(file, (out, problem) => {
@@ -9295,6 +9631,23 @@ function rImage(b){
       if (checklist) checklist.refresh();            // nothing in a picture to tick
     });
   }
+  /* A render put in place of a Blender file's preview: the picture
+     changes and the file's details are kept, marked as having one. */
+  function acceptRender(file){
+    err.textContent = "";
+    const st = psdStatsFor(b.id);
+    if (!st || st.fmt !== "blend"){ accept(file); return; }
+    shrinkImage(file, (out, problem) => {
+      if (problem){ err.textContent = problem; return; }
+      psdLive[b.id] = Object.assign({}, st, { shot: "render" });
+      keep(out);
+    });
+  }
+  renderBtn.addEventListener("click", () => renderInp.click());
+  renderInp.addEventListener("change", () => {
+    if (renderInp.files && renderInp.files[0]) acceptRender(renderInp.files[0]);
+    renderInp.value = "";
+  });
   /* A picture ready to keep, from whichever way it arrived. */
   function keep(out){
     showPicture(out);
@@ -9342,8 +9695,11 @@ function rImage(b){
           accept: { "image/png": [".png"], "image/jpeg": [".jpg", ".jpeg"], "image/gif": [".gif"],
                     "image/webp": [".webp"], "image/bmp": [".bmp"] } };
         const photoshop = { description: "Photoshop files", accept: { "image/vnd.adobe.photoshop": [".psd"] } };
-        /* Photoshop saves into Documents unless told otherwise. */
-        const [handle] = await window.showOpenFilePicker(b.psd
+        const blender = { description: "Blender files", accept: { "application/x-blender": [".blend"] } };
+        /* Photoshop and Blender both save into Documents unless told otherwise. */
+        const [handle] = await window.showOpenFilePicker(fromFile === "blend"
+          ? { startIn: "documents", types: [blender, pictures] }
+          : fromFile
           ? { startIn: "documents", types: [photoshop, pictures] }
           : { startIn: "pictures", types: [pictures, photoshop] });
         accept(await handle.getFile());
@@ -9375,23 +9731,25 @@ function rImage(b){
     err.textContent = NO_PICTURE;
   });
 
-  /* A Photoshop task can carry a checklist, ticked from what the file was
+  /* A Photoshop or Blender task can carry a checklist, ticked from what the file was
      made of rather than from code, and otherwise the same list a coding
      task has: lines a teacher ticks, ticks given while marking, a list the
      builder can hide. Its work is then saved the way a coding task's is,
      { src, checks, manual, teacher }, because that is the shape the marking
      list, the level and the Strength and Target all read. Without a
      checklist it stays the plain picture it always was. */
-  const listed = b.psd === true && Array.isArray(b.checks) && b.checks.length > 0;
+  const listed = !!fromFile && Array.isArray(b.checks) && b.checks.length > 0;
+  const runChecks = () => (fromFile === "blend" ? window.runBlendChecks : window.runPsdChecks)
+                            (b.checks, dataUrl ? psdStatsFor(b.id) : null);
   const checklist = listed
-    ? attachChecklist(s, b.checks, () => window.runPsdChecks(b.checks, dataUrl ? psdStatsFor(b.id) : null),
+    ? attachChecklist(s, b.checks, runChecks,
                       b.id, b)      // the task itself: attachChecklist reads its view and hidden from it
     : null;
   /* In marking, the file is checked again against the checklist as it now
      stands, the same as a coding task's code is, so a line added after
      they handed in is answered without asking them to hand in again. */
   if (checklist) writtenTickers.push(() =>
-    checklist.tickWritten(window.runPsdChecks(b.checks, dataUrl ? psdStatsFor(b.id) : null)));
+    checklist.tickWritten(runChecks()));
 
   fields[b.id] = {
     get: () => {
@@ -10050,13 +10408,17 @@ function renderPracticalComplete(){
    it was built and from what was saved where it was not, as earlierScreenshot
    does. Null when there are none, so the page is as it was. */
 /* `onlyPsd` is the ordinary lesson's summary, which shows no screenshots:
-   there only the tasks set to take a Photoshop file are shown, so a
+   there only the tasks set to take a Photoshop or Blender file are shown, so a
    teacher walking round at the end can see each one really was a file. */
 function submittedShots(onlyPsd){
   const ids = [], wantsPsd = {};
   const walk = (list) => (list || []).forEach(x => {
     if (!x) return;
-    if (x.type === "image" && x.id){ ids.push(x.id); if (x.psd === true) wantsPsd[x.id] = true; }
+    if (x.type === "image" && x.id){
+      ids.push(x.id);
+      if (x.psd === true) wantsPsd[x.id] = "Photoshop";
+      else if (x.blend === true) wantsPsd[x.id] = "Blender";
+    }
     walk(x.blocks);
     (x.options || []).forEach(o => walk(o.blocks));
   });
@@ -10076,7 +10438,7 @@ function submittedShots(onlyPsd){
   pics.forEach(p => {
     if (!p.src){
       const card = el("div","done-psd-card not-psd");
-      card.appendChild(tel("b","done-psd-title","No Photoshop file"));
+      card.appendChild(tel("b","done-psd-title","No " + (wantsPsd[p.id] || "Photoshop") + " file"));
       card.appendChild(tel("p","done-psd-file","Nothing handed in yet"));
       row.appendChild(card);
       return;
@@ -10107,6 +10469,7 @@ function submittedShots(onlyPsd){
 function psdDoneCard(st, wanted){
   if (!st && !wanted) return null;
   if (!st) return tel("div","done-shot-tag","Screenshot file");
+  if (st.fmt === "blend") return blendDoneCard(st);
   const card = el("div","done-psd-card");
   const layers = Array.isArray(st.layers) ? st.layers : [];
   const sum = psdSummary(st);
@@ -10118,6 +10481,25 @@ function psdDoneCard(st, wanted){
   fact(sum.layers + (sum.layers === 1 ? " layer" : " layers") + (hidden ? ", " + hidden + " hidden" : ""));
   fact(sum.text ? sum.text + " text" : "");
   fact(sum.styled ? sum.styled + " with a layer style" : "");
+  fact(st.modified ? "Last saved " + psdWhen(st.modified) : "");
+  card.appendChild(facts);
+  return card;
+}
+
+/* The same card for a Blender file: enough to tell a real scene from the
+   default cube on the way out of the room. */
+function blendDoneCard(st){
+  const card = el("div","done-psd-card");
+  const sum = blendSummary(st);
+  card.appendChild(tel("b","done-psd-title","Blender file"));
+  card.appendChild(tel("p","done-psd-file", st.file || ""));
+  const facts = el("ul","done-psd-facts");
+  const fact = (words) => { if (words) facts.appendChild(tel("li","", words)); };
+  fact(sum.objects + (sum.objects === 1 ? " object" : " objects") +
+       (sum.meshes ? ", " + sum.meshes + (sum.meshes === 1 ? " model" : " models") : ""));
+  fact(sum.materials ? sum.materials + (sum.materials === 1 ? " material" : " materials") : "");
+  fact(sum.modified ? sum.modified + " with a modifier" : "");
+  fact(sum.animated ? sum.animated + " animated" : "");
   fact(st.modified ? "Last saved " + psdWhen(st.modified) : "");
   card.appendChild(facts);
   return card;
@@ -11647,7 +12029,7 @@ function lessonTaskScore(b, v){
     return m.max ? { got: m.got, max: m.max } : null;
   }
   if (b.type === "hotspot") return { got: window.hotspotHit(b, v) ? 1 : 0, max: 1 };
-  if ((isCodeTask(b) || (b.type === "image" && b.psd === true)) && Array.isArray(b.checks) && b.checks.length){
+  if ((isCodeTask(b) || isFileTask(b)) && Array.isArray(b.checks) && b.checks.length){
     const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
     const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
     let got = 0;

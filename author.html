@@ -278,6 +278,7 @@
         <div class="palbody" hidden>
           <button class="pal" data-add="image"><b>Screenshot</b><span>They paste a picture</span></button>
           <button class="pal" data-add="photoshop"><b>Photoshop work</b><span>They choose their .psd file</span></button>
+          <button class="pal" data-add="blender"><b>Blender work</b><span>They choose their .blend file</span></button>
           <button class="pal" data-add="pastelink"><b>Paste a link</b><span>They hand in a link</span></button>
         </div>
       </div>
@@ -630,6 +631,7 @@ const BLANK = {
   /* A Screenshot task set to take a Photoshop file, so the lesson page, the
      PDF and View Work treat it as the screenshot it ends up as. */
   photoshop:() => ({ type:"image", psd:true, title:"", task:"" }),
+  blender:  () => ({ type:"image", blend:true, title:"", task:"" }),
   embed:    () => ({ type:"embed", url:"", title:"", note:"", confirm:false }),
   video:    () => ({ type:"video", title:"", url:"", caption:"", note:"", size:"full", width:"", align:"left",
                      sound:"on", autoplay:false, loop:false, controls:true, start:"", end:"", frame:true }),
@@ -1483,11 +1485,12 @@ function compileOne(b, id, target){
     {
       const blk = { type:"image", id, title: b.title || "", task: b.task || "",
                     compare: b.compare === true ? true : undefined,
-                    psd: b.psd === true ? true : undefined };
+                    psd: b.psd === true ? true : undefined,
+                    blend: b.blend === true && b.psd !== true ? true : undefined };
       /* A checklist only means something on a task that takes a file: a
          plain screenshot has nothing in it to tick a line off. */
-      if (b.psd === true && Array.isArray(b.checks) && b.checks.length){
-        const checks = savedChecks(b.checks, PSD_CHECKS);
+      if ((blk.psd || blk.blend) && Array.isArray(b.checks) && b.checks.length){
+        const checks = savedChecks(b.checks, blk.blend ? BLEND_CHECKS : PSD_CHECKS);
         if (checks.length){
           blk.checks = checks;
           if (b.checkMode === "one" || b.checkMode === "choose") blk.checkMode = b.checkMode;
@@ -3047,7 +3050,28 @@ const PSD_CHECKS = [
 /* Kinds no longer offered, by name, so a line made with one still says
    what it is in the builder rather than showing an empty dropdown. */
 const RETIRED_CHECKS = { psdSmart: "Smart objects" };
-const isPsdKind = (kind) => /^psd/.test(String(kind || ""));
+/* What a Blender file can be checked for, counted from its objects
+   (runBlendChecks in blend.js). Faces are counted as modelled, before
+   modifiers, so a Subdivision Surface does not turn a cube into a
+   thousand faces' worth of work. */
+const BLEND_CHECKS = [
+  ["blendMeshes",    "Models (mesh objects)",          "count"],
+  ["blendMaterials", "Different materials",            "count"],
+  ["blendTextured",  "Materials with a texture",       "count"],
+  ["blendModified",  "Objects with a modifier",        "count"],
+  ["blendModKinds",  "Different kinds of modifier",    "count"],
+  ["blendLights",    "Lights",                         "count"],
+  ["blendCameras",   "Cameras",                        "count"],
+  ["blendText",      "3D text objects",                "count"],
+  ["blendAnimated",  "Animated objects",               "count"],
+  ["blendKeys",      "Keyframes",                      "count"],
+  ["blendFrames",    "Frames in the animation",        "count"],
+  ["blendFaces",     "Faces across all the models",    "count"],
+  ["blendObjects",   "Objects of any kind",            "count"]
+];
+/* The checklists ticked from a file rather than from code: every line
+   counts something, so every one takes how many. */
+const isFileKind = (kind) => /^(psd|blend)/.test(String(kind || ""));
 const USES_OPTIONS = ["for loop","while loop","if","else","elif","input","print",
                       "list","function","variable","comment","random","turtle"];
 
@@ -3175,7 +3199,7 @@ function checkFields(c, row, kinds, repaint){
   };
 
   const kind = c.kind || kinds[0][0];
-  if (isPsdKind(kind)){ howMany(); return; }
+  if (isFileKind(kind)){ howMany(); return; }
   if (kinds === SCRATCH_CHECKS){
     if (kind === "block"){ whichBlock(); howMany(); }
     else if (kind === "runCount") needs("How many times", "count", "1");
@@ -3235,7 +3259,7 @@ function settleKind(c, scratch){
   }
   if (picksFromList(c.kind) && !c.value) c.value = USES_OPTIONS[0];
   if ((c.kind === "usesCount" || c.kind === "codeCount" ||
-       c.kind === "lineCount" || c.kind === "runCount" || isPsdKind(c.kind)) && !String(c.count || "").trim())
+       c.kind === "lineCount" || c.kind === "runCount" || isFileKind(c.kind)) && !String(c.count || "").trim())
     c.count = "1";
 }
 
@@ -3311,9 +3335,10 @@ function logicSentence(more){
   return out;
 }
 
-function checklistPopup(block, isWeb, psd){
+function checklistPopup(block, isWeb, fromFile){
   const isScratch = block.type === "scratch";
-  const kinds = psd ? PSD_CHECKS : isScratch ? SCRATCH_CHECKS : isWeb ? WEB_CHECKS : PY_CHECKS;
+  const kinds = fromFile === "blend" ? BLEND_CHECKS : fromFile ? PSD_CHECKS
+              : isScratch ? SCRATCH_CHECKS : isWeb ? WEB_CHECKS : PY_CHECKS;
   /* Which cards are open. Held against the checks themselves rather than
      against their positions, so moving one up or down does not open a
      different line than the one that was being edited. Nothing about it is
@@ -3324,8 +3349,9 @@ function checklistPopup(block, isWeb, psd){
   openModal(box => {
     box.classList.add("narrow", "checkmodal");
     box.appendChild(el("h2","","Checklist"));
-    box.appendChild(el("p","modal-text", psd
-      ? "Each line is ticked from the Photoshop file the student chooses, or by you when you mark it. " +
+    box.appendChild(el("p","modal-text", fromFile
+      ? "Each line is ticked from the " + (fromFile === "blend" ? "Blender" : "Photoshop") +
+        " file the student chooses, or by you when you mark it. " +
         "Keep the wording plain, it is what they read when they are stuck."
       : "Each line becomes something the student can tick off. Keep the wording plain, " +
         "it is what they read when they are stuck."));
@@ -3352,7 +3378,7 @@ function checklistPopup(block, isWeb, psd){
        rather the Run button was the only thing that ticks anything. */
     const liveBtn = el("button","btn-ghost bmini2");
     liveBtn.type = "button";
-    liveBtn.hidden = !!psd;          // a file is chosen, not typed: nothing to tick as they type
+    liveBtn.hidden = !!fromFile;          // a file is chosen, not typed: nothing to tick as they type
     const paintLive = () => {
       const on = block.checksLive !== false;
       liveBtn.textContent = "Tick off as they type: " + (on ? "on" : "off");
@@ -3594,7 +3620,7 @@ function checklistPopup(block, isWeb, psd){
         /* A block coding line is about the project, and a Photoshop line
            about the file: neither has lines of text for a condition to
            narrow down to, so neither has any. */
-        if (!Array.isArray(c.more) || isScratch || psd) c.more = [];
+        if (!Array.isArray(c.more) || isScratch || fromFile) c.more = [];
         c.more.forEach((m, mi) => {
           const mr = el("div","morecond" + (m.group ? " grouped" : ""));
           const top = el("div","brow condtop");
@@ -3666,7 +3692,7 @@ function checklistPopup(block, isWeb, psd){
           saveDraft(); paint();
         });
         /* on the same row as the box it adds a condition to, not under it */
-        if (!isScratch && !psd) mainRow.appendChild(addMore);
+        if (!isScratch && !fromFile) mainRow.appendChild(addMore);
         if (c.more.length){
           const sum = el("div","logicline");
           sum.appendChild(el("span","logiclead","Ticked when"));
@@ -3697,7 +3723,7 @@ function checklistPopup(block, isWeb, psd){
            appears under the line. Nought offers it as soon as the line is
            not ticked. */
         const after = el("label","hintafter");
-        if (psd) after.hidden = true;             // there is no Run to count
+        if (fromFile) after.hidden = true;             // there is no Run to count
         after.appendChild(document.createTextNode("Offer after "));
         const hnum = el("input");
         hnum.type = "number"; hnum.min = "0"; hnum.max = "99"; hnum.className = "stepnum";
@@ -3728,7 +3754,7 @@ function checklistPopup(block, isWeb, psd){
                      value: picksFromList(first) ? USES_OPTIONS[0] : "" };
       if (isScratch) settleKind(made, true);
       /* a Photoshop line counts something, and starts at one */
-      if (psd){ delete made.value; made.count = "1"; }
+      if (fromFile){ delete made.value; made.count = "1"; }
       block.checks.push(made);
       /* whatever was just added is the thing being written, so it opens */
       open.clear();
@@ -3943,7 +3969,7 @@ function checklistSentences(into){
   const tasks = [];
   const walk = (blocks) => (blocks || []).forEach(b => {
     if (!b) return;
-    if ((b.type === "ide" || b.type === "web" || (b.type === "image" && b.psd === true)) && Array.isArray(b.checks)
+    if ((b.type === "ide" || b.type === "web" || (b.type === "image" && (b.psd === true || b.blend === true))) && Array.isArray(b.checks)
         && b.checks.some(c => String(c.label || "").trim())) tasks.push(b);
     if (Array.isArray(b.blocks)) walk(b.blocks);
     if (b.type === "choice") (b.options || []).forEach(o => walk(o.blocks));
@@ -3962,7 +3988,7 @@ function checklistSentences(into){
   tasks.forEach((b, n) => {
     const card2 = el("div","bcard");
     const top = el("div","bhead");
-    const name = plainWords(b.title || b.task || "") || (b.type === "image" ? "Photoshop task " : "Coding task ") + (n + 1);
+    const name = plainWords(b.title || b.task || "") || (b.type === "image" ? (b.blend === true ? "Blender task " : "Photoshop task ") : "Coding task ") + (n + 1);
     /* A coding task in a chain is a level of its own. A Photoshop task is
        one task holding every level, so each of its lines says which. */
     const levels = b.type === "image"

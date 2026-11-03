@@ -54,11 +54,11 @@
     return { got: Math.sqrt(dx * dx + dy * dy) <= Number(b.r || 0) ? 1 : 0, max: 1 };
   }
   /* The tasks a practical's ticks are counted from: Python and web tasks,
-     and a Screenshot task set to take a Photoshop file. Scratch is left out
+     and a Screenshot task set to take a Photoshop or Blender file. Scratch is left out
      on purpose, as it always was here: counting it now would change how
      every Scratch practical already marked adds up. */
   function hasChecklist(b){
-    return !!b && (b.type === "ide" || b.type === "web" || (b.type === "image" && b.psd === true))
+    return !!b && (b.type === "ide" || b.type === "web" || (b.type === "image" && (b.psd === true || b.blend === true)))
       && Array.isArray(b.checks) && b.checks.length > 0;
   }
   function taskInfo(b){
