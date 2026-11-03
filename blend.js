@@ -231,6 +231,10 @@
   }
 
   /* ---------- the scene as plain data ---------- */
+  /* The keyed properties the 3D view plays back: where an object is, how
+     it is turned, its size, and switching it off and on. */
+  const MOVES = { location:1, rotation_euler:1, rotation_quaternion:1, rotation_axis_angle:1, scale:1, hide_viewport:1 };
+  const FCURVE_MUTED = 16, FCURVE_MOD_OFF = 32, FCURVE_DISCRETE = 4096, FMODIFIER_MUTED = 8, FMODIFIER_CYCLES = 4;
   const OB_KIND = { 0:"empty", 1:"mesh", 2:"curve", 3:"surface", 4:"text", 5:"metaball", 10:"light", 11:"camera",
                     12:"speaker", 13:"probe", 22:"lattice", 25:"armature", 26:"pencil", 27:"hair",
                     28:"points", 29:"volume", 30:"pencil" };
@@ -480,12 +484,13 @@
     const actByKey = new Map();
     for (const ac of await ids("AC")){
       let keys = 0, lo = Infinity, hi = -Infinity;
-      const paths = new Set();
+      const paths = new Set(), curves = [];
       for (const fc of await list(ac, "curves")){
         const n = fc.get("totvert") || 0;
         keys += n;
         const what = await text(fc.get("rna_path"));
         if (what) paths.add(what.replace(/\[.*$/, ""));
+        if (MOVES[what] && n && !((fc.get("flag") || 0) & FCURVE_MUTED)) curves.push(await curveForView(fc, what, n));
         if (n){
           const first = await deref(fc.get("bezt"), 0), last = await deref(fc.get("bezt"), n - 1);
           const frame = (bz) => bz && bz.has("vec") ? bz.get("vec", 3) : undefined;   // vec[1][0], the key itself
@@ -494,9 +499,39 @@
         }
       }
       const layered = ac.has("layer_array_num") && ac.get("layer_array_num") > 0;
-      actByKey.set(ac.block.at, { n: idName(ac), keys, from: isFinite(lo) ? Math.round(lo) : undefined,
+      actByKey.set(ac.block.at, { n: idName(ac), keys, curves, from: isFinite(lo) ? Math.round(lo) : undefined,
                                    to: isFinite(hi) ? Math.round(hi) : undefined,
                                    what: Array.from(paths).slice(0, 8), layered: layered || undefined });
+    }
+    /* One keyed curve as the 3D view needs it. Each key is [frame, value,
+       how it eases to the next, its two handles], then the settings of the
+       easing it uses if it is not Bezier. The handles are kept on every
+       key: easing into a key reads its left handle whatever kind it is. */
+    async function curveForView(fc, path, n){
+      const keys = [];
+      for (let i = 0; i < n; i++){
+        const bz = await deref(fc.get("bezt"), i);
+        if (!bz) break;
+        const v = (k) => r4(bz.get("vec", k));
+        const ipo = bz.get("ipo") || 0;
+        const key = [v(3), v(4), ipo, v(0), v(1), v(6), v(7)];
+        if (ipo >= 3) key.push(bz.get("easing") || 0, r4(bz.get("back") || 0), r4(bz.get("amplitude") || 0), r4(bz.get("period") || 0));
+        keys.push(key);
+      }
+      const flag = fc.get("flag") || 0;
+      const out = { p: path, i: fc.get("array_index") || 0, k: keys };
+      if (fc.get("extend") === 1) out.lin = 1;
+      if (flag & FCURVE_DISCRETE) out.step = 1;
+      /* A Cycles modifier repeats the keys before and after them. Only that
+         one is kept: it is how a student makes something loop, and the
+         others (Noise, Stepped and so on) are rare at this level. */
+      if (!(flag & FCURVE_MOD_OFF))
+        for (const m of await list(fc, "modifiers")){
+          if (m.get("type") !== FMODIFIER_CYCLES || (m.get("flag") & FMODIFIER_MUTED)) continue;
+          const d = await deref(m.get("data"));
+          if (d) out.cyc = [d.get("before_mode") || 0, d.get("after_mode") || 0, d.get("before_cycles") || 0, d.get("after_cycles") || 0];
+        }
+      return out;
     }
     async function animOf(v){
       const adt = v && v.has("adt") ? await deref(v.get("adt")) : null;
@@ -566,7 +601,8 @@
         slotColours.push(m ? m.c : DEFAULT_GREY);
       }
       drawable.push({ i: objects.length - 1, ob, kind, info, mods: geoMods, colours: slotColours,
-                      offInViewport: !!(restrict & 1) });
+                      offInViewport: !!(restrict & 1), act: anim && anim.curves && anim.curves.length ? anim : null,
+                      parentAt: at(ob.get("parent")) });
     }
     st.objectCount = objects.length;
     st.objects = objects.slice(0, MAX_LIST);
@@ -651,7 +687,11 @@
     }
     try{
       const shown = current ? await shownObjects(current) : null;
+      /* The frame showing when the file was saved, which the 3D view opens on. */
+      const r = current && current.sub("r");
+      if (r && r.get("cfra") !== undefined) st.frame = r.get("cfra");
       st.geo = await sceneForView(drawable, shown, st, { deref, ids, bytesOf, byOld, at, ctx, list, h });
+      delete st.frame;
     }catch(e){
       st.geo = { v: 1, failed: 1 };
     }
@@ -726,41 +766,50 @@
     }
     return o;
   }
-  function localMatrix(ob){
-    const v3 = (f, d) => [0, 1, 2].map(i => { const x = ob.get(f, i); return x === undefined ? d : x; });
-    const loc = v3("loc", 0), size = v3("size", 1), rot = v3("rot", 0);
-    let R;
+  /* An object's own transform, as plain numbers: what the file holds, and
+     what an animation changes frame by frame. */
+  function transformOf(ob){
+    const v = (f, n, d) => Array.from({ length: n }, (_, i) => { const x = ob.get(f, i); return x === undefined ? d : x; });
     const saved = ob.get("rotmode");
-    const mode = saved === undefined ? 1 : saved;     // 0 is a quaternion, so not "|| 1"
-    if (mode === 0){                       // a quaternion
-      const [w, x, y, z] = [0, 1, 2, 3].map(i => ob.get("quat", i) || 0);
+    return { l: v("loc", 3, 0), s: v("size", 3, 1), r: v("rot", 3, 0), q: v("quat", 4, 0),
+             ax: v("rotAxis", 3, 0), an: ob.get("rotAngle") || 0,
+             m: saved === undefined ? 1 : saved };      // 0 is a quaternion, so not "|| 1"
+  }
+  /* Location, rotation and scale to a matrix, as Blender builds one. Shared
+     with blendview.js, which does the same for every frame of an animation. */
+  function trs(t){
+    let R;
+    if (t.m === 0){                        // a quaternion
+      const [w, x, y, z] = t.q;
       const n = Math.hypot(w, x, y, z) || 1, a = w / n, b = x / n, c = y / n, d = z / n;
       R = [1-2*(c*c+d*d), 2*(b*c+a*d), 2*(b*d-a*c), 0,
            2*(b*c-a*d), 1-2*(b*b+d*d), 2*(c*d+a*b), 0,
            2*(b*d+a*c), 2*(c*d-a*b), 1-2*(b*b+c*c), 0, 0, 0, 0, 1];
-    } else if (mode === -1){               // an axis and an angle
-      const ang = ob.get("rotAngle") || 0;
-      let [x, y, z] = [0, 1, 2].map(i => ob.get("rotAxis", i) || 0);
+    } else if (t.m === -1){                // an axis and an angle
+      let [x, y, z] = t.ax;
       const n = Math.hypot(x, y, z) || 1; x /= n; y /= n; z /= n;
-      const c = Math.cos(ang), s = Math.sin(ang), t = 1 - c;
-      R = [t*x*x+c, t*x*y+s*z, t*x*z-s*y, 0, t*x*y-s*z, t*y*y+c, t*y*z+s*x, 0,
-           t*x*z+s*y, t*y*z-s*x, t*z*z+c, 0, 0, 0, 0, 1];
+      const c = Math.cos(t.an), s = Math.sin(t.an), u = 1 - c;
+      R = [u*x*x+c, u*x*y+s*z, u*x*z-s*y, 0, u*x*y-s*z, u*y*y+c, u*y*z+s*x, 0,
+           u*x*z+s*y, u*y*z-s*x, u*z*z+c, 0, 0, 0, 0, 1];
     } else {
       const axis = (i) => {
-        const c = Math.cos(rot[i]), s = Math.sin(rot[i]);
+        const c = Math.cos(t.r[i]), s = Math.sin(t.r[i]);
         if (i === 0) return [1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1];
         if (i === 1) return [c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1];
         return [c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1];
       };
       /* "XYZ" means X is applied first, so it sits rightmost. */
       R = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
-      (ROT_ORDER[mode] || "XYZ").split("").forEach(ch => { R = mul(axis("XYZ".indexOf(ch)), R); });
+      (ROT_ORDER[t.m] || "XYZ").split("").forEach(ch => { R = mul(axis("XYZ".indexOf(ch)), R); });
     }
-    const S = [size[0],0,0,0, 0,size[1],0,0, 0,0,size[2],0, 0,0,0,1];
+    const S = [t.s[0],0,0,0, 0,t.s[1],0,0, 0,0,t.s[2],0, 0,0,0,1];
     const M = mul(R, S);
-    M[12] = loc[0]; M[13] = loc[1]; M[14] = loc[2];
+    M[12] = t.l[0]; M[13] = t.l[1]; M[14] = t.l[2];
     return M;
   }
+  window.blendTRS = trs;
+  window.blendMul = mul;
+  const localMatrix = (ob) => trs(transformOf(ob));
   async function worldMatrix(ob, tools, depth){
     const saved = ob.has("obmat") ? "obmat" : ob.has("object_to_world") ? "object_to_world" : "";
     if (saved && ob.find(saved).f.count === 16){
@@ -950,8 +999,11 @@
 
   async function sceneForView(drawable, shown, st, tools){
     const meshes = [], meshIndex = new Map(), objects = [], cams = [], lights = [], notDrawn = [];
+    /* An object switched off with a key that switches it on again later
+       is kept, so the animation can bring it in. */
+    const keyedHide = (d) => !!(d.act && d.act.curves.some(c => c.p === "hide_viewport"));
     for (const d of drawable){
-      if (d.offInViewport || (shown && !shown.has(d.ob.block.at))) continue;
+      if ((d.offInViewport && !keyedHide(d)) || (shown && !shown.has(d.ob.block.at))) continue;
       const x = (await worldMatrix(d.ob, tools, 0)).map(r6);
       if (d.kind === "camera"){
         const ca = await tools.deref(d.ob.get("data"));
@@ -1011,7 +1063,45 @@
     if (cams.length) out.cams = cams;
     if (lights.length) out.lights = lights;
     if (notDrawn.length) out.notDrawn = notDrawn;
+    const anim = animationForView(drawable, st);
+    if (anim) out.anim = anim;
     return out;
+  }
+
+  /* ---------- animation for the 3D view ----------
+     For every object that moves, and everything it hangs from, its own
+     location, rotation and scale, its keyed curves, and its parent, so the
+     view can work out where it is on any frame the way Blender does:
+     parent's place × the parent inverse × its own. Objects that do not
+     move keep the matrix saved with them. Keys are about 30 bytes each, so
+     even a busy animation adds only a few kilobytes. */
+  function animationForView(drawable, st){
+    const byAt = new Map(drawable.map(d => [d.ob.block.at, d]));
+    const keep = new Map();
+    const add = (d, depth) => {
+      if (!d || keep.has(d.i) || depth > 32) return;
+      const t = transformOf(d.ob);
+      const parent = byAt.get(d.parentAt);
+      const pi = [];
+      for (let i = 0; i < 16; i++) pi.push(r6(d.ob.get("parentinv", i) || 0));
+      const entry = { l: t.l.map(r6), s: t.s.map(r6), m: t.m, p: parent ? parent.i : -1 };
+      if (t.m === 0) entry.q = t.q.map(r6);
+      else if (t.m === -1){ entry.ax = t.ax.map(r6); entry.an = r6(t.an); }
+      else entry.r = t.r.map(r6);
+      if (parent && pi.some(x => x)) entry.pi = pi;
+      if (d.act) entry.ch = d.act.curves;
+      if (d.offInViewport) entry.off = 1;
+      keep.set(d.i, entry);
+      if (parent) add(parent, depth + 1);
+    };
+    /* Anything with keys, and anything hanging from something with keys,
+       since a child moves with its parent. */
+    const moves = (d, depth) => !!d && depth < 32 && (!!d.act || moves(byAt.get(d.parentAt), depth + 1));
+    drawable.forEach(d => { if (moves(d, 0)) add(d, 0); });
+    if (!keep.size) return null;
+    const sc = st.scene || {};
+    return { xf: Object.fromEntries(keep), start: sc.start || 1, end: sc.end || 250, fps: sc.fps || 24,
+             cur: st.frame !== undefined ? st.frame : sc.start || 1 };
   }
 
   /* ---------- the picture ----------

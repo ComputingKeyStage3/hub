@@ -243,7 +243,208 @@
     budget.left -= g.sizes.length;
     return { g, notes };
   }
-  window.blendGeometry = { unpackMesh, applyMods, MAX_FACES };
+  /* ---------- animation: a keyed curve's value on any frame ----------
+     Written to give what Blender gives, following its own rules for each
+     kind of easing between keys, for before the first key and after the
+     last, and for the Cycles modifier. Key: [frame, value, ipo, left
+     handle x, y, right handle x, y], with ipo 0 constant, 1 linear, 2
+     Bezier, 3 and up one of Robert Penner's easings, which then has its
+     easing mode, back, amplitude and period after, as blend.js wrote it. */
+  const IPO = { CONST: 0, LIN: 1, BEZ: 2, BACK: 3, BOUNCE: 4, CIRC: 5, CUBIC: 6, ELASTIC: 7, EXPO: 8,
+                QUAD: 9, QUART: 10, QUINT: 11, SINE: 12 };
+  const EASE = { AUTO: 0, IN: 1, OUT: 2, IN_OUT: 3 };
+  /* Blender's easing functions (BLI_easing.c): t the time into the step,
+     b where it starts, c how far it goes, d how long it takes. */
+  const bounceOut = (t, b, c, d) => {
+    t /= d;
+    if (t < 1 / 2.75) return c * (7.5625 * t * t) + b;
+    if (t < 2 / 2.75){ t -= 1.5 / 2.75; return c * (7.5625 * t * t + 0.75) + b; }
+    if (t < 2.5 / 2.75){ t -= 2.25 / 2.75; return c * (7.5625 * t * t + 0.9375) + b; }
+    t -= 2.625 / 2.75; return c * (7.5625 * t * t + 0.984375) + b;
+  };
+  const bounceIn = (t, b, c, d) => c - bounceOut(d - t, 0, c, d) + b;
+  function elasticBlend(t, c, d, a, s, f){
+    if (c){
+      const u = Math.abs(s);
+      f = a ? f * a / Math.abs(c) : 0;
+      if (Math.abs(t * d) < u){ const l = Math.abs(t * d) / u; f = f * l + (1 - l); }
+    }
+    return f;
+  }
+  function elasticIn(t, b, c, d, a, p){
+    let s, f = 1;
+    if (t === 0) return b;
+    if ((t /= d) === 1) return b + c;
+    t -= 1;
+    if (!p) p = d * 0.3;
+    if (!a || a < Math.abs(c)){ s = p / 4; f = elasticBlend(t, c, d, a, s, f); a = c; }
+    else s = p / (2 * Math.PI) * Math.asin(c / a);
+    return -f * (a * Math.pow(2, 10 * t) * Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
+  }
+  function elasticOut(t, b, c, d, a, p){
+    let s, f = 1;
+    if (t === 0) return b;
+    if ((t /= d) === 1) return b + c;
+    t = -t;
+    if (!p) p = d * 0.3;
+    if (!a || a < Math.abs(c)){ s = p / 4; f = elasticBlend(t, c, d, a, s, f); a = c; }
+    else s = p / (2 * Math.PI) * Math.asin(c / a);
+    return f * (a * Math.pow(2, 10 * t) * Math.sin((t * d - s) * (2 * Math.PI) / p)) + c + b;
+  }
+  function elasticInOut(t, b, c, d, a, p){
+    let s, f = 1;
+    if (t === 0) return b;
+    if ((t /= d / 2) === 2) return b + c;
+    t -= 1;
+    if (!p) p = d * (0.3 * 1.5);
+    if (!a || a < Math.abs(c)){ s = p / 4; f = elasticBlend(t, c, d, a, s, f); a = c; }
+    else s = p / (2 * Math.PI) * Math.asin(c / a);
+    if (t < 0){ f *= -0.5; return f * (a * Math.pow(2, 10 * t) * Math.sin((t * d - s) * (2 * Math.PI) / p)) + b; }
+    t = -t; f *= 0.5;
+    return f * (a * Math.pow(2, 10 * t) * Math.sin((t * d - s) * (2 * Math.PI) / p)) + c + b;
+  }
+  const EASINGS = {
+    [IPO.BACK]:   [(t,b,c,d,k) => c*(t/=d)*t*((k[1]+1)*t - k[1]) + b,
+                   (t,b,c,d,k) => c*((t=t/d-1)*t*((k[1]+1)*t + k[1]) + 1) + b,
+                   (t,b,c,d,k) => { let s = k[1] * 1.525; if ((t /= d / 2) < 1) return c/2*(t*t*((s+1)*t - s)) + b;
+                                    t -= 2; return c/2*(t*t*((s+1)*t + s) + 2) + b; }, 1],
+    [IPO.BOUNCE]: [(t,b,c,d) => bounceIn(t,b,c,d), (t,b,c,d) => bounceOut(t,b,c,d),
+                   (t,b,c,d) => t < d/2 ? bounceIn(t*2,0,c,d)*0.5 + b : bounceOut(t*2-d,0,c,d)*0.5 + c*0.5 + b, 1],
+    [IPO.CIRC]:   [(t,b,c,d) => -c*(Math.sqrt(1 - (t/=d)*t) - 1) + b, (t,b,c,d) => c*Math.sqrt(1 - (t=t/d-1)*t) + b,
+                   (t,b,c,d) => (t /= d/2) < 1 ? -c/2*(Math.sqrt(1 - t*t) - 1) + b : c/2*(Math.sqrt(1 - (t-=2)*t) + 1) + b, 0],
+    [IPO.CUBIC]:  [(t,b,c,d) => c*(t/=d)*t*t + b, (t,b,c,d) => c*((t=t/d-1)*t*t + 1) + b,
+                   (t,b,c,d) => (t /= d/2) < 1 ? c/2*t*t*t + b : c/2*((t-=2)*t*t + 2) + b, 0],
+    [IPO.ELASTIC]:[(t,b,c,d,k) => elasticIn(t,b,c,d,k[2],k[3]), (t,b,c,d,k) => elasticOut(t,b,c,d,k[2],k[3]),
+                   (t,b,c,d,k) => elasticInOut(t,b,c,d,k[2],k[3]), 1],
+    [IPO.EXPO]:   [(t,b,c,d) => t === 0 ? b : c*Math.pow(2, 10*(t/d - 1)) + b,
+                   (t,b,c,d) => t === d ? b + c : c*(-Math.pow(2, -10*t/d) + 1) + b,
+                   (t,b,c,d) => { if (t === 0) return b; if (t === d) return b + c;
+                                  if ((t /= d/2) < 1) return c/2*Math.pow(2, 10*(t - 1)) + b;
+                                  return c/2*(-Math.pow(2, -10*--t) + 2) + b; }, 0],
+    [IPO.QUAD]:   [(t,b,c,d) => c*(t/=d)*t + b, (t,b,c,d) => -c*(t/=d)*(t - 2) + b,
+                   (t,b,c,d) => (t /= d/2) < 1 ? c/2*t*t + b : -c/2*((--t)*(t - 2) - 1) + b, 0],
+    [IPO.QUART]:  [(t,b,c,d) => c*(t/=d)*t*t*t + b, (t,b,c,d) => -c*((t=t/d-1)*t*t*t - 1) + b,
+                   (t,b,c,d) => (t /= d/2) < 1 ? c/2*t*t*t*t + b : -c/2*((t-=2)*t*t*t - 2) + b, 0],
+    [IPO.QUINT]:  [(t,b,c,d) => c*(t/=d)*t*t*t*t + b, (t,b,c,d) => c*((t=t/d-1)*t*t*t*t + 1) + b,
+                   (t,b,c,d) => (t /= d/2) < 1 ? c/2*t*t*t*t*t + b : c/2*((t-=2)*t*t*t*t + 2) + b, 0],
+    [IPO.SINE]:   [(t,b,c,d) => -c*Math.cos(t/d*(Math.PI/2)) + c + b, (t,b,c,d) => c*Math.sin(t/d*(Math.PI/2)) + b,
+                   (t,b,c,d) => -c/2*(Math.cos(Math.PI*t/d) - 1) + b, 0]
+  };
+  /* A Bezier step: Blender first pulls in handles that reach past the next
+     key (correct_bezpart), then finds where along the curve the frame is
+     and reads the value there. Bisection rather than its cubic formula:
+     the handles are pulled in so the frame only ever goes forwards, and
+     forty halvings is closer than a float can tell. */
+  function bezier(a, b, frame){
+    const v1 = [a[0], a[1]], v2 = [a[5], a[6]], v3 = [b[3], b[4]], v4 = [b[0], b[1]];
+    const h1 = [v1[0] - v2[0], v1[1] - v2[1]], h2 = [v4[0] - v3[0], v4[1] - v3[1]];
+    const len = v4[0] - v1[0], len1 = Math.abs(h1[0]), len2 = Math.abs(h2[0]);
+    if (len1 + len2 > 0 && len1 + len2 > len){
+      const f = len / (len1 + len2);
+      v2[0] = v1[0] - f * h1[0]; v2[1] = v1[1] - f * h1[1];
+      v3[0] = v4[0] - f * h2[0]; v3[1] = v4[1] - f * h2[1];
+    }
+    const at = (p0, p1, p2, p3, t) => { const u = 1 - t; return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3; };
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 40; i++){
+      const mid = (lo + hi) / 2;
+      if (at(v1[0], v2[0], v3[0], v4[0], mid) < frame) lo = mid; else hi = mid;
+    }
+    return at(v1[1], v2[1], v3[1], v4[1], (lo + hi) / 2);
+  }
+  function between(a, b, frame){
+    if (a[2] === IPO.CONST) return a[1];
+    if (a[2] === IPO.LIN) return a[1] + (b[1] - a[1]) * (frame - a[0]) / ((b[0] - a[0]) || 1);
+    if (a[2] === IPO.BEZ) return bezier(a, b, frame);
+    const e = EASINGS[a[2]];
+    if (!e) return a[1];
+    const k = a.slice(7);                         // [easing, back, amplitude, period]
+    const mode = k[0] === EASE.AUTO ? (e[3] ? EASE.OUT : EASE.IN) : k[0];
+    const fn = mode === EASE.IN ? e[0] : mode === EASE.OUT ? e[1] : e[2];
+    return fn(frame - a[0], a[1], b[1] - a[1], b[0] - a[0], k);
+  }
+  /* Before the first key and after the last: held, or carried on in a
+     straight line along the end key's handle (or towards its neighbour, for
+     a linear key), as Blender's Extrapolation does. */
+  function beyond(c, end, next, handleAt, frame){
+    if (end[2] === IPO.CONST || !c.lin || c.step || c.k.length < 2) return end[1];
+    let slope;
+    if (end[2] === IPO.LIN) slope = (next[1] - end[1]) / ((next[0] - end[0]) || Infinity);
+    else {
+      const hx = end[handleAt], hy = end[handleAt + 1];
+      if (hx === undefined || hx === end[0]) return end[1];
+      slope = (end[1] - hy) / (end[0] - hx);
+    }
+    return end[1] + slope * (frame - end[0]);
+  }
+  /* The Cycles modifier changes which frame the keys are read at, and with
+     Repeat with Offset adds a step each time round. Modes: 0 off, 1 repeat,
+     2 repeat with offset, 3 repeat mirrored. Cycles 0 means for ever. */
+  function cycled(c, frame){
+    const k = c.k, first = k[0], last = k[k.length - 1];
+    const span = last[0] - first[0], rise = last[1] - first[1];
+    let side = 0, mode = 0, count = 0, ofs = 0;
+    if (frame < first[0]){ side = -1; mode = c.cyc[0]; count = c.cyc[2]; ofs = first[0]; }
+    else if (frame > last[0]){ side = 1; mode = c.cyc[1]; count = c.cyc[3]; ofs = last[0]; }
+    if (!side || !mode || !span) return { frame, add: 0 };
+    const cycle = side * (frame - ofs) / span;
+    const into = (frame - ofs) % span;
+    if (count && cycle > count) return { frame, add: 0 };
+    let add = 0;
+    if (mode === 2) add = (side < 0 ? Math.floor((frame - ofs) / span) : Math.ceil((frame - ofs) / span)) * rise;
+    let t;
+    if (into === 0){
+      t = side === 1 ? last[0] : first[0];
+      if (mode === 3 && Math.trunc(cycle) % 2) t = side === 1 ? first[0] : last[0];
+    } else if (mode === 3 && Math.trunc(cycle + 1) % 2) t = side < 0 ? first[0] - into : last[0] - into;
+    else t = side < 0 ? last[0] + into : first[0] + into;
+    if (t < first[0]) t += span;
+    return { frame: t, add };
+  }
+  function curveAt(c, frame){
+    const k = c.k;
+    if (!k.length) return 0;
+    let add = 0;
+    if (c.cyc){ const r = cycled(c, frame); frame = r.frame; add = r.add; }
+    let v;
+    if (frame <= k[0][0]) v = beyond(c, k[0], k[1], 3, frame);
+    else if (frame >= k[k.length - 1][0]) v = beyond(c, k[k.length - 1], k[k.length - 2], 5, frame);
+    else {
+      let lo = 0, hi = k.length - 1;            // the step the frame falls in
+      while (hi - lo > 1){ const mid = (lo + hi) >> 1; if (k[mid][0] <= frame) lo = mid; else hi = mid; }
+      v = between(k[lo], k[hi], frame);
+    }
+    v += add;
+    return c.step ? Math.round(v) : v;
+  }
+  /* Where an object is on a frame: its own transform with its keyed
+     curves applied, under its parent's on the same frame. Returns the
+     matrix and whether it is switched off then. */
+  function worldAt(anim, i, frame, memo){
+    if (memo.has(i)) return memo.get(i);
+    const e = anim.xf[i];
+    const t = { l: e.l.slice(), s: e.s.slice(), m: e.m, r: (e.r || [0, 0, 0]).slice(), q: (e.q || [1, 0, 0, 0]).slice(),
+                ax: (e.ax || [0, 1, 0]).slice(), an: e.an || 0 };
+    let off = !!e.off;
+    (e.ch || []).forEach(c => {
+      const v = curveAt(c, frame);
+      if (c.p === "location") t.l[c.i] = v;
+      else if (c.p === "scale") t.s[c.i] = v;
+      else if (c.p === "rotation_euler") t.r[c.i] = v;
+      else if (c.p === "rotation_quaternion") t.q[c.i] = v;
+      else if (c.p === "rotation_axis_angle"){ if (c.i === 0) t.an = v; else t.ax[c.i - 1] = v; }
+      else if (c.p === "hide_viewport") off = v >= 0.5;      // as Blender reads a keyed tick box
+    });
+    let M = window.blendTRS(t);
+    if (e.p >= 0 && anim.xf[e.p]){
+      const parent = worldAt(anim, e.p, frame, memo).m;
+      M = window.blendMul(parent, e.pi ? window.blendMul(e.pi, M) : M);
+    }
+    const out = { m: M, off };
+    memo.set(i, out);
+    return out;
+  }
+  window.blendGeometry = { unpackMesh, applyMods, MAX_FACES, curveAt, worldAt };
 
   /* ---------- 4×4 matrices, column-major as WebGL takes them ---------- */
   const M4 = {
@@ -302,12 +503,21 @@
       if (!base) continue;
       const { g, notes } = applyMods(base, ob.mods, budget);
       const M = new Float32Array(ob.x);
+      /* A model that never moves is put in place once, here. One that is
+         animated stays in its own space and is given its matrix for each
+         frame as it is drawn. */
+      const moving = !!(geo.anim && geo.anim.xf[ob.o]);
       const n = g.pos.length / 3;
       const wp = new Float32Array(n * 3);
+      const placedLo = [Infinity, Infinity, Infinity], placedHi = [-Infinity, -Infinity, -Infinity];
       for (let i = 0; i < n; i++){
         const p = M4.point(M, g.pos[i * 3], g.pos[i * 3 + 1], g.pos[i * 3 + 2]);
-        wp[i * 3] = p[0]; wp[i * 3 + 1] = p[1]; wp[i * 3 + 2] = p[2];
-        for (let k = 0; k < 3; k++){ if (p[k] < lo[k]) lo[k] = p[k]; if (p[k] > hi[k]) hi[k] = p[k]; }
+        const w = moving ? [g.pos[i * 3], g.pos[i * 3 + 1], g.pos[i * 3 + 2]] : p;
+        wp[i * 3] = w[0]; wp[i * 3 + 1] = w[1]; wp[i * 3 + 2] = w[2];
+        for (let k = 0; k < 3; k++){
+          if (p[k] < lo[k]) lo[k] = p[k]; if (p[k] > hi[k]) hi[k] = p[k];
+          if (p[k] < placedLo[k]) placedLo[k] = p[k]; if (p[k] > placedHi[k]) placedHi[k] = p[k];
+        }
       }
       /* A negative scale turns the faces inside out, so they are turned back. */
       const flip = (M[0] * (M[5] * M[10] - M[6] * M[9]) - M[4] * (M[1] * M[10] - M[2] * M[9]) + M[8] * (M[1] * M[6] - M[2] * M[5])) < 0;
@@ -355,9 +565,10 @@
           lines.push(wp[a * 3], wp[a * 3 + 1], wp[a * 3 + 2], wp[b * 3], wp[b * 3 + 1], wp[b * 3 + 2]);
         }
       }
+      const own = boxOf(wp);
       objects.push({ o: ob.o, P, N, C, L: new Float32Array(lines), notes, skip: ob.skip || [],
-                     cut: !!(geo.meshes[ob.mesh] && geo.meshes[ob.mesh].cut),
-                     lo: boxOf(wp).lo, hi: boxOf(wp).hi, faces: g.sizes.length });
+                     cut: !!(geo.meshes[ob.mesh] && geo.meshes[ob.mesh].cut), moving,
+                     lo: placedLo, hi: placedHi, ownLo: own.lo, ownHi: own.hi, faces: g.sizes.length });
     }
     /* The models' own box, which the view opens on, and a bigger one with
        the cameras and lights in, which Frame all and the grid use: a camera
@@ -372,14 +583,15 @@
 
   /* Outlines for the camera and lights, as Blender draws them: the camera a
      pyramid with a triangle on top saying which way is up, a light a small
-     circle with a line down to the floor. In world space, as line pairs. */
-  function gizmos(geo, size, aspect){
+     circle with a line down to the floor. In world space, as line pairs.
+     matOf gives each one's matrix on the frame showing. */
+  function gizmos(geo, size, aspect, matOf){
     const out = [];
     const seg = (M, a, b) => { const p = M4.point(M, a[0], a[1], a[2]), q = M4.point(M, b[0], b[1], b[2]); out.push(...p, ...q); };
     (geo.cams || []).forEach(c => {
       /* Blender draws a camera at its Display Size, a metre unless changed,
          shaped like the picture it takes. */
-      const M = new Float32Array(c.x);
+      const M = matOf(c);
       const ds = c.ds || 1, d = ds * c.lens / c.sw;
       const w = aspect >= 1 ? ds / 2 : ds / 2 * aspect, hgt = aspect >= 1 ? ds / 2 / aspect : ds / 2;
       const tip = [0, 0, 0], corners = [[-w, -hgt, -d], [w, -hgt, -d], [w, hgt, -d], [-w, hgt, -d]];
@@ -389,7 +601,7 @@
       seg(M, [0, hgt * 1.9, -d], [-w * 0.5, hgt * 1.15, -d]);
     });
     (geo.lights || []).forEach(l => {
-      const M = new Float32Array(l.x), r = Math.max(0.1, size * 0.006);
+      const M = matOf(l), r = Math.max(0.1, size * 0.006);
       for (let i = 0; i < 16; i++){
         const a = i / 16 * Math.PI * 2, b = (i + 1) / 16 * Math.PI * 2;
         seg(M, [Math.cos(a) * r, Math.sin(a) * r, 0], [Math.cos(b) * r, Math.sin(b) * r, 0]);
@@ -402,9 +614,11 @@
   }
 
   /* ---------- drawing ---------- */
+  /* model is the identity for a model put in place once, and the frame's
+     matrix for one that moves; nmat turns its normals the same way. */
   const VS = `attribute vec3 p; attribute vec3 n; attribute vec3 c;
-    uniform mat4 vp; uniform mat4 view; varying vec3 vn; varying vec3 vc;
-    void main(){ gl_Position = vp * vec4(p, 1.0); vn = mat3(view) * n; vc = c; }`;
+    uniform mat4 vp; uniform mat4 view; uniform mat4 model; uniform mat3 nmat; varying vec3 vn; varying vec3 vc;
+    void main(){ gl_Position = vp * model * vec4(p, 1.0); vn = mat3(view) * (nmat * n); vc = c; }`;
   /* Two lights fixed to the view, a key from the upper left and a soft fill,
      which is roughly Blender's default studio light. */
   const FS = `precision mediump float; varying vec3 vn; varying vec3 vc; uniform float alpha;
@@ -413,7 +627,7 @@
       float fill = max(dot(N, normalize(vec3(0.6, -0.25, 0.75))), 0.0);
       vec3 col = vc * (0.28 + 0.62 * key + 0.22 * fill);
       gl_FragColor = vec4(min(col, vec3(1.0)), alpha); }`;
-  const LVS = `attribute vec3 p; uniform mat4 vp; void main(){ gl_Position = vp * vec4(p, 1.0); }`;
+  const LVS = `attribute vec3 p; uniform mat4 vp; uniform mat4 model; void main(){ gl_Position = vp * model * vec4(p, 1.0); }`;
   const LFS = `precision mediump float; uniform vec4 col; void main(){ gl_FragColor = col; }`;
 
   function program(gl, vs, fs){
@@ -447,7 +661,9 @@
     const mesh = program(gl, VS, FS), line = program(gl, LVS, LFS);
     const loc = { p: gl.getAttribLocation(mesh, "p"), n: gl.getAttribLocation(mesh, "n"), c: gl.getAttribLocation(mesh, "c"),
                   vp: gl.getUniformLocation(mesh, "vp"), view: gl.getUniformLocation(mesh, "view"), alpha: gl.getUniformLocation(mesh, "alpha"),
-                  lp: gl.getAttribLocation(line, "p"), lvp: gl.getUniformLocation(line, "vp"), lcol: gl.getUniformLocation(line, "col") };
+                  lp: gl.getAttribLocation(line, "p"), lvp: gl.getUniformLocation(line, "vp"), lcol: gl.getUniformLocation(line, "col"),
+                  model: gl.getUniformLocation(mesh, "model"), nmat: gl.getUniformLocation(mesh, "nmat"),
+                  lmodel: gl.getUniformLocation(line, "model") };
     scene.objects.forEach(o => {
       o.count = o.P.length / 3;
       o.bP = buffer(gl, o.P); o.bN = buffer(gl, o.N); o.bC = buffer(gl, o.C); o.bL = buffer(gl, o.L);
@@ -462,9 +678,29 @@
     const bGrid = buffer(gl, new Float32Array(grid));
     const bAxisX = buffer(gl, new Float32Array([-reach, 0, 0, reach, 0, 0]));
     const bAxisY = buffer(gl, new Float32Array([0, -reach, 0, 0, reach, 0]));
+    /* ---- the frame showing, and where everything is on it ----
+       Worked out once a frame and kept, since the camera view, the
+       outlines and picking all ask. */
+    const anim = geo.anim || null;
+    let frameNow = anim ? Math.max(anim.start, Math.min(anim.end, Math.round(anim.cur))) : 0;
+    let poses = new Map();
+    const IDENT = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    const pose = (i) => window.blendGeometry.worldAt(anim, i, frameNow, poses);
+    const matOf = (thing) => anim && anim.xf[thing.o] ? new Float32Array(pose(thing.o).m) : new Float32Array(thing.x);
+    const placeOf = (o) => o.moving ? { m: new Float32Array(pose(o.o).m), off: pose(o.o).off } : { m: IDENT, off: false };
+    /* The upper 3×3 of a matrix, inverted and turned over: what normals
+       need so they stay square to a face that has been scaled. */
+    function normalMatrix(m){
+      if (m === IDENT) return new Float32Array([1,0,0, 0,1,0, 0,0,1]);
+      const inv = M4.invert(m);
+      if (!inv) return new Float32Array([1,0,0, 0,1,0, 0,0,1]);
+      return new Float32Array([inv[0], inv[4], inv[8], inv[1], inv[5], inv[9], inv[2], inv[6], inv[10]]);
+    }
     const ren = (stats && stats.scene) || {};
-    const giz = gizmos(geo, size, ren.w && ren.h ? ren.w / ren.h : 16 / 9);
+    const aspectRender = ren.w && ren.h ? ren.w / ren.h : 16 / 9;
+    let giz = gizmos(geo, size, aspectRender, matOf);
     const bGiz = buffer(gl, giz);
+    const gizMoves = !!anim && [].concat(geo.cams || [], geo.lights || []).some(c => anim.xf[c.o]);
 
     /* ---- the view: turned about a point, as Blender's is ---- */
     const view = { yaw: -0.82, pitch: 0.45, dist: 10, target: [0, 0, 0], ortho: false, cam: -1, wire: false };
@@ -489,7 +725,7 @@
       if (view.cam >= 0 && camOf(view.cam)){
         const c = camOf(view.cam);
         /* A scaled camera still sees the same, so its scale is taken out. */
-        const x = Float32Array.from(c.x);
+        const x = matOf(c);
         for (let col = 0; col < 3; col++){
           const len = Math.hypot(x[col * 4], x[col * 4 + 1], x[col * 4 + 2]) || 1;
           for (let r = 0; r < 3; r++) x[col * 4 + r] /= len;
@@ -532,9 +768,10 @@
       return { V, VP: M4.mul(Pm, V) };
     }
 
-    function drawLines(buf, count, col, VP){
+    function drawLines(buf, count, col, VP, model){
       gl.useProgram(line);
       gl.uniformMatrix4fv(loc.lvp, false, VP);
+      gl.uniformMatrix4fv(loc.lmodel, false, model || IDENT);
       gl.uniform4fv(loc.lcol, col);
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.enableVertexAttribArray(loc.lp);
@@ -569,6 +806,10 @@
         gl.polygonOffset(1, 1);
         scene.objects.forEach(o => {
           if (!o.count) return;
+          const at = placeOf(o);
+          if (at.off) return;
+          gl.uniformMatrix4fv(loc.model, false, at.m);
+          gl.uniformMatrix3fv(loc.nmat, false, normalMatrix(at.m));
           [[o.bP, loc.p], [o.bN, loc.n], [o.bC, loc.c]].forEach(([b, a]) => {
             gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 3, gl.FLOAT, false, 0, 0);
           });
@@ -579,10 +820,77 @@
       }
       scene.objects.forEach((o, i) => {
         const on = i === selected;
-        if (view.wire || on) drawLines(o.bL, o.lineCount, on ? [1, 0.63, 0.16, view.wire ? 1 : 0.8] : [0.05, 0.05, 0.05, 0.9], VP);
+        const at = placeOf(o);
+        if (at.off) return;
+        if (view.wire || on) drawLines(o.bL, o.lineCount, on ? [1, 0.63, 0.16, view.wire ? 1 : 0.8] : [0.05, 0.05, 0.05, 0.9], VP, at.m);
       });
       if (giz.length) drawLines(bGiz, giz.length / 3, [0.05, 0.05, 0.05, 1], VP);
       paintOverlay();
+    }
+
+    /* A moving object is framed where it is on the frame showing. */
+    function frameObject(o){
+      if (!o.moving){ frame(o.lo, o.hi); return; }
+      const m = placeOf(o).m, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+      for (let c = 0; c < 8; c++){
+        const p = M4.point(m, c & 1 ? o.ownHi[0] : o.ownLo[0], c & 2 ? o.ownHi[1] : o.ownLo[1], c & 4 ? o.ownHi[2] : o.ownLo[2]);
+        for (let k = 0; k < 3; k++){ lo[k] = Math.min(lo[k], p[k]); hi[k] = Math.max(hi[k], p[k]); }
+      }
+      frame(lo, hi);
+    }
+
+    /* ---- the timeline: Blender's play button, a slider through the
+       frames and the frame number. Space plays and stops, the arrow keys
+       step a frame, Shift and an arrow go to the start or end, as in
+       Blender. It plays at the scene's own frame rate and goes round again
+       at the end. ---- */
+    let playing = false, playFrom = 0, playAt = 0, timeBar = null, slider = null, playBtn = null, frameLabel = null;
+    function setFrame(f){
+      if (!anim) return;
+      f = Math.max(anim.start, Math.min(anim.end, Math.round(f)));
+      if (f === frameNow && poses.size) return;
+      frameNow = f;
+      poses = new Map();
+      if (gizMoves){ giz = gizmos(geo, size, aspectRender, matOf); gl.bindBuffer(gl.ARRAY_BUFFER, bGiz); gl.bufferData(gl.ARRAY_BUFFER, giz, gl.DYNAMIC_DRAW); }
+      if (slider) slider.value = String(f);
+      if (frameLabel) frameLabel.textContent = "Frame " + f;
+      redraw();
+    }
+    function tick(now){
+      if (!playing) return;
+      const span = anim.end - anim.start + 1;
+      const passed = Math.floor((now - playAt) / 1000 * (anim.fps || 24));
+      setFrame(anim.start + ((playFrom - anim.start + passed) % span + span) % span);
+      requestAnimationFrame(tick);
+    }
+    function play(){
+      if (!anim || playing) return;
+      playing = true;
+      playFrom = frameNow >= anim.end ? anim.start : frameNow;
+      playAt = performance.now();
+      playBtn.textContent = "Pause"; playBtn.classList.add("on");
+      requestAnimationFrame(tick);
+    }
+    function stop(){
+      if (!playing) return;
+      playing = false;
+      playBtn.textContent = "Play"; playBtn.classList.remove("on");
+    }
+    if (anim){
+      timeBar = el("div", "bv-time");
+      playBtn = el("button", "bv-btn bv-play", "Play");
+      playBtn.type = "button"; playBtn.title = "Play the animation (Space)";
+      playBtn.addEventListener("click", (e) => { e.stopPropagation(); playing ? stop() : play(); canvas.focus(); });
+      slider = el("input", "bv-slider");
+      slider.type = "range"; slider.min = String(anim.start); slider.max = String(anim.end); slider.step = "1";
+      slider.value = String(frameNow);
+      slider.setAttribute("aria-label", "Frame");
+      slider.addEventListener("input", () => { stop(); setFrame(+slider.value); });
+      frameLabel = el("span", "bv-frame-no", "Frame " + frameNow);
+      const span = el("span", "bv-range", anim.start + " to " + anim.end);
+      timeBar.appendChild(playBtn); timeBar.appendChild(slider); timeBar.appendChild(frameLabel); timeBar.appendChild(span);
+      wrap.appendChild(timeBar);
+      wrap.classList.add("has-time");
     }
 
     /* ---- what is written over the view, as Blender writes it ---- */
@@ -611,6 +919,13 @@
       o.notes.forEach(n => notes.push(n + " on " + name));
       if (o.cut) notes.push(name + " simplified to fit");
     });
+    /* A constraint (Track To, Follow Path and so on) is worked out by
+       Blender as it plays. Where it is saved is right; between keys, an
+       object with one moves only as its own keys take it. */
+    if (anim && stats && stats.objects) Object.keys(anim.xf).forEach(i => {
+      const ob = stats.objects[i];
+      if (ob && ob.cons && ob.cons.length && anim.xf[i].ch) notes.push(ob.n + " has a " + ob.cons[0] + " constraint, which the animation does not follow");
+    });
     (geo.notDrawn || []).forEach(i => { const ob = stats && stats.objects && stats.objects[i];
       if (ob) notes.push(ob.n + (ob.k === "text" ? " is 3D text, which is not drawn" : " is not drawn")); });
     if (notes.length){
@@ -628,7 +943,7 @@
     function navPoints(){
       const cp = Math.cos(view.pitch), sp = Math.sin(view.pitch), cy = Math.cos(view.yaw), sy = Math.sin(view.yaw);
       let r = [-sy, cy, 0], back = [cp * cy, cp * sy, sp];
-      if (view.cam >= 0 && camOf(view.cam)){ const x = camOf(view.cam).x;
+      if (view.cam >= 0 && camOf(view.cam)){ const x = matOf(camOf(view.cam));
         const len = (a) => Math.hypot(a[0], a[1], a[2]) || 1;
         r = [x[0], x[1], x[2]].map((v, i, a) => v / len(a)); back = [x[8], x[9], x[10]].map((v, i, a) => v / len(a)); }
       const u = [back[1] * r[2] - back[2] * r[1], back[2] * r[0] - back[0] * r[2], back[0] * r[1] - back[1] * r[0]];   // screen up
@@ -696,7 +1011,7 @@
     function leaveCamera(){
       if (view.cam < 0) return;
       /* Turning from the camera view starts from where the camera stood. */
-      const c = camOf(view.cam), x = c.x;
+      const x = matOf(camOf(view.cam));
       const len = Math.hypot(x[8], x[9], x[10]) || 1;
       const back = [x[8] / len, x[9] / len, x[10] / len];
       view.pitch = Math.asin(Math.max(-1, Math.min(1, back[2])));
@@ -775,7 +1090,10 @@
       else if (k === "Numpad5"){ view.ortho = !view.ortho; redraw(); }
       else if (k === "Numpad0"){ if (geo.cams && geo.cams.length) toggleCamera(); }
       else if (k === "Home"){ view.cam = -1; frame(scene.allLo, scene.allHi); paintButtons(); redraw(); }
-      else if (k === "NumpadDecimal" || k === "Period"){ if (selected >= 0){ view.cam = -1; frame(scene.objects[selected].lo, scene.objects[selected].hi); paintButtons(); redraw(); } }
+      else if (k === "NumpadDecimal" || k === "Period"){ if (selected >= 0){ view.cam = -1; frameObject(scene.objects[selected]); paintButtons(); redraw(); } }
+      else if (anim && k === "Space"){ playing ? stop() : play(); }
+      else if (anim && k === "ArrowLeft"){ stop(); setFrame(e.shiftKey ? anim.start : frameNow - 1); }
+      else if (anim && k === "ArrowRight"){ stop(); setFrame(e.shiftKey ? anim.end : frameNow + 1); }
       else if (k === "KeyZ"){ view.wire = !view.wire; paintButtons(); redraw(); }
       else if (k === "Numpad4") orbit(-30, 0);
       else if (k === "Numpad6") orbit(30, 0);
@@ -801,6 +1119,9 @@
       gl.uniformMatrix4fv(loc.lvp, false, VP);
       scene.objects.forEach((o, i) => {
         const id = i + 1;
+        const at = placeOf(o);
+        if (at.off) return;
+        gl.uniformMatrix4fv(loc.lmodel, false, at.m);
         gl.uniform4fv(loc.lcol, [(id & 255) / 255, ((id >> 8) & 255) / 255, ((id >> 16) & 255) / 255, 1]);
         gl.bindBuffer(gl.ARRAY_BUFFER, o.bP);
         gl.enableVertexAttribArray(loc.lp);
@@ -836,6 +1157,7 @@
       /* Picked in the Outliner: `o` is the object's place in stats.objects. */
       select(o){ setSelected(scene.objects.findIndex(x => x.o === o), false); },
       close(){
+        playing = false;
         if (ro) ro.disconnect(); else window.removeEventListener("resize", fit);
         const lose = gl.getExtension("WEBGL_lose_context");
         if (lose) lose.loseContext();

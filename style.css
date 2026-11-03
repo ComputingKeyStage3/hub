@@ -820,12 +820,23 @@ html[data-bg=dark] .shot-full-btn:hover,html[data-bg=night] .shot-full-btn:hover
   border:1px dashed var(--bl-frame-line); box-shadow:0 0 0 9999px var(--bl-dim-out)}
 .bv-frame[hidden]{display:none}
 .bv-none{margin:0; padding:24px; color:var(--ps-dim)}
+/* The timeline along the bottom of the view, as Blender's sits under its
+   3D view, with the notes moved up above it. */
+.bv-time{position:absolute; left:0; right:0; bottom:0; display:flex; align-items:center; gap:10px; padding:6px 10px;
+  background:var(--bl-bar); color:var(--ps-text); font-size:12px}
+.bv-slider{flex:1; min-width:60px; accent-color:var(--bl-orange)}
+.bv-frame-no{flex:none; min-width:72px; color:var(--ps-bright); font-variant-numeric:tabular-nums}
+.bv-range{flex:none; color:var(--ps-dim)}
+.bv.has-time .bv-notes{bottom:46px}
 /* On a phone the label and the buttons would sit on top of each other, so
    the buttons go to the bottom, above the notes. */
 @media (max-width:560px){
   .bv-bar{top:auto; bottom:30px; max-width:calc(100% - 16px); flex-wrap:nowrap}
   .bv-btn{padding:4px 7px; font-size:11px; white-space:nowrap}
   .bv-nav{top:8px}
+  .bv.has-time .bv-bar{bottom:70px}
+  .bv.has-time .bv-notes{bottom:104px}
+  .bv-range{display:none}
 }
 /* Narrow, as in View Work's frame beside the marking column or on a phone:
    the panels go under the picture rather than squeezing it to a strip. */
