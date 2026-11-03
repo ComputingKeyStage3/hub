@@ -24,6 +24,7 @@
 <script src="tasks-extra.js"></script>
 <script src="psd.js"></script>
 <script src="blend.js"></script>
+<script src="blendview.js"></script>
 <script src="dragline.js"></script>
 <script src="config.js"></script>
 <script src="worklink.js"></script>
@@ -8953,10 +8954,23 @@ function blendWindow(st, picture){
 
   const doc = el("div","ps-doc");
   const tab = el("div","ps-tab");
-  tab.appendChild(tel("span","ps-tab-name", st.shot === "render" ? "Their render" :
-                      st.shot === "none" ? "No preview in the file" : "Blender's preview of the 3D view"));
+  /* Two tabs over the middle: the scene in 3D, which a teacher can turn
+     and pick things in, and the picture handed in. Work handed in before
+     the 3D view existed, or whose scene could not be kept, has only the
+     picture, and says why. */
+  const geo = st.geo || null;
+  const canDraw = !!(geo && Array.isArray(geo.objects) && geo.objects.length && window.blendView);
+  const tabBtn = (words) => { const b = tel("button","ps-tab-name bl-tab", words); b.type = "button"; tab.appendChild(b); return b; };
+  const viewTab = canDraw ? tabBtn("3D view") : null;
+  const picTab = tabBtn(st.shot === "render" ? "Their render" :
+                        st.shot === "none" ? "No preview in the file" : "Blender's preview");
+  if (!canDraw) tab.appendChild(tel("span","bl-tab-note", !geo ? "Handed in before the 3D view, so only the picture"
+    : geo.tooBig ? "Too big to keep in 3D" : geo.failed ? "Its models could not be read for 3D"
+    : "Nothing in the scene to draw"));
   const stage = el("div","ps-canvas");
   stage.appendChild(picture);
+  const space = el("div","bl-space");
+  let viewer = null;
   /* Blender's status bar says what is in the scene in the same words. */
   const status = el("div","ps-status");
   const statusZoom = tel("span","ps-zoom","");
@@ -8965,7 +8979,21 @@ function blendWindow(st, picture){
    st.bytes ? (st.bytes / 1048576).toFixed(st.bytes < 10485760 ? 1 : 0) + " MB" : ""]
     .filter(Boolean).forEach(words => status.appendChild(tel("span","", words)));
   status.appendChild(statusZoom);
-  doc.appendChild(tab); doc.appendChild(stage); doc.appendChild(status);
+  doc.appendChild(tab); doc.appendChild(space); doc.appendChild(stage); doc.appendChild(status);
+  /* The 3D view is made the first time it is shown, and only then asks
+     the computer for a graphics context. */
+  function showTab(three){
+    if (three && !viewer){
+      viewer = window.blendView(geo, st, { onPick: (i) => { if (rows[i]) pick(rows[i], objects[i], true); } });
+      if (viewer){ space.appendChild(viewer.el); if (selectedIndex >= 0) viewer.select(selectedIndex); }
+    }
+    space.hidden = !three; stage.hidden = three;
+    statusZoom.hidden = three;
+    if (viewTab) viewTab.classList.toggle("on", three);
+    picTab.classList.toggle("on", !three);
+  }
+  if (viewTab) viewTab.addEventListener("click", (e) => { e.stopPropagation(); showTab(true); });
+  picTab.addEventListener("click", (e) => { e.stopPropagation(); showTab(false); });
 
   const side = el("aside","ps-side");
   side.setAttribute("aria-label","Blender details");
@@ -9024,11 +9052,17 @@ function blendWindow(st, picture){
   const op = panel("Outliner", "ps-layers-panel");
   const list = el("ol","ps-layers");
   const pp = el("div","bl-props");
-  let selected = null;
-  function pick(row, o){
+  let selected = null, selectedIndex = -1;
+  const rows = [];
+  /* Picked in the Outliner or by clicking it in the 3D view, which then
+     outlines it in orange, as Blender does. */
+  function pick(row, o, fromView){
     if (selected) selected.classList.remove("ps-on");
     selected = row;
     row.classList.add("ps-on");
+    selectedIndex = rows.indexOf(row);
+    if (viewer && !fromView) viewer.select(selectedIndex);
+    if (fromView) row.scrollIntoView({ block: "nearest" });
     pp.innerHTML = "";
     pp.appendChild(tel("b","bl-props-name", o.n || "(no name)"));
     facts(pp, [
@@ -9063,6 +9097,7 @@ function blendWindow(st, picture){
     body.appendChild(tags);
     row.appendChild(body);
     row.addEventListener("click", () => pick(row, o));
+    rows.push(row);
     list.appendChild(row);
     if (!selected) pick(row, o);
   });
@@ -9131,9 +9166,14 @@ function blendWindow(st, picture){
 
   const main = el("div","ps-main");
   main.appendChild(doc); main.appendChild(side);
+  /* Opened in 3D, since that is what the picture cannot show. Put off to
+     the next frame so the window is on the page and has a size first. */
+  showTab(false);
+  if (canDraw) requestAnimationFrame(() => showTab(true));
   return {
     menu, main, stage,
-    zoomed(pct){ statusZoom.textContent = (pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10) + "%"; }
+    zoomed(pct){ statusZoom.textContent = (pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10) + "%"; },
+    close(){ if (viewer) viewer.close(); }
   };
 }
 
@@ -9281,6 +9321,7 @@ function showPictureFull(src, blockId, psd){
     document.removeEventListener("fullscreenchange", onFsChange);
     window.removeEventListener("resize", showZoom);
     if (document.fullscreenElement === view && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    if (ps && ps.close) ps.close();        // a 3D view gives its graphics context back
     view.remove();
     tellParent("");
   }

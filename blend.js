@@ -189,7 +189,11 @@
       const off = at.off + (index || 0) * f.one;
       if (off + f.one > this.b.length) return undefined;
       const L = this.c.h.little;
-      if (f.ptr) return ptrKey(this.dv, off, this.c.h.ptr, L);
+      if (f.ptr){
+        const raw = ptrKey(this.dv, off, this.c.h.ptr, L);
+        if (!raw) return raw;
+        return this.c.isId(f.type) ? "I|" + raw : this.block ? this.block.owner + "|" + raw : raw;
+      }
       if (f.type === "char" && f.count > 1 && index === undefined){
         let s = "";
         for (let i = 0; i < f.count && this.b[off + i]; i++) s += String.fromCharCode(this.b[off + i]);
@@ -214,7 +218,10 @@
     sub(path){
       const at = this.find(path);
       const st = at && this.c.dna.byName[at.f.type];
-      return st ? new View(this.c, st, this.b, at.off) : null;
+      if (!st) return null;
+      const v = new View(this.c, st, this.b, at.off);
+      v.block = this.block;
+      return v;
     }
   };
   /* Blender writes names as UTF-8; the bytes were read one to a character. */
@@ -277,11 +284,46 @@
   }
 
   async function scene(src, h, blocks){
-    const byOld = new Map();
-    blocks.forEach(b => { if (b.old) byOld.set(b.old, b); });
+    /* A saved pointer is the address the thing had in memory, and Blender
+       only promises it is unique among the blocks saved with one item: 3.6
+       reuses addresses between meshes as it saves them, which put one
+       mesh's corners on another. So, as Blender's own loader does, a
+       pointer is looked up among the blocks after the item it belongs to,
+       and a pointer to another item (a mesh, a material) among items. */
+    const NOT_ID = { DATA:1, REND:1, TEST:1, GLOB:1, DNA1:1, USER:1, ENDB:1 };
+    let owner = -1;
+    const scoped = new Map(), idMap = new Map(), anyMap = new Map();
+    blocks.forEach((b, i) => {
+      b.isId = !NOT_ID[b.code];
+      if (b.isId) owner = i;
+      b.owner = owner;
+      if (!b.old) return;
+      scoped.set(owner + "|" + b.old, b);
+      if (b.isId && !idMap.has(b.old)) idMap.set(b.old, b);
+      if (!anyMap.has(b.old)) anyMap.set(b.old, b);
+    });
+    const byOld = { get(key){
+      if (!key) return undefined;
+      const bar = key.indexOf("|");
+      if (bar < 0) return idMap.get(key) || anyMap.get(key);
+      const raw = key.slice(bar + 1);
+      if (key[0] === "I") return idMap.get(raw) || anyMap.get(raw);
+      return scoped.get(key) || idMap.get(raw) || anyMap.get(raw);
+    } };
+    /* The same item reached by two pointers is the same block, so maps of
+       items are kept by where the block sits in the file. */
+    const at = (key) => { const b = byOld.get(key); return b ? b.at : -1; };
     const dnaBlock = blocks.find(b => b.code === "DNA1");
     if (!dnaBlock) throw fail(SAY.broken);
-    const ctx = { h, dna: sdna(await src.read(dnaBlock.at, dnaBlock.len), h) };
+    const dna = sdna(await src.read(dnaBlock.at, dnaBlock.len), h);
+    const idTypes = new Map();
+    const ctx = { h, dna, isId(type){
+      if (!idTypes.has(type)){
+        const st = dna.byName[type];
+        idTypes.set(type, type === "ID" || !!(st && st.fields.id && st.fields.id.off === 0 && st.fields.id.type === "ID"));
+      }
+      return idTypes.get(type);
+    } };
 
     const cache = new Map();
     async function bytesOf(b){
@@ -337,7 +379,11 @@
       const bytes = await bytesOf(b);
       const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
       const out = [];
-      for (let i = 0; i < n && (i + 1) * h.ptr <= bytes.length; i++) out.push(ptrKey(dv, i * h.ptr, h.ptr, h.little));
+      /* Every array of pointers read here is a list of materials, which are items. */
+      for (let i = 0; i < n && (i + 1) * h.ptr <= bytes.length; i++){
+        const raw = ptrKey(dv, i * h.ptr, h.ptr, h.little);
+        out.push(raw ? "I|" + raw : null);
+      }
       return out;
     }
     async function text(key){
@@ -391,7 +437,7 @@
         if (images.length) out.im = images;
       }
       out.c = hex(colour[0], colour[1], colour[2]);
-      matByKey.set(m.block.old, out);
+      matByKey.set(m.block.at, out);
     }
 
     /* ---- meshes ----
@@ -403,25 +449,27 @@
                     v: me.any("totvert", "verts_num") || 0,
                     f: me.any("totpoly", "faces_num") || 0,
                     e: me.any("totedge", "edges_num") || 0 };
-      out.mat = (await ptrArray(me.get("mat"), me.get("totcol") || 0)).filter(Boolean);
-      meshByKey.set(me.block.old, out);
+      /* Slots in order, empty ones kept: a face's material is a slot number. */
+      out.mat = await ptrArray(me.get("mat"), me.get("totcol") || 0);
+      out.view = me;
+      meshByKey.set(me.block.at, out);
     }
     const curveByKey = new Map();
     for (const cu of await ids("CU")){
       const out = { n: idName(cu) };
       if (cu.has("str")) out.t = (await text(cu.get("str"))).slice(0, 400);
-      out.mat = (await ptrArray(cu.get("mat"), cu.get("totcol") || 0)).filter(Boolean);
-      curveByKey.set(cu.block.old, out);
+      out.mat = await ptrArray(cu.get("mat"), cu.get("totcol") || 0);
+      curveByKey.set(cu.block.at, out);
     }
     const lightByKey = new Map();
     for (const la of await ids("LA")){
-      lightByKey.set(la.block.old, { n: idName(la), a: LIGHT_KIND[la.get("type")] || "Light",
+      lightByKey.set(la.block.at, { n: idName(la), a: LIGHT_KIND[la.get("type")] || "Light",
                                      w: Math.round((la.get("energy") || 0) * 10) / 10,
                                      c: hex(la.get("r"), la.get("g"), la.get("b")) });
     }
     const camByKey = new Map();
     for (const ca of await ids("CA")){
-      camByKey.set(ca.block.old, { n: idName(ca), lens: Math.round((ca.get("lens") || 0) * 10) / 10,
+      camByKey.set(ca.block.at, { n: idName(ca), lens: Math.round((ca.get("lens") || 0) * 10) / 10,
                                    ortho: ca.get("type") === 1 ? 1 : undefined });
     }
 
@@ -446,26 +494,27 @@
         }
       }
       const layered = ac.has("layer_array_num") && ac.get("layer_array_num") > 0;
-      actByKey.set(ac.block.old, { n: idName(ac), keys, from: isFinite(lo) ? Math.round(lo) : undefined,
+      actByKey.set(ac.block.at, { n: idName(ac), keys, from: isFinite(lo) ? Math.round(lo) : undefined,
                                    to: isFinite(hi) ? Math.round(hi) : undefined,
                                    what: Array.from(paths).slice(0, 8), layered: layered || undefined });
     }
     async function animOf(v){
       const adt = v && v.has("adt") ? await deref(v.get("adt")) : null;
-      const act = adt && actByKey.get(adt.get("action"));
+      const act = adt && actByKey.get(at(adt.get("action")));
       if (adt && !act && adt.has("drivers") && adt.sub("drivers").get("first")) return { drivers: 1 };
       return act || null;
     }
 
     /* ---- objects ---- */
     const objects = [];
+    const drawable = [];            // what the 3D view will need, alongside each object
     const animated = new Set();
     const matUsed = new Map();
     for (const ob of await ids("OB")){
       const kind = OB_KIND[ob.get("type")] || "other";
       const o = { n: idName(ob), k: kind };
       const data = ob.get("data");
-      const info = meshByKey.get(data) || curveByKey.get(data) || lightByKey.get(data) || camByKey.get(data);
+      const info = meshByKey.get(at(data)) || curveByKey.get(at(data)) || lightByKey.get(at(data)) || camByKey.get(at(data));
       if (info){
         o.d = info.n;
         if (kind === "mesh"){ o.v = info.v; o.f = info.f; }
@@ -479,18 +528,19 @@
       const slots = (info && info.mat) || [];
       const keys = [];
       for (let i = 0; i < Math.max(own.length, slots.length); i++){
-        const k = own[i] || slots[i];
-        if (k && matByKey.has(k)) keys.push(k);
+        const k = at(own[i] || slots[i]);
+        if (matByKey.has(k)) keys.push(k);
       }
       if (keys.length){
         o.m = Array.from(new Set(keys)).map(k => matByKey.get(k).n);
         keys.forEach(k => matUsed.set(k, matByKey.get(k)));
       }
-      const mods = [];
+      const mods = [], geoMods = [];
       for (const md of await list(ob, "modifiers")){
         const name = modName(md.st.name);
         const levels = md.st.name === "SubsurfModifierData" ? md.get("levels") : undefined;
         mods.push(levels !== undefined ? name + " " + levels : name);
+        geoMods.push(modForView(md, name));
       }
       if (mods.length) o.mods = mods;
       const cons = [];
@@ -502,7 +552,7 @@
       const parts = await list(ob, "particlesystem");
       if (parts.length) o.ps = parts.length;
       const anim = await animOf(ob);
-      if (anim){ o.anim = anim.keys || 1; animated.add(ob.block.old); }
+      if (anim){ o.anim = anim.keys || 1; animated.add(ob.block.at); }
       const parent = await deref(ob.get("parent"));
       if (parent) o.p = idName(parent);
       /* Switched off for rendering: the camera in the Outliner. It still
@@ -510,6 +560,13 @@
       const restrict = ob.get("restrictflag") || 0;
       if (restrict & 4) o.h = 1;
       objects.push(o);
+      const slotColours = [];
+      for (let i = 0; i < Math.max(own.length, slots.length); i++){
+        const m = matByKey.get(at(own[i] || slots[i]));
+        slotColours.push(m ? m.c : DEFAULT_GREY);
+      }
+      drawable.push({ i: objects.length - 1, ob, kind, info, mods: geoMods, colours: slotColours,
+                      offInViewport: !!(restrict & 1) });
     }
     st.objectCount = objects.length;
     st.objects = objects.slice(0, MAX_LIST);
@@ -549,7 +606,7 @@
     if (glob){
       const g = new View(ctx, ctx.dna.structs[glob.sdna], await bytesOf(glob), 0);
       const cur = g.get("curscene");
-      current = scenes.find(s => s.block.old === cur) || null;
+      current = scenes.find(s => s.block === byOld.get(cur)) || null;
       const commit = g.get("build_hash");
       if (commit) st.build = commit.slice(0, 12);
     }
@@ -576,7 +633,385 @@
     }
     const collections = (await ids("GR")).length;
     if (collections) st.collections = collections;
+
+    /* ---- the scene itself, for the 3D view ----
+       Never allowed to stop the rest being handed in: a file whose meshes
+       cannot be read still has its objects, materials and checklist. */
+    /* What the 3D view showed: the objects in the scene's first view layer,
+       which leaves out a collection unticked in the Outliner, less any
+       hidden with H, the eye. Null when the file has no view layers, as
+       before 2.8, and then everything is drawn. */
+    async function shownObjects(sc){
+      const layers = sc.has("view_layers") ? await list(sc, "view_layers") : [];
+      if (!layers.length) return null;
+      const keys = new Set();
+      for (const base of await list(layers[0], "object_bases"))
+        if (!((base.get("flag") || 0) & BASE_HIDDEN)) keys.add(at(base.get("object")));
+      return keys;
+    }
+    try{
+      const shown = current ? await shownObjects(current) : null;
+      st.geo = await sceneForView(drawable, shown, st, { deref, ids, bytesOf, byOld, at, ctx, list, h });
+    }catch(e){
+      st.geo = { v: 1, failed: 1 };
+    }
     return st;
+  }
+
+  /* ---------- the scene for the 3D view ----------
+     Enough to draw the scene the way Blender's solid view does: each mesh's
+     corners and faces, where each object sits, the colour of each face's
+     material, and the camera and lights. Kept as numbers packed into text,
+     never as pictures.
+
+     Storage: a student's whole lesson may be at most 1.5MB on the server,
+     and the picture beside this can take 150KB, so the scene is held to
+     GEO_BUDGET characters. A typical KS3 scene is 10 to 60KB. Past the
+     budget the biggest models are simplified, by merging corners that sit
+     close together, until it fits, and the view says which were.
+
+     Modifiers are not applied here. A Subdivision Surface multiplies the
+     faces by four a level, so storing its result would cost sixteen times a
+     level-two model; storing the settings and redoing it in the view costs
+     nothing. Mirror, Array and Subdivision Surface are redone; the others
+     are named in the view as not drawn. */
+  const GEO_BUDGET = 450000;
+  const BASE_HIDDEN = 256;               // a view layer base hidden with H; measured on a 3.6 file
+  const DEFAULT_GREY = "#cccccc";        // Blender's solid view colour for a face with no material
+  const MAX_READ_VERTS = 3000000;        // beyond this a mesh is not read at all, to spare the computer's memory
+
+  /* A modifier as the view needs it, or just its name when the view cannot
+     redo it. "show in viewport" is bit 1 of mode: switched off there, it is
+     off in the view too. */
+  function modForView(md, name){
+    const shown = ((md.has("modifier.mode") ? md.get("modifier.mode") : 1) & 1) === 1;
+    if (!shown) return { t: "off", n: name };
+    switch (md.st.name){
+      case "MirrorModifierData": {
+        /* Axis bits: X is 8, Y 16, Z 32. Before 2.8 the axis was a number. */
+        const flag = md.get("flag") || 0;
+        let axes = (flag >> 3) & 7;
+        if (!axes) axes = 1 << (md.get("axis") || 0);
+        return { t: "mirror", a: axes, merge: (flag & 128) ? 0 : 1, tol: md.get("tolerance") || 0.001,
+                 ob: md.get("mirror_ob") ? 1 : undefined };
+      }
+      case "ArrayModifierData": {
+        const flags = md.get("offset_type") || 0;
+        const rel = [0, 1, 2].map(i => md.get("scale", i) || 0);
+        const con = [0, 1, 2].map(i => md.get("offset", i) || 0);
+        return { t: "array", count: Math.max(1, md.get("count") || 1), fit: md.get("fit_type") || 0,
+                 len: md.get("length") || 0, rel: (flags & 2) ? rel : undefined, con: (flags & 1) ? con : undefined,
+                 ob: (flags & 4) && md.get("offset_ob") ? 1 : undefined };
+      }
+      case "SubsurfModifierData":
+        /* Since 2.91 the corners are moved onto the smooth limit surface
+           unless Use Limit Surface is off, which is flag 64 being set. */
+        return { t: "subsurf", lv: md.get("levels") || 0, simple: md.get("subdivType") === 1 ? 1 : undefined,
+                 limit: (md.get("flags") & 64) ? undefined : 1 };
+    }
+    return { t: "skip", n: name };
+  }
+
+  /* An object's place in the world: its own 4×4 matrix as Blender last
+     worked it out, which already includes its parent. Blender 4.2 stopped
+     saving it, so then it is built again from location, rotation and scale,
+     and the parent's, the same way Blender does. */
+  const ROT_ORDER = { 1:"XYZ", 2:"XZY", 3:"YXZ", 4:"YZX", 5:"ZXY", 6:"ZYX" };
+  function mul(a, b){                      // column-major 4×4, as WebGL keeps them
+    const o = new Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++){
+      let s = 0;
+      for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+      o[c * 4 + r] = s;
+    }
+    return o;
+  }
+  function localMatrix(ob){
+    const v3 = (f, d) => [0, 1, 2].map(i => { const x = ob.get(f, i); return x === undefined ? d : x; });
+    const loc = v3("loc", 0), size = v3("size", 1), rot = v3("rot", 0);
+    let R;
+    const saved = ob.get("rotmode");
+    const mode = saved === undefined ? 1 : saved;     // 0 is a quaternion, so not "|| 1"
+    if (mode === 0){                       // a quaternion
+      const [w, x, y, z] = [0, 1, 2, 3].map(i => ob.get("quat", i) || 0);
+      const n = Math.hypot(w, x, y, z) || 1, a = w / n, b = x / n, c = y / n, d = z / n;
+      R = [1-2*(c*c+d*d), 2*(b*c+a*d), 2*(b*d-a*c), 0,
+           2*(b*c-a*d), 1-2*(b*b+d*d), 2*(c*d+a*b), 0,
+           2*(b*d+a*c), 2*(c*d-a*b), 1-2*(b*b+c*c), 0, 0, 0, 0, 1];
+    } else if (mode === -1){               // an axis and an angle
+      const ang = ob.get("rotAngle") || 0;
+      let [x, y, z] = [0, 1, 2].map(i => ob.get("rotAxis", i) || 0);
+      const n = Math.hypot(x, y, z) || 1; x /= n; y /= n; z /= n;
+      const c = Math.cos(ang), s = Math.sin(ang), t = 1 - c;
+      R = [t*x*x+c, t*x*y+s*z, t*x*z-s*y, 0, t*x*y-s*z, t*y*y+c, t*y*z+s*x, 0,
+           t*x*z+s*y, t*y*z-s*x, t*z*z+c, 0, 0, 0, 0, 1];
+    } else {
+      const axis = (i) => {
+        const c = Math.cos(rot[i]), s = Math.sin(rot[i]);
+        if (i === 0) return [1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1];
+        if (i === 1) return [c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1];
+        return [c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1];
+      };
+      /* "XYZ" means X is applied first, so it sits rightmost. */
+      R = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+      (ROT_ORDER[mode] || "XYZ").split("").forEach(ch => { R = mul(axis("XYZ".indexOf(ch)), R); });
+    }
+    const S = [size[0],0,0,0, 0,size[1],0,0, 0,0,size[2],0, 0,0,0,1];
+    const M = mul(R, S);
+    M[12] = loc[0]; M[13] = loc[1]; M[14] = loc[2];
+    return M;
+  }
+  async function worldMatrix(ob, tools, depth){
+    const saved = ob.has("obmat") ? "obmat" : ob.has("object_to_world") ? "object_to_world" : "";
+    if (saved && ob.find(saved).f.count === 16){
+      const m = [];
+      for (let i = 0; i < 16; i++) m.push(ob.get(saved, i));
+      if (m.some(x => x !== 0)) return m;
+    }
+    let M = localMatrix(ob);
+    const parent = depth < 32 ? await tools.deref(ob.get("parent")) : null;
+    if (parent){
+      const inv = [];
+      for (let i = 0; i < 16; i++) inv.push(ob.get("parentinv", i));
+      M = mul(await worldMatrix(parent, tools, depth + 1), mul(inv.some(x => x) ? inv : [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1], M));
+    }
+    return M;
+  }
+
+  /* A mesh's corners and faces, from either way Blender has written them.
+     Up to 3.6 it wrote the old structures, MVert, MPoly and MLoop. From 4.0
+     it writes named attributes instead: "position" for the corners,
+     ".corner_vert" for which corner each face goes round, and an offsets
+     array saying where each face starts.
+
+     The 4.0 way is written to Blender's description of it but has not been
+     tried against a file from 4.0 or later. */
+  async function meshGeometry(me, tools){
+    const { deref, byOld, bytesOf, h } = tools;
+    const nv = me.any("totvert", "verts_num") || 0, nf = me.any("totpoly", "faces_num") || 0;
+    if (!nv || !nf || nv > MAX_READ_VERTS) return null;
+    const raw = async (key) => { const b = key && byOld.get(key); return b ? { b, bytes: await bytesOf(b) } : null; };
+    const dvOf = (bytes) => new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    async function layer(cd, name){
+      const c = me.sub(cd);
+      if (!c) return null;
+      const n = c.get("totlayer") || 0;
+      for (let i = 0; i < n; i++){
+        const L = await deref(c.get("layers"), i);
+        if (L && L.get("name") === name) return raw(L.get("data"));
+      }
+      return null;
+    }
+    const pos = new Float32Array(nv * 3);
+    const mv = me.has("mvert") ? await deref(me.get("mvert")) : null;
+    if (mv && mv.has("co")){
+      const stride = mv.st.size, co = mv.find("co").off, dv = mv.dv;
+      for (let i = 0; i < nv && (i + 1) * stride <= mv.b.length; i++)
+        for (let k = 0; k < 3; k++) pos[i * 3 + k] = dv.getFloat32(i * stride + co + k * 4, h.little);
+    } else {
+      const p = await layer("vdata", "position");
+      if (!p || p.bytes.length < nv * 12) return null;
+      const dv = dvOf(p.bytes);
+      for (let i = 0; i < nv * 3; i++) pos[i] = dv.getFloat32(i * 4, h.little);
+    }
+
+    const sizes = new Uint32Array(nf), mat = new Uint8Array(nf), smooth = new Uint8Array(nf);
+    let corners;
+    const mp = me.has("mpoly") ? await deref(me.get("mpoly")) : null;
+    if (mp && mp.has("loopstart")){
+      const ml = await deref(me.get("mloop"));
+      if (!ml || !ml.has("v")) return null;
+      const nl = Math.floor(ml.b.length / ml.st.size);
+      const lv = ml.find("v").off;
+      const ls = mp.find("loopstart").off, lt = mp.find("totloop").off;
+      const mn = mp.has("mat_nr") ? mp.find("mat_nr").off : -1, fl = mp.has("flag") ? mp.find("flag").off : -1;
+      const starts = new Uint32Array(nf);
+      let total = 0;
+      for (let i = 0; i < nf; i++){
+        const at = i * mp.st.size;
+        starts[i] = mp.dv.getInt32(at + ls, h.little);
+        sizes[i] = mp.dv.getInt32(at + lt, h.little);
+        if (mn >= 0) mat[i] = Math.min(255, Math.max(0, mp.dv.getInt16(at + mn, h.little)));
+        if (fl >= 0) smooth[i] = mp.b[at + fl] & 1;
+        total += sizes[i];
+      }
+      corners = new Uint32Array(total);
+      let o = 0;
+      for (let i = 0; i < nf; i++)
+        for (let k = 0; k < sizes[i]; k++){
+          const l = starts[i] + k;
+          corners[o++] = l < nl ? ml.dv.getUint32(l * ml.st.size + lv, h.little) : 0;
+        }
+    } else {
+      const offs = await raw(me.any("face_offset_indices", "poly_offset_indices"));
+      const cv = await layer("ldata", ".corner_vert");
+      if (!offs || !cv) return null;
+      const od = dvOf(offs.bytes), cd = dvOf(cv.bytes);
+      const nl = cv.bytes.length >> 2;
+      corners = new Uint32Array(nl);
+      for (let i = 0; i < nl; i++) corners[i] = cd.getInt32(i * 4, h.little);
+      for (let i = 0; i < nf; i++) sizes[i] = od.getInt32((i + 1) * 4, h.little) - od.getInt32(i * 4, h.little);
+      const mi = await layer("pdata", "material_index");
+      if (mi) { const d = dvOf(mi.bytes); for (let i = 0; i < nf && i * 4 < mi.bytes.length; i++) mat[i] = Math.min(255, Math.max(0, d.getInt32(i * 4, h.little))); }
+      const sharp = await layer("pdata", "sharp_face");
+      for (let i = 0; i < nf; i++) smooth[i] = sharp ? (sharp.bytes[i] ? 0 : 1) : 0;
+    }
+    for (let i = 0; i < corners.length; i++) if (corners[i] >= nv) corners[i] = 0;
+    return { pos, sizes, corners, mat, smooth };
+  }
+
+  /* Simplified to about `target` corners by laying a grid over the model
+     and merging every corner in a cell into one. Faces left with fewer
+     than three corners go. */
+  function simplify(g, target){
+    const n = g.pos.length / 3;
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++){
+      const x = g.pos[i * 3 + k]; if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x;
+    }
+    const span = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1;
+    /* How many cells across gives about the corners wanted is found by
+       halving the range: a surface's corners grow with the square of it and
+       a solid's with the cube, so it cannot be worked out straight off. */
+    let few = 2, many = 4096, cells = Math.round(Math.sqrt(target) * 2);
+    for (let tries = 0; tries < 16; tries++){
+      const cell = span / cells, map = new Map(), remap = new Uint32Array(n), sum = [];
+      for (let i = 0; i < n; i++){
+        const key = Math.floor((g.pos[i*3] - lo[0]) / cell) + "," + Math.floor((g.pos[i*3+1] - lo[1]) / cell) + "," +
+                    Math.floor((g.pos[i*3+2] - lo[2]) / cell);
+        let j = map.get(key);
+        if (j === undefined){ j = map.size; map.set(key, j); sum.push([0, 0, 0, 0]); }
+        remap[i] = j;
+        const s = sum[j]; s[0] += g.pos[i*3]; s[1] += g.pos[i*3+1]; s[2] += g.pos[i*3+2]; s[3]++;
+      }
+      const last = tries === 15 || many - few <= 1;
+      if (!last && map.size > target){ many = cells; cells = Math.floor((few + cells) / 2); continue; }
+      if (!last && map.size < target * 0.85){ few = cells; cells = Math.ceil((cells + many) / 2); continue; }
+      const pos = new Float32Array(map.size * 3);
+      sum.forEach((s, j) => { pos[j*3] = s[0] / s[3]; pos[j*3+1] = s[1] / s[3]; pos[j*3+2] = s[2] / s[3]; });
+      const sizes = [], corners = [], mat = [], smooth = [];
+      let at = 0;
+      for (let f = 0; f < g.sizes.length; f++){
+        const ring = [];
+        for (let k = 0; k < g.sizes[f]; k++){
+          const v = remap[g.corners[at + k]];
+          if (ring[ring.length - 1] !== v) ring.push(v);
+        }
+        at += g.sizes[f];
+        if (ring.length > 1 && ring[0] === ring[ring.length - 1]) ring.pop();
+        if (new Set(ring).size < 3) continue;
+        sizes.push(ring.length); ring.forEach(v => corners.push(v)); mat.push(g.mat[f]); smooth.push(g.smooth[f]);
+      }
+      return { pos, sizes: Uint32Array.from(sizes), corners: Uint32Array.from(corners),
+               mat: Uint8Array.from(mat), smooth: Uint8Array.from(smooth), simplified: 1 };
+    }
+    return g;
+  }
+
+  /* Typed arrays to base64 text, so the scene can sit in the work's JSON. */
+  function b64(arr){
+    const bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+    let s = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  /* Corners to whole numbers 0 to 65535 across the model's box: a hundred
+     thousandth of its size, finer than anything that shows. */
+  function packMesh(g){
+    const n = g.pos.length / 3;
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++){
+      const x = g.pos[i * 3 + k]; if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x;
+    }
+    const size = [0, 1, 2].map(k => (hi[k] - lo[k]) || 0);
+    const q = new Uint16Array(n * 3);
+    for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++)
+      q[i * 3 + k] = size[k] ? Math.round((g.pos[i * 3 + k] - lo[k]) / size[k] * 65535) : 0;
+    const wide = n > 65535, big = g.sizes.some(x => x > 255);
+    const out = { nv: n, nf: g.sizes.length, lo: lo.map(r6), sz: size.map(r6), p: b64(q),
+                  c: b64(wide ? Uint32Array.from(g.corners) : Uint16Array.from(g.corners)),
+                  s: b64(big ? Uint16Array.from(g.sizes) : Uint8Array.from(g.sizes)) };
+    if (wide) out.cw = 4;
+    if (big) out.sw = 2;
+    if (g.mat.some(x => x)) out.m = b64(g.mat);
+    const smooth = g.smooth.reduce((a, x) => a + x, 0);
+    if (smooth === g.smooth.length) out.sm = 1;
+    else if (smooth){
+      const bits = new Uint8Array(Math.ceil(g.smooth.length / 8));
+      g.smooth.forEach((x, i) => { if (x) bits[i >> 3] |= 1 << (i & 7); });
+      out.smb = b64(bits);
+    }
+    if (g.simplified) out.cut = 1;
+    return out;
+  }
+  const r6 = (x) => Math.round(x * 1e6) / 1e6;
+  const r4 = (x) => Math.round(x * 1e4) / 1e4;
+  function packedSize(m){ return (m.p.length + m.c.length + m.s.length + (m.m || "").length + (m.smb || "").length); }
+
+  async function sceneForView(drawable, shown, st, tools){
+    const meshes = [], meshIndex = new Map(), objects = [], cams = [], lights = [], notDrawn = [];
+    for (const d of drawable){
+      if (d.offInViewport || (shown && !shown.has(d.ob.block.at))) continue;
+      const x = (await worldMatrix(d.ob, tools, 0)).map(r6);
+      if (d.kind === "camera"){
+        const ca = await tools.deref(d.ob.get("data"));
+        cams.push({ o: d.i, x, lens: ca ? r4(ca.get("lens") || 50) : 50, sw: ca ? r4(ca.get("sensor_x") || 36) : 36,
+                    sh: ca ? r4(ca.get("sensor_y") || 24) : 24, fit: ca ? ca.get("sensor_fit") || 0 : 0,
+                    ortho: ca && ca.get("type") === 1 ? r4(ca.get("ortho_scale") || 6) : undefined,
+                    ds: ca ? r4(ca.get("drawsize") || 1) : 1 });
+        continue;
+      }
+      if (d.kind === "light"){
+        const la = await tools.deref(d.ob.get("data"));
+        lights.push({ o: d.i, x, t: la ? la.get("type") : 0, c: d.info && d.info.c });
+        continue;
+      }
+      if (d.kind !== "mesh"){
+        if (d.kind !== "empty") notDrawn.push(d.i);
+        continue;
+      }
+      const key = tools.at(d.ob.get("data"));
+      if (!meshIndex.has(key)){
+        const info = d.info;
+        const g = info && info.view ? await meshGeometry(info.view, tools) : null;
+        meshIndex.set(key, g ? meshes.push({ g }) - 1 : -1);
+      }
+      const mi = meshIndex.get(key);
+      if (mi < 0){ notDrawn.push(d.i); continue; }
+      const ob = { o: d.i, mesh: mi, x, c: d.colours.length ? d.colours : [DEFAULT_GREY] };
+      const mods = d.mods.filter(m => m.t === "mirror" || m.t === "array" || m.t === "subsurf");
+      if (mods.length) ob.mods = mods;
+      const skipped = d.mods.filter(m => m.t === "skip").map(m => m.n);
+      if (skipped.length) ob.skip = skipped;
+      objects.push(ob);
+    }
+
+    /* Packed, then the biggest simplified until the whole fits. */
+    /* The big models are cut by the same fraction until the whole fits,
+       each time from the original. The size a model packs to is only known
+       once it is packed (fewer than 65,536 corners halves the size of every
+       face), so the fraction is corrected a few times, shrinking when over
+       and growing back when well under, so nothing is cut more than it has
+       to be. */
+    const packed = meshes.map(m => packMesh(m.g));
+    const total = () => packed.reduce((a, m) => a + packedSize(m), 0);
+    const original = packed.map(m => m.nv);
+    const cuttable = packed.map((m, i) => i).filter(i => packedSize(packed[i]) > 20000);
+    for (let round = 0; round < 8 && cuttable.length; round++){
+      const t = total(), cut = cuttable.some(i => packed[i].cut);
+      if (t <= GEO_BUDGET && (!cut || t > GEO_BUDGET * 0.85)) break;
+      const scale = GEO_BUDGET * 0.93 / t;
+      for (const i of cuttable){
+        const want = Math.max(200, Math.round(packed[i].nv * scale));
+        packed[i] = want >= original[i] ? packMesh(meshes[i].g) : packMesh(simplify(meshes[i].g, want));
+      }
+    }
+    if (total() > GEO_BUDGET) return { v: 1, tooBig: 1 };
+    const out = { v: 1, meshes: packed, objects };
+    if (cams.length) out.cams = cams;
+    if (lights.length) out.lights = lights;
+    if (notDrawn.length) out.notDrawn = notDrawn;
+    return out;
   }
 
   /* ---------- the picture ----------

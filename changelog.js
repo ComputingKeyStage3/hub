@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"16.1", text:"Blender work opens in a 3D view in View Work. Turn it, zoom and pan with the mouse or Blender's own keys, look through the scene's camera, switch to wireframe, and click a model to pick it in the Outliner. Mirror, Array and Subdivision Surface are shown as Blender shows them. Very big scenes are simplified to stay small, and the view says which models were. Work handed in before this shows its picture as before." },
   { v:"16.0", text:"Blender work: a new hand-in task where students choose their .blend file. The file stays on their computer. Its objects, models, materials, modifiers, lights, camera and animation are read and kept, with Blender's preview as the picture or their render if they add one. It can carry a checklist ticked from the file, and full screen in View Work opens it in a Blender-style window with an Outliner." },
   { v:"15.9.3", text:"Results: Add the missing student no longer adds anyone to the class. Type their first name and surname and they go into the markbook for now, in the right place, with the MEAs pasted again to match Arbor. The cross beside their name takes them out." },
   { v:"15.9.2", text:"Units and lessons are always in number order, so a new 9.2 unit goes after 9.1, and they can no longer be dragged out of it. A document opens wider beside the lesson, with a bigger edge to drag, and a picture moves above its task when there is not room for both side by side." },

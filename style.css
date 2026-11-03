@@ -775,6 +775,8 @@ html[data-bg=dark] .shot-full-btn:hover,html[data-bg=night] .shot-full-btn:hover
   --ps-text:#d9d9d9; --ps-dim:#999; --ps-sel:#334d80; --ps-work:#393939; --ps-hover:#3a3a3a;
   --ps-chip:#3a4a63; --ps-chip-ink:#e8eefa; --bl-orange:#e87d0d;
   --bl-mesh:#f19c4b; --bl-light:#e9d35b; --bl-camera:#a3b8d8; --bl-text:#8fc98f; --bl-tool:#79a8e8;
+  --bl-view:#393939; --bl-btn:#545454; --bl-btn-ink:#e6e6e6; --bl-bar:rgba(30,30,30,.75);
+  --bl-dim-out:rgba(0,0,0,.45); --bl-frame-line:rgba(255,255,255,.55); --bl-shadow:rgba(0,0,0,.8);
 }
 .bl-logo{width:26px; background:var(--bl-orange); border:0; color:#fff}
 .bl-logo svg{width:16px; height:16px; display:block}
@@ -796,6 +798,35 @@ html[data-bg=dark] .shot-full-btn:hover,html[data-bg=night] .shot-full-btn:hover
 .bl-mat-words{min-width:0; overflow-wrap:anywhere}
 .bl-mat-words b{display:block; font-weight:600; color:var(--ps-bright)}
 .bl-mat-words span{display:block; font-size:12px; color:var(--ps-dim)}
+/* The tabs over the middle of the window, and the 3D view under them. */
+.bl-tab{border:0; border-right:1px solid var(--ps-line); background:transparent; color:var(--ps-dim); font:inherit; cursor:pointer}
+.bl-tab.on{background:var(--ps-panel); color:var(--ps-bright)}
+.bl-tab-note{display:flex; align-items:center; min-width:0; padding:0 10px; color:var(--ps-dim); font-size:12px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.bl-space{flex:1; min-height:0; position:relative}
+.bl-space[hidden],.ps-canvas[hidden]{display:none}
+.bv{position:absolute; inset:0; overflow:hidden; background:var(--bl-view)}
+.bv-canvas{display:block; width:100%; height:100%; touch-action:none; outline:none}
+.bv-bar{position:absolute; top:8px; left:50%; transform:translateX(-50%); display:flex; flex-wrap:wrap; justify-content:center;
+  gap:2px; max-width:calc(100% - 200px); padding:3px; border-radius:6px; background:var(--bl-bar)}
+.bv-btn{border:0; padding:5px 10px; border-radius:4px; background:var(--bl-btn); color:var(--bl-btn-ink); font:inherit; font-size:12px; cursor:pointer}
+.bv-btn.on{background:var(--ps-sel); color:var(--ps-bright)}
+.bv-label{position:absolute; top:10px; left:12px; white-space:pre; color:var(--ps-text); font-size:12px; line-height:1.5;
+  pointer-events:none; text-shadow:0 1px 2px var(--bl-shadow)}
+.bv-nav{position:absolute; top:46px; right:8px; width:80px; height:80px; cursor:pointer}
+.bv-notes{position:absolute; left:12px; right:12px; bottom:8px; color:var(--ps-dim); font-size:12px; pointer-events:none;
+  text-shadow:0 1px 2px var(--bl-shadow)}
+.bv-frame{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:none;
+  border:1px dashed var(--bl-frame-line); box-shadow:0 0 0 9999px var(--bl-dim-out)}
+.bv-frame[hidden]{display:none}
+.bv-none{margin:0; padding:24px; color:var(--ps-dim)}
+/* On a phone the label and the buttons would sit on top of each other, so
+   the buttons go to the bottom, above the notes. */
+@media (max-width:560px){
+  .bv-bar{top:auto; bottom:30px; max-width:calc(100% - 16px); flex-wrap:nowrap}
+  .bv-btn{padding:4px 7px; font-size:11px; white-space:nowrap}
+  .bv-nav{top:8px}
+}
 /* Narrow, as in View Work's frame beside the marking column or on a phone:
    the panels go under the picture rather than squeezing it to a strip. */
 @media (max-width:760px){
