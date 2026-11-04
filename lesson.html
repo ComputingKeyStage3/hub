@@ -165,15 +165,19 @@ let restoredData = null;       // last saved data we restored (responses re-appl
    shows the room how far they have really got. coverwork.js decides what
    counts as a go. This is the one kind of lesson where Continue looks at the
    work, and it is allowed to because nothing here can leave a child stuck:
-   wrong answers count, and the answer is given after two wrong tries.
+   most wrong answers count, and where a task has to end up right the answer
+   is given after two wrong tries.
 
-   A page opens one task at a time. Understood under a task shows the next
-   one, once that task has had a go, and I am confused beside it shows the
-   second explanation the teacher wrote, if there is one.
+   A page opens one task at a time. Understood under something to read, or
+   Finished under something to do, shows the next one once that task has had
+   a go, and Finished presses itself when everything in it is right. A task
+   with its own Check button has no Finished at all: Check does that job. I am
+   confused beside it shows the second explanation the teacher wrote, if
+   there is one.
 
    All of it is kept under __cover beside the work, in the row it is saved in:
    ok        { task id: true } once Understood has been pressed
-   checked   { task id: true } once Check has been pressed on a short answer or table
+   checked   { task id: the answer Check was last pressed on }, short answers and tables
    confused  { task id: true } once I am confused has been pressed
    tries     { task id: different wrong answers so far }
    first     { quiz id: [got, out of] } from the first time through
@@ -183,6 +187,7 @@ let restoredData = null;       // last saved data we restored (responses re-appl
 const COVER_READ_MS = 3000;       // less than this a question is not being read
 const COVER_IDLE_MS = 60000;      // no touch for this long and the clock stops
 const COVER_TICK_MS = 5000;
+const COVER_AUTO_MS = 900;        // long enough to read "That is right" before the page moves
 let coverS = null, coverSeen = null, coverNoteOn = false, coverTicking = false;
 let coverLastTouch = 0;
 let coverNoteFor = null;          // the one task the note is about, if Understood raised it
@@ -206,7 +211,10 @@ const coverOn = () => !!(lesson && lesson.cover) && !spectate;
 const coverAsk = {
   read: (id) => { const f = fields[id]; try{ return f && f.get ? f.get() : undefined; }catch(e){ return undefined; } },
   ok: (id) => !!coverData().ok[id],
-  checked: (id) => !!coverData().checked[id],
+  /* The answer on screen, not just any answer: changing a wrong one to the
+     right one has to be checked again, or the page would open by itself and
+     say it was right before they asked. */
+  checked: (id) => coverData().checked[id] === JSON.stringify(coverAsk.read(id)),
   tries: (id) => coverData().tries[id] || 0,
   score: (b, v) => lessonTaskScore(b, v),
   started: (b, v) => gateAttempted(b, v)
@@ -324,7 +332,7 @@ function coverRow(child, last, opened){
   const buttons = el("div","cover-btns");
   row.appendChild(buttons);
   if (!last){
-    const ok = el("button","btn-primary cover-ok","Understood");
+    const ok = el("button","btn-primary cover-ok", window.coverWork.isWork(child) ? "Finished" : "Understood");
     ok.type = "button";
     ok.dataset.task = child.id;
     ok.addEventListener("click", () => {
@@ -343,7 +351,24 @@ function coverRow(child, last, opened){
       markDirty();
       opened();
     });
-    buttons.appendChild(ok);
+    /* With a Check button of its own, that is what they press. This one stays
+       out of the page, and is only what the task's being right presses. */
+    const ownCheck = window.coverWork.selfCheck(child);
+    if (!ownCheck) buttons.appendChild(ok);
+    /* Asked again when the time is up, in case the answer has been changed.
+       A page they have left waits for them to come back: coverOnShow asks
+       again, and the next task should open in front of them. */
+    let waiting = false;
+    const stillDue = () => !coverData().ok[child.id] && (ownCheck
+      ? !window.coverWork.need(child, coverAsk) : window.coverWork.allRight(child, coverAsk));
+    coverRows.push(() => {
+      if (waiting || !restoreDone || !stillDue()) return;
+      waiting = true;
+      setTimeout(() => {
+        waiting = false;
+        if (stillDue() && row.offsetParent !== null) ok.click();
+      }, COVER_AUTO_MS);
+    });
   }
   if (child.confused){
     const help = el("div","cover-help", child.confused);
@@ -8328,7 +8353,7 @@ function wrapExtra(b, build, eyebrow){
      table or a picture must not offer its own Check button there. */
   const made = build(b, { changed: markDirty,
                           tried: coverOn() ? (value) => coverTried(b.id, value) : null,
-                          pressed: coverOn() ? () => { coverData().checked[b.id] = true; } : null,
+                          pressed: coverOn() ? () => { coverData().checked[b.id] = JSON.stringify(coverAsk.read(b.id)); } : null,
                           assessment: !!(lesson && lesson.assessment && !lesson.practical) });
   fields[b.id] = { get: made.get, set: made.set };
   return {
@@ -8557,6 +8582,8 @@ function rQuiz(b){
     });
     scoreCard.appendChild(again);
     if (tell) tell();
+    /* Seeing the score saves nothing, so nothing else tells a Cover lesson. */
+    if (coverOn()) coverRows.forEach(paint => paint());
   }
 
   btn.addEventListener("click", () => {
@@ -10347,7 +10374,7 @@ function rShort(b){
         return;
       }
       const r = window.shortAnswer.mark(b, ans.value);
-      if (coverOn()) coverData().checked[b.id] = true;
+      if (coverOn()) coverData().checked[b.id] = JSON.stringify(coverAsk.read(b.id));
       fb.hidden = false;
       fb.dataset.verdict = r.ok ? "correct" : "incorrect";
       fb.innerHTML = "";
@@ -10373,7 +10400,7 @@ function rShort(b){
         /* Nobody in the room can help, so a Cover lesson gives the answer
            after two wrong tries rather than leave them on it for good. */
         if (coverOn() && coverTried(b.id, ans.value.trim().toLowerCase()) >= 2)
-          fb.appendChild(el("span","", "The answer is " + window.shortAnswer.accepted(b)[0] + ". You can carry on."));
+          fb.appendChild(el("span","", "The answer is " + window.shortAnswer.accepted(b)[0] + ". Type it in and press Check answer."));
         else fb.appendChild(el("span","", "Check your spelling and try again."));
       }
       markDirty();

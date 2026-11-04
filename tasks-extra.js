@@ -1280,6 +1280,10 @@
       right = got === spots.length && spots.length > 0;
       note.hidden = false;
       note.textContent = got + " of " + spots.length + " in the right place.";
+      /* After right is set: what was checked is compared with what is saved. */
+      if (ctx.pressed) ctx.pressed();
+      if (ctx.tried && !right && ctx.tried(JSON.stringify(placed)) >= 2)
+        note.textContent += " You can carry on.";
       ctx.changed();
     });
 
@@ -1389,6 +1393,9 @@
         holder.dataset.verdict = right ? "yes" : "no";
         said.dataset.verdict = right ? "yes" : "no";
         said.textContent = right ? "That is the right spot." : "Not quite. Have another go.";
+        if (ctx.pressed) ctx.pressed();
+        if (ctx.tried && !right && ctx.tried(JSON.stringify(at)) >= 2)
+          said.textContent = "Not quite. You can carry on.";
         ctx.changed();
       });
       s.appendChild(btn);
@@ -1856,7 +1863,7 @@
            different in the boxes brings the answers out. */
         if (ctx.tried && right < markable.length &&
             ctx.tried(boxes.map(x => x.input.value.trim().toLowerCase()).join("|")) >= 2)
-          fb.textContent = "Here are the answers: " + markable.map(x => x.cell.t).join(", ") + ". You can carry on.";
+          fb.textContent = "Here are the answers: " + markable.map(x => x.cell.t).join(", ") + ". Type them in and press Check the table.";
         ctx.changed();
       });
       row.appendChild(btn);

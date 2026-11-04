@@ -1,11 +1,13 @@
 /* What counts as having had a real go at a task in a Cover lesson.
 
    A Cover lesson runs with nobody who can teach it and nobody who can open a
-   page. So a student earns the next page by attempting this one, never by
-   getting it right: a child stuck on a question with nobody to ask is worse
-   than a wrong answer. Everything here asks "did they try?", and the two tasks
-   that can be failed for ever, a short answer and a table, give the answer
-   after two wrong tries so that the question always has an end.
+   page. So a student earns the next page by attempting this one: a child stuck
+   on a question with nobody to ask is worse than a wrong answer. Most of this
+   asks "did they try?". A task with a Check button of its own is the exception:
+   that button stands in for Finished, and the task has to end up right. It
+   still cannot strand anybody. A short answer and a table give the answer
+   after two wrong tries, to type in. A label or a spot on a picture cannot be
+   typed, so two wrong tries is enough there.
 
    Only the tasks listed in need() can hold a page. Anything else (code, a
    Scratch project, a file, a video) depends on something that might not load
@@ -62,6 +64,22 @@
     return "";
   }
 
+  /* Whether a task has its own Check button, which then does the job of
+     Finished. A task with no answers set has no such button: no markable boxes
+     in a table, no accepted answers on a short answer, nothing on a picture. */
+  function selfCheck(b){
+    if (!b) return false;
+    if (b.type === "hotspot") return true;
+    if (b.type === "label") return Array.isArray(b.spots) && b.spots.length > 0;
+    if (b.type === "short"){
+      const list = window.shortAnswer ? window.shortAnswer.accepted(b) : b.answers;
+      return Array.isArray(list) && list.length > 0;
+    }
+    if (b.type === "table") return (b.rows || []).some(row => (row || []).some(cell =>
+      cell && cell.fill && String(cell.t == null ? "" : cell.t).trim() !== ""));
+    return false;
+  }
+
   /* What is still needed from one task, in words a student can act on, or ""
      if nothing is. ctx gives what only the lesson page knows:
        read(id)     what the task holds now
@@ -77,17 +95,22 @@
         const ticked = v && Array.isArray(v.checked) ? v.checked.filter(Boolean).length : 0;
         return n && ticked < n ? "Answer every question in the quiz." : "";
       }
-      case "short": case "table": {
+      case "short": case "table": case "label": case "hotspot": {
+        /* Nothing to get right, such as a table of open boxes: having a go is
+           all there is, and it has no Check, so it keeps Finished. */
+        if (!selfCheck(b)) return ctx.started(b, v) ? "" : "Fill this in.";
         const sc = ctx.score(b, v);
-        /* A table of open boxes has nothing to get right. */
-        if (!sc || !sc.max) return ctx.started(b, v) ? "" : "Fill in the table.";
-        /* Right only counts once Check has been pressed. Otherwise I am
-           confused going away the moment the right word was typed would
-           tell them it was right before they asked. */
+        /* Right only counts once Check has been pressed on that answer.
+           Otherwise the page would open the moment the right word was typed,
+           and say it was right before they asked. */
         const checked = !ctx.checked || ctx.checked(b.id);
-        if ((sc.got >= sc.max && checked) || ctx.tries(b.id) >= 2) return "";
-        return b.type === "table" ? "Fill in the table and press Check."
-                                  : "Answer the question and press Check answer.";
+        if (sc && sc.got >= sc.max && checked) return "";
+        const untypable = b.type === "label" || b.type === "hotspot";
+        if (untypable && ctx.tries(b.id) >= 2) return "";
+        return b.type === "table" ? "Fill in the table and press Check the table."
+             : b.type === "label" ? "Label the picture and press Check my labels."
+             : b.type === "hotspot" ? "Click on the picture and press Check my answer."
+             : "Answer the question and press Check answer.";
       }
       case "blanks": {
         const gaps = (String(b.text || "").match(/\[\[/g) || []).length;
@@ -96,8 +119,6 @@
       }
       case "order":   return ctx.started(b, v) ? "" : "Put the list in order.";
       case "mc":      return ctx.started(b, v) ? "" : "Choose an answer.";
-      case "hotspot": return ctx.started(b, v) ? "" : "Click on the picture.";
-      case "label":   return ctx.started(b, v) ? "" : "Label the picture.";
       case "question": return writtenNeed(b, v);
       case "storyboard": return storyNeed(b, v);
       case "mindmap":
@@ -120,6 +141,22 @@
   const WORK = ["quiz","short","table","blanks","order","mc","hotspot","label","question",
                 "storyboard","mindmap","board","notes","choice","group"];
   const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo;
+  /* Everything right, so there is nothing left to decide and Finished can be
+     pressed for them. A quiz waits for its score to be up, and a short answer
+     or a table for Check: moving on any sooner would take the page away from
+     the feedback, or say it was right before they asked. Fill the gaps, put
+     in order and multiple choice have no Check in a lesson, so there it is
+     the moment the last piece is right. A task with nothing to mark never
+     gets here, and keeps its button. */
+  function allRight(b, ctx){
+    if (!isWork(b)) return false;
+    const v = ctx.read(b.id);
+    const sc = ctx.score(b, v);
+    if (!sc || !sc.max || sc.got < sc.max) return false;
+    if (b.type === "quiz") return !!(v && v.done);
+    if (b.type === "short" || b.type === "table") return !ctx.checked || ctx.checked(b.id);
+    return true;
+  }
   function listNeed(blocks, ctx){
     for (const b of blocks || []){
       const n = need(b, ctx);
@@ -130,15 +167,17 @@
   /* Every task on a page still wanting something, top level only: a task
      inside a choice or a group is scrolled to through the thing around it.
      Extension tasks are never in the way. Each task but the last also wants
-     its Understood pressed, ctx.ok saying which have been: the last has
-     nothing under it to open, so it has no such button. */
+     its button pressed, Understood or Finished, ctx.ok saying which have
+     been: the last has nothing under it to open, so it has no such button. */
   function left(page, ctx){
     const kids = (page && page.type === "page" ? (page.blocks || []) : (page ? [page] : []))
       .filter(b => b.type !== "extension");
     const out = [];
     kids.forEach((b, i) => {
       const words = need(b, ctx) ||
-        (ctx.ok && i < kids.length - 1 && !ctx.ok(b.id) ? "Press Understood when you are ready." : "");
+        (ctx.ok && i < kids.length - 1 && !ctx.ok(b.id)
+          ? (selfCheck(b) ? "Just a moment."
+             : isWork(b) ? "Press Finished when you are done." : "Press Understood when you are ready.") : "");
       if (words) out.push({ id: b.id, words: words });
     });
     return out;
@@ -174,5 +213,5 @@
              confused: Object.keys(c.confused || {}).length };
   }
 
-  window.coverWork = { need, left, junk, quizzes, facts, isWork };
+  window.coverWork = { need, left, junk, quizzes, facts, isWork, allRight, selfCheck };
 })();

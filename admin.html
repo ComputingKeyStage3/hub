@@ -2653,8 +2653,8 @@ function lessonCardsAndCover(list, box){
   head.textContent = "Cover lessons (" + cover.length + ")";
   fold.appendChild(head);
   fold.appendChild(el("p","cover-fold-note",
-    "For the cover teacher: students sign in and open the lesson. They work down each page, pressing Understood " +
-    "to see the next task. They are finished when they reach the last screen, which shows how many pages they did."));
+    "For the cover teacher: students sign in and open the lesson. They work down each page, pressing Understood or " +
+    "Finished to see the next task. They are finished when they reach the last screen, which shows how many pages they did."));
   const holder = el("div");
   fold.appendChild(holder);
   box.appendChild(fold);
