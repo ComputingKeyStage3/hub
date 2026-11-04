@@ -591,7 +591,7 @@
   /* ===================================================================
      STORYBOARD
      { type:"storyboard", title, task, panels, names:[...], timing, fps,
-       minSecs, maxSecs }
+       minSecs, maxSecs, flip, demo, starter:[{strokes}], keys:[...], speeds:[...] }
      A row of panels, each a small drawing, a sentence and how long it
      lasts. The drawing is kept as strokes, like a whiteboard, so six panels
      are tens of KB rather than six pictures.
@@ -601,6 +601,12 @@
      lands in the same place. It also means nothing here has to measure the
      canvas before it can draw, which a page that has not been shown yet
      cannot do.
+
+     flip makes it a flip book: pictures only, called frames, played on a loop
+     at the speed picked under it. demo takes the drawing tools away as well,
+     so a lesson can show an animation moving with no sound and nobody to
+     explain it: starter holds the drawings, keys the frames marked as
+     keyframes, and nothing is saved.
      =================================================================== */
   const STORY_W = 640, STORY_H = 360;
   /* About 25KB of JSON a panel at most. Nobody drawing a sketch reaches it,
@@ -661,14 +667,23 @@
   const storySaid = (n) => String(Math.round(n * 100) / 100);
 
   window.rStoryboard = function(b, ctx){
-    const wanted = Math.max(2, Math.min(12, Number(b.panels) || 6));
+    const flip = b.flip === true, demo = flip && b.demo === true;
+    const starter = Array.isArray(b.starter) ? b.starter : [];
+    /* A flip book needs more drawings than a plan needs panels. */
+    const wanted = Math.max(2, Math.min(flip ? 24 : 12, Number(b.panels) || starter.length || 6));
     const names = Array.isArray(b.names) ? b.names : [];
-    const timing = b.timing !== false;
+    const keys = Array.isArray(b.keys) ? b.keys : [];
+    const speeds = Array.isArray(b.speeds) && b.speeds.length ? b.speeds : [2, 6, 12];
+    let speed = speeds[Math.min(1, speeds.length - 1)];
+    const timing = !flip && b.timing !== false;
     const fps = Number(b.fps) || 24;
     const minSecs = Number(b.minSecs) || 0, maxSecs = Number(b.maxSecs) || 0;
 
     const blank = () => ({ strokes: [], text: "", secs: "" });
-    let panels = Array.from({ length: wanted }, blank);
+    const opening = (i) => Object.assign(blank(),
+      starter[i] && Array.isArray(starter[i].strokes)
+        ? { strokes: JSON.parse(JSON.stringify(starter[i].strokes)) } : {});
+    let panels = Array.from({ length: wanted }, (x, i) => opening(i));
     let at = 0;
     let tool = "pen", colour = "#1D1D1B", width = 4;
     let drawing = null;
@@ -676,12 +691,13 @@
        without an Are you sure. Not saved: it is only for the next press. */
     const cleared = new Map();
 
-    const s = make("section", "storyboard");
+    const s = make("section", "storyboard" + (flip ? " story-flip" : "") + (demo ? " story-demo" : ""));
     const inner = make("div", "story-inner");
     s.appendChild(inner);
 
     /* --- the tools --- */
     const bar = make("div", "board-bar story-bar");
+    bar.hidden = demo;
     inner.appendChild(bar);
     const svg = (d) => '<svg viewBox="0 0 20 20"><path d="' + d + '"/></svg>';
     const toolBtn = (icon, title, fn) => {
@@ -764,6 +780,7 @@
     words.maxLength = STORY_TEXT;
     words.placeholder = "What can we see? What moves?";
     side.appendChild(words);
+    wordsLabel.hidden = words.hidden = flip;
 
     let secsBox = null, framesNote = null;
     if (timing){
@@ -783,7 +800,7 @@
     copyBtn.type = "button";
     copyBtn.title = "Start from the panel before, then change what has moved";
     side.appendChild(copyBtn);
-    const nextBtn = make("button", "btn-ghost story-next", "Next panel");
+    const nextBtn = make("button", "btn-ghost story-next", flip ? "Next frame" : "Next panel");
     nextBtn.type = "button";
     side.appendChild(nextBtn);
 
@@ -791,9 +808,11 @@
     const strip = make("div", "story-strip");
     inner.appendChild(strip);
     let thumbs = [];
-    const filled = (p) => p.strokes.length > 0 && String(p.text).trim() !== "";
+    const filled = (p) => p.strokes.length > 0 && (flip || String(p.text).trim() !== "");
     const started = (p) => p.strokes.length > 0 || String(p.text).trim() !== "";
-    const nameOf = (i) => "Panel " + (i + 1) + (names[i] ? ": " + names[i] : "");
+    const isKey = (i) => keys.indexOf(i + 1) >= 0;
+    const nameOf = (i) => (flip ? "Frame " : "Panel ") + (i + 1) +
+      (isKey(i) ? ": a keyframe" : names[i] ? ": " + names[i] : "");
 
     function buildStrip(){
       strip.innerHTML = "";
@@ -814,9 +833,22 @@
 
     const foot = make("div", "story-foot");
     inner.appendChild(foot);
-    const playBtn = make("button", "btn-primary story-play", "Play my storyboard");
+    const playWords = flip ? "Play" : "Play my storyboard";
+    const playBtn = make("button", "btn-primary story-play", playWords);
     playBtn.type = "button";
     foot.appendChild(playBtn);
+    /* Changed while it plays, so the same drawings can be felt to speed up. */
+    const speedBtns = !flip ? [] : speeds.map(n => {
+      const btn = make("button", "btn-ghost story-speed", n + " a second");
+      btn.type = "button";
+      btn.title = "Play " + n + " frames every second";
+      btn.addEventListener("click", () => { speed = n; paintSpeeds(); });
+      foot.appendChild(btn);
+      return { btn: btn, n: n };
+    });
+    function paintSpeeds(){
+      speedBtns.forEach(x => x.btn.classList.toggle("on", x.n === speed));
+    }
     const total = make("p", "story-total");
     foot.appendChild(total);
 
@@ -825,14 +857,16 @@
       if (!t) return;
       storyPaint(t.c, panels[i].strokes, 192, 108);
       t.btn.classList.toggle("on", i === at);
-      t.btn.classList.toggle("done", filled(panels[i]));
-      t.label.textContent = (filled(panels[i]) ? "✓ " : "") + (i + 1);
+      t.btn.classList.toggle("done", !demo && filled(panels[i]));
+      t.btn.classList.toggle("key", isKey(i));
+      t.label.textContent = (!demo && filled(panels[i]) ? "✓ " : "") + (i + 1);
     }
     function paintTotals(){
       const done = panels.filter(filled).length, all = panels.length;
+      if (demo){ total.textContent = all + " frames"; return; }
       /* the same encouragement a written answer gets, and nothing to dismiss */
       const cheer = done === all ? "Looking good!" : done * 2 >= all ? "Keep going!" : "";
-      let line = done + " of " + all + " panels finished." + (cheer ? " " + cheer : "");
+      let line = done + " of " + all + (flip ? " frames drawn." : " panels finished.") + (cheer ? " " + cheer : "");
       if (timing){
         const secs = window.storySeconds(panels);
         if (secs > 0){
@@ -851,7 +885,7 @@
     }
     function paintCopy(){
       const before = panels[at - 1];
-      copyBtn.hidden = !(before && before.strokes.length && !panels[at].strokes.length);
+      copyBtn.hidden = demo || !(before && before.strokes.length && !panels[at].strokes.length);
     }
     /* After anything changes in the panel on screen */
     function paintPanel(){
@@ -862,14 +896,17 @@
       full.hidden = true;
     }
     function show(i){
+      const was = at;
       at = Math.max(0, Math.min(panels.length - 1, i));
       const p = panels[at];
       panelName.textContent = nameOf(at);
       canvas.setAttribute("aria-label", "Drawing for panel " + (at + 1));
       words.value = p.text;
       if (secsBox) secsBox.value = p.secs === "" ? "" : p.secs;
-      nextBtn.hidden = at === panels.length - 1;
-      thumbs.forEach((t, k) => paintThumb(k));
+      nextBtn.hidden = demo || at === panels.length - 1;
+      /* Only the two that changed: this runs twelve times a second in a
+         flip book, and repainting every thumbnail each time is the slow part. */
+      paintThumb(was);
       paintFrames();
       paintPanel();
     }
@@ -903,7 +940,7 @@
     }
     const pointsIn = (p) => p.strokes.reduce((n, st) => n + st.points.length, 0);
     canvas.addEventListener("pointerdown", (e) => {
-      if (e.button) return;
+      if (e.button || demo) return;
       e.preventDefault();
       stopPlay();
       if (pointsIn(panels[at]) >= STORY_POINTS){
@@ -946,7 +983,7 @@
       if (playTimer === null) return;
       clearTimeout(playTimer);
       playTimer = null;
-      playBtn.textContent = "Play my storyboard";
+      playBtn.textContent = playWords;
       s.classList.remove("story-playing");
     }
     playBtn.addEventListener("click", () => {
@@ -959,6 +996,18 @@
       playBtn.textContent = "Stop";
       s.classList.add("story-playing");
       let n = 0;
+      if (flip){
+        /* Round and round until stopped, reading the speed each time so a
+           new one takes effect at once. A page that has been left stops it:
+           offsetParent is empty once the section is out of sight. */
+        const turn = () => {
+          if (s.offsetParent === null){ stopPlay(); return; }
+          show(order[n++ % order.length]);
+          playTimer = setTimeout(turn, 1000 / speed);
+        };
+        turn();
+        return;
+      }
       const step = () => {
         const i = order[n++];
         show(i);
@@ -971,15 +1020,19 @@
       step();
     });
 
+    const paintStrip = () => thumbs.forEach((t, k) => paintThumb(k));
     buildStrip();
     show(0);
+    paintStrip();
     paintTools();
+    paintSpeeds();
 
     return {
       section: s,
-      get: () => ({ panels: panels }),
+      /* A demo is the teacher's drawing, so there is nothing of theirs to keep. */
+      get: () => demo ? null : { panels: panels },
       set: (v) => {
-        if (!v || !Array.isArray(v.panels)) return;
+        if (demo || !v || !Array.isArray(v.panels)) return;
         const got = v.panels.map(p => ({
           strokes: Array.isArray(p && p.strokes) ? p.strokes : [],
           text: String((p && p.text) || "").slice(0, STORY_TEXT),
@@ -988,13 +1041,14 @@
         }));
         /* Fewer panels set in the builder after work was saved must not lose
            the ones a student already drew, so the longer of the two wins. */
-        while (got.length < wanted) got.push(blank());
+        while (got.length < wanted) got.push(opening(got.length));
         panels = got;
         cleared.clear();
         buildStrip();
         show(0);
+        paintStrip();
       },
-      done: () => panels.every(started)
+      done: () => demo || panels.every(started)
     };
   };
 
@@ -1785,6 +1839,7 @@
       const row = make("div", "tt-actions");
       const btn = make("button", "btn-primary tt-check", "Check the table");
       btn.addEventListener("click", () => {
+        if (ctx.pressed) ctx.pressed();
         let right = 0;
         boxes.forEach(x => {
           if (!x.answer){ x.td.dataset.verdict = ""; return; }
@@ -1797,6 +1852,11 @@
           ? "All " + markable.length + " right."
           : right + " out of " + markable.length + " right so far. Have another go at the others.";
         fb.dataset.stage = right === markable.length ? "all" : right ? "some" : "none";
+        /* A Cover lesson has nobody to ask, so two goes with something
+           different in the boxes brings the answers out. */
+        if (ctx.tried && right < markable.length &&
+            ctx.tried(boxes.map(x => x.input.value.trim().toLowerCase()).join("|")) >= 2)
+          fb.textContent = "Here are the answers: " + markable.map(x => x.cell.t).join(", ") + ". You can carry on.";
         ctx.changed();
       });
       row.appendChild(btn);

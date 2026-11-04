@@ -306,6 +306,11 @@ function editTask(b, body, ctx){
   const k = editorKit(b, body, ctx);
   const edit = EDITORS[b.type];
   if (edit) edit(b, k);
+  /* Written here rather than in each editor, because in a Cover lesson every
+     task can have one. */
+  if (lesson.cover && b.type !== "page" && b.type !== "extension")
+    k.F("Another way to explain it (optional)", "confused", { area:true, rows:3,
+      help:"Shown when a student presses I am confused. Say the same idea differently, without giving the answer. Left empty, the button is not shown." });
   k.finish();
 }
 
@@ -1761,11 +1766,12 @@ EDITORS.storyboard = function(b, k){
   if (b.namesText === undefined) b.namesText = (b.names || []).join("\n");
   F("Heading (optional)", "title");
   F("Instruction (optional)", "task", { area:true, rows:2 });
-  F("How many panels", "panels", { num:true, help:"Between 2 and 12." });
+  F("How many panels", "panels", { num:true, help:"Between 2 and 12, or up to 24 for a flip book." });
   F("Panel headings (optional)", "namesText", { area:true, rows:4,
     help:"One line for each panel, in order. A panel with no line is only numbered." });
   settings(() => {
-    toggleRow([["timing","Students say how long each panel lasts", true]]);
+    toggleRow([["timing","Students say how long each panel lasts", true],
+               ["flip","Flip book: pictures only, played on a loop", false]]);
     F("Shortest it should be, in seconds", "minSecs", { num:true,
       help:"Only ever a suggestion under the panels. Leave at 0 for none." });
     F("Longest it should be, in seconds", "maxSecs", { num:true,

@@ -374,6 +374,7 @@
       const alts = versionsOf(id);
       if (alts.length) head.appendChild(el("span","statechip open", alts.length + " version" + (alts.length === 1 ? "" : "s")));
       if (l.assessment) head.appendChild(el("span","statechip shut","Assessment"));
+      if (l.cover) head.appendChild(el("span","statechip open","Cover"));
       card.appendChild(head);
 
       /* pages, tasks and when, filled in once the lesson has been read */

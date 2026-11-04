@@ -220,7 +220,7 @@
      pages, and they stay open. Home learning never locks: there is nobody at
      home to open the next page. lesson.html keeps its own copy of this. */
   function pagesLock(lesson){
-    return !!lesson && !lesson.homework && (!lesson.assessment || !!lesson.practical);
+    return !!lesson && !lesson.homework && !lesson.cover && (!lesson.assessment || !!lesson.practical);
   }
   function defaultLocks(lesson){
     const out = new Set();

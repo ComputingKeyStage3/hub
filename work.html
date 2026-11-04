@@ -87,6 +87,7 @@
       <!-- whose work it is, on the heading's own line, to leave the room for
            the boxes -->
       <h3 class="fbhead">Feedback <span id="fbWho"></span></h3>
+      <div class="cover-facts-box" id="coverFacts" hidden></div>
       <!-- Practice only: a sandbox is several programs and feedback belongs
            to one of them, so the boxes below say which. It follows whatever
            is open in the frame, and opens one when it is changed here. -->
@@ -153,6 +154,7 @@
 <script src="menus.js"></script>
 <script src="settings.js"></script>
 <script src="shortmatch.js"></script>
+<script src="coverwork.js"></script>
 <script src="ordermarks.js"></script>
 <script src="progressmath.js"></script>
 <script src="voice.js"></script>
@@ -1324,6 +1326,37 @@ function replayHeld(held){
    full. The first letter or two of it, which this used to add, made "Ada
    Bell Ad", which read as a name cut short rather than as a way of telling
    two Ada Bells apart. */
+/* What a Cover lesson kept about how the work was done, beside the work, so
+   who rushed can be seen from the list without opening every student. */
+function coverFactsOf(row){
+  if (!row || !lessonJson || !lessonJson.cover || !window.coverWork) return null;
+  let d = row.data;
+  try{ if (typeof d === "string") d = JSON.parse(d); }catch(e){ return null; }
+  return d && d.__cover ? window.coverWork.facts(lessonJson, d.__cover) : null;
+}
+function coverListNote(row){
+  const f = coverFactsOf(row);
+  if (!f) return "";
+  return "  \u00b7 " + f.pages + "/" + f.total + " pages \u00b7 " + f.mins + " min" +
+         (f.rushed.length ? " \u00b7 needs looking at" : "");
+}
+function paintCoverFacts(row){
+  const box = $("coverFacts");
+  const f = coverFactsOf(row);
+  box.hidden = !f;
+  box.innerHTML = "";
+  if (!f) return;
+  const line = (text, cls) => {
+    const p = document.createElement("p");
+    if (cls) p.className = cls;
+    p.textContent = text;
+    box.appendChild(p);
+  };
+  line(f.pages + " of " + f.total + " pages finished, " + f.mins + (f.mins === 1 ? " minute" : " minutes") + " working");
+  if (f.scores.length) line("First tries: " + f.scores.map(s => s.title + " " + s.got + "/" + s.max).join(", "));
+  if (f.confused) line("Asked for the other explanation on " + f.confused + (f.confused === 1 ? " task" : " tasks"));
+  if (f.rushed.length) line("Answered too quickly to have read: " + f.rushed.join(", "), "cover-facts-warn");
+}
 function pickerDisambig(st, group){
   if (group.length < 2 || !st.username) return "";
   return " (" + st.username + ")";
@@ -1344,7 +1377,8 @@ function paintPicker(){
     const row = rows.find(r => r.username === st.username);
     const has = PRACTICE ? programsOf(row).length : !!row;
     o.textContent = st.display_name + pickerDisambig(st, byName[st.display_name]) +
-      (marked ? "  \u00b7 \u2713 Marked" : has ? "" : (PRACTICE ? "  \u00b7 no programs" : "  \u00b7 nothing saved"));
+      (marked ? "  \u00b7 \u2713 Marked" : has ? "" : (PRACTICE ? "  \u00b7 no programs" : "  \u00b7 nothing saved")) +
+      coverListNote(row);
     sel.appendChild(o);
   });
   sel.value = String(idx);
@@ -1423,6 +1457,7 @@ function showStudent(i, step){
     frameGo(want.url);
   }
   $("fbWho").textContent = st.display_name + " · " + st.username + (row ? "" : " · nothing saved");
+  paintCoverFacts(row);
   /* a practical assessment is marked by hand, so the boxes appear */
   paintMarking(st.username);
   loadFeedback(row);

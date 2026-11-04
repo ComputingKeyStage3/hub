@@ -16,6 +16,7 @@
 <script src="autograder.js"></script>
 <script src="scratchhub.js"></script>
 <script src="shortmatch.js"></script>
+<script src="coverwork.js"></script>
 <script src="ordermarks.js"></script>
 <script src="voice.js"></script>
 <script src="richtext.js"></script>
@@ -79,6 +80,7 @@
   </div>
 </div>
 
+<p class="cover-left no-print" id="coverLeft" role="status" hidden></p>
 <div class="dock" id="dock">
   <button class="btn-ghost" id="backBtn">&larr; Back</button>
   <div class="mid"><button class="btn-ghost dock-rubric" id="rubricBtn" hidden>Show rubric</button></div>
@@ -156,6 +158,234 @@ const SKIP_MODE = spectate;
 let finished = false;          // set once they press Finish
 let assessStarted = Date.now();
 let restoredData = null;       // last saved data we restored (responses re-apply from it)
+
+/* ---------- a Cover lesson ----------
+   Run with nobody who can teach it and nobody who can open a page, so a
+   student earns the next page by having a go at this one, and the screen
+   shows the room how far they have really got. coverwork.js decides what
+   counts as a go. This is the one kind of lesson where Continue looks at the
+   work, and it is allowed to because nothing here can leave a child stuck:
+   wrong answers count, and the answer is given after two wrong tries.
+
+   A page opens one task at a time. Understood under a task shows the next
+   one, once that task has had a go, and I am confused beside it shows the
+   second explanation the teacher wrote, if there is one.
+
+   All of it is kept under __cover beside the work, in the row it is saved in:
+   ok        { task id: true } once Understood has been pressed
+   checked   { task id: true } once Check has been pressed on a short answer or table
+   confused  { task id: true } once I am confused has been pressed
+   tries     { task id: different wrong answers so far }
+   first     { quiz id: [got, out of] } from the first time through
+   rushed    quiz ids answered faster than anybody can read them
+   ms        time spent actually working
+   pages     how many pages are finished, for Mark work to read */
+const COVER_READ_MS = 3000;       // less than this a question is not being read
+const COVER_IDLE_MS = 60000;      // no touch for this long and the clock stops
+const COVER_TICK_MS = 5000;
+let coverS = null, coverSeen = null, coverNoteOn = false, coverTicking = false;
+let coverLastTouch = 0;
+let coverNoteFor = null;          // the one task the note is about, if Understood raised it
+const coverRows = [];             // each I am confused button, to repaint when the work moves on
+const coverWrongs = {};           // task id -> the last wrong answer
+const coverStamps = {};           // quiz id -> when each question was answered
+/* The saved state turns up after the page does, so this is asked again each
+   time rather than read once: asking early must not lose what comes back. */
+function coverData(){
+  if (!coverS) coverS = { ok:{}, checked:{}, confused:{}, tries:{}, first:{}, rushed:[], ms:0, pages:0 };
+  if (restoredData !== coverSeen){
+    coverSeen = restoredData;
+    const had = restoredData && restoredData.__cover;
+    if (had && typeof had === "object"){
+      coverS = Object.assign({}, coverS, had, { ms: Math.max(coverS.ms, Number(had.ms) || 0) });
+    }
+  }
+  return coverS;
+}
+const coverOn = () => !!(lesson && lesson.cover) && !spectate;
+const coverAsk = {
+  read: (id) => { const f = fields[id]; try{ return f && f.get ? f.get() : undefined; }catch(e){ return undefined; } },
+  ok: (id) => !!coverData().ok[id],
+  checked: (id) => !!coverData().checked[id],
+  tries: (id) => coverData().tries[id] || 0,
+  score: (b, v) => lessonTaskScore(b, v),
+  started: (b, v) => gateAttempted(b, v)
+};
+const coverLeftOn = (i) => window.coverWork.left((lesson.blocks || [])[i], coverAsk);
+function coverPagesDone(){
+  return (lesson.blocks || []).filter((b, i) => !coverLeftOn(i).length).length;
+}
+/* A different wrong answer, not the same one pressed twice: the answer is
+   given to somebody who has tried, not to somebody leaning on the button. */
+function coverTried(id, value){
+  const c = coverData();
+  if (coverWrongs[id] !== value){
+    coverWrongs[id] = value;
+    c.tries[id] = (c.tries[id] || 0) + 1;
+  }
+  return c.tries[id];
+}
+function coverQuizStep(b, checked, solved){
+  const c = coverData();
+  const count = checked.filter(Boolean).length, n = checked.length;
+  if (count === 1) coverStamps[b.id] = [];
+  (coverStamps[b.id] = coverStamps[b.id] || []).push(Date.now());
+  if (count < n) return;
+  if (!c.first[b.id]) c.first[b.id] = [solved.filter(Boolean).length, n];
+  /* Only a run watched from its first answer to its last can be judged, so
+     a quiz half done before a reload is left alone. A rushed quiz taken again
+     properly clears itself. */
+  const at = coverStamps[b.id];
+  if (n > 1 && at.length === n){
+    const quick = at[n - 1] - at[0] < (n - 1) * COVER_READ_MS;
+    c.rushed = c.rushed.filter(id => id !== b.id);
+    if (quick) c.rushed.push(b.id);
+  }
+}
+/* Clear whatever Continue last pointed at. */
+function coverClearNote(){
+  coverNoteOn = false;
+  coverNoteFor = null;
+  $("coverLeft").hidden = true;
+  document.querySelectorAll(".cover-want").forEach(n => n.classList.remove("cover-want"));
+}
+/* Called by Continue. True when this page still wants something: it says what
+   and takes them there, in place, with nothing to dismiss. */
+function coverHolds(){
+  if (!coverOn() || bypassed) return false;
+  const left = coverLeftOn(step);
+  coverClearNote();
+  if (!left.length) return false;
+  const note = $("coverLeft");
+  note.textContent = left.length + (left.length === 1 ? " task" : " tasks") + " left on this page. " + left[0].words;
+  note.hidden = false;
+  coverNoteOn = true;
+  const item = document.querySelector('[data-block-id="' + left[0].id + '"]');
+  if (item){
+    item.classList.add("cover-want");
+    item.scrollIntoView({ block:"center" });
+  }
+  return true;
+}
+/* The note goes as soon as what it asked for is done. */
+function coverRecheck(){
+  if (!coverOn()) return;
+  const done = coverNoteFor ? !window.coverWork.need(coverNoteFor, coverAsk) : !coverLeftOn(step).length;
+  if (done) coverClearNote();
+}
+/* The progress bar is a way forward too, so it asks the same question of
+   every page before the one pressed. Going back is always free. */
+function coverBlocksJump(i){
+  if (!coverOn() || bypassed) return false;
+  for (let p = 0; p < i && p < (lesson.blocks || []).length; p++){
+    if (!coverLeftOn(p).length) continue;
+    if (p !== step) showStep(p);
+    coverHolds();
+    return true;
+  }
+  return false;
+}
+/* Time only counts while somebody is touching the page, so a laptop left open
+   adds nothing. Stops at the finish: extension work is not what it measures. */
+function coverStart(){
+  if (coverTicking || !coverOn()) return;
+  coverTicking = true;
+  coverLastTouch = Date.now();
+  const touched = () => { coverLastTouch = Date.now(); };
+  ["pointerdown","pointermove","keydown","wheel"].forEach(e =>
+    document.addEventListener(e, touched, { passive:true, capture:true }));
+  setInterval(() => {
+    if (finished || document.hidden || Date.now() - coverLastTouch > COVER_IDLE_MS) return;
+    coverData().ms += COVER_TICK_MS;
+  }, COVER_TICK_MS);
+}
+function coverOnShow(){
+  coverStart();
+  if (coverOn()) coverClearNote();
+  /* What was pressed on an earlier visit only arrives after the page is drawn. */
+  document.querySelectorAll(".cover-ok").forEach(btn => {
+    btn.hidden = coverOn() && !!coverData().ok[btn.dataset.task];
+  });
+  coverRows.forEach(paint => paint());
+}
+/* What keeps the rest of a page back in a Cover lesson. rPage already knows how
+   to hide everything under a task that is holding, so this only answers it.
+   The last task has no Understood, so it opens the extension by being done. */
+function coverHold(child, last){
+  return { on: () => true,
+           passed: () => last ? !window.coverWork.need(child, coverAsk) : !!coverData().ok[child.id],
+           words: () => "", watch: () => {} };
+}
+/* The buttons under a task. Understood is never disabled, the same as Continue:
+   pressed too soon, it says what is left. opened() is rPage's, and shows what
+   comes next. */
+function coverRow(child, last, opened){
+  const row = el("div","cover-row");
+  const buttons = el("div","cover-btns");
+  row.appendChild(buttons);
+  if (!last){
+    const ok = el("button","btn-primary cover-ok","Understood");
+    ok.type = "button";
+    ok.dataset.task = child.id;
+    ok.addEventListener("click", () => {
+      const words = window.coverWork.need(child, coverAsk);
+      coverClearNote();
+      if (words){
+        const note = $("coverLeft");
+        note.textContent = words;
+        note.hidden = false;
+        coverNoteOn = true;
+        coverNoteFor = child;
+        return;
+      }
+      coverData().ok[child.id] = true;
+      ok.hidden = true;
+      markDirty();
+      opened();
+    });
+    buttons.appendChild(ok);
+  }
+  if (child.confused){
+    const help = el("div","cover-help", child.confused);
+    help.hidden = true;
+    const ask = el("button","btn-ghost cover-ask","I am confused");
+    ask.type = "button";
+    ask.setAttribute("aria-expanded", "false");
+    /* Help is for while they are stuck. Once the task is done, or they have
+       said they understood it, there is nothing left to be confused about. */
+    coverRows.push(() => {
+      const over = !!coverData().ok[child.id] ||
+        (window.coverWork.isWork(child) && !window.coverWork.need(child, coverAsk));
+      ask.hidden = over;
+      if (over){ help.hidden = true; ask.textContent = "I am confused"; }
+    });
+    ask.addEventListener("click", () => {
+      help.hidden = !help.hidden;
+      ask.textContent = help.hidden ? "I am confused" : "Hide this";
+      ask.setAttribute("aria-expanded", help.hidden ? "false" : "true");
+      if (!coverData().confused[child.id]){
+        coverData().confused[child.id] = true;
+        markDirty();
+      }
+    });
+    buttons.appendChild(ask);
+    row.appendChild(help);
+  }
+  return row;
+}
+/* How much was done, as the opening of What you got done on the last screen. */
+function coverIntro(){
+  const f = window.coverWork.facts(lesson, Object.assign({}, coverData(), { pages: coverPagesDone() }));
+  const intro = el("div","cover-intro");
+  const bits = [f.pages + " of " + f.total + " pages"];
+  if (f.last) bits.push(f.last.title + " " + f.last.got + " out of " + f.last.max);
+  bits.push(f.mins + (f.mins === 1 ? " minute" : " minutes") + " working");
+  intro.appendChild(el("p","cover-facts", bits.join(" \u00b7 ")));
+  if (f.rushed.length) intro.appendChild(el("p","cover-rushed",
+    f.rushed.join(", ") + " was answered very quickly. Go back and take it again, reading each question."));
+  intro.appendChild(el("p","cover-more","Finished early? Go back to the last page for the extension tasks."));
+  return intro;
+}
 let wasDone = false;           // the saved copy says this lesson was completed
 let lockedSet = new Set();     // task indexes the teacher has locked shut
 let linkBroken = false;        // a handed-in link arrived damaged
@@ -578,6 +808,7 @@ function snapshot(){
   if (voice && typeof voice === "object" && Object.keys(voice).length) data.__voice = voice;
   const psd = psdAll();
   if (Object.keys(psd).length) data.__psd = psd;
+  if (coverOn()) data.__cover = Object.assign(coverData(), { pages: coverPagesDone() });
   return data;
 }
 let voiceAnswers = null;          // question id -> option picked, once they answer here
@@ -739,6 +970,8 @@ let typedAt = 0;
    this is the one thing that hears about it. */
 const holdWatchers = new Set();
 function markDirty(){
+  if (coverNoteOn) coverRecheck();
+  coverRows.forEach(paint => paint());
   holdWatchers.forEach(fn => { try{ fn(); }catch(e){} });
   assessRepaintSoon();
   if (restoreDone && markingView) noteMarkingEdits();
@@ -1121,7 +1354,7 @@ async function fetchRelease(){
    learning is done at home with no teacher in the room to open anything, so
    a lock there would leave a child stuck until the next lesson. */
 function pagesLock(l){
-  return !!l && !l.homework && (!l.assessment || !!l.practical);
+  return !!l && !l.homework && !l.cover && (!l.assessment || !!l.practical);
 }
 /* With no teacher release saved, a lesson starts closed after its first real
    task (any reading before that stays open) and an assessment starts with
@@ -2710,6 +2943,7 @@ function showStep(i){
     step = (b !== null) ? b : (nextOpen(0, +1) !== null ? nextOpen(0, +1) : 0);
   }
   steps.forEach((s, n) => { s.section.hidden = (n !== step); });
+  if (lesson && lesson.cover) coverOnShow();
   try{ showHelpFor(steps[step].section); }catch(e){}
   /* How far they have been, so only a page never reached before announces
      itself on arrival (playArrival). Where a lesson opens counts as reached. */
@@ -2829,6 +3063,7 @@ async function tryContinue(){
     if (step === steps.length - 1){ finishLesson(); } else { showStep(step + 1); }
     return;
   }
+  if (coverHolds()) return;
   if (step === steps.length - 1){ await tryFinish(); return; }
 
   askingToMoveOn = true;
@@ -2865,6 +3100,7 @@ async function tryContinue(){
    pop-up Continue gives. One that is open is gone to, skipping any pages in
    between: Continue never stops anybody for unfinished work either. */
 async function tryJumpAhead(i, seg){
+  if (coverBlocksJump(i)) return;
   if (coolingDown()){
     const left = Math.ceil((cooldownUntil - Date.now()) / 1000);
     showLockTip(seg, "Please wait " + left + " second" + (left === 1 ? "" : "s") + " before trying again...");
@@ -4739,6 +4975,7 @@ function rPage(b){
   const finishers = [];  // what each of those is waiting on, one per task
   const slots = pageSlot(s);
   let fullTask = false;  // holds a task that takes the whole page
+  const lastTask = (b.blocks || []).filter(x => x.type !== "extension").slice(-1)[0];
   (b.blocks || []).forEach((child, j) => {
     if (!child.id) child.id = b.id + "_" + j;
     const built = buildBlock(child, j);
@@ -4771,6 +5008,7 @@ function rPage(b){
       const gate = taskGate(child);
       if (gate) built.hold = gate;
     }
+    if (coverOn()) built.hold = coverHold(child, child === lastTask);
     const item = el("div","pg-item");
     item.dataset.blockId = child.id;
     const bb = (typeof built.brief === "function") ? built.brief() : (built.brief || {});
@@ -4786,6 +5024,12 @@ function rPage(b){
     }
     built.section.hidden = false;
     item.appendChild(built.section);
+    if (coverOn()) item.appendChild(coverRow(child, child === lastTask, () => {
+      refreshHold();
+      try{ paintRail(); }catch(e){}
+      const next = items[items.findIndex(x => x.block === child) + 1];
+      if (next) scrollStageTo(next.item);
+    }));
     slots.place(item, child);
     kids.push(built);
     items.push({ item, built, type: child.type, name: bb.title || "", block: child });
@@ -5001,7 +5245,8 @@ function rPage(b){
     });
     /* "There is more on this page" under a level that is about to open is the
        level-up saying the same thing worse. */
-    holdNote.hidden = shut === -1 || items.some(e => e.levelling);
+    /* A Cover lesson's own button says it, right under the task. */
+    holdNote.hidden = shut === -1 || items.some(e => e.levelling) || coverOn();
     if (holdNote.hidden) return;
     holdNote.textContent = items[shut].built.hold.words();
     /* The note goes after whatever the page itself holds, which is the row
@@ -8082,6 +8327,8 @@ function wrapExtra(b, build, eyebrow){
   /* In a marked assessment nothing is marked until it is handed in, so a
      table or a picture must not offer its own Check button there. */
   const made = build(b, { changed: markDirty,
+                          tried: coverOn() ? (value) => coverTried(b.id, value) : null,
+                          pressed: coverOn() ? () => { coverData().checked[b.id] = true; } : null,
                           assessment: !!(lesson && lesson.assessment && !lesson.practical) });
   fields[b.id] = { get: made.get, set: made.set };
   return {
@@ -8334,6 +8581,7 @@ function rQuiz(b){
     checked[qi] = true;
     solved[qi] = ok;
     reveal(ok);
+    if (coverOn()) coverQuizStep(b, checked, solved);
     markDirty();
   });
 
@@ -10099,6 +10347,7 @@ function rShort(b){
         return;
       }
       const r = window.shortAnswer.mark(b, ans.value);
+      if (coverOn()) coverData().checked[b.id] = true;
       fb.hidden = false;
       fb.dataset.verdict = r.ok ? "correct" : "incorrect";
       fb.innerHTML = "";
@@ -10121,7 +10370,11 @@ function rShort(b){
       } else {
         /* A short answer has no model answer any more. One left in an older
            lesson's JSON is ignored, here and everywhere the answer is shown. */
-        fb.appendChild(el("span","", "Check your spelling and try again."));
+        /* Nobody in the room can help, so a Cover lesson gives the answer
+           after two wrong tries rather than leave them on it for good. */
+        if (coverOn() && coverTried(b.id, ans.value.trim().toLowerCase()) >= 2)
+          fb.appendChild(el("span","", "The answer is " + window.shortAnswer.accepted(b)[0] + ". You can carry on."));
+        else fb.appendChild(el("span","", "Check your spelling and try again."));
       }
       markDirty();
     });
@@ -12224,7 +12477,8 @@ function achievementLines(totals){
    same as the Progress tab leaves a lesson like that off its own count. */
 function achievementCard(){
   const totals = achievementTotals();
-  if (!Object.keys(totals.main).length) return null;
+  /* A Cover lesson always has its pages and minutes to say, marked work or not. */
+  if (!Object.keys(totals.main).length && !coverOn()) return null;
   const card = el("div","st-card ach-card");
   /* The line about how it went is what is worth reading first; "What you
      got done" is only there to introduce the list under it, so it follows
@@ -12232,6 +12486,7 @@ function achievementCard(){
   const headline = achievementHeadline(totals.mainList);
   if (headline) card.appendChild(el("p","ach-headline", headline));
   card.appendChild(el("h2","sect-head ach-subhead","What you got done"));
+  if (coverOn()) card.appendChild(coverIntro());
   card.appendChild(achievementLines(totals.main));
   if (Object.keys(totals.ext).length){
     card.appendChild(el("p","ach-also","You also completed…"));
@@ -13066,23 +13321,26 @@ function buildPdf(){
       return out;
     }
     if (b.type === "storyboard"){
-      out.push({ t: "text", face: "task", text: title || "Storyboard" });
+      /* Something to watch, not something they did. */
+      if (b.demo) return out;
+      out.push({ t: "text", face: "task", text: title || (b.flip ? "Flip book" : "Storyboard") });
       const panels = (v && Array.isArray(v.panels)) ? v.panels : [];
       const has = (p) => (Array.isArray(p.strokes) && p.strokes.length) || String(p.text || "").trim();
       if (!panels.some(has)){ out.push(answerBox("", "Nothing planned")); return out; }
       const fps = Number(b.fps) || 24;
       panels.forEach((p, i) => {
-        const name = (b.names || [])[i];
-        const f = b.timing !== false ? window.storyFrames(panels, i, fps) : null;
-        out.push({ t: "text", face: "sub", text: "Panel " + (i + 1) + (name ? ": " + pdfText(name) : "") +
+        const name = b.flip ? "" : (b.names || [])[i];
+        const f = b.timing !== false && !b.flip ? window.storyFrames(panels, i, fps) : null;
+        out.push({ t: "text", face: "sub", text: (b.flip ? "Frame " : "Panel ") + (i + 1) + (name ? ": " + pdfText(name) : "") +
                    (f ? " (" + p.secs + " seconds, frames " + f.from + " to " + f.to + ")" : "") });
         const data = (Array.isArray(p.strokes) && p.strokes.length) ? window.storyImage(p.strokes) : null;
         /* Three to a page rather than one: a storyboard is read as a row
            of small pictures, and six at full width is six sides of paper. */
-        if (data) out.push({ t: "img", data: data, fmt: "JPEG", w: W * 0.55, h: W * 0.55 * 9 / 16 });
-        out.push(answerBox(String(p.text || ""), data ? "No words written" : "Nothing in this panel"));
+        const wide = W * (b.flip ? 0.3 : 0.55);
+        if (data) out.push({ t: "img", data: data, fmt: "JPEG", w: wide, h: wide * 9 / 16 });
+        if (!b.flip || !data) out.push(answerBox(String(p.text || ""), data ? "No words written" : "Nothing in this panel"));
       });
-      if (b.timing !== false){
+      if (b.timing !== false && !b.flip){
         const secs = window.storySeconds(panels);
         if (secs > 0) out.push({ t: "text", face: "small",
           text: "Total: " + secs + " seconds, " + Math.round(secs * fps) + " frames" });

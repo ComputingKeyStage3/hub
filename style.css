@@ -8212,7 +8212,42 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
 /* While it plays there is nothing to press but Stop, so a stray click on a
    tool cannot look as though it did something. */
 .story-playing .story-bar, .story-playing .story-copy, .story-playing .story-next{ visibility:hidden }
+/* The speed buttons stay usable while it plays: changing speed mid-flight is
+   the whole point of them. */
+.story-speed.on{ border-color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, var(--panel)) }
+.story-thumb.key{ border-color:var(--amber); border-width:3px }
+.story-flip .story-total{ flex:1 1 120px }
+/* Nothing to write and nothing to draw, so the picture gets the width. */
+.story-demo .story-main{ grid-template-columns:minmax(0,1fr) }
+.story-demo .story-canvas{ cursor:default }
+.story-demo .story-main{ border-top:1px solid var(--line); border-radius:12px 12px 0 0 }
 @media (max-width:760px){
   .story-main{ grid-template-columns:minmax(0,1fr) }
   .story-thumb{ flex:0 0 96px }
 }
+
+/* =====================================================================
+   COVER LESSONS
+   ===================================================================== */
+.cover-row{ margin-top:14px }
+.cover-btns{ display:flex; flex-wrap:wrap; gap:10px }
+.cover-help{ margin-top:10px; padding:12px 14px; border-left:4px solid var(--amber); border-radius:var(--rad-sm);
+  background:var(--panel-2) }
+.cover-help p{ margin:0 0 6px }
+/* Above the bottom bar, and it takes nothing away from the page under it. */
+.cover-left{ position:fixed; left:16px; right:16px; bottom:calc(var(--bars-bottom, 76px) + 10px); z-index:30;
+  width:fit-content; margin:0 auto; padding:10px 16px; border:1.5px solid var(--amber); border-radius:var(--rad-md);
+  font-weight:600; color:var(--text); background:var(--panel); box-shadow:0 4px 14px rgba(0,0,0,.2) }
+.cover-want{ outline:3px solid var(--amber); outline-offset:6px; border-radius:var(--rad-sm) }
+.cover-intro{ margin:0 0 12px }
+.cover-intro p{ margin:0 0 6px }
+.cover-facts{ font-size:var(--text-lg); font-weight:700 }
+.cover-rushed{ font-size:var(--text-base) }
+.cover-more{ font-size:var(--text-sm); color:var(--muted) }
+.cover-fold{ margin-top:18px; border:1px solid var(--line); border-radius:var(--rad-md); background:var(--panel) }
+.cover-fold summary{ padding:12px 16px; font-weight:700; cursor:pointer }
+.cover-fold > div{ padding:0 16px 16px }
+.cover-fold-note{ margin:0 16px 12px; color:var(--muted); font-size:var(--text-sm) }
+.cover-facts-box{ margin:0 0 10px; padding:8px 10px; border:1px solid var(--line); border-radius:var(--rad-sm); font-size:var(--text-sm) }
+.cover-facts-box p{ margin:0 0 4px }
+.cover-facts-warn{ color:var(--red); font-weight:700 }

@@ -28,6 +28,8 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"16.4", text:"Cover lessons: a new kind of lesson that runs without you. Students earn each page by having a go at it, with the answer given after two wrong tries. Each task opens the next with Understood, and I am confused gives a second explanation written in the builder. The last screen says how many pages they did, their test score and their minutes working. Mark work shows pages done, first try scores, minutes working and who rushed. They sit in a folded section under a unit's lessons." },
+  { v:"16.3.1", text:"Storyboard can be a flip book: pictures only, played round and round at 2, 6 or 12 frames a second. A lesson can use one to show an animation moving, with its keyframes marked." },
   { v:"16.3", text:"New task: Storyboard. Students plan an animation panel by panel: a drawing, what happens and how long it lasts, with the frame numbers and total length worked out for them. Play my storyboard shows it at real speed, and it prints in the hand-in." },
   { v:"16.2.1", text:"Drag and drop tasks: a word in a box can be dragged back to the side or to another box, and two words swap if one lands on the other. Words glide into place, lines in a put in order list slide, and labelling now works on a touch screen." },
   { v:"16.2", text:"Blender work plays its animation in the 3D view. Press Play, or Space, to watch it at the scene's own speed, drag the slider to any frame, and use the arrow keys to step. Moving, turning, resizing, objects switched off and on, parents, the camera flying round, Cycles loops and every kind of easing play as they do in Blender. Look through the camera while it plays to see the animation as it will render." },
