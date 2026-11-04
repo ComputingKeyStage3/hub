@@ -861,7 +861,7 @@ if (OFFLINE){
    screenshot or a whiteboard therefore keep the PDF instead, and there is
    a length check behind that in case some other task grows unexpectedly.
    ===================================================================== */
-const HEAVY_TASKS = ["image", "board", "scratch"];
+const HEAVY_TASKS = ["image", "board", "storyboard", "scratch"];
 
 /* Screenshots and whiteboards can sit inside a page, so this looks all the
    way down rather than only at the top level. */
@@ -3280,6 +3280,10 @@ const TASK_ICON = {
   mindmap:   { name:"Mind map",
                d:'<circle cx="5.5" cy="12" r="2.5"/><circle cx="18" cy="6.5" r="2"/>' +
                  '<circle cx="18" cy="17.5" r="2"/><path d="M8 11l8-3.6M8 13l8 3.6"/>' },
+  /* three frames along a strip */
+  storyboard:{ name:"Storyboard",
+               d:'<rect x="2.5" y="7" width="5.6" height="10" rx="1"/><rect x="9.2" y="7" width="5.6" height="10" rx="1"/>' +
+                 '<rect x="15.9" y="7" width="5.6" height="10" rx="1"/>' },
   /* a board on a stand */
   board:     { name:"Whiteboard",
                d:'<rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M12 17v3"/>' +
@@ -4450,7 +4454,7 @@ function buildBlock(b, i){
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
               picture:rPicture, video:rVideo, pastelink:rPasteLink, frame:rFrame, web:rWeb,
               scratch:rScratch, binary:rBinary, binadd:rBinAdd,
-              board:rBoardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
+              board:rBoardTask, storyboard:rStoryboardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
               keywords:rKeywordsTask, helper:rHelperTask,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
               exam:rExamTask, table:rTableTask, hotspot:rHotspotTask,
@@ -8089,6 +8093,7 @@ function wrapExtra(b, build, eyebrow){
   };
 }
 const rBoardTask   = (b) => wrapExtra(b, window.rBoard,   "Whiteboard");
+const rStoryboardTask = (b) => wrapExtra(b, window.rStoryboard, "Storyboard");
 const rKeywordsTask = (b) => wrapExtra(b, window.rKeywords, "Keywords");
 const rTableTask  = (b) => wrapExtra(b, window.rTable,    "Table");
 const rLabelTask   = (b) => wrapExtra(b, window.rLabel,   "Labelling");
@@ -13058,6 +13063,30 @@ function buildPdf(){
                       text: answers.map((a, i) => "Row " + (i + 1) + ":  " + (a || "blank")).join("\n") });
       out.push({ t: "text", face: "small", text: (v && v.done) ? "All correct" : "Not all correct yet",
                  colour: (v && v.done) ? PDF.GREEN : PDF.AMBER });
+      return out;
+    }
+    if (b.type === "storyboard"){
+      out.push({ t: "text", face: "task", text: title || "Storyboard" });
+      const panels = (v && Array.isArray(v.panels)) ? v.panels : [];
+      const has = (p) => (Array.isArray(p.strokes) && p.strokes.length) || String(p.text || "").trim();
+      if (!panels.some(has)){ out.push(answerBox("", "Nothing planned")); return out; }
+      const fps = Number(b.fps) || 24;
+      panels.forEach((p, i) => {
+        const name = (b.names || [])[i];
+        const f = b.timing !== false ? window.storyFrames(panels, i, fps) : null;
+        out.push({ t: "text", face: "sub", text: "Panel " + (i + 1) + (name ? ": " + pdfText(name) : "") +
+                   (f ? " (" + p.secs + " seconds, frames " + f.from + " to " + f.to + ")" : "") });
+        const data = (Array.isArray(p.strokes) && p.strokes.length) ? window.storyImage(p.strokes) : null;
+        /* Three to a page rather than one: a storyboard is read as a row
+           of small pictures, and six at full width is six sides of paper. */
+        if (data) out.push({ t: "img", data: data, fmt: "JPEG", w: W * 0.55, h: W * 0.55 * 9 / 16 });
+        out.push(answerBox(String(p.text || ""), data ? "No words written" : "Nothing in this panel"));
+      });
+      if (b.timing !== false){
+        const secs = window.storySeconds(panels);
+        if (secs > 0) out.push({ t: "text", face: "small",
+          text: "Total: " + secs + " seconds, " + Math.round(secs * fps) + " frames" });
+      }
       return out;
     }
     if (b.type === "image" || b.type === "board"){

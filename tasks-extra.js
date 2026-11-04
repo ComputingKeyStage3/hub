@@ -589,6 +589,416 @@
   };
 
   /* ===================================================================
+     STORYBOARD
+     { type:"storyboard", title, task, panels, names:[...], timing, fps,
+       minSecs, maxSecs }
+     A row of panels, each a small drawing, a sentence and how long it
+     lasts. The drawing is kept as strokes, like a whiteboard, so six panels
+     are tens of KB rather than six pictures.
+
+     Strokes are stored against a fixed 640 x 360 frame and the canvas is
+     stretched by CSS, so a panel drawn on a phone and read on a projector
+     lands in the same place. It also means nothing here has to measure the
+     canvas before it can draw, which a page that has not been shown yet
+     cannot do.
+     =================================================================== */
+  const STORY_W = 640, STORY_H = 360;
+  /* About 25KB of JSON a panel at most. Nobody drawing a sketch reaches it,
+     and it is what stops one student scribbling a panel solid. */
+  const STORY_POINTS = 3000;
+  const STORY_TEXT = 240;
+
+  function storyPaint(c, strokes, w, h){
+    const k = w / STORY_W;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.fillStyle = "#FFFFFF";
+    c.fillRect(0, 0, w, h);
+    c.setTransform(k, 0, 0, k, 0, 0);
+    c.lineCap = "round"; c.lineJoin = "round";
+    (strokes || []).forEach(st => {
+      const pts = st.points || [];
+      if (!pts.length) return;
+      c.strokeStyle = st.colour || "#1D1D1B";
+      c.lineWidth = st.width || 4;
+      c.beginPath();
+      c.moveTo(pts[0][0], pts[0][1]);
+      /* a round cap on a line of no length is how a single tap makes a dot */
+      if (pts.length === 1) c.lineTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
+      c.stroke();
+    });
+  }
+  /* For the PDF: the live canvas belongs to one panel at a time. */
+  window.storyImage = function(strokes){
+    try{
+      const cv = document.createElement("canvas");
+      cv.width = STORY_W * 1.5; cv.height = STORY_H * 1.5;
+      storyPaint(cv.getContext("2d"), strokes, cv.width, cv.height);
+      /* JPEG: a PNG off a canvas has transparency, which jsPDF stores
+         uncompressed, and six panels came to a 12MB hand-in. The paper is
+         always white, so nothing is lost. */
+      return cv.toDataURL("image/jpeg", 0.85);
+    }catch(e){
+      console.warn("storyboard image failed", e);
+      return null;
+    }
+  };
+  /* Which frames a panel covers, counted from the seconds of the panels
+     before it. Worked out from running totals rather than panel by panel, so
+     half seconds at an odd frame rate cannot leave a gap or an overlap. Null
+     for a panel with no time on it. */
+  window.storyFrames = function(panels, i, fps){
+    const secs = (p) => Math.max(0, Number(p && p.secs) || 0);
+    if (!secs(panels[i])) return null;
+    let before = 0;
+    for (let k = 0; k < i; k++) before += secs(panels[k]);
+    return { from: Math.round(before * fps) + 1,
+             to: Math.round((before + secs(panels[i])) * fps) };
+  };
+  window.storySeconds = function(panels){
+    return (panels || []).reduce((sum, p) => sum + Math.max(0, Number(p && p.secs) || 0), 0);
+  };
+  const storySaid = (n) => String(Math.round(n * 100) / 100);
+
+  window.rStoryboard = function(b, ctx){
+    const wanted = Math.max(2, Math.min(12, Number(b.panels) || 6));
+    const names = Array.isArray(b.names) ? b.names : [];
+    const timing = b.timing !== false;
+    const fps = Number(b.fps) || 24;
+    const minSecs = Number(b.minSecs) || 0, maxSecs = Number(b.maxSecs) || 0;
+
+    const blank = () => ({ strokes: [], text: "", secs: "" });
+    let panels = Array.from({ length: wanted }, blank);
+    let at = 0;
+    let tool = "pen", colour = "#1D1D1B", width = 4;
+    let drawing = null;
+    /* What Clear took, so Undo can bring it back. That is what lets Clear go
+       without an Are you sure. Not saved: it is only for the next press. */
+    const cleared = new Map();
+
+    const s = make("section", "storyboard");
+    const inner = make("div", "story-inner");
+    s.appendChild(inner);
+
+    /* --- the tools --- */
+    const bar = make("div", "board-bar story-bar");
+    inner.appendChild(bar);
+    const svg = (d) => '<svg viewBox="0 0 20 20"><path d="' + d + '"/></svg>';
+    const toolBtn = (icon, title, fn) => {
+      const btn = make("button", "board-tool");
+      btn.type = "button";
+      btn.innerHTML = icon;
+      btn.title = title;
+      btn.setAttribute("aria-label", title);
+      btn.addEventListener("click", fn);
+      bar.appendChild(btn);
+      return btn;
+    };
+    function paintTools(){
+      penBtn.classList.toggle("on", tool === "pen");
+      rubBtn.classList.toggle("on", tool === "rub");
+      thinBtn.classList.toggle("on", width === 4);
+      thickBtn.classList.toggle("on", width === 10);
+      dots.forEach(d => d.dot.classList.toggle("story-dot-on", tool === "pen" && colour === d.colour));
+    }
+    const penBtn = toolBtn(svg("M14.5 2.5l3 3L7 16 3 17l1-4z"), "Draw", () => { tool = "pen"; paintTools(); });
+    const rubBtn = toolBtn('<svg viewBox="0 0 20 20"><path d="M8 16H4l-2-2 8-8 6 6-4 4z" opacity=".55"/><path d="M2 17h16v1.6H2z"/></svg>',
+                           "Rub out", () => { tool = "rub"; paintTools(); });
+    /* The five the whiteboard has, plus the two a winter scene runs out of
+       first. There is no white: the rubber is white, and the paper is. */
+    const dots = ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A","#DC8A3E","#8C5BC4"].map(c => {
+      const dot = make("button", "board-colour story-dot");
+      dot.type = "button";
+      dot.style.background = c;
+      dot.title = "Draw in this colour";
+      dot.setAttribute("aria-label", "Draw in this colour");
+      dot.addEventListener("click", () => { colour = c; tool = "pen"; paintTools(); });
+      bar.appendChild(dot);
+      return { dot: dot, colour: c };
+    });
+    const thinBtn = toolBtn('<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.5"/></svg>', "Thin line",
+                            () => { width = 4; paintTools(); });
+    const thickBtn = toolBtn('<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6"/></svg>', "Thick line",
+                             () => { width = 10; paintTools(); });
+    toolBtn(svg("M6 7h6a5 5 0 010 10h-3v-2h3a3 3 0 000-6H6v3L1.5 8 6 4z"), "Undo", () => {
+      const p = panels[at];
+      if (p.strokes.length) p.strokes.pop();
+      else if (cleared.has(p)){ p.strokes = cleared.get(p); cleared.delete(p); }
+      else return;
+      paintPanel(); ctx.changed();
+    });
+    const wipeBtn = toolBtn(svg("M7 2h6v2h4v2H3V4h4zM5 7h10l-.8 11H5.8z"), "Clear this drawing", () => {
+      const p = panels[at];
+      if (!p.strokes.length) return;
+      cleared.set(p, p.strokes);
+      p.strokes = [];
+      paintPanel(); ctx.changed();
+    });
+    wipeBtn.classList.add("board-wipe");
+
+    /* --- the panel being worked on --- */
+    const main = make("div", "story-main");
+    inner.appendChild(main);
+    const paper = make("div", "story-paper");
+    main.appendChild(paper);
+    const canvas = make("canvas", "story-canvas");
+    canvas.width = STORY_W * 1.5; canvas.height = STORY_H * 1.5;
+    canvas.setAttribute("role", "img");
+    paper.appendChild(canvas);
+    const pen = canvas.getContext("2d");
+    const full = make("p", "story-full");
+    full.hidden = true;
+    paper.appendChild(full);
+
+    const side = make("div", "story-side");
+    main.appendChild(side);
+    const panelName = make("h4", "story-name");
+    side.appendChild(panelName);
+    const wordsId = "story-" + (b.id || "t") + "-words";
+    const wordsLabel = make("label", "story-label", "What happens?");
+    wordsLabel.htmlFor = wordsId;
+    side.appendChild(wordsLabel);
+    const words = make("textarea", "story-words");
+    words.id = wordsId;
+    words.rows = 3;
+    words.maxLength = STORY_TEXT;
+    words.placeholder = "What can we see? What moves?";
+    side.appendChild(words);
+
+    let secsBox = null, framesNote = null;
+    if (timing){
+      const row = make("label", "story-time");
+      row.appendChild(make("span", "story-label", "How long?"));
+      secsBox = make("input", "story-secs");
+      secsBox.type = "number";
+      secsBox.min = "0"; secsBox.max = "60"; secsBox.step = "0.5";
+      secsBox.inputMode = "decimal";
+      row.appendChild(secsBox);
+      row.appendChild(make("span", "story-unit", "seconds"));
+      side.appendChild(row);
+      framesNote = make("p", "story-frames");
+      side.appendChild(framesNote);
+    }
+    const copyBtn = make("button", "btn-ghost story-copy", "Copy the last drawing");
+    copyBtn.type = "button";
+    copyBtn.title = "Start from the panel before, then change what has moved";
+    side.appendChild(copyBtn);
+    const nextBtn = make("button", "btn-ghost story-next", "Next panel");
+    nextBtn.type = "button";
+    side.appendChild(nextBtn);
+
+    /* --- every panel, in order --- */
+    const strip = make("div", "story-strip");
+    inner.appendChild(strip);
+    let thumbs = [];
+    const filled = (p) => p.strokes.length > 0 && String(p.text).trim() !== "";
+    const started = (p) => p.strokes.length > 0 || String(p.text).trim() !== "";
+    const nameOf = (i) => "Panel " + (i + 1) + (names[i] ? ": " + names[i] : "");
+
+    function buildStrip(){
+      strip.innerHTML = "";
+      thumbs = panels.map((p, i) => {
+        const btn = make("button", "story-thumb");
+        btn.type = "button";
+        btn.title = nameOf(i);
+        const cv = make("canvas");
+        cv.width = 192; cv.height = 108;
+        btn.appendChild(cv);
+        const label = make("span", "story-thumbnum", String(i + 1));
+        btn.appendChild(label);
+        btn.addEventListener("click", () => { stopPlay(); show(i); });
+        strip.appendChild(btn);
+        return { btn: btn, c: cv.getContext("2d"), label: label };
+      });
+    }
+
+    const foot = make("div", "story-foot");
+    inner.appendChild(foot);
+    const playBtn = make("button", "btn-primary story-play", "Play my storyboard");
+    playBtn.type = "button";
+    foot.appendChild(playBtn);
+    const total = make("p", "story-total");
+    foot.appendChild(total);
+
+    function paintThumb(i){
+      const t = thumbs[i];
+      if (!t) return;
+      storyPaint(t.c, panels[i].strokes, 192, 108);
+      t.btn.classList.toggle("on", i === at);
+      t.btn.classList.toggle("done", filled(panels[i]));
+      t.label.textContent = (filled(panels[i]) ? "✓ " : "") + (i + 1);
+    }
+    function paintTotals(){
+      const done = panels.filter(filled).length, all = panels.length;
+      /* the same encouragement a written answer gets, and nothing to dismiss */
+      const cheer = done === all ? "Looking good!" : done * 2 >= all ? "Keep going!" : "";
+      let line = done + " of " + all + " panels finished." + (cheer ? " " + cheer : "");
+      if (timing){
+        const secs = window.storySeconds(panels);
+        if (secs > 0){
+          line += " It lasts " + storySaid(secs) + (secs === 1 ? " second" : " seconds") +
+                  ", which is " + Math.round(secs * fps) + " frames.";
+          if (minSecs && secs < minSecs) line += " Aim for at least " + storySaid(minSecs) + " seconds.";
+          else if (maxSecs && secs > maxSecs) line += " Try to keep it to " + storySaid(maxSecs) + " seconds.";
+        }
+      }
+      total.textContent = line;
+    }
+    function paintFrames(){
+      if (!framesNote) return;
+      const f = window.storyFrames(panels, at, fps);
+      framesNote.textContent = f ? "Frames " + f.from + " to " + f.to : "";
+    }
+    function paintCopy(){
+      const before = panels[at - 1];
+      copyBtn.hidden = !(before && before.strokes.length && !panels[at].strokes.length);
+    }
+    /* After anything changes in the panel on screen */
+    function paintPanel(){
+      storyPaint(pen, panels[at].strokes, canvas.width, canvas.height);
+      paintThumb(at);
+      paintTotals();
+      paintCopy();
+      full.hidden = true;
+    }
+    function show(i){
+      at = Math.max(0, Math.min(panels.length - 1, i));
+      const p = panels[at];
+      panelName.textContent = nameOf(at);
+      canvas.setAttribute("aria-label", "Drawing for panel " + (at + 1));
+      words.value = p.text;
+      if (secsBox) secsBox.value = p.secs === "" ? "" : p.secs;
+      nextBtn.hidden = at === panels.length - 1;
+      thumbs.forEach((t, k) => paintThumb(k));
+      paintFrames();
+      paintPanel();
+    }
+
+    words.addEventListener("input", () => {
+      panels[at].text = words.value;
+      paintThumb(at); paintTotals();
+      ctx.changed();
+    });
+    if (secsBox) secsBox.addEventListener("input", () => {
+      const n = Number(secsBox.value);
+      panels[at].secs = secsBox.value === "" || !isFinite(n) ? "" : Math.max(0, Math.min(60, n));
+      paintFrames(); paintTotals();
+      ctx.changed();
+    });
+    copyBtn.addEventListener("click", () => {
+      const before = panels[at - 1];
+      if (!before) return;
+      panels[at].strokes = JSON.parse(JSON.stringify(before.strokes));
+      paintPanel(); ctx.changed();
+    });
+    nextBtn.addEventListener("click", () => { stopPlay(); show(at + 1); });
+
+    /* --- drawing --- */
+    function where(e){
+      const r = canvas.getBoundingClientRect();
+      const x = (e.clientX - r.left) / (r.width || 1) * STORY_W;
+      const y = (e.clientY - r.top) / (r.height || 1) * STORY_H;
+      return [ Math.round(Math.max(0, Math.min(STORY_W, x))),
+               Math.round(Math.max(0, Math.min(STORY_H, y))) ];
+    }
+    const pointsIn = (p) => p.strokes.reduce((n, st) => n + st.points.length, 0);
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.button) return;
+      e.preventDefault();
+      stopPlay();
+      if (pointsIn(panels[at]) >= STORY_POINTS){
+        full.textContent = "This drawing is full. Undo a few lines to carry on.";
+        full.hidden = false;
+        return;
+      }
+      try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+      drawing = { colour: tool === "rub" ? "#FFFFFF" : colour,
+                  width: tool === "rub" ? 24 : width, points: [where(e)] };
+      panels[at].strokes.push(drawing);
+      cleared.delete(panels[at]);
+      storyPaint(pen, panels[at].strokes, canvas.width, canvas.height);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!drawing) return;
+      const p = where(e), last = drawing.points[drawing.points.length - 1];
+      /* Points closer than this draw the same line and only take up room. */
+      if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 2) return;
+      drawing.points.push(p);
+      storyPaint(pen, panels[at].strokes, canvas.width, canvas.height);
+      if (pointsIn(panels[at]) >= STORY_POINTS) finishLine();
+    });
+    function finishLine(){
+      if (!drawing) return;
+      drawing = null;
+      paintPanel();
+      ctx.changed();
+    }
+    canvas.addEventListener("pointerup", finishLine);
+    canvas.addEventListener("pointercancel", finishLine);
+
+    /* --- playing it back ---
+       Timers rather than a CSS animation. Every machine in school reports
+       prefers-reduced-motion, and style.css turns animations off for that.
+       Each panel stays up for as long as it was given, so this is the
+       length the plan really is. */
+    let playTimer = null;
+    function stopPlay(){
+      if (playTimer === null) return;
+      clearTimeout(playTimer);
+      playTimer = null;
+      playBtn.textContent = "Play my storyboard";
+      s.classList.remove("story-playing");
+    }
+    playBtn.addEventListener("click", () => {
+      if (playTimer !== null){ stopPlay(); return; }
+      const order = panels.map((p, i) => i).filter(i => started(panels[i]));
+      if (!order.length){
+        total.textContent = "Draw something in a panel first, then press Play.";
+        return;
+      }
+      playBtn.textContent = "Stop";
+      s.classList.add("story-playing");
+      let n = 0;
+      const step = () => {
+        const i = order[n++];
+        show(i);
+        const secs = Number(panels[i].secs) || 1;
+        playTimer = setTimeout(() => {
+          if (n < order.length) step();
+          else { stopPlay(); show(order[0]); }
+        }, Math.min(secs, 10) * 1000);
+      };
+      step();
+    });
+
+    buildStrip();
+    show(0);
+    paintTools();
+
+    return {
+      section: s,
+      get: () => ({ panels: panels }),
+      set: (v) => {
+        if (!v || !Array.isArray(v.panels)) return;
+        const got = v.panels.map(p => ({
+          strokes: Array.isArray(p && p.strokes) ? p.strokes : [],
+          text: String((p && p.text) || "").slice(0, STORY_TEXT),
+          secs: (p && p.secs !== "" && p.secs !== undefined && p.secs !== null && isFinite(Number(p.secs)))
+                ? Number(p.secs) : ""
+        }));
+        /* Fewer panels set in the builder after work was saved must not lose
+           the ones a student already drew, so the longer of the two wins. */
+        while (got.length < wanted) got.push(blank());
+        panels = got;
+        cleared.clear();
+        buildStrip();
+        show(0);
+      },
+      done: () => panels.every(started)
+    };
+  };
+
+  /* ===================================================================
      LABELLING A PICTURE
      { type:"label", image, words:[...], spots:[{x,y,w,h,answer}] }
      Boxes are drawn on the picture in the builder; students drag a word

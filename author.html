@@ -240,6 +240,7 @@
           <button class="pal" data-add="notes"><b>Notes</b><span>Their own notes, with formatting</span></button>
           <button class="pal" data-add="mindmap"><b>Mind map</b><span>A middle idea with branches</span></button>
           <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
+          <button class="pal" data-add="storyboard"><b>Storyboard</b><span>Plan an animation, panel by panel</span></button>
           <button class="pal" data-add="helper"><b>Photoshop help</b><span>A help chat they can ask</span></button>
         </div>
       </div>
@@ -645,6 +646,7 @@ const BLANK = {
                      task:"Type what you want to do in Photoshop, or what has gone wrong." }),
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
+  storyboard:() => ({ type:"storyboard", title:"", task:"", panels:6, names:[], timing:true, minSecs:0, maxSecs:0 }),
   keywords: () => ({ type:"keywords", title:"", task:"",
                      words:[{ word:"", hint:"" }, { word:"", hint:"" }] }),
   label:    () => ({ type:"label", title:"", task:"", image:"", spots:[] }),
@@ -738,7 +740,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -1409,6 +1411,19 @@ function compileOne(b, id, target){
     else if (b.type === "board")
       push(keepArrays({ type:"board", id, title: b.title || "", task: b.task || "",
         height: Number(b.height) || 420 }));
+    else if (b.type === "storyboard")
+      push(keepArrays({ type:"storyboard", id, title: b.title || "", task: b.task || "",
+        panels: Math.max(2, Math.min(12, Number(b.panels) || 6)),
+        /* namesText is what the editor types into, and only exists once the
+           task has been opened there. Reopened and saved without that, the
+           list it came with has to come through untouched. */
+        names: b.namesText !== undefined
+          ? String(b.namesText).split("\n").map(x => x.trim()).filter(Boolean)
+          : (Array.isArray(b.names) ? b.names : []),
+        timing: b.timing !== false,
+        fps: Number(b.fps) || undefined,
+        minSecs: Number(b.minSecs) || undefined,
+        maxSecs: Number(b.maxSecs) || undefined }));
     else if (b.type === "label")
       push(keepArrays({ type:"label", id, title: b.title || "", task: b.task || "",
         image: b.image || "",
