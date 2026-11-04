@@ -616,22 +616,6 @@
       box.style.width = sp.w + "%";
       box.style.height = sp.h + "%";
       box.dataset.index = String(i);
-      box.addEventListener("dragover", (e) => { e.preventDefault(); box.classList.add("over"); });
-      box.addEventListener("dragleave", () => box.classList.remove("over"));
-      box.addEventListener("drop", (e) => {
-        e.preventDefault();
-        box.classList.remove("over");
-        const word = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
-        if (!word) return;
-        /* a word can only be in one place at a time */
-        Object.keys(placed).forEach(k => { if (placed[k] === word) delete placed[k]; });
-        placed[i] = word;
-        paint();
-        ctx.changed();
-      });
-      box.addEventListener("click", () => {
-        if (placed[i]){ delete placed[i]; paint(); ctx.changed(); }
-      });
       holder.appendChild(box);
       return { box, answer: sp.answer };
     });
@@ -651,23 +635,177 @@
     let right = false;
     function paint(){
       tray.innerHTML = "";
-      const used = new Set(Object.values(placed));
+      /* Taken off one at a time rather than looked up, so two boxes wanting
+         the same word each have a copy of it to take. */
+      const onPicture = Object.values(placed);
       (b.words || []).forEach(word => {
-        if (used.has(word)) return;
-        const chip = make("span", "label-word", word);
-        chip.draggable = true;
-        chip.addEventListener("dragstart", (e) => {
-          if (e.dataTransfer) e.dataTransfer.setData("text/plain", word);
-        });
-        tray.appendChild(chip);
+        const at = onPicture.indexOf(word);
+        if (at >= 0){ onPicture.splice(at, 1); return; }
+        tray.appendChild(make("span", "label-word", word));
       });
       if (!tray.children.length) tray.appendChild(make("span", "hint", "Every word is on the picture."));
       spots.forEach((sp, i) => {
-        sp.box.textContent = placed[i] || "";
+        sp.box.textContent = "";
+        if (placed[i]) sp.box.appendChild(make("span", "label-placed", placed[i]));
         sp.box.dataset.filled = placed[i] ? "yes" : "no";
         sp.box.dataset.verdict = "";
       });
     }
+
+    /* Moving a word. Done with pointer events and not the browser's own drag,
+       which cannot pick a word back up out of a box, draws its own see-through
+       copy that nothing can animate, and does nothing on a touch screen.
+
+       Every movement is el.animate() rather than a CSS transition. Every
+       machine in the school reports prefers-reduced-motion, and the blanket
+       rule near the top of style.css stops transitions dead, so a transition
+       here would look right at home and never run in a classroom. */
+    const GLIDE = { duration: 260, easing: "cubic-bezier(.2,.8,.3,1)" };
+    const trayChips = () => Array.from(tray.querySelectorAll(".label-word"));
+
+    function flyer(word, at){
+      const ghost = make("div", "label-flyer");
+      ghost.textContent = word;
+      ghost.style.left = at.left + "px";
+      ghost.style.top = at.top + "px";
+      ghost.style.width = at.width + "px";
+      ghost.style.height = at.height + "px";
+      /* on the body: a transformed parent would turn fixed into relative */
+      document.body.appendChild(ghost);
+      return ghost;
+    }
+    function fly(ghost, from, to, landing){
+      landing.style.visibility = "hidden";
+      const box = (r) => ({ left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+      const land = () => { ghost.remove(); landing.style.visibility = ""; };
+      ghost.getAnimations().forEach(a => a.cancel());
+      const flight = ghost.animate([box(from), box(to)], { ...GLIDE, fill: "forwards" });
+      flight.onfinish = land;
+      flight.oncancel = land;
+    }
+    /* Everything that moves goes through here: the change is made and drawn
+       straight away, so what is saved never waits for an animation, and the
+       words are then flown from where they were. A move is
+       { word, from, to, ghost }, to being a box's index or "tray". */
+    function settle(change, moves){
+      const wasInTray = trayChips().map(c => ({ word: c.textContent, at: c.getBoundingClientRect() }));
+      if (change) change();
+      paint();
+      trayChips().forEach(chip => {
+        const was = wasInTray.findIndex(w => w.word === chip.textContent);
+        if (was < 0) return;
+        const old = wasInTray.splice(was, 1)[0].at, now = chip.getBoundingClientRect();
+        const dx = old.left - now.left, dy = old.top - now.top;
+        if (dx || dy) chip.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], GLIDE);
+      });
+      moves.forEach(m => {
+        const inTray = m.to === "tray";
+        const landing = inTray ? trayChips().reverse().find(c => c.textContent === m.word && !c.style.visibility)
+                               : spots[m.to].box.firstChild;
+        if (!landing){ if (m.ghost) m.ghost.remove(); return; }
+        const to = (inTray ? landing : spots[m.to].box).getBoundingClientRect();
+        fly(m.ghost || flyer(m.word, m.from), m.from, to, landing);
+      });
+      if (change) ctx.changed();
+    }
+
+    let lift = null;          // the word being held, while one is
+    function aim(){
+      const under = document.elementFromPoint(lift.x, lift.y);
+      const box = under && under.closest(".label-spot");
+      lift.spot = box && holder.contains(box) ? Number(box.dataset.index) : null;
+      lift.side = !!(under && side.contains(under));
+      spots.forEach((sp, i) => sp.box.classList.toggle("over", i === lift.spot));
+      side.classList.toggle("over", lift.side && lift.from !== "tray");
+    }
+    /* The browser's drag scrolled by itself near the edge of the page. On a
+       phone the words sit below the picture, so without this the top boxes
+       cannot be reached with a word in hand. */
+    function scrollerOf(n){
+      for (n = n.parentElement; n; n = n.parentElement){
+        const o = getComputedStyle(n).overflowY;
+        if ((o === "auto" || o === "scroll") && n.scrollHeight > n.clientHeight) return n;
+      }
+      return document.scrollingElement;
+    }
+    function nudgeScroll(){
+      if (!lift || !lift.ghost) return;
+      const page = lift.scroller === document.scrollingElement;
+      const edges = page ? { top: 0, bottom: innerHeight } : lift.scroller.getBoundingClientRect();
+      const by = lift.y < edges.top + 90 ? -9 : lift.y > edges.bottom - 90 ? 9 : 0;
+      if (by){ lift.scroller.scrollBy(0, by); aim(); }
+      requestAnimationFrame(nudgeScroll);
+    }
+    function follow(e){
+      if (!lift || e.pointerId !== lift.pointer) return;
+      lift.x = e.clientX; lift.y = e.clientY;
+      const dx = lift.x - lift.startX, dy = lift.y - lift.startY;
+      if (!lift.ghost){
+        /* a press that wanders a pixel or two is still a press */
+        if (Math.hypot(dx, dy) < 5) return;
+        lift.ghost = flyer(lift.word, lift.at);
+        lift.ghost.classList.add("held");
+        lift.ghost.animate([{ transform: "none" }, { transform: "scale(1.06)" }], { duration: 120, fill: "forwards" });
+        lift.shown.style.visibility = "hidden";
+        if (lift.from !== "tray") spots[lift.from].box.dataset.filled = "no";
+        requestAnimationFrame(nudgeScroll);
+      }
+      lift.ghost.style.left = lift.at.left + dx + "px";
+      lift.ghost.style.top = lift.at.top + dy + "px";
+      aim();
+    }
+    function letGo(e){
+      if (!lift || e.pointerId !== lift.pointer) return;
+      const held = lift;
+      lift = null;
+      document.removeEventListener("pointermove", follow);
+      document.removeEventListener("pointerup", letGo);
+      document.removeEventListener("pointercancel", letGo);
+      spots.forEach(sp => sp.box.classList.remove("over"));
+      side.classList.remove("over");
+      const { word, from, ghost } = held;
+
+      /* Pressed and let go without moving: a box gives its word back. */
+      if (!ghost){
+        if (from !== "tray")
+          settle(() => { delete placed[from]; }, [{ word, from: held.at, to: "tray" }]);
+        return;
+      }
+      const was = ghost.getBoundingClientRect();
+      const target = e.type === "pointercancel" ? null : held.spot;
+      if (target !== null && target !== from){
+        const other = placed[target];
+        const moves = [{ word, from: was, to: target, ghost }];
+        /* the word already there goes where this one came from, so a swap
+           between two boxes is a swap, and from the side it goes to the side */
+        if (other) moves.push({ word: other, from: spots[target].box.getBoundingClientRect(), to: from });
+        settle(() => {
+          if (from !== "tray") delete placed[from];
+          placed[target] = word;
+          if (other && from !== "tray") placed[from] = other;
+        }, moves);
+      } else if (from !== "tray" && held.side && e.type !== "pointercancel"){
+        settle(() => { delete placed[from]; }, [{ word, from: was, to: "tray", ghost }]);
+      } else {
+        /* let go somewhere that is not a place: it goes back where it was */
+        settle(null, [{ word, from: was, to: from, ghost }]);
+      }
+    }
+    s.addEventListener("pointerdown", (e) => {
+      if (e.button || lift) return;
+      const grabbed = e.target.closest && e.target.closest(".label-word, .label-spot[data-filled=yes]");
+      if (!grabbed) return;
+      e.preventDefault();
+      const inBox = grabbed.classList.contains("label-spot");
+      lift = { pointer: e.pointerId, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY,
+               word: grabbed.textContent, from: inBox ? Number(grabbed.dataset.index) : "tray",
+               shown: inBox ? grabbed.firstChild : grabbed, at: grabbed.getBoundingClientRect(),
+               scroller: scrollerOf(s), ghost: null, spot: null, side: false };
+      document.addEventListener("pointermove", follow);
+      document.addEventListener("pointerup", letGo);
+      document.addEventListener("pointercancel", letGo);
+    });
+
     check.addEventListener("click", () => {
       let got = 0;
       spots.forEach((sp, i) => {

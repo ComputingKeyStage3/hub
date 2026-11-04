@@ -9944,9 +9944,20 @@ function rOrder(b){
   });
   function move(from, to){
     if (to < 0 || to >= arrangement.length || from === to) return;
+    const was = arrangement.slice();
+    const tops = lines().map(row => row.getBoundingClientRect().top);
     const [x] = arrangement.splice(from, 1);
     arrangement.splice(to, 0, x);
     redraw(); markDirty();
+    /* Each line slides from where it was. el.animate() and not a transition,
+       because the school's machines report reduced motion and the blanket
+       rule in style.css would stop a transition from ever running there. */
+    lines().forEach((row, pos) => {
+      const dy = tops[was.indexOf(arrangement[pos])] - row.getBoundingClientRect().top;
+      if (arrangement[pos] === x) row.style.zIndex = 1;      // the one moved stays on top
+      if (dy) row.animate([{ transform:"translateY(" + dy + "px)" }, { transform:"none" }],
+                          { duration:260, easing:"cubic-bezier(.2,.8,.3,1)" });
+    });
   }
   redraw();
 

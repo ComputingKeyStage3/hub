@@ -3717,6 +3717,16 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .label-word{padding:7px 13px; background:var(--panel); border:1.5px solid var(--line-2);
   border-radius:var(--rad-pill); cursor:grab; font-size:var(--text-md)}
 .label-word:hover{border-color:var(--amber)}
+/* a word can be picked up from the side or out of a box, by a finger as well */
+.label-word,.label-spot[data-filled=yes]{touch-action:none; user-select:none; -webkit-user-select:none}
+.label-spot[data-filled=yes]{cursor:grab}
+.label-side.over .label-words{outline:2px dashed var(--amber); outline-offset:5px; border-radius:var(--rad-sm)}
+/* the word while it is moving, over everything else on the page */
+.label-flyer{position:fixed; z-index:10000; pointer-events:none; box-sizing:border-box;
+  display:flex; align-items:center; justify-content:center; padding:0 6px; overflow:hidden;
+  text-align:center; line-height:1.15; background:var(--panel); color:var(--text);
+  font-size:var(--text-sm); font-weight:600; border:1.5px solid var(--amber); border-radius:var(--rad-sm)}
+.label-flyer.held{cursor:grabbing; box-shadow:0 8px 20px rgba(0,0,0,.28)}
 .label-note{margin-top:10px; font-weight:600}
 .label-edit{cursor:crosshair; touch-action:none}
 .label-ghost{position:absolute; border:2px dashed var(--amber); border-radius:var(--rad-sm);
@@ -4026,8 +4036,9 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 /* the words themselves in two or three narrow columns */
 .label-side .label-words{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr));
   gap:6px; margin:0; justify-content:stretch }
+/* a long one wraps: cut short, a word cannot be read to be chosen */
 .label-side .label-word{ padding:6px 8px; font-size:var(--text-base); text-align:center;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  overflow-wrap:anywhere; display:flex; align-items:center; justify-content:center }
 /* and the button tucked under them, to the right */
 .label-side .btn-primary{ align-self:flex-end; margin:2px 0 0 }
 .label-note{ text-align:right; margin:0 }
