@@ -240,6 +240,7 @@
           <button class="pal" data-add="notes"><b>Notes</b><span>Their own notes, with formatting</span></button>
           <button class="pal" data-add="mindmap"><b>Mind map</b><span>A middle idea with branches</span></button>
           <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
+          <button class="pal" data-add="storyboard"><b>Storyboard</b><span>Plan an animation, panel by panel</span></button>
           <button class="pal" data-add="helper"><b>Photoshop help</b><span>A help chat they can ask</span></button>
         </div>
       </div>
@@ -587,7 +588,7 @@ window.addEventListener("scroll", placeHelp, true);
    original. A version is a whole lesson of its own, with its own id and its
    own students' work: the three fields beside it are only what the console
    shows to tell one apart from another. */
-let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false,
+let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false,
                versionOf:"", versionName:"", versionNote:"", versionCode:"",
                topics:{}, responses:{}, extensions:[], blocks:[] };
 
@@ -645,6 +646,7 @@ const BLANK = {
                      task:"Type what you want to do in Photoshop, or what has gone wrong." }),
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
+  storyboard:() => ({ type:"storyboard", title:"", task:"", panels:6, names:[], timing:true, minSecs:0, maxSecs:0 }),
   keywords: () => ({ type:"keywords", title:"", task:"",
                      words:[{ word:"", hint:"" }, { word:"", hint:"" }] }),
   label:    () => ({ type:"label", title:"", task:"", image:"", spots:[] }),
@@ -738,7 +740,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -1019,6 +1021,7 @@ function compile(){
      home page group by, and neither of those has the specification. */
   if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
+  if (lesson.cover) out.cover = true;
   /* The lesson's slides (author-slides.js), one deck kept whole. */
   const slides = window.compileSlides ? window.compileSlides(lesson) : null;
   if (slides) out.slides = slides;
@@ -1182,6 +1185,7 @@ function compileOne(b, id, target){
   /* "can be skipped" is remembered on whatever the task compiles to */
   const push = (x) => {
     if (x && b && b.required === false) x.required = false;
+    if (x && b && b.confused) x.confused = b.confused;
     /* Which bank task this copy came from. It has to survive compiling: the
        builder reopens a lesson from exactly this JSON, so a link dropped
        here is a link gone, and the next save would give the task a
@@ -1409,6 +1413,26 @@ function compileOne(b, id, target){
     else if (b.type === "board")
       push(keepArrays({ type:"board", id, title: b.title || "", task: b.task || "",
         height: Number(b.height) || 420 }));
+    else if (b.type === "storyboard")
+      push(keepArrays({ type:"storyboard", id, title: b.title || "", task: b.task || "",
+        panels: Math.max(2, Math.min(b.flip === true ? 24 : 12, Number(b.panels) || 6)),
+        /* namesText is what the editor types into, and only exists once the
+           task has been opened there. Reopened and saved without that, the
+           list it came with has to come through untouched. */
+        names: b.namesText !== undefined
+          ? String(b.namesText).split("\n").map(x => x.trim()).filter(Boolean)
+          : (Array.isArray(b.names) ? b.names : []),
+        timing: b.timing !== false,
+        /* The drawings in a demo are written by a script, not in this editor,
+           so these only have to come through a save untouched. */
+        flip: b.flip === true ? true : undefined,
+        demo: b.demo === true ? true : undefined,
+        starter: Array.isArray(b.starter) && b.starter.length ? b.starter : undefined,
+        keys: Array.isArray(b.keys) && b.keys.length ? b.keys : undefined,
+        speeds: Array.isArray(b.speeds) && b.speeds.length ? b.speeds : undefined,
+        fps: Number(b.fps) || undefined,
+        minSecs: Number(b.minSecs) || undefined,
+        maxSecs: Number(b.maxSecs) || undefined }));
     else if (b.type === "label")
       push(keepArrays({ type:"label", id, title: b.title || "", task: b.task || "",
         image: b.image || "",
@@ -2425,7 +2449,7 @@ function pageLockTools(b, tools){
   /* Home learning has none: it is done at home, where there is no teacher
      to open a page, so lesson.html never locks one. An assessment's pages
      are gone through one after another in the one sitting, so none either. */
-  if (lesson.homework || lesson.assessment) return;
+  if (lesson.homework || lesson.cover || lesson.assessment) return;
   const isFirst = lesson.blocks.indexOf(b) === 0;
   if (isFirst) b.startLocked = false;     // students must be able to begin
   const locked = b.startLocked !== false;
@@ -2819,9 +2843,10 @@ function setMode(assess, practical){
   saveDraft(); render(); schedulePreview();
   if (typeof paintBuildBar === "function") paintBuildBar();
 }
-/* The four kinds of work, in the order they are offered. Home learning is
-   a lesson in every way except that students see it as home learning and
-   nothing in it is ever locked. */
+/* The kinds of work, in the order they are offered. Home learning is a lesson
+   in every way except that students see it as home learning and nothing in it
+   is ever locked. Cover is nothing locked as well, but each page has to be
+   earned by having a go at it, because nobody in the room can check. */
 const KINDS = [
   { id:"lesson",    name:"Lesson",               icon:"lessons",
     about:"Pages a class works through, opened one at a time as you teach." },
@@ -2830,13 +2855,17 @@ const KINDS = [
   { id:"practical", name:"Practical assessment", icon:"practice",
     about:"Built like a lesson, sat a page at a time, and marked by you." },
   { id:"home",      name:"Home learning",        icon:"home",
-    about:"A lesson done at home. Every question is on one page, the way an assessment's are." }
+    about:"A lesson done at home. Every question is on one page, the way an assessment's are." },
+  { id:"cover",     name:"Cover lesson",         icon:"eye",
+    about:"Runs without you. Students earn each page by having a go, and finish on a card they show the cover teacher." }
 ];
 function kindNow(){
-  return lesson.practical ? "practical" : lesson.assessment ? "assess" : lesson.homework ? "home" : "lesson";
+  return lesson.practical ? "practical" : lesson.assessment ? "assess" : lesson.homework ? "home"
+       : lesson.cover ? "cover" : "lesson";
 }
 function setKind(id){
   lesson.homework = id === "home";
+  lesson.cover = id === "cover";
   setMode(id === "assess", id === "practical");
   paintBuildBar();
 }
@@ -4801,7 +4830,7 @@ function askPasscode(b){
 /* Every locked page that has not got a passcode yet, by its number. */
 function pagesMissingPasscode(){
   const out = [];
-  if (lesson.homework) return out;        // nothing locks in home learning
+  if (lesson.homework || lesson.cover) return out;   // nothing locks in either
   if (lesson.assessment) return out;      // nor in a marked assessment
   lesson.blocks.forEach((b, i) => {
     if (b.type !== "page" || i === 0) return;
@@ -7554,6 +7583,7 @@ async function downloadForFolder(){
     /* a practice one is a practical too, and is listed as one */
     (lesson.assessment || lesson.practical) ? { assessment: true } : {},
     lesson.homework ? { homework: true } : {},
+    lesson.cover ? { cover: true } : {},
     lesson.versionOf ? { versionOf: lesson.versionOf, versionName: lesson.versionName || "",
                          versionNote: lesson.versionNote || "", versionCode: lesson.versionCode || "" } : {},
     { code: code });
@@ -7598,7 +7628,7 @@ async function downloadForFolder(){
        the passcodes down. */
     const gates = [];
     lesson.blocks.forEach((blk, i) => {
-      if (!lesson.homework && blk.type === "page" && i > 0 && blk.startLocked !== false && blk.passCode)
+      if (!lesson.homework && !lesson.cover && blk.type === "page" && i > 0 && blk.startLocked !== false && blk.passCode)
         gates.push("Page " + (i + 1) + ": " + blk.passCode);
     });
     if (gates.length){
@@ -7882,6 +7912,7 @@ function fromCompiled(data, meta){
                 practice: window.progressMath.rubricRun(data),
                 rubricShow: data.rubricShow === "grade" ? "grade" : "level",
                 homework: !!data.homework,
+                cover: !!data.cover,
                 /* The two sentences for everything wrong and everything right
                    were saved but never read back, so reopening an assessment
                    emptied both boxes and the next save threw them away. */
@@ -7924,6 +7955,7 @@ function fromCompiled(data, meta){
     const made = backOne(b);
     if (made && b && b.fromTask) made.fromTask = b.fromTask;
     if (made && b && b.required === false) made.required = false;
+    if (made && b && b.confused) made.confused = b.confused;
     if (made && b && ["attempted","partial","full"].includes(b.gate)) made.gate = b.gate;
     /* A checklist line saved with no kind (switched over from Teacher before
        that was put right) is repaired as it opens, so the lesson is fixed by

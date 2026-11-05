@@ -2638,7 +2638,29 @@ function lessonCards(list, box){
   });
   box.appendChild(grid);
 }
-function paintHub(){ lessonCards(lessonsOfUnit(hubUnit), $("hubList")); }
+/* Cover lessons are kept out of the way under the taught ones, folded shut:
+   they are reached for on the morning somebody is off, not in the run of a
+   unit, and a number in the middle of the list would read as a lesson to teach. */
+function lessonCardsAndCover(list, box){
+  const cover = list.filter(l => l.cover);
+  const taught = list.filter(l => !l.cover);
+  if (taught.length || !cover.length) lessonCards(taught, box);
+  else box.innerHTML = "";
+  if (!cover.length) return;
+  const fold = document.createElement("details");
+  fold.className = "cover-fold";
+  const head = document.createElement("summary");
+  head.textContent = "Cover lessons (" + cover.length + ")";
+  fold.appendChild(head);
+  fold.appendChild(el("p","cover-fold-note",
+    "For the cover teacher: students sign in and open the lesson. They work down each page, pressing Understood or " +
+    "Finished to see the next task. They are finished when they reach the last screen, which shows how many pages they did."));
+  const holder = el("div");
+  fold.appendChild(holder);
+  box.appendChild(fold);
+  lessonCards(cover, holder);
+}
+function paintHub(){ lessonCardsAndCover(lessonsOfUnit(hubUnit), $("hubList")); }
 
 /* ---------- the link to hand a class (no server) ----------
    Lessons reach students through Teams or Impero rather than a lesson list,
@@ -2896,7 +2918,7 @@ function openPoint(id){
   show("hubPointLessonsView");
   paintPointLessons();
 }
-function paintPointLessons(){ lessonCards(lessonsOfPoint(hubPoint), $("hubPointList")); }
+function paintPointLessons(){ lessonCardsAndCover(lessonsOfPoint(hubPoint), $("hubPointList")); }
 on("refPoint", "click", () => refreshSpec("hubPointList", "Loading the lessons", paintPointLessons));
 on("backPointStrand", "click", () => { if (hubStrand) openStrand(hubStrand); else openComponent(hubComp); });
 /* The builder opens knowing where it is: the year group, the point, and the
@@ -4258,7 +4280,7 @@ async function fetchCatalogue(){
          anything else about a lesson, so the hub folds them away here too. */
       lessons: file.lessons.map(l => ({ lesson_id: l.id, unit: l.unit, year: l.year,
                                         code: l.code, position: 0, published: 1,
-                                        title: l.title,
+                                        title: l.title, cover: !!l.cover,
                                         version_of: l.versionOf || "",
                                         version_name: l.versionName || "",
                                         version_note: l.versionNote || "",
@@ -5226,7 +5248,9 @@ function paintTasks(){
   const msg = $("relMsg");
   if (msg){
     const rows = lessonJson.blocks.length + (lessonJson.assessment ? 0 : 1);   // + the summary
-    const base = (lessonJson.homework && !lessonJson.assessment)
+    const base = lessonJson.cover
+        ? "A cover lesson is never locked. Students open each page by having a go at the one before."
+      : (lessonJson.homework && !lessonJson.assessment)
         ? "Home learning is never locked, so every page is open."
       : locks.size === 0 ? "Every task is open for " + cls + "."
       : locks.size >= rows ? "Every task is locked for " + cls + "."

@@ -374,6 +374,7 @@
       const alts = versionsOf(id);
       if (alts.length) head.appendChild(el("span","statechip open", alts.length + " version" + (alts.length === 1 ? "" : "s")));
       if (l.assessment) head.appendChild(el("span","statechip shut","Assessment"));
+      if (l.cover) head.appendChild(el("span","statechip open","Cover"));
       card.appendChild(head);
 
       /* pages, tasks and when, filled in once the lesson has been read */
@@ -495,7 +496,7 @@
     web:"Web page", question:"Written answer", quiz:"Quiz", extension:"Extension tasks", group:"Group",
     choice:"Choice", image:"Screenshot", embed:"Video", video:"Video file", frame:"Embedded page", link:"Link to a site",
     mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order", keywords:"Keyword definitions",
-    notes:"Notes", mindmap:"Mind map", board:"Whiteboard", label:"Label a picture", binary:"Binary conversion",
+    notes:"Notes", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", label:"Label a picture", binary:"Binary conversion",
     binadd:"Binary addition", password:"Password checker", caesar:"Caesar cipher", short:"Short answer",
     table:"Table", exam:"Exam question", python:"Python code" };
   window.stepTitle = function(b, i){

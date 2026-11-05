@@ -306,6 +306,11 @@ function editTask(b, body, ctx){
   const k = editorKit(b, body, ctx);
   const edit = EDITORS[b.type];
   if (edit) edit(b, k);
+  /* Written here rather than in each editor, because in a Cover lesson every
+     task can have one. */
+  if (lesson.cover && b.type !== "page" && b.type !== "extension")
+    k.F("Another way to explain it (optional)", "confused", { area:true, rows:3,
+      help:"Shown when a student presses I am confused. Say the same idea differently, without giving the answer. Left empty, the button is not shown." });
   k.finish();
 }
 
@@ -392,6 +397,7 @@ const TASK_ICONS = {
   helper:    '<path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.2-.8.6-.8 1.1"/><path d="M12 14h.01"/>',
   mindmap:   '<circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5.5" r="1.8"/><circle cx="19.5" cy="5.5" r="1.8"/><circle cx="4.5" cy="18.5" r="1.8"/><circle cx="19.5" cy="18.5" r="1.8"/><path d="M9.8 9.8 5.8 6.8M14.2 9.8l4-3M9.8 14.2l-4 3M14.2 14.2l4 3"/>',
   board:     '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 13c2-4 3 1 5-2s3 1 5-1M9 21l3-4 3 4"/>',
+  storyboard:'<rect x="2.5" y="7" width="5.6" height="10" rx="1"/><rect x="9.2" y="7" width="5.6" height="10" rx="1"/><rect x="15.9" y="7" width="5.6" height="10" rx="1"/>',
   code:      '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   ide:       '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   web:       '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M10 13l-2 2 2 2M14 13l2 2-2 2"/>',
@@ -1752,6 +1758,24 @@ EDITORS.board = function(b, k){
   settings(() => {
     F("How tall, in pixels", "height", { num:true,
       help:"What they draw is kept as the strokes themselves, not a picture, so it takes very little room." });
+  });
+};
+
+EDITORS.storyboard = function(b, k){
+  const { F, toggleRow, settings } = k;
+  if (b.namesText === undefined) b.namesText = (b.names || []).join("\n");
+  F("Heading (optional)", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+  F("How many panels", "panels", { num:true, help:"Between 2 and 12, or up to 24 for a flip book." });
+  F("Panel headings (optional)", "namesText", { area:true, rows:4,
+    help:"One line for each panel, in order. A panel with no line is only numbered." });
+  settings(() => {
+    toggleRow([["timing","Students say how long each panel lasts", true],
+               ["flip","Flip book: pictures only, played on a loop", false]]);
+    F("Shortest it should be, in seconds", "minSecs", { num:true,
+      help:"Only ever a suggestion under the panels. Leave at 0 for none." });
+    F("Longest it should be, in seconds", "maxSecs", { num:true,
+      help:"Only ever a suggestion under the panels. Leave at 0 for none." });
   });
 };
 
