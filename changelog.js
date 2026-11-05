@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"16.3", text:"Home learning is all on one page, laid out like an assessment's questions: numbered cards with the bar beside them, and no progress bar along the top." },
   { v:"16.2.1", text:"Drag and drop tasks: a word in a box can be dragged back to the side or to another box, and two words swap if one lands on the other. Words glide into place, lines in a put in order list slide, and labelling now works on a touch screen." },
   { v:"16.2", text:"Blender work plays its animation in the 3D view. Press Play, or Space, to watch it at the scene's own speed, drag the slider to any frame, and use the arrow keys to step. Moving, turning, resizing, objects switched off and on, parents, the camera flying round, Cycles loops and every kind of easing play as they do in Blender. Look through the camera while it plays to see the animation as it will render." },
   { v:"16.1", text:"Blender work opens in a 3D view in View Work. Turn it, zoom and pan with the mouse or Blender's own keys, look through the scene's camera, switch to wireframe, and click a model to pick it in the Outliner. Mirror, Array and Subdivision Surface are shown as Blender shows them. Very big scenes are simplified to stay small, and the view says which models were. Work handed in before this shows its picture as before." },

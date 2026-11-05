@@ -7274,11 +7274,15 @@ body.assess-on-questions .stagerow > #blocks{flex:0 1 800px}
 /* Each question is a card of its own with room round it, its number on a
    line above its words. Run together with a thin line between them, thirty
    questions read as one wall of text. */
-.assess-questions > .pg-item{
+.assess-questions > .pg-item, .assess-questions > .pagegroup > .pg-item{
   background:var(--panel); border:1px solid var(--line); border-radius:var(--rad-lg);
   padding:22px 24px 24px; margin:0 0 28px;
 }
-.assess-questions > .pg-item:first-child{margin-top:16px}
+.assess-questions > .pg-item:first-child, .assess-questions > .pagegroup:first-child > .pg-item:first-child{margin-top:16px}
+/* The name of a page in home learning, which sits between the questions. */
+.assess-part{margin:32px 0 14px; font-size:var(--text-xl)}
+.assess-questions > .pagegroup:first-child > .assess-part{margin-top:20px}
+.assess-part + .pg-item{margin-top:0 !important}
 /* One swipe on a touch screen is one question, landing with the card at the
    top, the same place a turn of the wheel takes it (glideStage in
    lesson.html does the wheel, because it has to work with reduced motion
@@ -7287,16 +7291,16 @@ body.assess-on-questions .stagerow > #blocks{flex:0 1 800px}
    the last card are a stop of their own. */
 @media (pointer:coarse){
   body.assess-on-questions #stage{scroll-snap-type:y mandatory; scroll-padding-top:12px}
-  .assess-questions > .pg-item{scroll-snap-align:start; scroll-snap-stop:always}
+  .assess-questions > .pg-item, .assess-questions > .pagegroup > .pg-item{scroll-snap-align:start; scroll-snap-stop:always}
   .assess-questions > .assess-end{scroll-snap-align:end}
 }
 .aq-num{margin:0 0 6px; font-size:var(--text-xs); font-weight:800; letter-spacing:.06em;
   text-transform:uppercase; color:var(--amber)}
-.assess-questions > .pg-item > .pg-h{font-size:var(--text-xl); line-height:1.45; margin:0 0 16px}
-.assess-questions > .pg-item > .pg-t{margin:-8px 0 16px}
+.assess-questions > .pg-item > .pg-h, .assess-questions > .pagegroup > .pg-item > .pg-h{font-size:var(--text-xl); line-height:1.45; margin:0 0 16px}
+.assess-questions > .pg-item > .pg-t, .assess-questions > .pagegroup > .pg-item > .pg-t{margin:-8px 0 16px}
 /* Being taken to a question: a ring that fades, because the card has a
    background of its own that the usual flash would wipe out. */
-.assess-questions > .pg-item.justopened{animation:qcardflash 1.6s ease-out}
+.assess-questions > .pg-item.justopened, .assess-questions > .pagegroup > .pg-item.justopened{animation:qcardflash 1.6s ease-out}
 @keyframes qcardflash{
   from{box-shadow:0 0 0 3px var(--amber)}
   to{box-shadow:0 0 0 3px transparent}
@@ -7308,8 +7312,8 @@ body.assess-on-questions .stagerow > #blocks{flex:0 1 800px}
   .qbar{display:none}
   .qnav-open:not([hidden]){display:inline-flex; align-items:center; justify-content:center;
     max-width:100%; padding:8px 14px; font-size:var(--text-base); font-weight:700; white-space:nowrap}
-  .assess-questions > .pg-item{padding:16px 16px 18px; margin-bottom:20px; border-radius:var(--rad-lg)}
-  .assess-questions > .pg-item > .pg-h{font-size:var(--text-xl)}
+  .assess-questions > .pg-item, .assess-questions > .pagegroup > .pg-item{padding:16px 16px 18px; margin-bottom:20px; border-radius:var(--rad-lg)}
+  .assess-questions > .pg-item > .pg-h, .assess-questions > .pagegroup > .pg-item > .pg-h{font-size:var(--text-xl)}
 }
 .qsheet .qnav-grid{margin:14px 0 0; grid-template-columns:repeat(auto-fill, minmax(48px, 1fr))}
 .qsheet .qnum{height:44px; font-size:var(--text-md)}
