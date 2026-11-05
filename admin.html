@@ -233,7 +233,7 @@ setTimeout(function(){
     <h2 style="margin:14px 0 4px">Lessons</h2>
     <div class="toolrow">
       <button class="btn-ghost" id="hubNewYear">+ New year group</button>
-      <button class="btn-primary" id="hubNewLesson">+ Build a new lesson</button>
+      <button class="btn-primary" id="hubNewLesson">+ Build new</button>
     </div>
     <div class="classgrid" id="hubYears"></div>
     <div id="hubSearchResults"></div>
@@ -252,7 +252,7 @@ setTimeout(function(){
       <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
       <button class="btn-ghost" id="specBtn" hidden>Specification</button>
       <button class="btn-ghost" id="yearVoiceBtn" hidden title="What this year group said in Student Voice">Student Voice</button>
-      <button class="btn-primary" id="hubNewLesson2">+ Build a new lesson</button>
+      <button class="btn-primary" id="hubNewLesson2">+ Build new</button>
     </div>
     <div class="classgrid" id="hubUnits"></div>
     <div id="unitSearchResults"></div>
@@ -300,7 +300,7 @@ setTimeout(function(){
     </div>
     <div class="toolrow">
       <button class="btn-ghost iconbtn refresh" id="refPoint" title="Refresh">&#8635;</button>
-      <button class="btn-primary" id="hubNewLesson4">+ Build a new lesson</button>
+      <button class="btn-primary" id="hubNewLesson4">+ Build new</button>
     </div>
     <div class="subtabs kindtabs" id="pointKinds" role="tablist" aria-label="Kind of lesson"></div>
     <div id="hubPointList"></div>
@@ -315,7 +315,7 @@ setTimeout(function(){
     </div>
     <div class="toolrow">
       <button class="btn-ghost iconbtn refresh" id="refUnitPage" title="Refresh">&#8635;</button>
-      <button class="btn-primary" id="hubNewLesson3">+ Build a new lesson</button>
+      <button class="btn-primary" id="hubNewLesson3">+ Build new</button>
     </div>
     <div class="subtabs kindtabs" id="hubKinds" role="tablist" aria-label="Kind of lesson"></div>
     <div id="hubList"></div>
@@ -497,8 +497,8 @@ setTimeout(function(){
 
     </div>
     <div class="toolrow">
-      <button class="btn-primary" id="addLessonBtn">+ Add an existing lesson</button>
-      <button class="btn-ghost" id="newLessonBtn">+ Build a new lesson</button>
+      <button class="btn-primary" id="addLessonBtn">+ Add new</button>
+      <button class="btn-ghost" id="newLessonBtn">+ Build new</button>
     </div>
     <div class="subtabs kindtabs" id="classKinds" role="tablist" aria-label="Kind of lesson"></div>
     <!-- The grids themselves are made inside this, one per sub-point of the
@@ -2582,7 +2582,7 @@ function openHubUnit(u, kind){
 /* the lesson cards, used for a unit and for search results */
 function lessonCards(list, box){
   box.innerHTML = "";
-  if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build a new lesson”.")); return; }
+  if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build new”.")); return; }
   const grid = el("div","lessongrid");
   /* Sorted here rather than by each caller, so the hub, a point's lessons
      and a search all come out in the same order. */
@@ -2655,13 +2655,13 @@ const LESSON_KINDS = [
 const kindOf = (l) => l.cover ? "cover"
                     : (l.homework && !l.assessment && !l.practical) ? "homework"
                     : "lessons";
-const kindWords = () => LESSON_KINDS.find(k => k.id === lessonKind).words;
+const kindWords = (kind) => LESSON_KINDS.find(k => k.id === (kind || lessonKind)).words;
 /* The tabs, each saying how many are behind it, so an empty shelf can be told
    from a full one without pressing it. */
-function paintKindTabs(bar, list, repaint){
+function drawKindTabs(bar, list, open, pick){
   bar.innerHTML = "";
   LESSON_KINDS.forEach(k => {
-    const here = k.id === lessonKind;
+    const here = k.id === open;
     const b = el("button", here ? "on" : "", k.name);
     b.type = "button";
     b.dataset.kind = k.id;
@@ -2669,16 +2669,19 @@ function paintKindTabs(bar, list, repaint){
     b.setAttribute("aria-selected", here ? "true" : "false");
     const n = list.filter(l => kindOf(l) === k.id).length;
     if (n) b.appendChild(el("span","kindcount", String(n)));
-    b.addEventListener("click", () => {
-      lessonKind = k.id;
-      /* Noted now rather than at the next change of screen, because a tab is
-         not one, and the builder is a page of its own: coming back from it
-         has to land on the shelf it was opened from. */
-      const spot = lastSpot();
-      if (spot){ spot.kind = k.id; try{ sessionStorage.setItem("hub_spot", JSON.stringify(spot)); }catch(e){} }
-      repaint();
-    });
+    b.addEventListener("click", () => pick(k.id));
     bar.appendChild(b);
+  });
+}
+function paintKindTabs(bar, list, repaint){
+  drawKindTabs(bar, list, lessonKind, (kind) => {
+    lessonKind = kind;
+    /* Noted now rather than at the next change of screen, because a tab is
+       not one, and the builder is a page of its own: coming back from it
+       has to land on the shelf it was opened from. */
+    const spot = lastSpot();
+    if (spot){ spot.kind = kind; try{ sessionStorage.setItem("hub_spot", JSON.stringify(spot)); }catch(e){} }
+    repaint();
   });
 }
 function kindShelf(list, bar, box, repaint){
@@ -2686,7 +2689,7 @@ function kindShelf(list, bar, box, repaint){
   const shown = list.filter(l => kindOf(l) === lessonKind);
   box.innerHTML = "";
   if (!shown.length){
-    box.appendChild(el("p","hint","No " + kindWords() + " here yet, press “+ Build a new lesson”."));
+    box.appendChild(el("p","hint","No " + kindWords() + " here yet, press “+ Build new”."));
     return;
   }
   if (lessonKind === "cover") box.appendChild(el("p","hint",
@@ -4575,7 +4578,9 @@ function pointNamed(name){
 }
 
 on("addLessonBtn", "click", () => {
-  let showAll = false, term = "";
+  /* Its own idea of which tab is open, starting on the one behind it, so
+     looking through the pop-up does not move the page underneath. */
+  let showAll = false, term = "", kind = lessonKind;
   openModal(box => {
     /* Wider than an ordinary pop-up. This one is a list of lessons with a
        search box and a button on one line above it, and at the usual 440px
@@ -4585,6 +4590,10 @@ on("addLessonBtn", "click", () => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);
     modalTitle(box, "Add a lesson to " + (subunit || unit || "no unit"));
+    const kinds = el("div","subtabs kindtabs");
+    kinds.setAttribute("role", "tablist");
+    kinds.setAttribute("aria-label", "Kind of lesson");
+    box.appendChild(kinds);
     const tools = el("div","toolrow");
     /* the same box as the one on the hub, rather than a bare input */
     const searchWrap = el("span","searchbox");
@@ -4608,7 +4617,7 @@ on("addLessonBtn", "click", () => {
     function paint(){
       holder.innerHTML = "";
       const t = term.trim().toLowerCase();
-      const rows = fileLessons.filter(l => {
+      const offered = fileLessons.filter(l => {
         /* Versions are not offered here in their own right. The lesson they
            came from is, and which version this class gets is asked once it
            has been picked. */
@@ -4621,6 +4630,8 @@ on("addLessonBtn", "click", () => {
         if (showAll) return true;
         return (l.unit || "") === unit;                                // suggested by the lesson itself
       });
+      drawKindTabs(kinds, offered.map(l => catOf(l.id)), kind, (k) => { kind = k; paint(); });
+      const rows = offered.filter(l => kindOf(catOf(l.id)) === kind);
       inOrder(rows);
       longWord.textContent = showAll ? "Only lessons for this unit" : "Show every lesson";
       shortWord.textContent = showAll ? "This unit" : "All units";
@@ -4629,8 +4640,8 @@ on("addLessonBtn", "click", () => {
            something shorter on a phone, and a message telling a teacher to
            press words that are not on screen is worse than no message. */
         holder.appendChild(el("p","modal-text", showAll
-          ? "No other lessons match."
-          : "No lessons name this unit yet. Look in every unit with the button above, or build a new one."));
+          ? "No other " + kindWords(kind) + " match."
+          : "No " + kindWords(kind) + " for this unit yet. Look in every unit with the button above, or build a new one."));
       }
       rows.forEach(l => {
         const row = el("button","ov-row");
@@ -4679,7 +4690,7 @@ function paintLessonGrid(){
   paintKindTabs($("classKinds"), shelf, paintLessonGrid);
   const mine = shelf.filter(l => kindOf(l) === lessonKind);
   if (!mine.length){
-    g.appendChild(el("p","hint","No " + kindWords() + " here yet for " + cls + ". Add one with “+ Add an existing lesson”."));
+    g.appendChild(el("p","hint","No " + kindWords() + " here yet for " + cls + ". Add one with “+ Add new”."));
     return;
   }
   inOrder(mine, (l) => titleOf(l.lesson_id));
@@ -4710,7 +4721,7 @@ function paintLessonGrid(){
     chip.appendChild(el("span","chip-state", state));
     chip.appendChild(el("span","chip-when", when));
     chip.title = when;
-    chip.addEventListener("click", (e) => { e.stopPropagation(); schedulePopup(l.lesson_id); });
+    chip.addEventListener("click", (e) => { e.stopPropagation(); publishPopup(l.lesson_id); });
     head.appendChild(chip);
     if (a && a.release_at && scheduled)
       card.appendChild(el("p","lp-note","Opens " + niceDate(a.release_at) + " at " + hhmm(a.release_at)));
@@ -4741,7 +4752,7 @@ function paintLessonGrid(){
     const pub = el("button", live ? "btn-ghost" : "btn-primary", live ? "Unpublish" : "Publish");
     pub.addEventListener("click", () => {
       if (live){ setPublish(l.lesson_id, false); return; }
-      schedulePopup(l.lesson_id);
+      publishPopup(l.lesson_id);
     });
     const isAssessment = !!l.assessment;
     const workBtn = el("button", isAssessment ? "btn-primary" : "btn-ghost",
@@ -4871,21 +4882,87 @@ async function setPublish(id, on, releaseAt, closeOn){
     await loadCatalogue(); paintLessonGrid();
   }catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
 }
-function schedulePopup(id){
+/* What the timetable knows about this class. Waited for before a pop-up opens
+   rather than filling in afterwards: the first thing in it is decided by the
+   answer, and a button that moves as it is reached for gets the wrong press.
+   Home has usually fetched it already. A timetable that cannot be read is the
+   same as a class that is not on it. */
+async function timetableReady(){
+  if (OFFLINE || !window.timetable) return;
+  try{ await window.timetable.load(); }catch(e){}
+}
+const lessonAfter = (moment) => window.timetable ? window.timetable.lessonAfter(cls, moment) : null;
+const lessonWhen = (n) => n.name + ", " + (ymd(n.date) === ymd(new Date()) ? "today" : niceDate(ymd(n.date))) + " at " + n.start;
+
+/* Publishing is nearly always one of a few things, so those are what is
+   offered, with the form for anything else behind the last of them. A lesson
+   usually wants to open when the class arrives, and home learning is usually
+   set now and wanted back next lesson. Something already out goes straight to
+   its dates, because that is an edit rather than a decision. */
+async function publishPopup(id){
+  const already = assignOf(id);
+  if (already && already.published){ await schedulePopup(id); return; }
+  await timetableReady();
+  const next = lessonAfter(new Date());
+  const homework = kindOf(catOf(id)) === "homework";
+  openModal(box => {
+    modalTitle(box, "Publish \u201c" + titleOf(id) + "\u201d");
+    const choice = (style, words, note, go) => {
+      const b = el("button", "pubchoice " + style);
+      b.type = "button";
+      b.appendChild(el("b","", words));
+      if (note) b.appendChild(el("span","", note));
+      b.addEventListener("click", go);
+      box.appendChild(b);
+    };
+    const publish = (releaseAt, closeOn) => async () => { closeModal(); await setPublish(id, true, releaseAt, closeOn); };
+    if (!next) box.appendChild(el("p","modal-text", cls + " is not on your timetable, so there is no lesson to go by."));
+    if (homework){
+      if (next) choice("btn-primary", "Publish now, due next lesson", "Due " + lessonWhen(next) + ". Closes at " + CLOSES_AT + " that day.",
+                       publish("", ymd(next.date)));
+      else choice("btn-primary", "Publish now", "Closes at " + CLOSES_AT + " today.", publish("", ymd(new Date())));
+    } else {
+      if (next){
+        const at = new Date(ymd(next.date) + "T" + next.start + ":00");
+        choice("btn-primary", "Publish for the next lesson", lessonWhen(next) + ". Closes at " + CLOSES_AT + " that day.",
+               publish(at.toISOString(), ymd(next.date)));
+      }
+      choice(next ? "btn-ghost" : "btn-primary", "Publish now", "Closes at " + CLOSES_AT + " today.", publish("", ymd(new Date())));
+    }
+    choice("btn-ghost", "Schedule a custom time", "", () => schedulePopup(id));
+  });
+}
+
+async function schedulePopup(id){
+  await timetableReady();
   openModal(box => {
     const already = assignOf(id);
     const live = already && already.published;
+    const homework = kindOf(catOf(id)) === "homework";
     modalTitle(box, "Schedule \u201c" + titleOf(id) + "\u201d");
     /* start from what is already set, so this edits rather than replaces */
     let date = (already && already.release_at) ? localDay(already.release_at) : ymd(new Date());
     let time = (already && already.release_at) ? hhmm(already.release_at) : "";
     let close = (already && already.close_on) ? already.close_on : "";
-    /* Follows the opening day until a teacher moves it. A closing day already
-       saved on a different day from the opening one is a choice somebody made,
-       and so is having none on a lesson from before every lesson had one: that
-       is left as it is rather than quietly given a date. */
+    /* The day it closes unless a teacher says otherwise: the day it opens, or
+       for home learning the day of the first lesson after that. */
+    const closeFor = (moment, day) => {
+      const next = homework ? lessonAfter(moment) : null;
+      return next ? ymd(next.date) : day;
+    };
+    /* Counted from now at the earliest: with no time picked yet, today's date
+       means midnight, and a lesson taught this morning would come back as the
+       next one. */
+    const usualClose = () => {
+      const opens = new Date(date + "T" + (time || "00:00") + ":00"), now = new Date();
+      return closeFor(opens < now ? now : opens, date);
+    };
+    /* Follows that until a teacher moves it. A closing day already saved on
+       some other day is a choice somebody made, and so is having none on a
+       lesson from before every lesson had one: that is left as it is rather
+       than quietly given a date. */
     const noClosing = !!live && !close;
-    let closeTouched = noClosing || (!!close && close !== date);
+    let closeTouched = noClosing || (!!close && close !== usualClose());
     const summary = el("p","modal-text","");
     const dateRow = el("div","bfield");
     dateRow.appendChild(el("label","","Opens on"));
@@ -4942,19 +5019,19 @@ function schedulePopup(id){
       date = dIn.value;
       refresh();
     });
-    /* Publishing now has no opening day to follow, so it closes today, unless
-       a day still to come was picked for it. */
-    const closeIfNow = () => (closeTouched && close && close >= ymd(new Date())) ? close : ymd(new Date());
+    /* Opening now has no opening day to follow, so it goes by today, unless a
+       day still to come was picked for it. */
+    const closeIfNow = () => (closeTouched && close && close >= ymd(new Date())) ? close : closeFor(new Date(), ymd(new Date()));
     function refresh(){
-      if (!closeTouched){ close = date; cIn.value = date; }   // the closing day follows
-      summary.textContent = !time ? "Publish now closes at " + CLOSES_AT + " on " + niceDate(closeIfNow()) + "."
+      if (!closeTouched){ close = usualClose(); cIn.value = close; }   // the closing day follows
+      summary.textContent = !time ? (live ? "Opening it now closes it at " + CLOSES_AT + " on " + niceDate(closeIfNow()) + "." : "Choose a time above.")
         : close ? "Opens " + niceDate(date) + " at " + time + ", closes at " + CLOSES_AT + " on " + niceDate(close) + "."
         : "Opens " + niceDate(date) + " at " + time + ", with no closing day.";
     }
     cIn.value = close; refresh();
     box.appendChild(summary);
 
-    const go = el("button","btn-primary modal-cta", live ? "Save these dates" : "Schedule lesson");
+    const go = el("button","btn-primary modal-cta", live ? "Save these dates" : homework ? "Schedule home learning" : "Schedule lesson");
     go.addEventListener("click", async () => {
       if (!time){ summary.textContent = "Pick a period first."; return; }
       if (close && close < date){ summary.textContent = "It would close before it opens. Choose a later closing day."; return; }
@@ -4962,8 +5039,13 @@ function schedulePopup(id){
       closeModal();
       await setPublish(id, true, at.toISOString(), close);
     });
-    const now = el("button","btn-ghost modal-stay", live ? "Open it now instead" : "Publish now");
-    now.addEventListener("click", async () => { closeModal(); await setPublish(id, true, "", closeIfNow()); });
+    /* Publishing now is one of the choices this was reached from, so it is not
+       offered twice. */
+    const now = el("button","btn-ghost modal-stay", live ? "Open it now instead" : "Back");
+    now.addEventListener("click", async () => {
+      if (!live){ publishPopup(id); return; }
+      closeModal(); await setPublish(id, true, "", closeIfNow());
+    });
     box.appendChild(go); box.appendChild(now);
   });
 }
@@ -5229,7 +5311,7 @@ function openManage(){
           closeModal(); paintLessonGrid(); openManage();
         } else {
           closeModal();
-          schedulePopup(lessonId);
+          publishPopup(lessonId);
         }
       }catch(e){ say("Could not change that", e.message); }
     });

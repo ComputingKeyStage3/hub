@@ -359,7 +359,7 @@
   window.lessonCards = function(list, box){
     if (!on("richCards")) return baseLessonCards.apply(this, arguments);
     box.innerHTML = "";
-    if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build a new lesson”.")); return; }
+    if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build new”.")); return; }
     inOrder(list, (l) => titleOf(l.lesson_id));
     const grid = el("div","lessongrid richgrid");
     list.forEach(l => {

@@ -1309,6 +1309,34 @@
     return null;
   }
 
+  /* The first lesson with a class to start after a moment, for publishing:
+     null when the timetable has nothing for the class. Not nextLessonFor,
+     which counts a lesson still going on, because a lesson cannot be published
+     for a start already gone and home learning set during a lesson is due at
+     the one after it. A double is one lesson here, or its second half would
+     count as the next lesson while the first was being taught.
+
+     Asks nothing of the server, so a pop-up can call it on every change of a
+     date box. load() has to have been waited for first. */
+  function lessonAfter(name, moment){
+    const k = String(name || "").toLowerCase();
+    if (!tt || !k || isNaN(moment)) return null;
+    const mins = moment.getHours() * 60 + moment.getMinutes();
+    const first = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate());
+    for (let i = 0; i < 70; i++){
+      const d = addDays(first, i);
+      const plan = dayPlan(tt, d);
+      if (plan.kind !== "school") continue;
+      for (const x of withDoubles(plan.list)){
+        if (String(x.slot.cls || "").toLowerCase() !== k) continue;
+        const start = toMins(x.start);
+        if (start === null || (i === 0 && start <= mins)) continue;
+        return { date: d, start: x.start, name: partsName(x.parts) };
+      }
+    }
+    return null;
+  }
+
   /* ================= hooking in ================= */
   const baseShow = window.show;
   window.show = function(view){
@@ -1322,7 +1350,7 @@
   /* Whatever is on screen already, since the sign-in may have gone up first. */
   if ($("homeView") && !$("homeView").hidden) paintHome();
 
-  window.timetable = { open, paintEditor, paintHome, load, nextLessonFor,
+  window.timetable = { open, paintEditor, paintHome, load, nextLessonFor, lessonAfter,
                        hasLessons: () => !!tt && hasLessons(tt),
                        weekOf: (d) => tt ? weekOf(tt, d || new Date()) : undefined,
                        _test: { normal, weekOf, holsOf, dayPlan, holidayWeek, nextSchoolDay, fromArbor, withDoubles } };
