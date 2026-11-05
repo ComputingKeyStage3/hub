@@ -497,7 +497,7 @@ setTimeout(function(){
 
     </div>
     <div class="toolrow">
-      <button class="btn-primary" id="addLessonBtn">+ Add new</button>
+      <button class="btn-primary" id="addLessonBtn">+ Add existing</button>
       <button class="btn-ghost" id="newLessonBtn">+ Build new</button>
     </div>
     <div class="subtabs kindtabs" id="classKinds" role="tablist" aria-label="Kind of lesson"></div>
@@ -4690,7 +4690,7 @@ function paintLessonGrid(){
   paintKindTabs($("classKinds"), shelf, paintLessonGrid);
   const mine = shelf.filter(l => kindOf(l) === lessonKind);
   if (!mine.length){
-    g.appendChild(el("p","hint","No " + kindWords() + " here yet for " + cls + ". Add one with “+ Add new”."));
+    g.appendChild(el("p","hint","No " + kindWords() + " here yet for " + cls + ". Add one with “+ Add existing”."));
     return;
   }
   inOrder(mine, (l) => titleOf(l.lesson_id));

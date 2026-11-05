@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"16.7.1", text:"The Add new button in a unit now says Add existing." },
   { v:"16.7", text:"Publish now goes by your timetable: a lesson can open for the class's next lesson, and home learning can go out now and be due next lesson. Add new has the Lessons, Home Learning and Cover tabs, and the buttons now say Add new and Build new." },
   { v:"16.6", text:"A unit now has Lessons, Home Learning and Cover tabs, in Lessons and in a class. A class opens straight on its units, with tabs along the top for Students and Progress. Every lesson you publish closes at 23:59 that day unless you pick a different closing day." },
   { v:"16.5", text:"Home learning is all on one page, laid out like an assessment's questions: numbered cards with the bar beside them, and no progress bar along the top." },
