@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"16.6", text:"A unit now has Lessons, Home Learning and Cover tabs, in Lessons and in a class. A class opens straight on its units, with tabs along the top for Students and Progress. Every lesson you publish closes at 23:59 that day unless you pick a different closing day." },
   { v:"16.5", text:"Home learning is all on one page, laid out like an assessment's questions: numbered cards with the bar beside them, and no progress bar along the top." },
   { v:"16.4.1", text:"Cover lessons: a task to do now says Finished rather than Understood, and it presses itself when everything in the task is right. A task with its own Check button has no Finished: students keep going until it is right, and a short answer or a table gives the answer to type in after two wrong tries." },
   { v:"16.4", text:"Cover lessons: a new kind of lesson that runs without you. Students earn each page by having a go at it, with the answer given after two wrong tries. Each task opens the next with Understood, and I am confused gives a second explanation written in the builder. The last screen says how many pages they did, their test score and their minutes working. Mark work shows pages done, first try scores, minutes working and who rushed. They sit in a folded section under a unit's lessons." },

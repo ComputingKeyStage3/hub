@@ -76,7 +76,7 @@
   const SECTION = {
     homeView:"home", hubView:"hub", hubUnitsView:"hub", hubCompView:"hub", hubPointView:"hub",
     hubPointLessonsView:"hub", hubLessonsView:"hub", classesView:"classes", classView:"classes",
-    studentsView:"classes", coverView:"classes", unitsView:"classes", partsView:"classes",
+    studentsView:"classes", coverView:"classes", partsView:"classes",
     lessonsView:"classes", progressView:"classes", timetableView:"classes", studentView:"classes", practiceView:"practice", resultsView:"results",
     pwView:"pw", keepView:"keep", keyView:"home", whoView:"home"
   };
@@ -260,7 +260,7 @@
               await catPost({ op:"assign", id: id, groups: [group] });
               if (was && was.published)
                 await catPost({ op:"class-publish", id: id, group: group, published: true,
-                                releaseAt: was.release, closeOn: was.close });
+                                releaseAt: was.release, closeOn: was.close, openEnded: !was.close });
               await loadCatalogue();
               if (cls === group) paintLessonGrid();
               UI.toast("Back with " + group);

@@ -49,7 +49,7 @@
   /* The pages of a class, offered under each class that matches. */
   const CLASS_PAGES = [
     { name:"Students",        icon:"classes",  words:"logins passwords pupils", tile:"openStudents" },
-    { name:"Units & lessons", icon:"lessons",  words:"publish lock mark work", tile:"openLessons" },
+    { name:"Units",           icon:"lessons",  words:"lessons publish lock mark work", tile:"openLessons" },
     { name:"Progress",        icon:"progress", words:"markbook grid results", tile:"openProgress" }
   ];
 
@@ -136,11 +136,12 @@
       if (strand){
         openComponent(parseInt(strand.component, 10) || 0);
         openStrand(strand.id);
-        openPoint(p.id);
+        openPoint(p.id, kindOf(l));
         return pick($("hubPointList"), id);
       }
     }
-    openHubUnit(l.unit || "");
+    /* on its own shelf, or there would be no card to pick out */
+    openHubUnit(l.unit || "", kindOf(l));
     pick($("hubList"), id);
   }
   function pick(holder, id){

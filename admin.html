@@ -302,6 +302,7 @@ setTimeout(function(){
       <button class="btn-ghost iconbtn refresh" id="refPoint" title="Refresh">&#8635;</button>
       <button class="btn-primary" id="hubNewLesson4">+ Build a new lesson</button>
     </div>
+    <div class="subtabs kindtabs" id="pointKinds" role="tablist" aria-label="Kind of lesson"></div>
     <div id="hubPointList"></div>
   </div>
 
@@ -316,6 +317,7 @@ setTimeout(function(){
       <button class="btn-ghost iconbtn refresh" id="refUnitPage" title="Refresh">&#8635;</button>
       <button class="btn-primary" id="hubNewLesson3">+ Build a new lesson</button>
     </div>
+    <div class="subtabs kindtabs" id="hubKinds" role="tablist" aria-label="Kind of lesson"></div>
     <div id="hubList"></div>
   </div>
 
@@ -341,16 +343,25 @@ setTimeout(function(){
   <!-- ============ one class ============ -->
   <div id="classView" hidden>
     <button class="crumb" id="backClasses">&larr; All classes</button>
+    <button class="btn-ghost iconbtn refresh" id="refUnits" title="Refresh">&#8635;</button>
     <div class="classhead">
       <h2 id="clsName"></h2>
       <button class="btn-ghost iconbtn" id="renameBtn" title="Rename class">&#9998;</button>
     </div>
-    <div class="bigcards">
-      <button class="classtile" id="openLessons"><b><span data-icon="lessons" data-size="22"></span> Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
-      <button class="classtile" id="openStudents"><b><span data-icon="classes" data-size="22"></span> Students</b><span>Add, edit and reset logins</span></button>
-      <button class="classtile" id="openProgress"><b><span data-icon="progress" data-size="22"></span> Progress</b><span>How a unit is going, lesson by lesson</span></button>
-      <button class="classtile" id="openCover" hidden><b><span data-icon="coverage" data-size="22"></span> Specification coverage</b><span>How the class is doing, point by point</span></button>
+    <div class="toolrow">
+      <button class="btn-primary" id="addUnitBtn">+ Add an existing unit</button>
+      <button class="btn-ghost" id="newUnitBtn2">+ New unit</button>
     </div>
+    <!-- One bar for a class's four screens, not one per screen: paintClassTabs
+         moves it under the heading of whichever of them is up, so these ids
+         stay unique and the search box can press them from anywhere. -->
+    <div class="subtabs classtabs" id="classTabs" role="tablist" aria-label="This class">
+      <button id="openLessons" type="button" role="tab">Units</button>
+      <button id="openStudents" type="button" role="tab">Students</button>
+      <button id="openProgress" type="button" role="tab">Progress</button>
+      <button id="openCover" type="button" role="tab" hidden>Specification coverage</button>
+    </div>
+    <div class="classgrid" id="unitGrid"></div>
   </div>
 
   <!-- ============ specification coverage ============ -->
@@ -459,23 +470,12 @@ setTimeout(function(){
     <div id="pwList"></div>
   </div>
 
-  <div id="unitsView" hidden>
-    <button class="crumb" id="backClass2">&larr; <span class="bk"></span></button>
-    <button class="btn-ghost iconbtn refresh" id="refUnits" title="Refresh">&#8635;</button>
-    <h2 style="margin:14px 0 4px">Units</h2>
-    <div class="toolrow">
-      <button class="btn-primary" id="addUnitBtn">+ Add an existing unit</button>
-      <button class="btn-ghost" id="newUnitBtn2">+ New unit</button>
-    </div>
-    <div class="classgrid" id="unitGrid"></div>
-  </div>
-
   <!-- A GCSE or A Level unit is one point of the specification, so a class's
        lessons are divided the way the hub divides them: 2.2, then 2.2.1, then
        the lessons. A KS3 unit has no sub-points and this screen is stepped
        over entirely, so nothing about a KS3 class changes. -->
   <div id="partsView" hidden>
-    <button class="crumb" id="backUnits2">&larr; Units</button>
+    <button class="crumb" id="backUnits2">&larr; <span class="bk"></span></button>
     <div class="classhead">
       <h2 id="partsUnitName"></h2>
     </div>
@@ -490,7 +490,7 @@ setTimeout(function(){
   </div>
 
   <div id="lessonsView" hidden>
-    <button class="crumb" id="backUnits">&larr; <span class="bkpart">Units</span></button>
+    <button class="crumb" id="backUnits">&larr; <span class="bkpart"></span></button>
     <button class="btn-ghost iconbtn refresh" id="refLessons" title="Refresh">&#8635;</button>
     <div class="classhead">
       <h2 id="unitName"></h2>
@@ -500,6 +500,7 @@ setTimeout(function(){
       <button class="btn-primary" id="addLessonBtn">+ Add an existing lesson</button>
       <button class="btn-ghost" id="newLessonBtn">+ Build a new lesson</button>
     </div>
+    <div class="subtabs kindtabs" id="classKinds" role="tablist" aria-label="Kind of lesson"></div>
     <!-- The grids themselves are made inside this, one per sub-point of the
          unit, so a heading can sit between them. -->
     <div id="lessonGrid"></div>
@@ -620,7 +621,6 @@ function refreshHere(){
 const toHome    = () => { show("homeView"); };
 const toClasses = () => { refreshGroups(); show("classesView"); paintCrumbs(); };
 const toClass   = () => openClass(cls);
-const toUnits   = () => { show("unitsView"); paintClassUnits(); };
 const toHub     = () => { show("hubView"); paintYears(); };
 const toHubYear = () => openYear(hubYear);
 function paintCrumbs(){
@@ -658,13 +658,11 @@ function paintCrumbs(){
                                           { name: (window.studentProfile && window.studentProfile.name()) || "Student" }]);
   if (v === "coverView") return crumbs([home, { name: cls, go: toClass }, { name:"Specification coverage" }]);
   if (v === "progressView") return crumbs([home, { name: cls, go: toClass }, { name:"Progress" }]);
-  if (v === "unitsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units" }]);
-  if (v === "partsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
-                                        { name: unit || "Not in a unit" }]);
+  if (v === "partsView") return crumbs([home, { name: cls, go: toClass }, { name: unit || "Not in a unit" }]);
   /* One crumb longer when the unit was divided, so the trail says which part
      of 2.2 this is and leads back to the rest of them. A KS3 unit has no
      parts screen to go back to, so it keeps the trail it always had. */
-  if (v === "lessonsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units", go: toUnits }]
+  if (v === "lessonsView") return crumbs([home, { name: cls, go: toClass }]
       .concat(partsOfUnit().length
         ? [{ name: unit || "Not in a unit", go: () => openUnit(unit) },
            { name: subunit || "All of " + unitCode() }]
@@ -680,7 +678,7 @@ function crumbName(id){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView","practiceView","progressView","timetableView","studentView","resultsView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","partsView","lessonsView","keepView","pwView","practiceView","progressView","timetableView","studentView","resultsView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   /* Signing in and choosing who is teaching are pop-ups over Home, so Home
@@ -695,6 +693,7 @@ function show(view, quiet){
   });
   clearInterval(relTimer);
   hideLoader();
+  paintClassTabs();
   /* The bar comes out with whatever it sits above, in the same frame. Showing
      it the moment the first answer came back, while the page underneath was
      still waiting on the second and third, is what made the console arrive in
@@ -712,7 +711,7 @@ function show(view, quiet){
     try{
       sessionStorage.setItem("hub_spot", JSON.stringify(
         { view: view, cls: cls, unit: unit, subunit: subunit, hubYear: hubYear, hubUnit: hubUnit,
-          hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint,
+          hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint, kind: lessonKind,
           stu: (window.studentProfile && window.studentProfile.username()) || "" }));
     }catch(e){}
   }
@@ -762,6 +761,9 @@ try{
       cls = st.cls || cls; unit = st.unit || ""; subunit = st.subunit || "";
       hubYear = st.hubYear || ""; hubUnit = st.hubUnit || "";
       hubComp = st.hubComp || 0; hubStrand = st.hubStrand || ""; hubPoint = st.hubPoint || "";
+      /* A tab left open across the update can still have this in its history,
+         and showing a screen that has gone would blank the page. */
+      if (st.view === "unitsView") st.view = "classView";
       show(st.view, true);
       if (st.view === "classesView") paintClasses();
       else if (st.view === "hubView") paintYears();
@@ -770,13 +772,12 @@ try{
       else if (st.view === "hubPointView"){ if (hubStrand) paintPoints(); else paintStrands(); }
       else if (st.view === "hubPointLessonsView") paintPointLessons();
       else if (st.view === "hubLessonsView") paintHub();
-      else if (st.view === "unitsView") paintClassUnits();
       else if (st.view === "partsView"){ namePartsUnit(); paintParts(); }
       else if (st.view === "lessonsView"){ nameLessonShelf(); paintLessonGrid(); }
       else if (st.view === "studentsView") loadStudents();
       else if (st.view === "progressView") openProgressView();
       else if (st.view === "resultsView") toResults();
-      else if (st.view === "classView"){ $("clsName").textContent = cls; }
+      else if (st.view === "classView") openClass(cls);
       else if (st.view === "timetableView" && window.timetable) window.timetable.paintEditor();
       else if (st.view === "studentView" && window.studentProfile) window.studentProfile.reopen(st.stu);
     }catch(err){}
@@ -1196,7 +1197,9 @@ async function restoreSpot(spot){
        whole with only the box waiting in it. */
     if (spot.view === "practiceView"){ toPractice(); return; }
     if (spot.view === "resultsView"){ await toResults(); return; }
-    if (here && spot.view === "classView"){ openClass(cls); return; }
+    /* unitsView was a screen of its own until the class page became it, and a
+       tab open across that update still has it noted. */
+    if (here && (spot.view === "classView" || spot.view === "unitsView")){ await openClass(cls); return; }
     if (here && spot.view === "studentsView"){ openClass(cls); show("studentsView"); loadStudents(); return; }
     /* The screens off the side menu and the class's own reports. Each was
        missing here, so refreshing any of them landed on Home. */
@@ -1210,9 +1213,6 @@ async function restoreSpot(spot){
        going back to the lesson hub flashed Home first, and going back to a
        class's units flashed the class. The dots stay until the screen that
        was actually asked for is ready. */
-    if (here && spot.view === "unitsView"){
-      nameClass(cls); await loadCatalogue(); show("unitsView"); paintClassUnits(); return;
-    }
     /* Both of a class's lesson screens come back the same way, through
        openUnit, so the heading and the crumbs are built by the one thing that
        builds them anywhere else. openUnit clears the part on its way in, so
@@ -1220,13 +1220,13 @@ async function restoreSpot(spot){
     if (here && (spot.view === "partsView" || spot.view === "lessonsView")){
       nameClass(cls); await loadCatalogue(); await loadClassLocks();
       const want = subunit;
-      openUnit(unit);
+      openUnit(unit, spot.kind);
       if (spot.view === "lessonsView") openPart(want);
       return;
     }
     if (spot.view === "hubView"){ await loadCatalogue(); show("hubView"); paintYears(); return; }
     if (spot.view === "hubUnitsView"){ await loadCatalogue(); openYear(hubYear); return; }
-    if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit); return; }
+    if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit, spot.kind); return; }
     /* openYear sends a GCSE or A Level year group to its components on its
        own, so these only have to carry on from there. */
     if (spot.view === "hubCompView"){ await loadCatalogue(); openYear(hubYear); return; }
@@ -1240,7 +1240,7 @@ async function restoreSpot(spot){
       await loadCatalogue(); openYear(hubYear);
       if (hubComp) openComponent(hubComp);
       if (hubStrand) openStrand(hubStrand);
-      if (hubPoint) openPoint(hubPoint);
+      if (hubPoint) openPoint(hubPoint, spot.kind);
       return;
     }
     show("homeView");          // a note pointing at nothing we can open
@@ -2568,8 +2568,9 @@ function paintHubUnits(){
     g.appendChild(el("p","hint","No units here yet, press “+ New unit”."));
 }
 
-function openHubUnit(u){
+function openHubUnit(u, kind){
   hubUnit = u;
+  lessonKind = kind || "lessons";
   $("hubUnitName").textContent = u || "Not in a unit";
   $("backUnitYear").textContent = hubYear || "Lessons";
   showIf("renameHubUnitBtn", u);
@@ -2638,29 +2639,64 @@ function lessonCards(list, box){
   });
   box.appendChild(grid);
 }
-/* Cover lessons are kept out of the way under the taught ones, folded shut:
-   they are reached for on the morning somebody is off, not in the run of a
-   unit, and a number in the middle of the list would read as a lesson to teach. */
-function lessonCardsAndCover(list, box){
-  const cover = list.filter(l => l.cover);
-  const taught = list.filter(l => !l.cover);
-  if (taught.length || !cover.length) lessonCards(taught, box);
-  else box.innerHTML = "";
-  if (!cover.length) return;
-  const fold = document.createElement("details");
-  fold.className = "cover-fold";
-  const head = document.createElement("summary");
-  head.textContent = "Cover lessons (" + cover.length + ")";
-  fold.appendChild(head);
-  fold.appendChild(el("p","cover-fold-note",
+/* ---------- Lessons, Home Learning and Cover ----------
+   The three shelves of a unit, the same in the hub and in a class. Assessments
+   and practicals sit with the lessons, because they are taught in the run of a
+   unit. Home learning is set for outside the room, and cover is reached for on
+   the morning somebody is off, so neither belongs in a list of what to teach. */
+const LESSON_KINDS = [
+  { id:"lessons",  name:"Lessons",       words:"lessons" },
+  { id:"homework", name:"Home Learning", words:"home learning" },
+  { id:"cover",    name:"Cover",         words:"cover lessons" }
+];
+/* The builder saves one of these per lesson, but a practical comes back from
+   the server flagged as an assessment as well, so home learning is only home
+   learning if it is not one of those too. */
+const kindOf = (l) => l.cover ? "cover"
+                    : (l.homework && !l.assessment && !l.practical) ? "homework"
+                    : "lessons";
+const kindWords = () => LESSON_KINDS.find(k => k.id === lessonKind).words;
+/* The tabs, each saying how many are behind it, so an empty shelf can be told
+   from a full one without pressing it. */
+function paintKindTabs(bar, list, repaint){
+  bar.innerHTML = "";
+  LESSON_KINDS.forEach(k => {
+    const here = k.id === lessonKind;
+    const b = el("button", here ? "on" : "", k.name);
+    b.type = "button";
+    b.dataset.kind = k.id;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", here ? "true" : "false");
+    const n = list.filter(l => kindOf(l) === k.id).length;
+    if (n) b.appendChild(el("span","kindcount", String(n)));
+    b.addEventListener("click", () => {
+      lessonKind = k.id;
+      /* Noted now rather than at the next change of screen, because a tab is
+         not one, and the builder is a page of its own: coming back from it
+         has to land on the shelf it was opened from. */
+      const spot = lastSpot();
+      if (spot){ spot.kind = k.id; try{ sessionStorage.setItem("hub_spot", JSON.stringify(spot)); }catch(e){} }
+      repaint();
+    });
+    bar.appendChild(b);
+  });
+}
+function kindShelf(list, bar, box, repaint){
+  paintKindTabs(bar, list, repaint);
+  const shown = list.filter(l => kindOf(l) === lessonKind);
+  box.innerHTML = "";
+  if (!shown.length){
+    box.appendChild(el("p","hint","No " + kindWords() + " here yet, press “+ Build a new lesson”."));
+    return;
+  }
+  if (lessonKind === "cover") box.appendChild(el("p","hint",
     "For the cover teacher: students sign in and open the lesson. They work down each page, pressing Understood or " +
     "Finished to see the next task. They are finished when they reach the last screen, which shows how many pages they did."));
   const holder = el("div");
-  fold.appendChild(holder);
-  box.appendChild(fold);
-  lessonCards(cover, holder);
+  box.appendChild(holder);
+  lessonCards(shown, holder);
 }
-function paintHub(){ lessonCardsAndCover(lessonsOfUnit(hubUnit), $("hubList")); }
+function paintHub(){ kindShelf(lessonsOfUnit(hubUnit), $("hubKinds"), $("hubList"), paintHub); }
 
 /* ---------- the link to hand a class (no server) ----------
    Lessons reach students through Teams or Impero rather than a lesson list,
@@ -2909,8 +2945,9 @@ function paintPoints(){
   });
 }
 
-function openPoint(id){
+function openPoint(id, kind){
   hubPoint = id;
+  lessonKind = kind || "lessons";
   const p = pointById(id);
   const strand = pointById(hubStrand);
   $("pointName").textContent = p ? (p.code + " " + p.title) : "Lessons";
@@ -2918,7 +2955,7 @@ function openPoint(id){
   show("hubPointLessonsView");
   paintPointLessons();
 }
-function paintPointLessons(){ lessonCardsAndCover(lessonsOfPoint(hubPoint), $("hubPointList")); }
+function paintPointLessons(){ kindShelf(lessonsOfPoint(hubPoint), $("pointKinds"), $("hubPointList"), paintPointLessons); }
 on("refPoint", "click", () => refreshSpec("hubPointList", "Loading the lessons", paintPointLessons));
 on("backPointStrand", "click", () => { if (hubStrand) openStrand(hubStrand); else openComponent(hubComp); });
 /* The builder opens knowing where it is: the year group, the point, and the
@@ -3295,23 +3332,45 @@ function nameClass(name){
 async function openClass(name){
   nameClass(name);
   show("classView");
-  /* Coverage is for a class doing GCSE or A Level work, and a KS3 class
-     should not be offered a screen that can only ever be empty for it.
+  /* A class opens on its units, because they are what a teacher came for. They
+     were one press further in once, behind a tile. The catalogue has to have
+     arrived first: a class opened straight from the home screen has not been
+     through the hub. */
+  if (!catLoaded) wait("unitGrid", "Loading the units", true);
+  try{ await loadCatalogue(); }
+  catch(e){ $("unitGrid").innerHTML = ""; $("unitGrid").appendChild(el("p","hint", e.message)); return; }
+  if (cls === name) paintClassUnits();
+}
+/* The bar across a class's screens, put under the heading of the one that is
+   up and left hidden everywhere else.
 
-     Nothing records which year group a class belongs to, and guessing
-     from its name is a guess: 10A is Year 10 until somebody calls a set
-     10X2 or 7-Green. So the test is what the class has actually been
-     given. A lesson filed against a point of the specification is the
-     only thing coverage counts, so a class with none has nothing to
-     show, whatever it is called.
+   Coverage is for a class doing GCSE or A Level work, and a KS3 class
+   should not be offered a screen that can only ever be empty for it.
 
-     The catalogue has to have arrived first: a class opened straight
-     from the home screen has not been through the hub. */
-  const cover = $("openCover");
-  if (cover) cover.hidden = true;
-  if (OFFLINE) return;
-  try{ await loadCatalogue(); }catch(e){ return; }
-  if (cover) cover.hidden = !classDoesSpecWork();
+   Nothing records which year group a class belongs to, and guessing
+   from its name is a guess: 10A is Year 10 until somebody calls a set
+   10X2 or 7-Green. So the test is what the class has actually been
+   given. A lesson filed against a point of the specification is the
+   only thing coverage counts, so a class with none has nothing to
+   show, whatever it is called. Asked again once the catalogue arrives,
+   because a refresh on Students comes back before it has. */
+const CLASS_TABS = { classView:"openLessons", studentsView:"openStudents",
+                     progressView:"openProgress", coverView:"openCover" };
+function paintClassTabs(){
+  const bar = $("classTabs");
+  if (!bar) return;
+  const view = VIEWS.find(x => $(x) && !$(x).hidden);
+  const tab = CLASS_TABS[view];
+  bar.hidden = !tab;
+  if (!tab) return;
+  const screen = $(view);
+  const head = screen.querySelector(":scope > .viewhead") || screen.querySelector(":scope > h2, :scope > .classhead");
+  if (head) head.after(bar);
+  Array.from(bar.children).forEach(b => {
+    b.classList.toggle("on", b.id === tab);
+    b.setAttribute("aria-selected", b.id === tab ? "true" : "false");
+  });
+  $("openCover").hidden = view !== "coverView" && !(catLoaded && classDoesSpecWork());
 }
 /* Has this class been given a lesson that is filed against the
    specification? Versions count: a class doing "1.1.1, lower ability" is
@@ -3323,6 +3382,7 @@ function classDoesSpecWork(){
     return familyOf(l.lesson_id).some(v => assignOf(v.lesson_id));
   });
 }
+on("openLessons", "click", () => openClass(cls));
 on("openCover", "click", () => { show("coverView"); loadCoverage(); });
 
 
@@ -3449,7 +3509,7 @@ async function openProgressView(force){
   }
 }
 /* The units this class has lessons in, same list and same order as the
-   Units & lessons tile offers, so a unit called the same thing in both
+   Units tab offers, so a unit called the same thing in both
    places is always the same unit. */
 function paintProgressUnitSelect(){
   const sel = $("progressUnitSelect");
@@ -3799,7 +3859,6 @@ on("refLessons", "click", async () => {
   catch(e){ $("lessonGrid").innerHTML = ""; $("lessonGrid").appendChild(el("p","hint", e.message)); }
 });
 on("backClass1", "click", () => openClass(cls));
-on("backClass2", "click", () => openClass(cls));
 
 on("renameBtn", "click", () => {
   openModal(box => {
@@ -4250,6 +4309,9 @@ let unit = "";                            // the unit being managed
    has. It is the point's wording, "2.2.1 Programming fundamentals", because
    that is what the catalogue carries. */
 let subunit = "";
+/* Which of a unit's three shelves is open: lessons, homework or cover. One for
+   the hub and the class alike, since only one unit is ever on screen. */
+let lessonKind = "lessons";
 
 /* Kept for as long as the page is open. Reloading the page starts again,
    and every screen has a refresh button for when something has changed. */
@@ -4261,6 +4323,7 @@ async function loadCatalogue(force){
      console reads the units in the order this list holds them. */
   if (window.lessonOrder) window.lessonOrder.sortUnits(cat.units);
   catLoaded = true;
+  paintClassTabs();
 }
 async function fetchCatalogue(){
   fileLessons = [];
@@ -4281,6 +4344,8 @@ async function fetchCatalogue(){
       lessons: file.lessons.map(l => ({ lesson_id: l.id, unit: l.unit, year: l.year,
                                         code: l.code, position: 0, published: 1,
                                         title: l.title, cover: !!l.cover,
+                                        assessment: !!l.assessment, practical: !!l.practical,
+                                        homework: !!l.homework,
                                         version_of: l.versionOf || "",
                                         version_name: l.versionName || "",
                                         version_note: l.versionNote || "",
@@ -4324,13 +4389,6 @@ async function catPost(payload){
   return said;
 }
 
-on("openLessons", "click", async () => {
-  show("unitsView");
-  if (!catLoaded) wait("unitGrid", "Loading the units", true);
-  try{ await loadCatalogue(); paintClassUnits(); }
-  catch(e){ $("unitGrid").innerHTML = '<p class="hint">' + e.message + '</p>'; }
-});
-
 /* Only the units this class actually has lessons in. */
 function classLessons(){
   return (cat.lessons || []).filter(l =>
@@ -4347,20 +4405,27 @@ function paintClassUnits(){
     return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
   });
   names.forEach(n => {
-    const count = mine.filter(l => (l.unit || "") === n).length;
+    const here = mine.filter(l => (l.unit || "") === n);
+    const count = (kind) => here.filter(l => kindOf(l) === kind).length;
     const t = el("button","classtile");
     t.appendChild(el("b","", n || "Not in a unit"));
-    t.appendChild(el("span","", count + " lesson" + (count === 1 ? "" : "s")));
+    /* The same three shelves the unit opens on, so the tile and the tabs add
+       up. A shelf with nothing on it is not mentioned. */
+    const said = [];
+    if (count("lessons")) said.push(countWord(count("lessons"), "lesson", "lessons"));
+    if (count("homework")) said.push(count("homework") + " home learning");
+    if (count("cover")) said.push(count("cover") + " cover");
+    t.appendChild(el("span","", said.join(", ")));
     t.addEventListener("click", () => openUnit(n));
     g.appendChild(t);
   });
   if (!names.length)
-    g.appendChild(el("p","hint", cls + " has no lessons yet. Add some from the lesson hub, or with the button below."));
+    g.appendChild(el("p","hint", cls + " has no lessons yet. Add some from the lesson hub, or press “+ Add an existing unit”."));
 }
 /* Back off the lessons, which is the parts screen where the unit was divided
    and the units themselves where it was not. */
-on("backUnits", "click", () => { if (partsOfUnit().length) openUnit(unit); else toUnits(); });
-on("backUnits2", "click", toUnits);
+on("backUnits", "click", () => { if (partsOfUnit().length) openUnit(unit); else toClass(); });
+on("backUnits2", "click", toClass);
 on("refParts", "click", async () => {
   wait("partGrid", "Loading the parts", true);
   try{ await loadCatalogue(true); paintParts(); }
@@ -4398,17 +4463,19 @@ function byPartName(a, b){
 function namePartsUnit(){ $("partsUnitName").textContent = unit || "Not in a unit"; }
 function nameLessonShelf(){
   $("unitName").textContent = subunit || unit || "Not in a unit";
-  /* The back button says where it goes, which is not always Units now. */
+  /* The back button says where it goes, which is the class unless the unit
+     was divided into parts. */
   const parts = partsOfUnit().length;
-  document.querySelectorAll(".bkpart").forEach(b => { b.textContent = parts ? unitCode() || "Back" : "Units"; });
+  document.querySelectorAll(".bkpart").forEach(b => { b.textContent = parts ? unitCode() || "Back" : cls; });
 }
 
 /* A unit opens on its parts where it has any, and on its lessons where it has
    none. A KS3 unit never has any, so it goes straight through exactly as it
    always did. */
-function openUnit(name){
+function openUnit(name, kind){
   unit = name;
   subunit = "";
+  lessonKind = kind || "lessons";
   if (!partsOfUnit().length){ openPart(""); return; }
   namePartsUnit();
   show("partsView");
@@ -4428,7 +4495,8 @@ async function showLessonInClass(group, id){
     await loadCatalogue();
     const l = (cat.lessons || []).find(x => x.lesson_id === id) || {};
     flashLesson = id; flashUntil = 0;
-    openUnit(l.unit || "");
+    /* opened on the shelf it is on, or there would be no card to pick out */
+    openUnit(l.unit || "", kindOf(l));
     if (partsOfUnit().length) openPart(l.subunit || "");
   }catch(e){ openClass(group); }
 }
@@ -4584,6 +4652,8 @@ on("addLessonBtn", "click", () => {
              rather than adding it somewhere it will not appear. */
           addLessonToClass(l.id, () => {
             const landed = catOf(l.id).subunit || "";
+            /* the shelf it landed on, the same as the part it landed in */
+            lessonKind = kindOf(catOf(l.id));
             if (landed === subunit) paintLessonGrid();
             else openPart(landed);
           }).catch(e => say("Could not add that", e.message));
@@ -4605,9 +4675,11 @@ function paintLessonGrid(){
   /* One shelf at a time: the part of the unit that was opened, or the whole
      of it, which on a KS3 unit is every lesson it has because nothing there
      carries a part. */
-  const mine = classLessonsIn(unit).filter(l => (l.subunit || "") === subunit);
+  const shelf = classLessonsIn(unit).filter(l => (l.subunit || "") === subunit);
+  paintKindTabs($("classKinds"), shelf, paintLessonGrid);
+  const mine = shelf.filter(l => kindOf(l) === lessonKind);
   if (!mine.length){
-    g.appendChild(el("p","hint","No lessons here yet for " + cls + ", add one from the hub above."));
+    g.appendChild(el("p","hint","No " + kindWords() + " here yet for " + cls + ". Add one with “+ Add an existing lesson”."));
     return;
   }
   inOrder(mine, (l) => titleOf(l.lesson_id));
@@ -4643,7 +4715,7 @@ function paintLessonGrid(){
     if (a && a.release_at && scheduled)
       card.appendChild(el("p","lp-note","Opens " + niceDate(a.release_at) + " at " + hhmm(a.release_at)));
     else if (a && a.close_on && live)
-      card.appendChild(el("p","lp-note", (closed ? "Closed " : "Closes ") + niceDate(a.close_on)));
+      card.appendChild(el("p","lp-note", (closed ? "Closed " : "Closes ") + niceDate(a.close_on) + " at " + CLOSES_AT));
     card.appendChild(head);
     /* Which version this class is on, and the way to change it. Only where
        there is more than one: a line reading "Version Original" on every card
@@ -4779,10 +4851,23 @@ function niceDate(iso){
   if (isNaN(d)) return iso;
   return d.toLocaleDateString(undefined, { weekday:"short", day:"numeric", month:"short" });
 }
+/* A lesson closes at the end of the day it opens, unless a teacher says
+   otherwise. close_on is a date and every page reads it as open until that
+   day is over, so 23:59 is what the date already means and is said here rather
+   than stored. The day is worked out on this computer and sent, because the
+   server's clock is on UTC, which is the wrong day for the first hour of a
+   British Summer Time morning.
+
+   closeOn left out means that default. An empty closeOn is different: it is
+   Undo or a re-save putting back a lesson from before every lesson had a
+   closing day, which keeps having none. */
+const CLOSES_AT = "23:59";
 async function setPublish(id, on, releaseAt, closeOn){
   try{
     await catPost({ op:"class-publish", id: id, group: cls, published: on,
-                    releaseAt: releaseAt || "", closeOn: closeOn || "" });
+                    releaseAt: releaseAt || "",
+                    closeOn: closeOn === undefined ? (on ? ymd(new Date()) : "") : closeOn,
+                    openEnded: !!on && closeOn === "" });
     await loadCatalogue(); paintLessonGrid();
   }catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
 }
@@ -4795,6 +4880,12 @@ function schedulePopup(id){
     let date = (already && already.release_at) ? localDay(already.release_at) : ymd(new Date());
     let time = (already && already.release_at) ? hhmm(already.release_at) : "";
     let close = (already && already.close_on) ? already.close_on : "";
+    /* Follows the opening day until a teacher moves it. A closing day already
+       saved on a different day from the opening one is a choice somebody made,
+       and so is having none on a lesson from before every lesson had one: that
+       is left as it is rather than quietly given a date. */
+    const noClosing = !!live && !close;
+    let closeTouched = noClosing || (!!close && close !== date);
     const summary = el("p","modal-text","");
     const dateRow = el("div","bfield");
     dateRow.appendChild(el("label","","Opens on"));
@@ -4841,36 +4932,38 @@ function schedulePopup(id){
     timeRow.appendChild(customTime); box.appendChild(timeRow);
 
     const closeRow = el("div","bfield");
-    closeRow.appendChild(el("label","","Closes at the end of"));
+    closeRow.appendChild(el("label","","Closes at " + CLOSES_AT + " on"));
     const cIn = el("input"); cIn.type = "date";
     closeRow.appendChild(cIn);
     box.appendChild(closeRow);
 
-    let closeTouched = !!close;
     cIn.addEventListener("input", () => { closeTouched = true; close = cIn.value; refresh(); });
     dIn.addEventListener("input", () => {
       date = dIn.value;
-      if (!closeTouched){ close = date; cIn.value = date; }   // the closing date follows
       refresh();
     });
+    /* Publishing now has no opening day to follow, so it closes today, unless
+       a day still to come was picked for it. */
+    const closeIfNow = () => (closeTouched && close && close >= ymd(new Date())) ? close : ymd(new Date());
     function refresh(){
-      if (!closeTouched){ close = date; cIn.value = date; }
-      summary.textContent = time
-        ? "Opens " + niceDate(date) + " at " + time + ", closes at the end of " + niceDate(close) + "."
-        : "Choose a time above, or publish now.";
+      if (!closeTouched){ close = date; cIn.value = date; }   // the closing day follows
+      summary.textContent = !time ? "Publish now closes at " + CLOSES_AT + " on " + niceDate(closeIfNow()) + "."
+        : close ? "Opens " + niceDate(date) + " at " + time + ", closes at " + CLOSES_AT + " on " + niceDate(close) + "."
+        : "Opens " + niceDate(date) + " at " + time + ", with no closing day.";
     }
-    close = date; cIn.value = date; refresh();
+    cIn.value = close; refresh();
     box.appendChild(summary);
 
     const go = el("button","btn-primary modal-cta", live ? "Save these dates" : "Schedule lesson");
     go.addEventListener("click", async () => {
       if (!time){ summary.textContent = "Pick a period first."; return; }
+      if (close && close < date){ summary.textContent = "It would close before it opens. Choose a later closing day."; return; }
       const at = new Date(date + "T" + time + ":00");
       closeModal();
       await setPublish(id, true, at.toISOString(), close);
     });
     const now = el("button","btn-ghost modal-stay", live ? "Open it now instead" : "Publish now");
-    now.addEventListener("click", async () => { closeModal(); await setPublish(id, true); });
+    now.addEventListener("click", async () => { closeModal(); await setPublish(id, true, "", closeIfNow()); });
     box.appendChild(go); box.appendChild(now);
   });
 }

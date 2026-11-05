@@ -31,6 +31,7 @@
           year: l.year || u.year || "",
           code: l.code ? String(l.code).trim() : "",
           assessment: !!l.assessment,
+          practical: !!l.practical,
           homework: !!l.homework,
           cover: !!l.cover,
           /* A version of another lesson. Empty for an original, which is
