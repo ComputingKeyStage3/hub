@@ -5145,6 +5145,11 @@ function sharePopup(id, justPublished){
 function offerHomeLearningLink(id){
   const a = assignOf(id);
   if (kindOf(catOf(id)) === "homework" && a && a.published) sharePopup(id, true);
+  /* Published from Cover details, so back there for the code it was done for. */
+  if (reopenCoverFor === id){
+    reopenCoverFor = "";
+    if (a && a.published) coverDetails(id);
+  }
 }
 
 /* ---------- the sign-in backup for a cover lesson ----------
@@ -5169,6 +5174,7 @@ function qrPicture(text){
     '<rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + path + '" fill="#000"/></svg>';
   return box;
 }
+let reopenCoverFor = "";
 /* Three things to do, a section each and nothing more: get the notes, show the
    code, see how the lesson goes. It was a page of reading once, and whoever is
    setting a cover is usually doing it in a hurry. */
@@ -5193,7 +5199,16 @@ async function coverDetails(id){
     const grid = el("div","covergrid");
     grid.appendChild(section("coverNotesCard", "Cover notes"));
     const scan = section("coverScanCard", "Sign-in backup", "coverscan");
-    scan.appendChild(el("p","hint", live ? "For students who cannot sign in." : "The code appears once this is published or scheduled."));
+    scan.appendChild(el("p","hint", live ? "For students who cannot sign in."
+      : "Publish this lesson to get the code. Students cannot use it while it is a draft."));
+    /* Saying it needs publishing left a teacher looking for a code that was
+       never going to appear, so the way to do it is here, and it comes back. */
+    if (!live){
+      const pub = el("button","btn-primary","Publish");
+      pub.type = "button";
+      pub.addEventListener("click", () => { reopenCoverFor = id; closeModal(); publishPopup(id); });
+      scan.appendChild(pub);
+    }
     grid.appendChild(scan);
     grid.appendChild(section("coverPlanCard", "Lesson structure", "coverplan"));
     box.appendChild(grid);

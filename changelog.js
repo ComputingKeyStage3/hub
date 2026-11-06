@@ -28,6 +28,8 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.0.3", text:"Cover details on a draft says the lesson needs publishing to get the Sign-in backup code, with a Publish button that brings you back to the code." },
+  { v:"17.0.2", text:"Quizzes keep the feedback and the button beside the options, so students no longer scroll to find Next question. It fades in after a couple of seconds and glows until pressed. On a phone it sits underneath and scrolls into view." },
   { v:"17.0.1", text:"Cover details is simpler: Cover notes, the Sign-in backup code and the Lesson structure, a section each. Work handed in through the Sign-in backup is found in View work." },
   { v:"17.0", text:"Cover lessons have Cover details in place of Manage: the cover notes to download, what students work through, how it runs, and the Sign-in backup. Cover notes are a Word document uploaded in Lesson options, with a template to download there. New: an 8.2 cover lesson that needs no specialist software." },
   { v:"16.9", text:"Home learning marks itself like an assessment: no Check buttons, Finish points out anything unanswered, and the summary shows the mark with View my work. It has its own tab for students, and their tabs have icons and fit an iPad. Copy link waits until home learning is published. Cover lessons have a Sign-in backup, a link and QR code for students who cannot sign in, with their work listed in the pop-up and in View work." },
