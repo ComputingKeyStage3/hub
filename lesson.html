@@ -135,7 +135,17 @@ let inspectList = null, inspectIdx = 0, keepStep = null, inspectUser = "";
 const INSPECT_KEY = qs.get("box") === "next" ? "hub_inspect_next" : "hub_inspect";
 let teacherTools = false;   // a teacher is looking at this work
 const lessonId = qs.get("id") || "demo";
-const WORK_KEY = "hub_work_" + lessonId;
+/* A student with no sign-in, here through Sign-in backup on a cover lesson.
+   access.html took their name and left it in this browser. Their own key for
+   the work, because an iPad passed along a row is several children on one
+   lesson, and each of them starting on the last one's answers would be worse
+   than having nothing at all. */
+let guest = null;
+if (qs.get("guest") !== null && !spectate){
+  try{ guest = JSON.parse(localStorage.getItem("hub_guest") || "null"); }catch(e){ guest = null; }
+  if (!guest || guest.lesson !== lessonId || !guest.key){ guest = null; location.replace("index.html"); }
+}
+const WORK_KEY = "hub_work_" + lessonId + (guest ? "_" + guest.id : "");
 
 const fields = {};   // id -> { get, set }
 const steps  = [];   // { section, check(), brief:{eyebrow,title,text} }
@@ -419,13 +429,70 @@ let relManaged = false;
    can read their work and see their mark; nothing they hand in is accepted,
    which the server enforces, so the page stops them before they try. */
 let markingLocked = false;
-if (!localStorage.getItem("hub_token") && location.search.indexOf("builder=") < 0
+if (!localStorage.getItem("hub_token") && !guest && location.search.indexOf("builder=") < 0
     && location.search.indexOf("preview=") < 0 && location.search.indexOf("view=") < 0) {
   document.addEventListener("DOMContentLoaded", () => {
     const h = (typeof builderParam !== "undefined" && builderParam !== null) ? null : document.getElementById("signinHint");
     if (h) h.hidden = false;
   });
 }
+/* Where Home would be, their name: there is no home to go back to without a
+   sign-in, and a name typed wrong on an iPad has to be put right from here, or
+   the teacher is left with work from nobody they can find. */
+function paintGuestName(){
+  const home = document.getElementById("homeLink");
+  if (!guest || !home) return;
+  let btn = document.getElementById("guestName");
+  if (!btn){
+    btn = document.createElement("button");
+    btn.id = "guestName";
+    btn.type = "button";
+    btn.className = "home guestname";
+    btn.title = "Change your name";
+    btn.addEventListener("click", askGuestName);
+    home.parentNode.insertBefore(btn, home);
+    home.hidden = true;
+  }
+  btn.textContent = guest.name;
+}
+paintGuestName();
+function askGuestName(){
+  const back = el("div","modal-back no-print");
+  const box = el("div","modal narrow");
+  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+  x.addEventListener("click", () => back.remove());
+  box.appendChild(x);
+  box.appendChild(el("h2","","Your name"));
+  const boxFor = (label, value) => {
+    const row = el("div","bfield");
+    row.appendChild(el("label","", label));
+    const input = el("input");
+    input.type = "text"; input.maxLength = 40; input.value = value; input.autocomplete = "off";
+    row.appendChild(input);
+    box.appendChild(row);
+    return input;
+  };
+  const first = boxFor("First name", guest.first || "");
+  const last = boxFor("Surname", guest.last || "");
+  const msg = el("p","hint","");
+  box.appendChild(msg);
+  const go = el("button","btn-primary modal-cta","Save my name");
+  go.addEventListener("click", () => {
+    const f = first.value.trim(), l = last.value.trim();
+    if (!f || !l){ msg.textContent = "Type your first name and your surname."; return; }
+    guest = Object.assign({}, guest, { first: f, last: l, name: f + " " + l });
+    try{ localStorage.setItem("hub_guest", JSON.stringify(guest)); }catch(e){}
+    paintGuestName();
+    back.remove();
+    /* Already with the teacher under the old name, so it goes again. */
+    if (lastSubmittedPayload){ lastSubmittedPayload = ""; submitWork(); }
+  });
+  box.appendChild(go);
+  back.appendChild(box);
+  document.body.appendChild(back);
+  setTimeout(() => first.focus(), 30);
+}
+
 /* Puts everything except the cross and the closing buttons into a part that
    scrolls on its own, so a long pop-up can be read on a small screen without
    its buttons sliding off the bottom. */
@@ -611,10 +678,10 @@ function marksButton(res, review){
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", () => back.remove());
     popup.appendChild(x);
-    popup.appendChild(el("h2","","Your assessment"));
+    popup.appendChild(el("h2","", homeworkView() ? "Your work" : "Your assessment"));
     const got = res.perQ.reduce((n, q) => n + q.pts, 0);
     const outOf = res.perQ.reduce((n, q) => n + q.max, 0);
-    popup.appendChild(el("p","modal-text", "You scored " + got + " out of " + outOf + "."));
+    if (outOf) popup.appendChild(el("p","modal-text", "You scored " + got + " out of " + outOf + "."));
     if (review) popup.appendChild(review);
     scrollBody(popup);
   back.appendChild(popup);
@@ -1297,7 +1364,7 @@ const apiReady = !OFFLINE && API && API.indexOf("PASTE_") !== 0;
    missing file is normal rather than an error. */
 async function dbLesson(){
   if (!apiReady) throw new Error("missing");
-  const grp = localStorage.getItem("hub_group") || "";
+  const grp = guest ? guest.group : (localStorage.getItem("hub_group") || "");
   const where = API + "/api/catalog?lesson=" + encodeURIComponent(lessonId) +
                 (grp ? "&group=" + encodeURIComponent(grp) : "");
   const ask = (headers) => fetch(where, { headers: headers, cache:"no-store" });
@@ -1327,14 +1394,14 @@ async function dbLesson(){
   if (!d.lesson) throw new Error("missing");
   return { ok:true, json: async () => d.lesson };
 }
-const token = localStorage.getItem("hub_token") || "";
+const token = guest ? "" : (localStorage.getItem("hub_token") || "");
 /* A real student's own tab has no reason to say which class it is in the
    address, so this is normally read from what signing in cached. The
    teacher console's work pop-ups are a second student nobody signed in
    as, previewing a specific class's copy of the lesson, and have no such
    cache to read; &group= on the address is how they say which class the
    release settings should be looked up for. */
-const group = qs.get("group") || localStorage.getItem("hub_group") || "";
+const group = qs.get("group") || (guest && guest.group) || localStorage.getItem("hub_group") || "";
 const RELEASE_KEY = "hub_rel_" + lessonId;
 
 try{
@@ -1760,8 +1827,7 @@ const handedOver = handedLesson();
              screen has to agree with it, which it can only do once this
              has actually been asked for. */
           if (pagesLock(lesson)) await fetchRelease();
-          if (lesson.assessment) renderAssessmentComplete(false);
-          else showLessonComplete(true);
+          showSummary();
           return;
         }
         bypassed = true;                    // nothing to run, nothing to tick
@@ -1843,7 +1909,7 @@ const handedOver = handedLesson();
       const target = stepParam !== null ? parseInt(stepParam, 10)
                    : (previewParam !== null && previewParam !== "" ? parseInt(previewParam, 10) : null);
       if (viewParam !== null && wasDone && target === null){
-        if (lesson.assessment) renderAssessmentComplete(false); else showLessonComplete(true);
+        showSummary();
       } else {
         showStep(Math.min(Math.max(target || 0, 0), steps.length - 1));
       }
@@ -1883,8 +1949,7 @@ const handedOver = handedLesson();
          marking, which the summary has to know before it is drawn. */
       await fetchRelease();
       hideLoader();
-      if (lesson.assessment){ renderAssessmentComplete(false); }
-      else { showLessonComplete(true); }
+      showSummary();
       return;
     }
     hideLoader("Checking your work\u2026");
@@ -2102,7 +2167,7 @@ async function loadSaved(){
     const raw = localStorage.getItem(WORK_KEY);
     if (raw) local = JSON.parse(raw);
   }catch(e){ /* unreadable cache: fall through to the server copy */ }
-  const handedInOnce = !!(lesson && (lesson.practical || lesson.assessment));
+  const handedInOnce = !!(lesson && (lesson.practical || lesson.assessment)) || homeworkView();
   const askServer = !local || (handedInOnce && !local.__done && token && apiReady);
   const putBack = (d) => {
     restoredData = d; wasDone = !!d.__done;
@@ -2204,13 +2269,41 @@ function assessLayout(){
 /* Home learning is sat the way an assessment is: one page of numbered
    questions with the bar beside them, and no bar of pages along the top. It
    is still a lesson underneath. Its pages stay its steps, so its saved work
-   and a teacher's progress columns read as they always did, and it keeps
-   what a lesson has and a test does not: Check buttons, and a way back in
-   from the summary. A page a student has to press through to reach the next
+   and a teacher's progress columns read as they always did. It is marked the
+   way a test is too: nothing on screen until Finish, then a mark and the
+   marked work, with no way back in unless a teacher's code opens it. A page a
+   student has to press through to reach the next
    question was one more thing between them and finishing, at home, with
    nobody there to ask. */
 function homeworkView(){
   return !!(lesson && lesson.homework && !lesson.assessment && !lesson.practical);
+}
+/* Marked when it is handed in rather than on the page, so a task must not
+   offer its own Check button. */
+function marksAtEnd(){
+  return !!(lesson && lesson.assessment && !lesson.practical) || homeworkView();
+}
+/* The summary that belongs to this kind of work, for every way of reaching it. */
+function showSummary(){
+  if ((lesson && lesson.assessment) || homeworkView()) renderAssessmentComplete(false);
+  else showLessonComplete(true);
+}
+/* Everything in home learning a student was asked to do, in the order they saw
+   it, which a test does not need because its questions are not inside pages.
+   The same walk as quantifiableTasks in progressmath.js, extension tasks left
+   out, so the mark on the summary is the mark in the teacher's mark book. */
+function homeworkTasks(){
+  const out = [];
+  const walk = (blocks) => (blocks || []).forEach(b => {
+    if (!b || b.type === "extension" || b.type === "choice" || b.type === "helper") return;
+    if (b.type === "page" || b.type === "group"){
+      if (!(b.type === "page" && b.extension === true)) walk(b.blocks);
+      return;
+    }
+    if (!ASSESS_READING.includes(b.type) && fields[b.id]) out.push(b);
+  });
+  walk(lesson && lesson.blocks);
+  return out;
 }
 function briefOf(st, plain){
   const was = (plain && st.plainBrief) ? st.plainBrief : st.brief;
@@ -2287,6 +2380,9 @@ function arrangeAssessment(){
    them, and it has to stay itself for any of that to go on working. Each task
    still gets its number and its card. */
 function arrangeHomework(){
+  /* Back to the list this came from, not the Lessons one it is not in. */
+  const way = $("homeLink");
+  if (way && !spectate) way.href = "index.html?tab=homework";
   const questions = el("section","assess-page assess-questions");
   const screen = { el: questions, kind: "questions", title: "Questions",
                    text: "Answer every question, then press Finish at the bottom.", step: 0 };
@@ -2304,7 +2400,7 @@ function arrangeHomework(){
       const n = reading ? null : ++num;
       const item = assessItem(st, b, n);
       questions.appendChild(item);
-      if (!reading) items.push({ step: i, block: b, num: n, item: item, built: st });
+      if (!reading){ items.push({ step: i, block: b, num: n, item: item, built: st }); questionNo[b.id] = n; }
       return;
     }
     if (named && b.title) st.section.insertBefore(tel("h2","assess-part", b.title), st.section.firstChild);
@@ -2315,6 +2411,7 @@ function arrangeHomework(){
       entry.item.classList.add("aq-card");
       entry.item.insertBefore(tel("p","aq-num","Question " + n), entry.item.firstChild);
       items.push({ step: i, block: entry.block, num: n, item: entry.item, built: entry.built });
+      questionNo[entry.block.id] = n;     // the marked work numbers them the same
     });
   });
   questions.appendChild(el("p","assess-end", "That was the last question. Check your answers, then press Finish."));
@@ -2386,8 +2483,12 @@ function questionAnswered(it){
   }
   /* A written answer or a quiz has no check that can fail, so in home learning,
      which can hold them, that would count them as answered before they were
-     touched. An assessment does not offer them. */
-  if (assessPages && assessPages.homework) return gateAttempted(b, v);
+     touched. An assessment does not offer them. A quiz has to be answered all
+     the way through, or question 3 of 5 left empty would never be pointed out. */
+  if (assessPages && assessPages.homework){
+    if (b.type === "quiz") return !!(v && Array.isArray(v.checked) && v.checked.length && v.checked.every(Boolean));
+    return gateAttempted(b, v);
+  }
   try{ return it.built.check().ok; }catch(e){ return true; }
 }
 
@@ -2823,7 +2924,11 @@ function assessRepaintSoon(){
    from it without a teacher. */
 function askToHandIn(){
   const missing = assessPages.items.filter(it => !questionAnswered(it));
-  if (!missing.length){ confirmHandIn(); return; }
+  /* Home learning says what is missing and stops there. Done alone at home,
+     one question is plenty, and it has none at all when nothing is missing. */
+  const home = !!assessPages.homework;
+  const handIn = home ? finishLesson : confirmHandIn;
+  if (!missing.length){ handIn(); return; }
   assessPages.flagMissing = true;
   paintTracker();
   const count = missing.length;
@@ -2836,7 +2941,7 @@ function askToHandIn(){
     text: phone ? "Press the button at the bottom and look for the questions marked red."
                 : "Look for the questions marked red on the side.",
     yes: { label: "Go back and complete the questions", act: () => goToQuestion(missing[0], true) },
-    no:  { label: "Submit my assessment anyway", act: confirmHandIn },
+    no:  { label: home ? "Submit my home learning anyway" : "Submit my assessment anyway", act: handIn },
     focus: "yes"
   });
 }
@@ -2932,8 +3037,7 @@ function buildTracker(){
     hideLockTip();
     /* The same two screens the lesson picks between when it opens straight on
        the summary, or an assessment would be handed the ordinary one. */
-    if (lesson && lesson.assessment) renderAssessmentComplete(false);
-    else showLessonComplete(true);            // a revisit: no confetti, nothing re-sent
+    showSummary();                            // a revisit: no confetti, nothing re-sent
   });
   t.appendChild(end);
 }
@@ -3148,9 +3252,6 @@ async function tryContinue(){
        always did. Asking them whether to hand it in would be asking about
        somebody else's test. */
     if (viewParam !== null){ finishLesson(); return; }
-    /* Home learning finishes the way a lesson does, with nothing to confirm:
-       it can be gone back into, so there is nothing final to warn about. */
-    if (A.homework){ await tryFinish(); return; }
     /* Handing in has started already: a second press while the score is on
        its way would hand it in twice. */
     if (finished && !spectate) return;
@@ -3959,7 +4060,7 @@ let lastSubmittedPayload = "";
 let unsavedTyping = false;
 window.addEventListener("beforeunload", (e) => {
   if (spectate || OFFLINE || !restoreDone) return;
-  if (!token || !apiReady) return;
+  if ((!token && !guest) || !apiReady) return;
   if (!unsavedTyping) return;
   e.preventDefault();
   e.returnValue = "";
@@ -3969,16 +4070,22 @@ async function submitWork(){
   if (!restoreDone) return "offline";      // never send blanks over real work
   /* Writes to the database only when something actually changed since the
      last successful write, pressing Save work twice costs nothing. */
-  if (!token || !apiReady) return "offline";
+  if ((!token && !guest) || !apiReady) return "offline";
   const payload = JSON.stringify(snapshot());
   const mark = typedAt;             // what they had typed when this one left
   if (payload === lastSubmittedPayload){ unsavedTyping = false; return "done"; }
   try{
-    const r = await fetch(API + "/api/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-      body: JSON.stringify({ lesson: lessonId, data: JSON.parse(payload) })
-    });
+    /* With no sign-in the sealed link is what says which class this is for. */
+    const r = guest
+      ? await fetch(API + "/api/teacher/guest-save", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ k: guest.key, id: guest.id, name: guest.name, data: JSON.parse(payload) })
+        })
+      : await fetch(API + "/api/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+          body: JSON.stringify({ lesson: lessonId, data: JSON.parse(payload) })
+        });
     /* 503 is the server saying the database is too busy to take this right
        now, after queueing as long as it can. That is not the same as not
        reaching it, and the child is told so, with a way to try again. */
@@ -4250,7 +4357,7 @@ async function rocketSave(send){
    looking round, or a lesson not yet read back from the server has nothing
    to send, and nothing to wait for. */
 function rocketWanted(){
-  return !OFFLINE && !spectate && !!token && apiReady && restoreDone;
+  return !OFFLINE && !spectate && (!!token || !!guest) && apiReady && restoreDone;
 }
 
 /* ---------- exam questions in an ordinary lesson ----------
@@ -4399,13 +4506,13 @@ async function tryFinish(){
      would hand the work in again and, in an assessment, send its score again. */
   function backToFeedback(){
     returnAllSections();
-    if (lesson && lesson.assessment) renderAssessmentComplete(false);
-    else showLessonComplete(true);
+    showSummary();
   }
   async function finishLesson(){
     if (workFrozen){ backToFeedback(); return; }
     if (rocketUp) return;              // already on its way: a second press waits with it
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
+  if (homeworkView()){ homeworkFinish(); return; }
   finished = true;
   tickWrittenCode();                 // before the save, so the ticks go with it
   save();
@@ -4418,6 +4525,18 @@ async function tryFinish(){
     return;
   }
   showLessonComplete(false, true);   // they have just pressed Finish
+}
+
+/* Home learning goes straight to its mark, with no rocket. The rocket is there
+   for a room handing in at the same moment, and these arrive one at a time
+   across an evening. The summary sends the work and says how that went. */
+function homeworkFinish(){
+  if (!spectate){
+    finished = true;
+    tickWrittenCode();                 // before the save, so the ticks go with it
+    save();
+  }
+  renderAssessmentComplete(!spectate);
 }
 
 /* ---------- finish pop-up ---------- */
@@ -4499,7 +4618,7 @@ function askBypass(){
      student who opened it by mistake starts guessing. */
   box.appendChild(el("h2","","Teacher code console"));
   box.appendChild(el("p","modal-text","<b>Only to be used by your teacher. Close this if you have opened it accidentally!</b>"));
-  const reopening = !!assessPages && !assessPages.homework && finished;
+  const reopening = !!assessPages && finished;
   /* The summary is not a page, and skipping from it went back into the
      pages: past a marked practical's summary, or into a handed-in test. */
   const doneUp = $("doneScreen");
@@ -4523,7 +4642,7 @@ function askBypass(){
     const wanted = (lesson && lesson.bypassHash) || 2667650483;   // default: SKIP-2026
     const word = typed.toUpperCase();
     if (strHash(word) === REOPEN_HASH){
-      if (!assessPages || assessPages.homework || !finished){
+      if (!assessPages || !finished){
         msg.textContent = "That code lets a student back into an assessment they have handed in.";
         return;
       }
@@ -8435,7 +8554,7 @@ function wrapExtra(b, build, eyebrow){
   const made = build(b, { changed: markDirty,
                           tried: coverOn() ? (value) => coverTried(b.id, value) : null,
                           pressed: coverOn() ? () => { coverData().checked[b.id] = JSON.stringify(coverAsk.read(b.id)); } : null,
-                          assessment: !!(lesson && lesson.assessment && !lesson.practical) });
+                          assessment: marksAtEnd() });
   fields[b.id] = { get: made.get, set: made.set };
   return {
     section: made.section,
@@ -8455,8 +8574,11 @@ const rHotspotTask = (b) => wrapExtra(b, window.rHotspot, "Click the right spot"
    it scored, which wrapExtra has no room for: fields[] would drop result()
    and the coverage screen would have nothing to read. */
 function rExamTask(b){
+  /* A written one in home learning keeps its button: that button is the mark
+     scheme, and without it nothing can mark the answer at all. */
   const made = window.rExam(b, { changed: markDirty,
-                                 assessment: !!(lesson && lesson.assessment) });
+                                 assessment: !!(lesson && lesson.assessment) ||
+                                             (homeworkView() && b.answer === "short") });
   fields[b.id] = { get: made.get, set: made.set, result: made.result };
   return {
     section: made.section,
@@ -8553,8 +8675,21 @@ function rQuiz(b){
   const fb = el("div","feedback"); fb.hidden = true;
   const btn = el("button","btn-primary","Check answer");
   const scoreCard = el("div","quiz-score"); scoreCard.hidden = true;
+  /* Home learning marks a quiz on Finish, so picking an answer is all there is
+     to do and the button only moves on. Nothing is shown right or wrong, and a
+     question can be gone back to and changed until it is handed in. */
+  const noCheck = homeworkView();
+  const prevBtn = el("button","btn-ghost quiz-prev","\u2190 Previous question");
+  prevBtn.type = "button";
+  prevBtn.hidden = true;
   s.appendChild(head); s.appendChild(qtext); s.appendChild(opts);
-  s.appendChild(fb); s.appendChild(btn); s.appendChild(scoreCard);
+  s.appendChild(fb);
+  if (noCheck){
+    const moves = el("div","row quiz-moves");
+    moves.appendChild(prevBtn); moves.appendChild(btn);
+    s.appendChild(moves);
+  } else s.appendChild(btn);
+  s.appendChild(scoreCard);
 
   let qi = 0;
   let tell = null;                          // the page asks to be told when the score moves
@@ -8581,6 +8716,13 @@ function rQuiz(b){
     return Math.max(1, Math.ceil(n * (Math.min(100, parseInt(p.value, 10) || 0) / 100)));
   }
   const passed = () => got() >= needed();
+  /* What the answer on screen is worth, kept as it changes. */
+  function recordPick(){
+    const right = rightSet(qs[qi]);
+    checked[qi] = picked[qi].size > 0;
+    solved[qi] = picked[qi].size === right.size && [...picked[qi]].every(x => right.has(x));
+    finishedQuiz = n > 0 && checked.every(Boolean);
+  }
 
   function draw(){
     scoreCard.hidden = true;
@@ -8596,7 +8738,7 @@ function rQuiz(b){
       box.type = multi(q) ? "checkbox" : "radio";
       box.name = b.id + "-q" + qi;
       box.checked = picked[qi].has(j);
-      box.disabled = checked[qi];        // answered, so it stands as their answer
+      box.disabled = checked[qi] && !noCheck;   // answered, so it stands as their answer
       if (box.checked) lab.classList.add("chosen");
       box.addEventListener("change", () => {
         if (multi(q)){
@@ -8607,14 +8749,16 @@ function rQuiz(b){
           Array.from(opts.children).forEach((c, k) => c.classList.toggle("chosen", k === j));
         }
         fb.hidden = true;
+        if (noCheck) recordPick();
         markDirty();
       });
       lab.appendChild(box); lab.appendChild(el("span","", text));
       opts.appendChild(lab);
     });
     fb.hidden = true;
-    btn.textContent = "Check answer";
-    if (checked[qi]) reveal(solved[qi]);
+    btn.textContent = noCheck ? "Next question \u2192" : "Check answer";
+    if (noCheck){ btn.hidden = qi >= n - 1; prevBtn.hidden = qi === 0; }
+    else if (checked[qi]) reveal(solved[qi]);
     if (tell) tell();
   }
 
@@ -8667,9 +8811,11 @@ function rQuiz(b){
     if (coverOn()) coverRows.forEach(paint => paint());
   }
 
+  prevBtn.addEventListener("click", () => { if (qi > 0){ qi--; draw(); } });
   btn.addEventListener("click", () => {
     const q = qs[qi];
     if (!q) return;
+    if (noCheck){ if (qi < n - 1){ qi++; draw(); } return; }
     /* already answered: this press is the step onwards */
     if (checked[qi]){
       if (qi < n - 1){ qi++; draw(); }
@@ -8710,13 +8856,13 @@ function rQuiz(b){
       finishedQuiz = !!v.done || (n > 0 && checked.every(Boolean));
       const firstUnanswered = checked.findIndex(x => !x);
       qi = firstUnanswered === -1 ? Math.max(0, n - 1) : firstUnanswered;
-      if (finishedQuiz) showScore(); else draw();
+      if (finishedQuiz && !noCheck) showScore(); else draw();
     }
   };
   draw();
 
   return { section:s,
-           check:() => (!n || !needed() || passed())
+           check:() => (noCheck || !n || !needed() || passed())
              ? { ok:true }
              : { ok:false, message:"Get " + needed() + " out of " + n + " right to carry on" },
            /* A teacher can ask for the rest of the page to stay shut until the
@@ -8727,7 +8873,7 @@ function rQuiz(b){
               page the moment the tally crossed the line put the rest of the
               work on screen while they were still on question three, which
               read as the quiz having ended early. */
-           hold: { on: () => !!(b.pass && b.pass.hold) && needed() > 0,
+           hold: { on: () => !noCheck && !!(b.pass && b.pass.hold) && needed() > 0,
                    passed: () => finishedQuiz && (!needed() || passed()),
                    words: () => "There is more on this page. Finish the quiz above and get " +
                                 needed() + " out of " + n + " right to open it.",
@@ -10444,7 +10590,7 @@ function rShort(b){
 
   /* In an assessment everything is marked at the end. In a lesson the student
      can check their own answer here and try again. */
-  const inLesson = !(lesson && lesson.assessment);
+  const inLesson = !(lesson && lesson.assessment) && !homeworkView();
   if (inLesson){
     const fb = el("div","feedback"); fb.hidden = true;
     const btn = el("button","btn-primary short-check","Check answer");
@@ -10542,22 +10688,46 @@ function labelMarks(b, v){
 function computeAssessment(){
   const perQ = [], byTopic = {};
   let score = 0, outOf = 0, n = 0;
-  lesson.blocks.forEach((b) => {
+  const home = homeworkView();
+  /* Home learning can hold work no machine can mark, a written answer say. It
+     adds nothing to the score but still belongs in View my work. */
+  const noMark = (b) => {
+    if (!home) return;
+    n++;
+    const v = fields[b.id] ? fields[b.id].get() : null;
+    const said = (Array.isArray(v) ? v : [v]).filter(x => typeof x === "string" && x.trim()).join("\n\n");
+    perQ.push({ id: b.id, n: questionNo[b.id] || n, type: "unmarked", pts: 0, max: 0, auto: 0,
+                title: stripTags(b.prompt || b.heading || b.title || b.task || "") || "Your work",
+                review: { yours: said } });
+  };
+  (home ? homeworkTasks() : lesson.blocks).forEach((b) => {
     /* A coding task is marked by its checklist: each line is worth whatever
        the teacher put against it. Without marks on the lines there is nothing
-       to add up, so it is left out of the score entirely. */
-    const codingMarks = isCodeTask(b)
+       to add up, so it is left out of the score entirely. Home learning goes
+       by the lesson's mark book, where every line of a checklist is a mark. */
+    const everyLine = home && Array.isArray(b.checks) && b.checks.length > 0;
+    const codingMarks = everyLine || (isCodeTask(b)
       && Array.isArray(b.checks)
-      && b.checks.some(c => (parseInt(c.marks, 10) || 0) > 0);
-    if (!codingMarks && !["mc","order","blanks","short","exam","table","label","hotspot"].includes(b.type)) return;
+      && b.checks.some(c => (parseInt(c.marks, 10) || 0) > 0));
+    const quizHere = home && b.type === "quiz" && (b.questions || []).length > 0;
+    if (!codingMarks && !quizHere && !["mc","order","blanks","short","exam","table","label","hotspot"].includes(b.type)){
+      noMark(b);
+      return;
+    }
     const v = fields[b.id] ? fields[b.id].get() : null;
     /* A table with no answers in it, or a picture with no labels, has
        nothing to mark, so it is left out the way an unmarked checklist is. */
-    if (b.type === "table" && !tableMarks(b, v).max) return;
-    if (b.type === "label" && !labelMarks(b, v).max) return;
+    if (b.type === "table" && !tableMarks(b, v).max){ noMark(b); return; }
+    if (b.type === "label" && !labelMarks(b, v).max){ noMark(b); return; }
     n++;
     let pts = 0, max = 0, review = {};
-    if (b.type === "mc"){
+    if (quizHere){
+      max = b.questions.length;
+      const right = (v && Array.isArray(v.solved)) ? v.solved : [];
+      pts = right.filter(Boolean).length;
+      review.picked = (v && Array.isArray(v.picked)) ? v.picked : [];
+      review.solved = right;
+    } else if (b.type === "mc"){
       max = 1;
       const chosen = (v === null || v === undefined) ? null : v;
       pts = chosen === b.answer ? 1 : 0;
@@ -10588,11 +10758,12 @@ function computeAssessment(){
       max = 1;
       pts = window.hotspotHit(b, v) ? 1 : 0;
       review = { clicked: !!(v && typeof v.x === "number") };
-    } else if (isCodeTask(b)){
+    } else if (codingMarks){
       const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
+      const byHand = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
       review.items = (b.checks || []).map((c, i) => {
-        const worth = Math.max(0, parseInt(c.marks, 10) || 0);
-        const ok = !!flags[i];
+        const worth = everyLine ? 1 : Math.max(0, parseInt(c.marks, 10) || 0);
+        const ok = everyLine && c.manual ? byHand[i] === true : !!flags[i];
         max += worth;
         if (ok) pts += worth;
         return { given: c.label || ("Check " + (i + 1)), ok, expected: worth + (worth === 1 ? " mark" : " marks") };
@@ -10962,8 +11133,9 @@ function enterMarkingLock(){
    each mark is a score to change (see markStepper). */
 function buildReview(res, marking){
   const rev = el("div","review");
+  const blocks = homeworkView() ? homeworkTasks() : lesson.blocks;
   res.perQ.forEach(q => {
-    const b = lesson.blocks.find(x => x.id === q.id) || {};
+    const b = blocks.find(x => x.id === q.id) || {};
     const v = fields[q.id] ? fields[q.id].get() : null;
     const row = el("div","resq");
     row.dataset.q = q.id;
@@ -10977,8 +11149,8 @@ function buildReview(res, marking){
     const changed = el("span","rev-changed");
     body.appendChild(changed);
     const paintMark = () => {
-      row.className = "resq " + (q.pts === q.max ? "right" : q.pts > 0 ? "part" : "wrong");
-      mark.textContent = q.pts === q.max ? "\u2713" : q.pts > 0 ? (q.pts + "/" + q.max) : "\u2717";
+      row.className = "resq " + (!q.max ? "unmarked" : q.pts === q.max ? "right" : q.pts > 0 ? "part" : "wrong");
+      mark.textContent = !q.max ? "" : q.pts === q.max ? "\u2713" : q.pts > 0 ? (q.pts + "/" + q.max) : "\u2717";
       const moved = q.auto !== undefined && q.pts !== q.auto;
       changed.hidden = !moved;
       changed.textContent = !moved ? ""
@@ -10989,6 +11161,42 @@ function buildReview(res, marking){
     /* computeResults left the program out of the title, so it is put back
        here as a box, the way the question showed it. */
     if (q.code) body.appendChild(el("div","ask-code", q.code));
+
+    /* Written work has no mark to show, so it is what they wrote and no more. */
+    if (q.type === "unmarked"){
+      if (q.review.yours){
+        body.appendChild(el("p","rev-label", "Answer given"));
+        body.appendChild(el("div","rev-quote rev-long", q.review.yours));
+      }
+      body.appendChild(el("span","why", "This one is not marked automatically. Your teacher can read it."));
+    }
+
+    /* A quiz in home learning, each of its questions the way a Multiple choice
+       one is drawn. */
+    if (q.type === "quiz"){
+      (b.questions || []).forEach((one, i) => {
+        const right = new Set(Array.isArray(one.answers) ? one.answers : [one.answer]);
+        const chose = new Set(q.review.picked[i] || []);
+        const part = el("div","rev-quizq");
+        const asked = el("p","rev-label", "");
+        asked.innerHTML = one.q || "";
+        part.appendChild(asked);
+        const opts = el("div","rev-opts");
+        (one.options || []).forEach((text, j) => {
+          let c = "rev-opt";
+          if (chose.has(j)) c += " picked " + (right.has(j) ? "good" : "bad");
+          if (right.has(j)) c += " answer";
+          const o = el("div", c);
+          o.appendChild(el("span","dot",""));
+          o.appendChild(el("span","", text));
+          if (right.has(j)) o.appendChild(el("span","tag","Correct"));
+          else if (chose.has(j)) o.appendChild(el("span","tag","Your answer"));
+          opts.appendChild(o);
+        });
+        part.appendChild(opts);
+        body.appendChild(part);
+      });
+    }
 
     if (q.type === "mc"){
       const opts = el("div","rev-opts");
@@ -11095,6 +11303,8 @@ function buildReview(res, marking){
        here, only the question's title and a cross. */
     if (q.type === "ide" || q.type === "web"){
       reviewCode(b, v).forEach(n => body.appendChild(n));
+    }
+    if (q.type === "ide" || q.type === "web" || (homeworkView() && Array.isArray(b.checks) && b.checks.length)){
       body.appendChild(el("p","rev-label", "Checklist"));
       body.appendChild(reviewItems(q.review.items || []));
     }
@@ -11116,16 +11326,22 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   if (!res){ res = computeAssessment(); }
   if (!st){ st = starOn() ? computeST(res.byTopic) : NO_STAR; }
   const pct = Math.round(100*res.score/Math.max(1,res.outOf));
-  const heading = resultHeading(pct);
+  const home = homeworkView();
+  /* Home learning of nothing but written answers has no mark to give, and
+     nought out of nought is not one. */
+  const heading = home && !res.outOf ? doneWords() : resultHeading(pct);
   const box = doneShell(heading);
 
   // hero + score, the tick appears whatever the score
   const hero = heroBits(heading, lesson.title);
-  hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
-  hero.appendChild(el("div","done-pct", pct + "%"));
+  if (res.outOf || !home){
+    hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
+    hero.appendChild(el("div","done-pct", pct + "%"));
+  }
+  if (home) homeworkHandIn(hero, justFinished);
   /* A way straight into the marked work, where the "result saved" line used
      to sit. It fades in last, once the cards have settled. */
-  const seeBtn = el("button","btn-primary done-save fadein","View my assessment");
+  const seeBtn = el("button","btn-primary done-save fadein", home ? "View my work" : "View my assessment");
   hero.appendChild(seeBtn);
 
   /* The hero and the two cards sit side by side, and the cards slide in
@@ -11234,11 +11450,35 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   }
 }
 
+/* Home learning hands itself in from its summary, there being no rocket to do
+   it first, and this line is what says it arrived. Offline nothing has gone
+   anywhere, so the way to hand it in is here instead, as on a lesson's. */
+function homeworkHandIn(hero, justFinished){
+  const status = el("p","handin");
+  hero.appendChild(status);
+  if (OFFLINE && !spectate){
+    hero.appendChild(saveButton(status));
+    if (linkPossible()) hero.appendChild(pdfButton(status, false));
+    return;
+  }
+  if (spectate) return;
+  if (justFinished){
+    submitWork().then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
+    return;
+  }
+  /* Opened again later. A copy that never reached the teacher is tried again,
+     and costs nothing if there is nothing new to send. */
+  if (!token) return;
+  paintStatus(status, "done");
+  paintSaveButtons("saved");
+}
+
 /* Whether this assessment gives STAR feedback. A teacher can switch it off
    on a standard assessment in Lesson options: it is then given a mark and
-   nothing more, with no Strength and Target and no response tasks. */
+   nothing more, with no Strength and Target and no response tasks. Home
+   learning has no topics to find a Strength and Target in. */
 function starOn(){
-  return !(lesson && lesson.assessment && !lesson.practical && lesson.star === false);
+  return !(lesson && lesson.assessment && !lesson.practical && lesson.star === false) && !homeworkView();
 }
 const NO_STAR = { strength: "", target: "", targetTopic: null };
 
@@ -11247,11 +11487,13 @@ const NO_STAR = { strength: "", target: "", targetTopic: null };
    tasks. */
 function markOnlySummary(o){
   const tn = teacherNote || {};
-  const teacherCard = feedbackCard({ comment: tn.comment });
+  /* Nothing writes a Strength and Target for home learning, so any here are a
+     teacher's own, from View work. */
+  const teacherCard = feedbackCard(homeworkView() ? tn : { comment: tn.comment });
   if (teacherCard) o.cards.appendChild(teacherCard);
   /* Nothing to put beside the mark, so it sits alone, as a practical does. */
   else { o.cards.remove(); o.layout.classList.add("alone"); }
-  if (teacherTools) o.box.appendChild(markEditor(o.res));
+  if (teacherTools && !homeworkView()) o.box.appendChild(markEditor(o.res));
   const review = marksButton(o.res, o.rev);
   o.seeBtn.addEventListener("click", () => review.open());
   const voice = voiceCard();
@@ -12171,14 +12413,15 @@ function doneShell(title){
     note.innerHTML = lockIcon(17);
     note.appendChild(document.createTextNode(" Your teacher has locked this while they mark it, so it cannot be changed just now."));
     box.appendChild(note);
-  } else if (steps.length && !(assessPages && !assessPages.homework && !spectate) && !(practicalMarked() && !spectate)){
+  } else if (steps.length && !(assessPages && !spectate) && !(practicalMarked() && !spectate)){
     /* Not for a marked assessment a student has handed in. They were told
        twice that there was no going back; their answers are under View my
        assessment, and a teacher's code is the way back in. Nor for a
        practical once the teacher has marked it: what to do next is on the
        summary, and going back in only invites changing marked work. */
     const back = el("button","btn-ghost done-back", workFrozen ? "← View my original work" : "← Back to my work");
-    /* Back to the top of home learning's one page, not the last of its pages. */
+    /* Only a teacher, for home learning. Back to the top of its one page, not
+       the last of its pages. */
     back.addEventListener("click", () => leaveSummary(assessPages && assessPages.homework ? 0 : Math.max(0, steps.length - 1)));
     box.appendChild(back);
   }
@@ -12199,7 +12442,7 @@ function doneShell(title){
      to leave the teacher no dot at all. A marked practical has no way back
      to the pages where the dot used to be, and its response tasks have
      checklists a teacher may need to tick. */
-  const keepDot = !spectate && !!(lesson && (lesson.assessment || lesson.practical));
+  const keepDot = !spectate && !!(lesson && (lesson.assessment || lesson.practical || homeworkView()));
   dock.classList.toggle("keep-dot", keepDot);
   dock.classList.toggle("gone", !rubricOnSummary() && !keepDot);
   paintFrozenNote(true);
@@ -12633,8 +12876,9 @@ function showLessonComplete(revisit, justFinished, sentAlready){
        out without going looking for one. */
     if (linkPossible()) hero.appendChild(pdfButton(status, false));
   }
-  /* Offline there is no home to go back to, only a code box. */
-  if (!spectate && !OFFLINE){
+  /* Offline there is no home to go back to, only a code box, and nor is there
+     for somebody who never signed in. */
+  if (!spectate && !OFFLINE && !guest){
     const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
     hero.appendChild(back);
   }
@@ -12684,7 +12928,7 @@ function showLessonComplete(revisit, justFinished, sentAlready){
     if (sentAlready){ paintStatus(status, sentAlready); paintSaveButtons(sentAlready === "done" ? "saved" : "idle"); }
     else submitWork().then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
   }
-  else if (revisit && token && !spectate){
+  else if (revisit && (token || guest) && !spectate){
     status.dataset.state = "done";
     status.textContent = "Saved earlier \u2713";
     paintSaveButtons("saved");

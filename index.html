@@ -63,9 +63,10 @@
   </section>
 
   <div class="tabs" id="tabs" hidden>
-    <button class="on" id="tabLessons">Lessons</button>
-    <button id="tabResults">Assessments &amp; STAR Feedback</button>
-    <button id="tabPractice">Practice</button>
+    <button class="on" id="tabLessons"><span data-icon="lessons" data-size="18"></span><span>Lessons</span></button>
+    <button id="tabResults"><span data-icon="star" data-size="18"></span><span>Assessments</span></button>
+    <button id="tabHome"><span data-icon="home" data-size="18"></span><span>Home Learning</span></button>
+    <button id="tabPractice"><span data-icon="practice" data-size="18"></span><span>Practice</span></button>
     <button class="btn-ghost iconbtn refresh" id="refTab" title="Check for anything new">&#8635;</button>
   </div>
   <div id="view-lessons" hidden>
@@ -216,7 +217,8 @@ let openTab = "lessons";
 /* The sandbox sends a student back here with ?tab=practice on the address, so
    they land on the list they came from rather than on their lessons. */
 try{
-  if (new URLSearchParams(location.search).get("tab") === "practice") openTab = "practice";
+  const wantedTab = new URLSearchParams(location.search).get("tab");
+  if (wantedTab === "practice" || wantedTab === "homework") openTab = wantedTab;
 }catch(e){}
 
 /* A home learning link from a teacher: index.html?open=<lesson>. It comes here
@@ -628,9 +630,13 @@ function paintLessons(byId){
   const cat = (catalogue && catalogue.lessons) || [];
   // published, not locked for this class, and known in the lesson files
   /* the server already filtered by class. Assessments of every kind are
-     opened from Assessments & STAR Feedback, where their marks and feedback
+     opened from Assessments, where their marks and feedback
      come back, and not from here. */
   let visible = cat.filter(c => byId[c.lesson_id] && !lockedLessons.has(c.lesson_id) && !c.assessment);
+  /* Lessons and Home Learning are one list, drawn twice: the same Active and
+     Past, the same units, and only what is in it differs. */
+  const homeTab = openTab === "homework";
+  visible = visible.filter(c => !!c.homework === homeTab);
   /* A lesson is in the past once its closing date has gone by, or once the
      student has finished it. Closed lessons can still be opened and edited.
      Half finished work does not hold one back: the date closes it either way. */
@@ -645,7 +651,10 @@ function paintLessons(byId){
   visible = visible.filter(c => showing === "done" ? isPast(c) : !isPast(c));
 
   if (!visible.length){
-    box.innerHTML = '<p class="hint">' + (showing === "done"
+    box.innerHTML = '<p class="hint">' + (homeTab
+      ? (showing === "done" ? "Nothing here yet. Home learning moves here once you finish it, or once it closes."
+                            : "You have no home learning to do right now.")
+      : showing === "done"
       ? "Nothing here yet, lessons move here once they close, or once you finish them."
       : (cat.length ? "No lessons are open right now. Your teacher will publish them when you need them."
                     : "No lessons have been published yet.")) + '</p>';
@@ -793,8 +802,11 @@ on("refTab", "click", async () => {
   }catch(e){}
   btn.disabled = false;
 });
-on("tabLessons", "click", () => switchTab("lessons"));
+/* The list is drawn again here and not in switchTab, which also runs as the page
+   starts, before the lesson list's own variables exist. */
+on("tabLessons", "click", () => { switchTab("lessons"); loadLessons(); });
 on("tabResults", "click", () => switchTab("results"));
+on("tabHome", "click", () => { switchTab("homework"); loadLessons(); });
 on("tabPractice", "click", () => switchTab("practice"));
 let resultsLoaded = false;
 
@@ -820,8 +832,10 @@ function switchTab(which){
   openTab = which;
   $("tabLessons").classList.toggle("on", which === "lessons");
   $("tabResults").classList.toggle("on", which === "results");
+  $("tabHome").classList.toggle("on", which === "homework");
   $("tabPractice").classList.toggle("on", which === "practice");
-  $("view-lessons").hidden = which !== "lessons";
+  const listing = which === "lessons" || which === "homework";
+  $("view-lessons").hidden = !listing;
   $("view-results").hidden = which !== "results";
   $("view-practice").hidden = which !== "practice";
   /* Nothing on the Practice tab comes from the server, so there is nothing

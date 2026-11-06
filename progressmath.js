@@ -8,7 +8,8 @@
   const TASK_LABEL = { quiz:"Quiz", mc:"Multiple choice", order:"Put in order",
                        blanks:"Fill the gaps", short:"Short answer",
                        ide:"Coding task", web:"Coding task", scratch:"Coding task", image:"Photoshop task",
-                       table:"Table", label:"Label a picture", hotspot:"Click the right spot" };
+                       table:"Table", label:"Label a picture", hotspot:"Click the right spot",
+                       exam:"Exam question" };
   function plainText(html){ return String(html || "").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
   function normAns(x){ return String(x || "").toLowerCase().trim().replace(/\s+/g," ").replace(/[.,!?;:'"]+$/g,""); }
 
@@ -94,6 +95,9 @@
           return;
         }
         if (b.type === "page" || b.type === "group"){ walk(b.blocks, title, ext); return; }
+        /* An exam question counts here only in home learning, which marks one on
+           its summary: a lesson's are read by Specification coverage instead. */
+        if (b.type === "exam" && !(lessonJson && lessonJson.homework)) return;
         const t = taskInfo(b);
         if (t){ t.pageIndex = pageIndex; t.pageTitle = title; t.extension = ext; out.push(t); }
       });
@@ -129,6 +133,17 @@
     }
     if (b.type === "short")
       return { got: (window.shortAnswer && window.shortAnswer.mark(b, v).ok) ? 1 : 0, max: 1 };
+    if (b.type === "exam"){
+      let max = Math.max(0, parseInt(b.marks, 10) || 0);
+      const said = (v && typeof v === "object") ? String(v.text || "") : String(v || "");
+      if (b.answer === "short"){
+        if (!max) max = 1;
+        return { got: (window.shortAnswer && window.shortAnswer.mark(b, said).ok) ? max : 0, max: max };
+      }
+      const scheme = (Array.isArray(b.scheme) ? b.scheme : []).filter(p => p && p.text);
+      if (!max) max = scheme.reduce((t, p) => t + Math.max(1, parseInt(p.marks, 10) || 1), 0);
+      return { got: (v && v.marks !== undefined && v.marks !== null) ? Math.max(0, Math.min(max, Number(v.marks) || 0)) : 0, max: max };
+    }
     if (b.type === "table") return tableScore(b, v);
     if (b.type === "label") return labelScore(b, v);
     if (b.type === "hotspot") return hotspotScore(b, v);

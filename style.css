@@ -8293,3 +8293,45 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
   .lessons .lessonCard .go{ order:2 }
   .lessons .lessonCard .badge{ order:3 }
 }
+
+/* The tabs on a student's home page, an icon and a word each. They have to fit
+   an iPad without scrolling, and the refresh button sits after them in the row
+   rather than over the end of it. */
+#tabs{ align-items:center; flex-wrap:nowrap }
+#tabs > button:not(.refresh){ display:inline-flex; align-items:center; justify-content:center; gap:7px; white-space:nowrap }
+#tabs > button:not(.refresh) svg{ flex:none }
+#tabs .refresh{ flex:none; position:static; margin-left:auto }
+/* On a phone the words go under the icons, or four of them will not fit. */
+@media (max-width:600px){
+  #tabs{ overflow:visible; gap:0 }
+  #tabs > button:not(.refresh){ flex:1 1 0; min-width:0; flex-direction:column; gap:2px; padding:6px 2px;
+    line-height:1.15; font-size:var(--text-2xs); white-space:normal; text-align:center }
+  #tabs .refresh{ margin-left:2px }
+}
+/* A quiz in home learning has nothing to check, so its buttons only move on. */
+.quiz-moves{ gap:10px; flex-wrap:wrap }
+.quiz-moves .btn-primary{ margin-left:auto }
+.rev-quizq{ margin-top:10px }
+/* Written work in View my work has no mark, so nothing stands where one would. */
+.resq.unmarked .mark{ visibility:hidden }
+/* A student's name where Home would be, there being no account to go home to. */
+.topbar .guestname{ background:none; border:none; padding:0; font:inherit; cursor:pointer;
+  max-width:40vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  text-decoration:underline; text-underline-offset:3px }
+/* Sign-in backup: the code, the link and what has come back. */
+.accessqr{ width:220px; max-width:70%; margin:6px auto 12px; background:#fff; line-height:0 }
+.accessqr svg{ display:block; width:100% }
+.accesslink{ overflow-wrap:anywhere; white-space:pre-wrap; font-size:var(--text-xs) }
+.accesslist{ display:grid; gap:8px; margin-bottom:12px }
+#accessHolder{ margin-bottom:16px }
+.accessrow{ display:flex; align-items:center; gap:10px; padding:8px 12px; text-align:left;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:var(--rad-md) }
+.accesswho{ flex:1; min-width:0 }
+.accesswho b{ display:block; overflow-wrap:anywhere }
+.accesswho span{ font-size:var(--text-sm); color:var(--muted) }
+/* Nothing to write feedback into for somebody with no account. */
+.guestwork .workside{ display:none }
+.guestwork .worksplit{ grid-template-columns:minmax(0,1fr) }
+/* The first page of Sign-in backup. */
+.accesspage .signin{ margin:0 auto }
+.accessclass{ font-size:var(--text-lg); margin:0 0 16px }

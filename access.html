@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="images/logo.svg" type="image/svg+xml">
+<link rel="icon" href="images/logo-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="images/logo-180.png">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computing Lesson Hub</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="look.css">
+<script src="icons.js"></script>
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<script src="config.js"></script>
+</head>
+<body class="accesspage">
+
+<div class="page">
+  <div class="masthead">
+    <p class="eyebrow">Computing</p>
+    <h1 id="headline">Your lesson</h1>
+  </div>
+
+  <section class="station signin" id="card">
+    <p class="hint" id="wait">Checking your link…</p>
+    <form id="nameForm" hidden autocomplete="off">
+      <p class="accessclass">Your class is <b id="className"></b></p>
+      <div class="signin-field">
+        <label for="first">First name</label>
+        <input type="text" id="first" maxlength="40" autocomplete="off" autocapitalize="words">
+      </div>
+      <div class="signin-field" style="margin-top:12px">
+        <label for="last">Surname</label>
+        <input type="text" id="last" maxlength="40" autocomplete="off" autocapitalize="words">
+      </div>
+      <p class="err" id="nameErr" role="alert"></p>
+      <button class="btn-primary" id="goBtn" type="submit" style="margin-top:14px">Open the lesson</button>
+    </form>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+/* The way in to a cover lesson for a student who cannot sign in, reached by the
+   link or QR code on the teacher's Sign-in backup pop-up. The link is sealed
+   by the server, so the class and the lesson are asked for rather than read out
+   of it. Nothing here asks for a password: that is the whole point of the page.
+
+   Somebody already signed in to that class needs none of this and goes straight
+   to the lesson, where their work is saved as it always is. */
+const API = (window.HUB && window.HUB.API) || "";
+const sealed = new URLSearchParams(location.search).get("k") || "";
+
+function stop(words){
+  $("wait").hidden = false;
+  $("wait").textContent = words;
+  $("nameForm").hidden = true;
+}
+function sessionLasting(){
+  const token = localStorage.getItem("hub_token");
+  if (!token || !localStorage.getItem("hub_name")) return false;
+  try{
+    const inside = token.slice(0, token.lastIndexOf(".")).replace(/-/g, "+").replace(/_/g, "/");
+    const exp = JSON.parse(atob(inside)).exp;
+    return !exp || Date.now() < exp;
+  }catch(e){ return true; }
+}
+function savedGuest(){
+  try{ return JSON.parse(localStorage.getItem("hub_guest") || "null"); }catch(e){ return null; }
+}
+/* The same name on the same link is the same student coming back to their work.
+   A different name is the next child on a shared iPad, who starts afresh. */
+function newId(){
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+
+let lessonInfo = null;
+async function start(){
+  if (!sealed || !API || (window.HUB && window.HUB.OFFLINE))
+    return stop("This link is not working. Ask your teacher for it again.");
+  let d;
+  try{
+    const r = await fetch(API + "/api/teacher/guest-open?k=" + encodeURIComponent(sealed), { cache:"no-store" });
+    d = await r.json();
+    if (!r.ok) return stop(d.error || "This link is not working. Ask your teacher for it again.");
+  }catch(e){
+    return stop("Could not reach the server. Try again in a moment.");
+  }
+  lessonInfo = d;
+  if (!d.open) return stop("This lesson is not open yet. Ask your teacher when it will be.");
+  const mine = String(localStorage.getItem("hub_group") || "").toLowerCase();
+  if (sessionLasting() && mine === String(d.group).toLowerCase()){
+    location.replace("lesson.html?id=" + encodeURIComponent(d.lesson));
+    return;
+  }
+  $("headline").textContent = d.title || "Your lesson";
+  $("className").textContent = d.group;
+  const had = savedGuest();
+  if (had && had.key === sealed){ $("first").value = had.first || ""; $("last").value = had.last || ""; }
+  $("wait").hidden = true;
+  $("nameForm").hidden = false;
+  $("first").focus();
+}
+
+$("nameForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const first = $("first").value.trim(), last = $("last").value.trim();
+  if (!first){ $("nameErr").textContent = "Type your first name."; $("first").focus(); return; }
+  if (!last){ $("nameErr").textContent = "Type your surname."; $("last").focus(); return; }
+  const name = first + " " + last;
+  const had = savedGuest();
+  const same = had && had.key === sealed && String(had.name).toLowerCase() === name.toLowerCase();
+  try{
+    localStorage.setItem("hub_guest", JSON.stringify({
+      key: sealed, id: same ? had.id : newId(), first: first, last: last, name: name,
+      group: lessonInfo.group, lesson: lessonInfo.lesson }));
+  }catch(err){
+    $("nameErr").textContent = "This browser will not save your work. Try a different one, or ask your teacher.";
+    return;
+  }
+  location.href = "lesson.html?id=" + encodeURIComponent(lessonInfo.lesson) + "&guest=1";
+});
+
+start();
+</script>
+</body>
+</html>

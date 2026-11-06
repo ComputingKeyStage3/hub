@@ -20,6 +20,7 @@
 <script src="menus.js"></script>
 <script src="dragline.js"></script>
 <script src="progressmath.js"></script>
+<script src="qrcode.js"></script>
 <script src="markbook.js"></script>
 <script src="resultsbook.js"></script>
 <script src="teacher.js"></script>
@@ -4766,8 +4767,13 @@ function paintLessonGrid(){
     /* Home learning has nothing to pace, so Manage had nothing in it. What a
        teacher comes back to its card for is the link. */
     const homework = kindOf(l) === "homework";
-    const man = el("button","btn-ghost", homework ? "Copy link" : "Manage");
-    man.addEventListener("click", () => { if (homework) sharePopup(l.lesson_id); else manageLesson(l.lesson_id); });
+    const cover = kindOf(l) === "cover";
+    const man = el("button","btn-ghost", homework ? "Copy link" : cover ? "Sign-in backup" : "Manage");
+    man.addEventListener("click", () => {
+      if (homework) sharePopup(l.lesson_id);
+      else if (cover) signInBackup(l.lesson_id);
+      else manageLesson(l.lesson_id);
+    });
     const edit = el("button","btn-ghost","Edit");
     edit.title = "Open in the lesson builder";
     edit.addEventListener("click", () => editLesson(l.lesson_id));
@@ -4775,7 +4781,10 @@ function paintLessonGrid(){
     rem.title = "Take it away from " + cls;
     rem.addEventListener("click", () => removeFromClass(l));
     acts.appendChild(pub);
-    acts.appendChild(man);
+    /* A link to something not out yet is a link to nothing, so these two wait
+       until it is published or scheduled. Home learning and cover have nothing
+       to pace, so there is no Manage for them to fall back on until then. */
+    if (live || !(homework || cover)) acts.appendChild(man);
     /* View work is its own button, unless the screen is too narrow for four */
     const extras = [["Edit in the builder", () => editLesson(l.lesson_id)],
                     ["Remove from " + cls, () => removeFromClass(l)]];
@@ -5094,13 +5103,11 @@ function arborInstructions(id){
 }
 function sharePopup(id, justPublished){
   const a = assignOf(id);
-  const live = !!(a && a.published);
-  const later = live && a.release_at && a.release_at > new Date().toISOString();
+  const later = a && a.release_at && a.release_at > new Date().toISOString();
   openModal(box => {
     modalTitle(box, justPublished ? "Published for " + cls : "\u201c" + titleOf(id) + "\u201d");
     box.appendChild(el("p","modal-text",
-      !live ? "This is still a draft, so the link will not open for " + cls + " until it is published."
-      : later ? "The link will open for " + cls + " from " + niceDate(a.release_at) + " at " + hhmm(a.release_at) + "."
+      later ? "The link will open for " + cls + " from " + niceDate(a.release_at) + " at " + hhmm(a.release_at) + "."
       : "Now tell " + cls + " about it. The link takes them straight to it, signing in first if they need to."));
     /* What is about to be copied, and the way to get it if a school has
        switched off the clipboard for scripts: it is ready to select. */
@@ -5138,6 +5145,107 @@ function sharePopup(id, justPublished){
 function offerHomeLearningLink(id){
   const a = assignOf(id);
   if (kindOf(catOf(id)) === "homework" && a && a.published) sharePopup(id, true);
+}
+
+/* ---------- the sign-in backup for a cover lesson ----------
+   For the student who cannot sign in, with a cover teacher in the room who
+   cannot reset a password. The server seals the class and the lesson into the
+   link, so nothing in it can be read or changed by hand, and access.html asks
+   for a name in place of a password. What comes back is kept apart from the
+   class's own work and is listed here, because this is the one place the class
+   teacher knows to look for it. The picture is drawn on this computer: a school
+   that blocks a QR website would otherwise lose the code when it is needed. */
+function qrPicture(text){
+  const code = window.qrcode(0, "M");
+  code.addData(text);
+  code.make();
+  const count = code.getModuleCount(), quiet = 4, size = count + quiet * 2;
+  let path = "";
+  for (let r = 0; r < count; r++) for (let c = 0; c < count; c++)
+    if (code.isDark(r, c)) path += "M" + (c + quiet) + " " + (r + quiet) + "h1v1h-1z";
+  const box = el("div","accessqr");
+  /* Always black on white, whatever the theme: a phone has to read it. */
+  box.innerHTML = '<svg viewBox="0 0 ' + size + ' ' + size + '" role="img" aria-label="QR code for this lesson" shape-rendering="crispEdges">' +
+    '<rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + path + '" fill="#000"/></svg>';
+  return box;
+}
+async function signInBackup(id){
+  const group = cls;
+  openModal(box => {
+    box.classList.add("accessbox");
+    modalTitle(box, "Sign-in backup");
+    box.appendChild(el("p","modal-text",
+      "For anyone in " + group + " who cannot sign in. They scan this or open the link, type their name, and start."));
+    const holder = el("div"); holder.id = "accessHolder";
+    holder.appendChild(el("p","hint","Making the link…"));
+    box.appendChild(holder);
+    box.appendChild(el("p","set-label","Work handed in this way"));
+    const list = el("div","accesslist"); list.id = "accessList";
+    box.appendChild(list);
+    const done = el("button","btn-ghost modal-stay","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+  try{
+    const r = await fetch(API + "/api/teacher/guest-link?lesson=" + encodeURIComponent(id) +
+                          "&group=" + encodeURIComponent(group), { headers: H(), cache: "no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not make the link.");
+    const holder = $("accessHolder");
+    if (!holder) return;
+    const url = new URL("access.html", location.href);
+    url.search = "?k=" + d.k;
+    holder.innerHTML = "";
+    holder.appendChild(qrPicture(url.href));
+    const link = el("pre","codeblock accesslink", url.href);
+    holder.appendChild(link);
+    const copy = el("button","btn-ghost","Copy link");
+    copy.type = "button";
+    copy.addEventListener("click", async () => {
+      try{ await navigator.clipboard.writeText(url.href); copy.textContent = "Copied \u2713"; }
+      catch(e){
+        /* a school can switch off the clipboard for scripts */
+        const pick = document.createRange(); pick.selectNodeContents(link);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(pick);
+        copy.textContent = "Now press Ctrl+C";
+      }
+    });
+    holder.appendChild(copy);
+  }catch(e){
+    const holder = $("accessHolder");
+    if (holder){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
+  }
+  paintGuestList(id, group);
+}
+async function paintGuestList(id, group){
+  const list = $("accessList");
+  if (!list) return;
+  list.innerHTML = "";
+  let rows = [];
+  try{
+    const r = await fetch(API + "/api/teacher/guest-work?names=1&lesson=" + encodeURIComponent(id) +
+                          "&group=" + encodeURIComponent(group), { headers: H(), cache: "no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "");
+    rows = d.rows || [];
+  }catch(e){ list.appendChild(el("p","hint","Could not load this list. Try opening it again.")); return; }
+  if (!rows.length){ list.appendChild(el("p","hint","Nothing yet. Names appear here once a student saves or finishes.")); return; }
+  rows.forEach(g => {
+    const row = el("div","accessrow");
+    const who = el("div","accesswho");
+    who.appendChild(el("b","", g.name));
+    who.appendChild(el("span","", (g.done ? "Finished" : "Still working") + " \u00b7 " + niceDate(g.saved) + " at " + hhmm(g.saved)));
+    row.appendChild(who);
+    const view = el("button","btn-ghost bmini2","View work");
+    view.type = "button";
+    view.addEventListener("click", () => {
+      closeModal();
+      consoleNav.go("work.html?lesson=" + encodeURIComponent(id) + "&group=" + encodeURIComponent(group) +
+                    "&student=" + encodeURIComponent("guest:" + g.id));
+    });
+    row.appendChild(view);
+    list.appendChild(row);
+  });
 }
 
 /* Units belong to a year group. This offers the ones from this class's year

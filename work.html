@@ -294,6 +294,7 @@ async function boot(){
     if (markingTest()) $("viewMode").hidden = true;
     roster = students.sort(byUsername);
     rows = work;
+    await addGuests();
     if (!PRACTICE) await loadMarks();
     if (!PRACTICE) lockedPages = await fetchLocks(lessonJson);
     if (PRACTICE){
@@ -424,6 +425,24 @@ async function fetchWork(){
       data: window.progressMath.withMarkingTicks(
         window.progressMath.withTeacherEdits(row.data, row.feedback), row.feedback) }));
 }
+/* Students who came in by Sign-in backup on a cover lesson. They have no
+   account, so they are put in the class for this page only, after everyone who
+   does, and from here on the list, the frame and the mark book treat them as
+   anybody else. A cover lesson with no answer here simply has nobody extra. */
+async function addGuests(){
+  if (PRACTICE || !lessonJson || !lessonJson.cover) return;
+  try{
+    const r = await fetch(API + "/api/teacher/guest-work?lesson=" + encodeURIComponent(lessonId) +
+                          "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+    if (!r.ok) return;
+    ((await r.json()).rows || []).forEach(g => {
+      const username = "guest:" + g.id;
+      roster.push({ username: username, display_name: g.name, guest: true });
+      rows.push({ username: username, display_name: g.name, data: g.data, raw: g.data,
+                  feedback: "", updated_at: g.saved });
+    });
+  }catch(e){}
+}
 /* What has been marked so far. Pulled out of boot so Refresh can ask for it
    again: a colleague marking the same class in the next room is exactly the
    sort of thing a teacher presses Refresh to see. */
@@ -481,6 +500,7 @@ async function refreshWork(){
     roster = students.sort(byUsername);
     rows = work;
     if (lesson) lessonJson = lesson;
+    await addGuests();
     if (!PRACTICE) await loadMarks();
     if (!PRACTICE) lockedPages = await fetchLocks(lessonJson);
     /* Back to the same student, by name rather than by position: somebody
@@ -1472,7 +1492,7 @@ function paintPicker(){
     o.value = String(i);
     const row = rows.find(r => r.username === st.username);
     const has = PRACTICE ? programsOf(row).length : !!row;
-    o.textContent = st.display_name + pickerDisambig(st, byName[st.display_name]) +
+    o.textContent = st.display_name + (st.guest ? "  \u00b7 Sign-in backup" : pickerDisambig(st, byName[st.display_name])) +
       (marked ? "  \u00b7 \u2713 Marked" : has ? "" : (PRACTICE ? "  \u00b7 no programs" : "  \u00b7 nothing saved")) +
       coverListNote(row);
     sel.appendChild(o);
@@ -1552,7 +1572,10 @@ function showStudent(i, step){
     handFrame($("workFrame"), want.box);
     frameGo(want.url);
   }
-  $("fbWho").textContent = st.display_name + " · " + st.username + (row ? "" : " · nothing saved");
+  $("fbWho").textContent = st.display_name + " · " + (st.guest ? "Sign-in backup" : st.username) + (row ? "" : " · nothing saved");
+  /* Feedback is kept on a student's account and they read it when they sign
+     in. Somebody with no account would never see it, so it is not offered. */
+  $("workPane").classList.toggle("guestwork", !!st.guest);
   paintCoverFacts(row);
   /* a practical assessment is marked by hand, so the boxes appear */
   paintMarking(st.username);
@@ -3022,6 +3045,7 @@ window.addEventListener("beforeunload", (e) => {
 
 /* Save on its own waits and says so; Save and next does not wait at all. */
 async function saveFeedback(andNext){
+  if ((roster[idx] || {}).guest) return;      // nowhere for it to go
   if (!roster[idx]) return false;
   if (OFFLINE){
     const ok = await handBack();
