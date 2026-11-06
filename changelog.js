@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.0.3", text:"In a quiz, the answer a student picked now turns green if it was right and red if it was wrong." },
   { v:"17.0.3", text:"Cover details on a draft says the lesson needs publishing to get the Sign-in backup code, with a Publish button that brings you back to the code." },
   { v:"17.0.2", text:"Quizzes keep the feedback and the button beside the options, so students no longer scroll to find Next question. It fades in after a couple of seconds and glows until pressed. On a phone it sits underneath and scrolls into view." },
   { v:"17.0.1", text:"Cover details is simpler: Cover notes, the Sign-in backup code and the Lesson structure, a section each. Work handed in through the Sign-in backup is found in View work." },

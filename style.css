@@ -337,9 +337,6 @@ iframe.embed{
 .opt:hover{background:var(--panel-2)}
 .opt input{width:20px; height:20px; margin-top:1px; flex:none; accent-color:var(--amber)}
 
-.opt.right{border-color:var(--mint); background:rgba(65,199,164,.08)}
-.opt.wrong{border-color:var(--red); background:rgba(232,97,90,.08)}
-
 .feedback{margin:12px 0; padding:11px 14px; border-radius:var(--rad-md); font-size:var(--text-lg); line-height:1.45; border:1px solid var(--line)}
 .feedback[hidden]{display:none}
 .feedback b{display:block; font-family:var(--display); font-size:var(--text-lg); margin-bottom:3px}
@@ -1142,6 +1139,18 @@ html[data-bg=dark] .seg{background:#3D434F}
 .opt{background:var(--panel); border-color:var(--line-2); border-radius:var(--rad-md)}
 .opt:hover{border-color:var(--amber)}
 .opt.chosen{border-color:var(--amber); background:var(--panel-2); box-shadow:0 0 0 3px rgba(220,138,62,.15)}
+/* Marked, once a quiz answer is checked. These sit after .opt.chosen and name it
+   because the option a student picked carries both classes: up by the other
+   quiz rules, .chosen won and their own answer never turned red or green. The
+   :hover is for the same reason, or pointing at a marked option turned it blue. */
+.opt.right,.opt.right:hover,.opt.chosen.right{
+  border-color:var(--mint); background:var(--mint-dim);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--mint) 22%, transparent);
+}
+.opt.wrong,.opt.wrong:hover,.opt.chosen.wrong{
+  border-color:var(--red); background:var(--red-dim);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent);
+}
 input[type=text],input[type=password],textarea,select{
   background:var(--panel); border:1.5px solid var(--line-2); color:var(--text); border-radius:var(--rad-md);
 }
@@ -3052,6 +3061,48 @@ html[data-bg=night] .st-target,html[data-bg=night] .st-target b{color:#F0938E}
   margin-bottom:4px; color:var(--text)}
 .quiz-score p{margin:0 0 12px; font-size:var(--text-lg); color:var(--text)}
 .quiz-score[data-verdict=correct] .btn-primary{display:none}
+
+/* A quiz keeps its feedback and its button in a column beside the options, so
+   neither can push the other out of sight. Measured against the quiz rather
+   than the screen, because a quiz can sit somewhere narrow on a wide screen.
+   Anything too narrow for two columns stacks, and rQuiz scrolls the button
+   into view. */
+.quiz-room{container-type:inline-size}
+.quiz-play{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.quiz-side{display:grid; gap:12px; min-width:0}
+.quiz-side .feedback{margin:0}
+.quiz-side .btn-primary{width:100%}
+@container (min-width:620px){
+  .quiz-play{grid-template-columns:minmax(0,1fr) minmax(230px,32%); gap:20px; align-items:start}
+  /* Long options or pictures can run past the bottom of the stage. The button
+     stays alongside instead of being left at the top of them. */
+  .quiz-side{position:sticky; top:10px}
+}
+
+/* Next question arrives once the feedback has had a couple of seconds to be
+   read, then glows until it is pressed. It holds its space while it waits, so
+   nothing on the page moves when it appears. Everything that hides it is in
+   the animation: where that does not run, the button is simply there, and a
+   student is never left without a way on. */
+.quiz-next{
+  --quiz-next:quiz-next-in .5s ease 1.5s backwards, quiz-next-glow 1.5s ease-in-out 2s infinite;
+  animation:var(--quiz-next);
+  padding-top:12px; padding-bottom:12px; font-size:var(--text-lg); font-weight:800;
+}
+@keyframes quiz-next-in{
+  from{opacity:0; pointer-events:none}
+  to{opacity:1; pointer-events:auto}
+}
+/* Slow and soft on purpose: well under the three flashes a second that can be
+   a danger to someone with photosensitive epilepsy. */
+@keyframes quiz-next-glow{
+  0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--amber) 55%, transparent)}
+  50%{box-shadow:0 0 18px 7px color-mix(in srgb, var(--amber) 70%, transparent)}
+}
+/* Every machine in the school reports prefers-reduced-motion, so without this
+   line the blanket rule near the top of the file stops both of these and a
+   student there sees neither the wait nor the glow. */
+@media (prefers-reduced-motion:reduce){ .quiz-next{animation:var(--quiz-next) !important} }
 
 /* --- adding a task under the ones already on a page ---
    A row of categories across the top; pressing one drops its tasks out
