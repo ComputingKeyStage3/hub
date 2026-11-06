@@ -4768,10 +4768,10 @@ function paintLessonGrid(){
        teacher comes back to its card for is the link. */
     const homework = kindOf(l) === "homework";
     const cover = kindOf(l) === "cover";
-    const man = el("button","btn-ghost", homework ? "Copy link" : cover ? "Sign-in backup" : "Manage");
+    const man = el("button","btn-ghost", homework ? "Copy link" : cover ? "Cover details" : "Manage");
     man.addEventListener("click", () => {
       if (homework) sharePopup(l.lesson_id);
-      else if (cover) signInBackup(l.lesson_id);
+      else if (cover) coverDetails(l.lesson_id);
       else manageLesson(l.lesson_id);
     });
     const edit = el("button","btn-ghost","Edit");
@@ -4781,10 +4781,10 @@ function paintLessonGrid(){
     rem.title = "Take it away from " + cls;
     rem.addEventListener("click", () => removeFromClass(l));
     acts.appendChild(pub);
-    /* A link to something not out yet is a link to nothing, so these two wait
-       until it is published or scheduled. Home learning and cover have nothing
-       to pace, so there is no Manage for them to fall back on until then. */
-    if (live || !(homework || cover)) acts.appendChild(man);
+    /* A link to something not out yet is a link to nothing, so Copy link waits
+       until it is published or scheduled. Cover details are wanted before that:
+       it is where the notes are, and a cover is set ahead of the day. */
+    if (live || !homework) acts.appendChild(man);
     /* View work is its own button, unless the screen is too narrow for four */
     const extras = [["Edit in the builder", () => editLesson(l.lesson_id)],
                     ["Remove from " + cls, () => removeFromClass(l)]];
@@ -5169,23 +5169,46 @@ function qrPicture(text){
     '<rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + path + '" fill="#000"/></svg>';
   return box;
 }
-async function signInBackup(id){
+/* Everything for whoever is setting the cover, in one place: the notes to hand
+   over, what the lesson asks of students, how it runs with nobody who knows the
+   subject, and the way in for anyone who cannot sign in. */
+async function coverDetails(id){
   const group = cls;
+  const a = assignOf(id);
+  const live = !!(a && a.published);
+  const later = live && a.release_at && a.release_at > new Date().toISOString();
   openModal(box => {
-    box.classList.add("accessbox");
-    modalTitle(box, "Sign-in backup");
-    box.appendChild(el("p","modal-text",
-      "For anyone in " + group + " who cannot sign in. They scan this or open the link, type their name, and start."));
+    box.classList.add("wide", "coverbox");
+    modalTitle(box, titleOf(id));
+    box.appendChild(el("p","modal-text", !live ? group + " · Not published yet"
+      : later ? group + " · Opens " + niceDate(a.release_at) + " at " + hhmm(a.release_at)
+      : a.close_on ? group + " · Open until " + CLOSES_AT + " on " + niceDate(a.close_on)
+      : group + " · Open now"));
+    const cols = el("div","covercols");
+    const info = el("div"); info.id = "coverInfo";
+    info.appendChild(el("p","hint","Loading\u2026"));
+    cols.appendChild(info);
+    const access = el("div"); access.id = "accessCol";
+    access.appendChild(el("p","set-label","Sign-in backup"));
+    access.appendChild(el("p","hint","For anyone in " + group + " who cannot sign in. They scan this or open the link, type their name, and start."));
     const holder = el("div"); holder.id = "accessHolder";
-    holder.appendChild(el("p","hint","Making the link…"));
-    box.appendChild(holder);
-    box.appendChild(el("p","set-label","Work handed in this way"));
+    access.appendChild(holder);
+    access.appendChild(el("p","set-label","Work handed in this way"));
     const list = el("div","accesslist"); list.id = "accessList";
-    box.appendChild(list);
+    access.appendChild(list);
+    cols.appendChild(access);
+    box.appendChild(cols);
     const done = el("button","btn-ghost modal-stay","Done");
     done.addEventListener("click", closeModal);
     box.appendChild(done);
   });
+  paintCoverInfo(id);
+  if (!live){
+    $("accessHolder").appendChild(el("p","hint","The code and link appear here once the lesson is published or scheduled."));
+    $("accessList").appendChild(el("p","hint","Nothing yet."));
+    return;
+  }
+  $("accessHolder").appendChild(el("p","hint","Making the link\u2026"));
   try{
     const r = await fetch(API + "/api/teacher/guest-link?lesson=" + encodeURIComponent(id) +
                           "&group=" + encodeURIComponent(group), { headers: H(), cache: "no-store" });
@@ -5216,6 +5239,82 @@ async function signInBackup(id){
     if (holder){ holder.innerHTML = ""; holder.appendChild(el("p","hint", e.message)); }
   }
   paintGuestList(id, group);
+}
+/* The lesson is fetched rather than read from the catalogue, which knows only
+   its title: the notes and the pages are inside it. */
+async function paintCoverInfo(id){
+  let json = null;
+  try{ json = await fetchLesson(id); }
+  catch(e){
+    const box = $("coverInfo");
+    if (box){ box.innerHTML = ""; box.appendChild(el("p","hint", e.message)); }
+    return;
+  }
+  const box = $("coverInfo");
+  if (!box) return;
+  box.innerHTML = "";
+
+  box.appendChild(el("p","set-label","Cover notes"));
+  const notes = json.coverNotes;
+  if (notes && notes.data){
+    box.appendChild(el("p","hint","A plan of the lesson for the cover teacher. Fill in the date, the room and any class notes, then pass it on."));
+    const get = el("button","btn-primary","Download cover notes");
+    get.type = "button";
+    get.addEventListener("click", () => saveWordFile(notes));
+    box.appendChild(get);
+  } else {
+    box.appendChild(el("p","hint","None have been added to this lesson yet. Upload them from Lesson options in the builder."));
+    const edit = el("button","btn-ghost","Open in the builder");
+    edit.type = "button";
+    edit.addEventListener("click", () => { closeModal(); editLesson(id); });
+    box.appendChild(edit);
+  }
+
+  if (json.what || json.why){
+    box.appendChild(el("p","set-label","What it is about"));
+    if (json.what) box.appendChild(el("p","coverwhat", json.what));
+    if (json.why) box.appendChild(el("p","hint", json.why));
+  }
+
+  const pages = (json.blocks || []).filter(b => b && b.type === "page");
+  if (pages.length){
+    box.appendChild(el("p","set-label","What students work through"));
+    const list = el("ol","coverpages");
+    pages.forEach(p => list.appendChild(el("li","", p.title || "A page")));
+    box.appendChild(list);
+  }
+
+  box.appendChild(el("p","set-label","How it runs"));
+  const how = el("ul","coverhow");
+  ["Students work through it on the hub at their own pace, so nobody needs to know the subject.",
+   "Each page opens once they have had a real go at the one before.",
+   "A question they keep getting wrong gives them the answer, so nobody gets stuck.",
+   "They finish on a card to show you, which says how they got on."
+  ].forEach(line => how.appendChild(el("li","", line)));
+  box.appendChild(how);
+
+  if (json.slides && Array.isArray(json.slides.list) && json.slides.list.length){
+    const pres = el("button","btn-ghost","\u25b6 Present slides");
+    pres.type = "button";
+    pres.addEventListener("click", () => window.open("slides.html?id=" + encodeURIComponent(id) +
+                                                     "&group=" + encodeURIComponent(cls), "_blank"));
+    box.appendChild(pres);
+  }
+}
+/* The Word file travels inside the lesson, as base64. */
+function saveWordFile(notes){
+  const raw = atob(notes.data);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes],
+    { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = notes.name || "cover-notes.docx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 async function paintGuestList(id, group){
   const list = $("accessList");

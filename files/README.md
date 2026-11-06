@@ -47,3 +47,7 @@ Leave **Maximise compatibility** ticked when saving one, even though it
 makes the file a little bigger. A **Photoshop work** task reads the picture
 students hand in from the flattened copy that option saves, and a class that
 has only ever seen it ticked will not untick it.
+
+## Cover notes template
+
+`cover-notes-template.docx` is the blank Word document offered in Lesson options on a cover lesson. It is a template for teachers rather than a file for students, so no lesson links to it.

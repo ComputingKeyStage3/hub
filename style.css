@@ -8335,3 +8335,15 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
 /* The first page of Sign-in backup. */
 .accesspage .signin{ margin:0 auto }
 .accessclass{ font-size:var(--text-lg); margin:0 0 16px }
+
+/* Cover details: what the teacher needs on the left, the way in for students on
+   the right, and one column on anything narrow. Left aligned, because it is read
+   rather than glanced at. */
+.covercols{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:28px; text-align:left }
+.covercols .set-label{ margin:16px 0 6px }
+.covercols .set-label:first-child{ margin-top:0 }
+.coverwhat{ margin:0 0 4px }
+.coverpages, .coverhow{ margin:0 0 12px; padding-left:20px }
+.coverpages li, .coverhow li{ margin:3px 0 }
+@media (max-width:760px){ .covercols{ grid-template-columns:minmax(0,1fr); gap:10px } }
+.covernotes-name{ margin:0 0 8px; font-weight:700; overflow-wrap:anywhere }

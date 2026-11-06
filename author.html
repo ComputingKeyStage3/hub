@@ -1022,6 +1022,8 @@ function compile(){
   if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
   if (lesson.cover) out.cover = true;
+  /* Left off here, a teacher's notes would be gone the next time it opened. */
+  if (lesson.cover && lesson.coverNotes) out.coverNotes = lesson.coverNotes;
   /* The lesson's slides (author-slides.js), one deck kept whole. */
   const slides = window.compileSlides ? window.compileSlides(lesson) : null;
   if (slides) out.slides = slides;
@@ -4319,6 +4321,68 @@ function openLessonOptions(){
     secKind.appendChild(grid);
     box.appendChild(secKind);
 
+    /* ---- cover notes ----
+       Only a cover lesson has them, so this comes and goes with the kind, and
+       it sits up here because it is the thing a cover lesson is not ready
+       without. */
+    const secNotes = optSection("Cover notes",
+      "A Word document for the teacher setting the cover. They download it from Cover details on the lesson's card. Students never see it.");
+    const notesBody = el("div");
+    secNotes.appendChild(notesBody);
+    box.appendChild(secNotes);
+    const paintCoverNotes = () => {
+      secNotes.hidden = !lesson.cover;
+      notesBody.innerHTML = "";
+      const row = el("div","toolrow");
+      const pick = el("input"); pick.type = "file"; pick.hidden = true;
+      pick.accept = ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      const msg = el("p","hint","");
+      pick.addEventListener("change", async () => {
+        const f = pick.files && pick.files[0];
+        if (!f) return;
+        /* A lesson is saved whole and has to stay under what the server takes,
+           and a page of tables is a few tens of kilobytes. Anything near this
+           has pictures in it that the cover teacher does not need. */
+        if (!/\.docx$/i.test(f.name)){ msg.textContent = "That is not a Word document. Choose a .docx file."; return; }
+        if (f.size > 300 * 1024){ msg.textContent = "That file is too big. Take any pictures out of it and try again."; return; }
+        const data = await new Promise((done, fail) => {
+          const r = new FileReader();
+          r.onload = () => done(String(r.result).split(",")[1] || "");
+          r.onerror = fail;
+          r.readAsDataURL(f);
+        }).catch(() => "");
+        if (!data){ msg.textContent = "That file could not be read. Try again."; return; }
+        lesson.coverNotes = { name: f.name, data: data };
+        saveDraft();
+        paintCoverNotes();
+      });
+      const up = el("button", lesson.coverNotes ? "btn-ghost" : "btn-primary",
+                    lesson.coverNotes ? "Replace" : "Upload cover notes");
+      up.type = "button";
+      up.addEventListener("click", () => pick.click());
+      if (lesson.coverNotes) notesBody.appendChild(el("p","covernotes-name", lesson.coverNotes.name));
+      row.appendChild(up);
+      if (lesson.coverNotes){
+        const rid = el("button","btn-ghost","Remove");
+        rid.type = "button";
+        rid.addEventListener("click", () => { lesson.coverNotes = null; saveDraft(); paintCoverNotes(); });
+        row.appendChild(rid);
+      }
+      const blank = el("button","btn-ghost","Download the template");
+      blank.type = "button";
+      blank.addEventListener("click", () => {
+        const a = document.createElement("a");
+        a.href = "files/cover-notes-template.docx";
+        a.download = "cover-notes-template.docx";
+        document.body.appendChild(a); a.click(); a.remove();
+      });
+      row.appendChild(blank);
+      notesBody.appendChild(row);
+      notesBody.appendChild(pick);
+      notesBody.appendChild(msg);
+    };
+    paintCoverNotes();
+
     /* ---- what it is called ---- */
     const secAbout = optSection("About it");
     const w1 = el("div","bfield");
@@ -4415,7 +4479,7 @@ function openLessonOptions(){
     secVer.appendChild(ver);
     box.appendChild(secVer);
 
-    const repaint = () => { paintKinds(); paintHow(); };
+    const repaint = () => { paintKinds(); paintHow(); paintCoverNotes(); };
     paintKinds(); paintHow();
 
     const go = el("button","btn-primary modal-cta","Done");
@@ -7913,6 +7977,7 @@ function fromCompiled(data, meta){
                 rubricShow: data.rubricShow === "grade" ? "grade" : "level",
                 homework: !!data.homework,
                 cover: !!data.cover,
+                coverNotes: data.coverNotes || null,
                 /* The two sentences for everything wrong and everything right
                    were saved but never read back, so reopening an assessment
                    emptied both boxes and the next save threw them away. */
