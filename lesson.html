@@ -8682,13 +8682,25 @@ function rQuiz(b){
   const prevBtn = el("button","btn-ghost quiz-prev","\u2190 Previous question");
   prevBtn.type = "button";
   prevBtn.hidden = true;
-  s.appendChild(head); s.appendChild(qtext); s.appendChild(opts);
-  s.appendChild(fb);
+  s.appendChild(head); s.appendChild(qtext);
   if (noCheck){
     const moves = el("div","row quiz-moves");
     moves.appendChild(prevBtn); moves.appendChild(btn);
-    s.appendChild(moves);
-  } else s.appendChild(btn);
+    s.appendChild(opts); s.appendChild(fb); s.appendChild(moves);
+  } else {
+    /* The feedback and the button go in a column beside the options. Under
+       them, the feedback pushed the button down by its own height at the very
+       moment it was needed, and on a school laptop that put Next question
+       behind the bar at the bottom of the screen. The section is what the
+       stylesheet measures, so a quiz in a narrow place stacks as it would on
+       a phone, whatever the width of the screen. */
+    s.classList.add("quiz-room");
+    const play = el("div","quiz-play");
+    const side = el("div","quiz-side");
+    side.appendChild(fb); side.appendChild(btn);
+    play.appendChild(opts); play.appendChild(side);
+    s.appendChild(play);
+  }
   s.appendChild(scoreCard);
 
   let qi = 0;
@@ -8724,9 +8736,25 @@ function rQuiz(b){
     finishedQuiz = n > 0 && checked.every(Boolean);
   }
 
+  /* Scrolls the stage just far enough to show from the top of one thing to the
+     bottom of another. The stage is what scrolls, not the window, and it ends
+     at the bar along the bottom, so scrollIntoView can leave a button tucked
+     against that bar. Set directly because a smooth scroll is not reliable
+     here: goToTask has the story. */
+  function keepInView(top, bottom){
+    const stage = $("stage");
+    if (!stage || !stage.contains(s)) return;
+    const view = stage.getBoundingClientRect();
+    const below = bottom.getBoundingClientRect().bottom + 14 - view.bottom;
+    const above = view.top + 10 - top.getBoundingClientRect().top;
+    if (below > 0) stage.scrollTop += below;
+    else if (above > 0) stage.scrollTop -= above;
+  }
+
   function draw(){
     scoreCard.hidden = true;
     head.hidden = false; qtext.hidden = false; opts.hidden = false; btn.hidden = false;
+    btn.classList.remove("quiz-next");
     const q = qs[qi];
     if (!q){ head.textContent = ""; qtext.textContent = "No questions yet."; opts.innerHTML = ""; return; }
     head.textContent = "Question " + (qi + 1) + " of " + n + (multi(q) ? " · tick every right answer" : "");
@@ -8778,8 +8806,9 @@ function rQuiz(b){
     fb.innerHTML = "";
     fb.appendChild(el("b","", ok ? "Correct" : "Not quite"));
     fb.appendChild(el("span","", ok ? (q.why || "")
-      : (q.hint || "The right answer is marked above.")));
+      : (q.hint || "The right answer is marked in green.")));
     btn.textContent = qi < n - 1 ? "Next question →" : "See how I did";
+    btn.classList.add("quiz-next");
     if (tell) tell();
   }
 
@@ -8806,6 +8835,7 @@ function rQuiz(b){
       draw(); markDirty(); refreshGate();
     });
     scoreCard.appendChild(again);
+    keepInView(scoreCard, scoreCard);
     if (tell) tell();
     /* Seeing the score saves nothing, so nothing else tells a Cover lesson. */
     if (coverOn()) coverRows.forEach(paint => paint());
@@ -8818,7 +8848,7 @@ function rQuiz(b){
     if (noCheck){ if (qi < n - 1){ qi++; draw(); } return; }
     /* already answered: this press is the step onwards */
     if (checked[qi]){
-      if (qi < n - 1){ qi++; draw(); }
+      if (qi < n - 1){ qi++; draw(); keepInView(head, head); }
       else showScore();
       return;
     }
@@ -8827,7 +8857,8 @@ function rQuiz(b){
       fb.innerHTML = "";
       fb.appendChild(el("b","","Choose an answer"));
       fb.appendChild(el("span","", multi(q) ? "Tick every answer you think is right."
-                                            : "Pick one of the options above, then check it."));
+                                            : "Pick one of the options, then check it."));
+      keepInView(fb, btn);
       return;
     }
     const right = rightSet(q);
@@ -8835,6 +8866,7 @@ function rQuiz(b){
     checked[qi] = true;
     solved[qi] = ok;
     reveal(ok);
+    keepInView(fb, btn);
     if (coverOn()) coverQuizStep(b, checked, solved);
     markDirty();
   });
