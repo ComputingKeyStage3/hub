@@ -3712,7 +3712,7 @@ function paintUnitProgress(result){
       row.appendChild(bar);
       row.appendChild(el("span","covernum", l.mr.pct + "%"));
     }
-    const open = el("button","btn-ghost", "Open markbook");
+    const open = el("button","btn-ghost", "Open mark book");
     open.addEventListener("click", () => openWorkPage(l.id, "progress"));
     row.appendChild(open);
     rows.appendChild(row);
@@ -4379,9 +4379,16 @@ async function fetchCatalogue(){
   assigns = cat.assignments || [];
 }
 const catOf = (id) => (cat.lessons || []).find(l => l.lesson_id === id) || { unit: "", published: 0, position: 0, version_of: "" };
-/* An assessment is marked there: a practical by hand, a test a question at
-   a time, so the way into its work says so. A lesson is looked at. */
-const workLabel = (id) => (catOf(id).practical || catOf(id).assessment) ? "Mark work" : "View work";
+/* The way into a lesson's work, which is what the button on its card is for.
+   A practical is marked by hand, so it opens on the work. A test and home
+   learning mark themselves, so what a teacher wants first is the whole class
+   at once, and they open on the mark book. A lesson is looked at. */
+const workWay = (id) => {
+  const l = catOf(id);
+  if (l.practical) return { label:"Mark work", tab:"" };
+  if (l.assessment || kindOf(l) === "homework") return { label:"Mark book", tab:"markbook" };
+  return { label:"View work", tab:"" };
+};
 const titleOf = (id) => { const l = fileLessons.find(x => x.id === id); return l ? l.title : id; };
 async function catPost(payload){
   catLoaded = false;                 // whatever this changes, the copy we hold is stale
@@ -4754,13 +4761,13 @@ function paintLessonGrid(){
       if (live){ setPublish(l.lesson_id, false); return; }
       publishPopup(l.lesson_id);
     });
-    const isAssessment = !!l.assessment;
-    const workBtn = el("button", isAssessment ? "btn-primary" : "btn-ghost",
-                       isAssessment ? "Markbook" : "View work");
-    /* The markbook is a tab of the work page now, opened on that tab. */
-    workBtn.addEventListener("click", () => openWorkPage(l.lesson_id, isAssessment ? "markbook" : ""));
-    const man = el("button","btn-ghost","Manage");
-    man.addEventListener("click", () => manageLesson(l.lesson_id));
+    const way = workWay(l.lesson_id);
+    const openWork = () => openWorkPage(l.lesson_id, way.tab);
+    /* Home learning has nothing to pace, so Manage had nothing in it. What a
+       teacher comes back to its card for is the link. */
+    const homework = kindOf(l) === "homework";
+    const man = el("button","btn-ghost", homework ? "Copy link" : "Manage");
+    man.addEventListener("click", () => { if (homework) sharePopup(l.lesson_id); else manageLesson(l.lesson_id); });
     const edit = el("button","btn-ghost","Edit");
     edit.title = "Open in the lesson builder";
     edit.addEventListener("click", () => editLesson(l.lesson_id));
@@ -4773,11 +4780,13 @@ function paintLessonGrid(){
     const extras = [["Edit in the builder", () => editLesson(l.lesson_id)],
                     ["Remove from " + cls, () => removeFromClass(l)]];
     if (family.length > 1) extras.unshift(["Choose the version", () => pickVersionFor(l.lesson_id)]);
-    if (isAssessment) extras.unshift(["Markbook", () => workBtn.click()]);
-    if (narrow()) extras.unshift([workLabel(l.lesson_id), () => openWorkPage(l.lesson_id)]);
+    /* A practical's own button goes to the marking, so its mark book is here.
+       A test's button already is the mark book. */
+    if (l.practical) extras.unshift(["Mark book", () => openWorkPage(l.lesson_id, "markbook")]);
+    if (narrow()) extras.unshift([way.label, openWork]);
     else {
-      const vw = el("button","btn-ghost",workLabel(l.lesson_id));
-      vw.addEventListener("click", () => openWorkPage(l.lesson_id));
+      const vw = el("button","btn-ghost",way.label);
+      vw.addEventListener("click", openWork);
       acts.appendChild(vw);
     }
     acts.appendChild(overflowMenu(extras));
@@ -4915,7 +4924,11 @@ async function publishPopup(id){
       b.addEventListener("click", go);
       box.appendChild(b);
     };
-    const publish = (releaseAt, closeOn) => async () => { closeModal(); await setPublish(id, true, releaseAt, closeOn); };
+    const publish = (releaseAt, closeOn) => async () => {
+      closeModal();
+      await setPublish(id, true, releaseAt, closeOn);
+      offerHomeLearningLink(id);
+    };
     if (!next) box.appendChild(el("p","modal-text", cls + " is not on your timetable, so there is no lesson to go by."));
     if (homework){
       if (next) choice("btn-primary", "Publish now, due next lesson", "Due " + lessonWhen(next) + ". Closes at " + CLOSES_AT + " that day.",
@@ -5038,6 +5051,9 @@ async function schedulePopup(id){
       const at = new Date(date + "T" + time + ":00");
       closeModal();
       await setPublish(id, true, at.toISOString(), close);
+      /* Moving the dates of something already out is not publishing it, and
+         the class has had the link. */
+      if (!live) offerHomeLearningLink(id);
     });
     /* Publishing now is one of the choices this was reached from, so it is not
        offered twice. */
@@ -5048,6 +5064,80 @@ async function schedulePopup(id){
     });
     box.appendChild(go); box.appendChild(now);
   });
+}
+
+/* ---------- handing out home learning ----------
+   Home learning is set on Arbor, so what a teacher needs the moment it is
+   published is something to paste there. The link goes to the front page
+   rather than to the lesson, because the front page is what can ask a student
+   to sign in first: index.html opens the lesson itself once they have. */
+function homeLearningLink(id){
+  const url = new URL("index.html", location.href);
+  url.search = "?open=" + encodeURIComponent(id);
+  return url.href;
+}
+/* Plain text with the link on a line of its own, because an address only
+   reliably becomes a link when nothing is touching it. */
+function arborInstructions(id){
+  const a = assignOf(id);
+  const longDate = (day) => new Date(day + "T00:00:00")
+    .toLocaleDateString("en-GB", { weekday:"long", day:"numeric", month:"long" });
+  const lines = ["Your Computing home learning is on the Computing Lesson Hub: " + titleOf(id), "",
+                 "1. Click this link:", homeLearningLink(id), "",
+                 "2. Sign in with your username and password if it asks you to.",
+                 "3. Your home learning will open. Answer every question, then press Finish."];
+  const later = a && a.release_at && a.release_at > new Date().toISOString();
+  if (later || (a && a.close_on)) lines.push("");
+  if (later) lines.push("It opens on " + longDate(localDay(a.release_at)) + " at " + hhmm(a.release_at) + ".");
+  if (a && a.close_on) lines.push("Complete it by " + longDate(a.close_on) + ".");
+  return lines.join("\n");
+}
+function sharePopup(id, justPublished){
+  const a = assignOf(id);
+  const live = !!(a && a.published);
+  const later = live && a.release_at && a.release_at > new Date().toISOString();
+  openModal(box => {
+    modalTitle(box, justPublished ? "Published for " + cls : "\u201c" + titleOf(id) + "\u201d");
+    box.appendChild(el("p","modal-text",
+      !live ? "This is still a draft, so the link will not open for " + cls + " until it is published."
+      : later ? "The link will open for " + cls + " from " + niceDate(a.release_at) + " at " + hhmm(a.release_at) + "."
+      : "Now tell " + cls + " about it. The link takes them straight to it, signing in first if they need to."));
+    /* What is about to be copied, and the way to get it if a school has
+       switched off the clipboard for scripts: it is ready to select. */
+    const words = el("textarea","sharewords");
+    words.readOnly = true;
+    words.rows = 11;
+    words.value = arborInstructions(id);
+    words.setAttribute("aria-label", "What will be copied");
+    box.appendChild(words);
+    const offers = [];
+    const offer = (style, label, note, text) => {
+      const b = el("button", "pubchoice " + style);
+      b.type = "button";
+      const head = el("b","", label);
+      b.appendChild(head);
+      b.appendChild(el("span","", note));
+      b.addEventListener("click", async () => {
+        offers.forEach(o => { o.head.textContent = o.label; });
+        words.value = text;
+        try{ await navigator.clipboard.writeText(text); head.textContent = "Copied \u2713"; }
+        catch(e){ words.focus(); words.select(); head.textContent = "Now press Ctrl+C"; }
+      });
+      offers.push({ head: head, label: label });
+      box.appendChild(b);
+    };
+    offer("btn-primary", "Copy Arbor instructions", "Short steps for students, with the link in them.", arborInstructions(id));
+    offer("btn-ghost", "Copy link", "Only the link.", homeLearningLink(id));
+    const done = el("button","btn-ghost modal-stay","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+}
+/* Only once it has really gone out: setPublish says so itself when it fails,
+   and a link to something still in draft would be a link to nothing. */
+function offerHomeLearningLink(id){
+  const a = assignOf(id);
+  if (kindOf(catOf(id)) === "homework" && a && a.published) sharePopup(id, true);
 }
 
 /* Units belong to a year group. This offers the ones from this class's year
@@ -5315,11 +5405,12 @@ function openManage(){
         }
       }catch(e){ say("Could not change that", e.message); }
     });
-    const workBtn = el("button","btn-ghost",workLabel(lessonId));
-    workBtn.addEventListener("click", () => openWorkPage(lessonId));
+    const way = workWay(lessonId);
+    const workBtn = el("button","btn-ghost",way.label);
+    workBtn.addEventListener("click", () => openWorkPage(lessonId, way.tab));
     bar.appendChild(pubBtn); bar.appendChild(workBtn);
-    if (lessonJson && lessonJson.assessment){
-      const mb = el("button","btn-ghost","Markbook");
+    if (lessonJson && lessonJson.practical){
+      const mb = el("button","btn-ghost","Mark book");
       mb.addEventListener("click", () => openWorkPage(lessonId, "markbook"));
       bar.appendChild(mb);
     }

@@ -2936,7 +2936,7 @@ function rubricPopup(){
     box.appendChild(el("h2","","Levels"));
     box.appendChild(el("p","modal-text",
       "Put the lowest level first. Students see them in this order, left to right, while they work. " +
-      "Give each one the grade range it stands for: the markbook shows it, and students see it only if you choose the grade range for them."));
+      "Give each one the grade range it stands for: the mark book shows it, and students see it only if you choose the grade range for them."));
     /* What students are told before the levels themselves, which is how this
        practical in particular is meant to be worked through. Left empty, the
        rubric opens with no line under its heading at all. */
@@ -3839,7 +3839,7 @@ function markingSetup(into){
     body.appendChild(el("p","bhelp",
       "Students sit this like any practical and hand it in at the end. " +
       "You give a Strength and a Target, filled in for you from their checklists, and they " +
-      "get the response tasks. Each level has a grade range, which you see in the markbook."));
+      "get the response tasks. Each level has a grade range, which you see in the mark book."));
     if (!lesson.rubric) lesson.rubric = [];
     const w = el("div","bfield");
     const n = lesson.rubric.filter(g => g.name).length;
@@ -3873,7 +3873,7 @@ function markingSetup(into){
       ? "The rubric shows each level's grade range instead of its name." +
         (missing ? " " + missing + (missing === 1 ? " level has" : " levels have") +
                    " no grade range yet, so students see " + (missing === 1 ? "its name" : "their names") + " instead." : "")
-      : "The rubric shows each level by name. Grade ranges stay in the markbook."));
+      : "The rubric shows each level by name. Grade ranges stay in the mark book."));
     body.appendChild(show);
   } else {
     const w = el("div","bfield");
@@ -4490,7 +4490,7 @@ function voiceField(){
       ["On: under the summary of their marks, each student is asked one of the ticked questions "
        + "about how the half term went, picked at random. It is optional, with a Skip button, and "
        + "their answer is saved the moment they pick it.",
-       "Their answers are in the Student Voice tab of the markbook, one question at a time."]);
+       "Their answers are in the Student Voice tab of the mark book, one question at a time."]);
     if (row) w.replaceChild(fresh, row); else w.insertBefore(fresh, list);
     row = fresh;
     list.hidden = !on();

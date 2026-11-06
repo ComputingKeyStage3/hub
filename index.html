@@ -219,6 +219,33 @@ try{
   if (new URLSearchParams(location.search).get("tab") === "practice") openTab = "practice";
 }catch(e){}
 
+/* A home learning link from a teacher: index.html?open=<lesson>. It comes here
+   rather than to the lesson so that a student who is not signed in is asked
+   to, and goes on to the lesson as soon as they are. A session that has run
+   out counts as not signed in: the lesson would open, but nothing done in it
+   could be saved. Up here so that a student who is signed in leaves before
+   the home page is drawn, and for the same reason as openTab above. */
+let wantedLesson = "";
+try{ wantedLesson = new URLSearchParams(location.search).get("open") || ""; }catch(e){}
+function openWantedLesson(){
+  if (!wantedLesson) return false;
+  location.replace("lesson.html?id=" + encodeURIComponent(wantedLesson));
+  return true;
+}
+function sessionLasting(){
+  const token = localStorage.getItem("hub_token");
+  if (!token || !localStorage.getItem("hub_name")) return false;
+  try{
+    const inside = token.slice(0, token.lastIndexOf(".")).replace(/-/g, "+").replace(/_/g, "/");
+    const exp = JSON.parse(atob(inside)).exp;
+    return !exp || Date.now() < exp;
+  }catch(e){ return true; }       // not one we can read: the server will say
+}
+if (wantedLesson){
+  if (OFFLINE || sessionLasting()) openWantedLesson();   // offline there is nothing to sign in to
+  else ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
+}
+
 /* Nothing about lessons is shown until a student has signed in.
    One view at a time, rather than every view unhidden at once: they were all
    empty until something was loaded into them, so nothing showed, and the
@@ -340,7 +367,7 @@ function renderAuth(){
     if (help) help.hidden = false;
     $("loginCard").hidden = false;
     resetSignIn();
-    $("headline").textContent = "Sign in";
+    $("headline").textContent = wantedLesson ? "Sign in to open your home learning" : "Sign in";
     signedInView(false);
   }
 }
@@ -446,7 +473,7 @@ async function signIn(){
     localStorage.setItem("hub_group", d.group || "");
     renderAuth();
     if (d.mustSet) forcePassword(d.name);
-    else loadLessons();
+    else if (!openWantedLesson()) loadLessons();
   }catch(e){
     $("loginErr").textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message;
   }finally{
@@ -867,7 +894,7 @@ on("npGo", "click", async () => {
     if (!r.ok) throw new Error(d.error || "Could not save it.");
     $("pwModal").hidden = true;
     $("np1").value = $("np2").value = "";
-    loadLessons();
+    if (!openWantedLesson()) loadLessons();
   }catch(e){ $("npMsg").textContent = e.message; }
 });
 

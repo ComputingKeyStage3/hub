@@ -27,7 +27,7 @@
   <span class="grow"></span>
   <div class="subtabs worktabs">
     <button class="on" id="tabWork">View work</button>
-    <button id="tabProgress">Markbook</button>
+    <button id="tabProgress">Mark book</button>
   </div>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
@@ -313,7 +313,7 @@ async function boot(){
        markbook already needed, and the table above it is worth showing
        whether or not it ever arrives. An assessment has the markbook in
        place of Progress, and nothing to compare against a sibling lesson. */
-    if (!PRACTICE && !markbookMode()) loadComparison().then(() => { if (!PRACTICE) paintProgress(); });
+    if (!PRACTICE && !markbookMode() && !homeLearning()) loadComparison().then(() => { if (!PRACTICE) paintProgress(); });
     /* Opened on one student, from a class list or the username search: start
        on them rather than on whoever is first alphabetically. */
     const asked = (qs.get("student") || "").toLowerCase();
@@ -538,6 +538,52 @@ function markbookMode(){
 function paintSecondTab(){
   if (markbookMode()) paintMarkbookPane(); else paintProgress();
 }
+
+/* ---------------- home learning's mark book ----------------
+   The lesson mark book below with the question asked first put first: who has
+   done it? Nobody is in the room to see, so that is what a teacher opens it
+   for, and the marks come after. */
+function homeLearning(){
+  return !PRACTICE && !!(lessonJson && lessonJson.homework && !lessonJson.assessment &&
+                         !lessonJson.practical && !lessonJson.cover);
+}
+/* Finish is never held back, so a student can press it on an empty page, and
+   that is not home learning done. A lesson that is only there to be read has
+   nothing to fill in, so there pressing Finish is all it can ask for. */
+function homeLearningState(data){
+  const pm = window.progressMath;
+  const finished = !!(data && data.__done);
+  const began = pm.hasWork(lessonJson, data);
+  if (finished && (began || !pm.asksForWork(lessonJson)))
+    return { key:"done", label:"Completed", rank:3, began:true };
+  if (began) return { key:"started", label:"Started", rank:2, began:true };
+  if (finished) return { key:"empty", label:"Finished, nothing done", rank:1, began:false };
+  return { key:"none", label:"Not started", rank:0, began:false };
+}
+/* When they last saved. The work carries it, stamped on the student's own
+   computer; the row's updated_at moves when a teacher saves feedback too. */
+function lastSavedAt(data){ return (data && data.__saved) || ""; }
+function niceSaved(iso){
+  const d = new Date(iso);
+  if (!iso || isNaN(d)) return "";
+  return d.toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" }) + ", " +
+         String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+}
+let homeLearningShowing = "all";     // all, done or not
+function homeLearningShows(state){
+  return homeLearningShowing === "all" ||
+         (homeLearningShowing === "done") === (state.key === "done");
+}
+function homeLearningPills(row, marks){
+  const done = roster.filter(st => marks[st.username].state.key === "done").length;
+  [["all","Everyone",roster.length], ["done","Completed",done], ["not","Not completed",roster.length - done]].forEach(p => {
+    const pill = el("button","progress-pill" + (homeLearningShowing === p[0] ? " on" : ""), p[1] + " " + p[2]);
+    pill.type = "button";
+    pill.setAttribute("aria-pressed", String(homeLearningShowing === p[0]));
+    pill.addEventListener("click", () => { homeLearningShowing = p[0]; paintProgress(); });
+    row.appendChild(pill);
+  });
+}
 function paintMarkbookPane(){
   if (!window.markbook) return;
   /* A mark saved on this page since it opened is in marks, not in the rows
@@ -677,6 +723,10 @@ function paintProgress(){
   const openTasks = allTasks.filter(t => !lockedPages.has(t.pageIndex));
   const hasExt = openTasks.some(t => t.extension);
   const tasks = openTasks.filter(t => progressShowExt || !t.extension);
+  /* Home learning with nothing in it that marks itself still has a class to
+     account for, so it carries on where a lesson stops here. */
+  const hl = homeLearning();
+  $("progressPane").classList.toggle("hlbook", hl);
   filters.innerHTML = ""; table.innerHTML = "";
 
   /* the row over the table: which tasks, at one end; the spreadsheet's
@@ -685,13 +735,13 @@ function paintProgress(){
   const tools = el("div","mbtools");
   const full = el("button","btn-ghost iconbtn progress-full-btn","");
   full.innerHTML = window.hubUI ? window.hubUI.icon("open", 17) : "⛶";
-  full.title = "Show the markbook full screen";
-  full.setAttribute("aria-label", "Show the markbook full screen");
+  full.title = "Show the mark book full screen";
+  full.setAttribute("aria-label", "Show the mark book full screen");
   full.addEventListener("click", openProgressFullscreen);
   filters.appendChild(left);
   filters.appendChild(tools);
   const hint = $("progressHint");
-  if (!tasks.length){
+  if (!tasks.length && !hl){
     tools.appendChild(full);
     msg.textContent = !openTasks.length
       ? (allTasks.length ? "Every page with a scored task on it is still locked for this class."
@@ -703,11 +753,12 @@ function paintProgress(){
     if (hint) hint.hidden = true;
     return;
   }
-  msg.textContent = "";
+  msg.textContent = tasks.length ? "" : "Nothing in this home learning marks itself, so there are no scores to show.";
   if (hint) hint.hidden = false;
   const labels = [...new Set(tasks.map(t => t.label))];
-  /* Only worth offering when there is more than one kind to choose between. */
-  if (labels.length > 1){
+  /* Only worth offering when there is more than one kind to choose between.
+     Home learning has its own pills in this place. */
+  if (labels.length > 1 && !hl){
     labels.forEach(label => {
       const pill = el("button","progress-pill" + (progressPicked.has(label) ? " on" : ""), label);
       pill.type = "button";
@@ -737,8 +788,10 @@ function paintProgress(){
       perTask[t.id] = sc;
       gotSum += sc.got; maxSum += sc.max;
     });
-    marks[st.username] = { data: data, perTask: perTask, total: { got: gotSum, max: maxSum } };
+    marks[st.username] = { data: data, perTask: perTask, total: { got: gotSum, max: maxSum },
+                           state: hl ? homeLearningState(data) : null };
   });
+  if (hl) homeLearningPills(left, marks);
 
   const copyAll = el("button","btn-ghost bmini2","Copy all");
   copyAll.type = "button";
@@ -755,11 +808,13 @@ function paintProgress(){
   tools.appendChild(excel);
   tools.appendChild(full);
 
-  const sorted = roster.slice().sort((a, b) => {
+  const sorted = roster.filter(st => !hl || homeLearningShows(marks[st.username].state)).sort((a, b) => {
     const k = progressSort.key, d = progressSort.dir;
     let x, y;
     if (k === "username"){ x = a.username || ""; y = b.username || ""; }
     else if (k === "displayName"){ x = a.display_name || ""; y = b.display_name || ""; }
+    else if (k === "state"){ x = marks[a.username].state.rank; y = marks[b.username].state.rank; }
+    else if (k === "saved"){ x = lastSavedAt(marks[a.username].data); y = lastSavedAt(marks[b.username].data); }
     else if (k === "total"){ x = marks[a.username].total.got; y = marks[b.username].total.got; }
     else { x = marks[a.username].perTask[k] ? marks[a.username].perTask[k].got : -1;
            y = marks[b.username].perTask[k] ? marks[b.username].perTask[k].got : -1; }
@@ -779,8 +834,10 @@ function paintProgress(){
      task never merges into its page's group: it is stamped with its own
      title in quantifiableTasks, so the two never look like one run. The
      three columns before them have no page, so one blank cell spans them. */
+  /* Home learning with no scores has no Marks column to fill. */
+  const showTotal = !hl || shown.length > 0;
   const nameBlank = el("th","pcol-page pcol-lead");
-  nameBlank.colSpan = 3;
+  nameBlank.colSpan = 2 + (hl ? 2 : 0) + (showTotal ? 1 : 0);
   rowPage.appendChild(nameBlank);
   let i = 0;
   while (i < shown.length){
@@ -808,7 +865,11 @@ function paintProgress(){
   };
   rowTask.appendChild(head("Username", "username", "pcol-name"));
   rowTask.appendChild(head("Display name", "displayName"));
-  rowTask.appendChild(head("Marks", "total", "pcol-total"));
+  if (hl){
+    rowTask.appendChild(head("Status", "state"));
+    rowTask.appendChild(head("Last saved", "saved"));
+  }
+  if (showTotal) rowTask.appendChild(head("Marks", "total", "pcol-total"));
   shown.forEach(t => {
     /* The type is what fits in the column; the page row above already says
        where it is, so the full title is left for a hover rather than
@@ -843,9 +904,21 @@ function paintProgress(){
     name.appendChild(open);
     name.dataset.copy = st.display_name || "";
     tr.appendChild(name);
-    const total = el("td","pcol-total", m.total.max ? m.total.got + " / " + m.total.max : "");
-    total.dataset.copy = m.total.max ? String(m.total.got) : "";
-    tr.appendChild(total);
+    /* Nought out of ten is somebody who got them all wrong, which is not the
+       same thing as somebody who never opened it. */
+    const scored = !!m.total.max && (!hl || m.state.began);
+    if (hl){
+      const status = el("td","");
+      status.appendChild(el("span","hlstate " + m.state.key, m.state.label));
+      status.dataset.copy = m.state.label;
+      tr.appendChild(status);
+      tr.appendChild(el("td","hlsaved", niceSaved(lastSavedAt(m.data))));
+    }
+    if (showTotal){
+      const total = el("td","pcol-total", scored ? m.total.got + " / " + m.total.max : "");
+      total.dataset.copy = scored ? String(m.total.got) : "";
+      tr.appendChild(total);
+    }
     shown.forEach(t => {
       const sc = m.perTask[t.id];
       const td = el("td","progresscell mbtick");
@@ -867,6 +940,8 @@ function paintProgress(){
     });
     tbody.appendChild(tr);
   });
+  if (hl && !sorted.length) msg.textContent = homeLearningShowing === "done"
+    ? "Nobody has completed it yet." : "Everyone has completed it.";
   if (sheet) sheet.selectable(table);
   paintProgressStats(shown, marks);
 }
@@ -886,12 +961,16 @@ function extToggle(){
    is on spelled out, because a spreadsheet has no row of page names above. */
 function saveLessonMarkbook(shown, marks){
   const sheet = window.markbook && window.markbook.sheet;
-  const head = ["Username", "Display name", "Marks", "Out of"];
+  const hl = homeLearning();
+  const head = ["Username", "Display name"].concat(hl ? ["Status", "Last saved"] : [], ["Marks", "Out of"]);
   shown.forEach(t => head.push(t.pageTitle + ": " + t.label));
   const out = [head];
   roster.slice().sort((a, b) => (a.username || "").localeCompare(b.username || "")).forEach(st => {
     const m = marks[st.username];
-    const row = [st.username || "", st.display_name || "", m.total.max ? m.total.got : "", m.total.max || ""];
+    const scored = !!m.total.max && (!hl || m.state.began);
+    const row = [st.username || "", st.display_name || ""].concat(
+      hl ? [m.state.label, niceSaved(lastSavedAt(m.data))] : [],
+      [scored ? m.total.got : "", m.total.max || ""]);
     shown.forEach(t => row.push(attempted(m.data, t.id) ? m.perTask[t.id].got : ""));
     out.push(row);
   });
@@ -965,16 +1044,31 @@ function paintProgressStats(shown, marks){
   if (!box) return;
   box.innerHTML = "";
   $("progressTypes").hidden = true;
-  const totals = roster.map(st => marks[st.username].total).filter(t => t.max > 0);
-  if (!totals.length) return;
-  const pctOf = (t) => Math.round(100 * t.got / t.max);
-  const pctClass = (p) => p >= 80 ? "yes" : p >= 50 ? "part" : "no";
   const stat = (big, small, cls) => {
     const c = el("div","mbstat");
     c.appendChild(el("b", cls || "", big));
     c.appendChild(el("span","", small));
     return c;
   };
+  /* Who has done it comes first, and is there whether or not there are marks.
+     Everything after it counts only the students who started: in a lesson the
+     class is in the room, but a student who never opened their home learning
+     did not score nought, and counting them as if they had would make every
+     average say more about who bothered than about what was understood. */
+  const hl = homeLearning();
+  const counted = hl ? roster.filter(st => marks[st.username].state.began) : roster;
+  if (hl){
+    const howMany = (key) => roster.filter(st => marks[st.username].state.key === key).length;
+    const done = howMany("done"), started = howMany("started");
+    const notYet = roster.length - done - started;
+    box.appendChild(stat(done + " of " + roster.length, "Completed", done === roster.length && done ? "yes" : ""));
+    box.appendChild(stat(String(started), "Started, not finished", started ? "part" : ""));
+    box.appendChild(stat(String(notYet), "Not started", notYet ? "no" : ""));
+  }
+  const totals = counted.map(st => marks[st.username].total).filter(t => t.max > 0);
+  if (!totals.length) return;
+  const pctOf = (t) => Math.round(100 * t.got / t.max);
+  const pctClass = (p) => p >= 80 ? "yes" : p >= 50 ? "part" : "no";
 
   const pcts = totals.map(pctOf);
   const avg = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
@@ -985,8 +1079,8 @@ function paintProgressStats(shown, marks){
   const fullCount = totals.filter(t => t.got === t.max).length;
   const strugglingCount = totals.filter(t => t.got < t.max * 0.5).length;
 
-  box.appendChild(stat(attemptedCount + " of " + roster.length, "Attempted"));
-  box.appendChild(stat(avg + "%", "Average", pctClass(avg)));
+  if (!hl) box.appendChild(stat(attemptedCount + " of " + roster.length, "Attempted"));
+  box.appendChild(stat(avg + "%", hl ? "Average of those who started" : "Average", pctClass(avg)));
   /* Against the lesson before this one in the same unit, once it is known:
      fetched in the background by loadComparison and repainted in when it
      arrives, so the rest of the stats are never held up waiting for it. */
@@ -997,9 +1091,11 @@ function paintProgressStats(shown, marks){
       "vs " + comparisonPrev.title + " (" + comparisonPrev.pct + "%)",
       diff > 0 ? "yes" : diff < 0 ? "no" : ""));
   }
-  box.appendChild(stat(bands.high + " / " + bands.mid + " / " + bands.low, "80%+ · 50–79% · under 50%"));
+  /* Home learning has three figures of its own at the front, and a second row
+     of these took the room from the list of who has done it. */
+  if (!hl) box.appendChild(stat(bands.high + " / " + bands.mid + " / " + bands.low, "80%+ · 50–79% · under 50%"));
   box.appendChild(stat(String(fullCount), "Full marks", fullCount ? "yes" : ""));
-  box.appendChild(stat(String(strugglingCount), "Under half", strugglingCount ? "no" : ""));
+  if (!hl) box.appendChild(stat(String(strugglingCount), "Under half", strugglingCount ? "no" : ""));
 
   /* One average per task type, however many columns of it there are, so
      two checklists on different pages still read as one Coding task
@@ -1011,7 +1107,7 @@ function paintProgressStats(shown, marks){
   shown.forEach(t => {
     const b = byLabel[t.label] || (byLabel[t.label] = { got:0, max:0 });
     let got = 0, max = 0;
-    roster.forEach(st => { const sc = marks[st.username].perTask[t.id]; got += sc.got; max += sc.max; });
+    counted.forEach(st => { const sc = marks[st.username].perTask[t.id]; got += sc.got; max += sc.max; });
     b.got += got; b.max += max;
     if (max){
       const p = Math.round(100 * got / max);

@@ -363,6 +363,14 @@
      whether somebody was in the lesson being marked. */
   const NOT_WORK = { text:1, picture:1, video:1, link:1, embed:1, frame:1 };
   const HOLDS = { page:1, group:1, extension:1, choice:1 };
+  /* Whether a lesson asks a student to do anything at all, or is only there
+     to be read. hasWork can never say yes about one that is. */
+  function asksForWork(lessonJson){
+    const any = (blocks) => (blocks || []).some(b => !!b &&
+      (HOLDS[b.type] ? any(b.blocks) || (b.options || []).some(o => any(o.blocks))
+                     : !NOT_WORK[b.type] && !!b.id));
+    return any(lessonJson && lessonJson.blocks);
+  }
   function hasWork(lessonJson, data){
     if (!data || typeof data !== "object") return false;
     let found = false;
@@ -475,7 +483,7 @@
   }
 
   window.progressMath = { TASK_LABEL, plainText, normAns, taskInfo,
-                          quantifiableTasks, scoreTask, checkDone, hasChecklist, attempted, withMarkingTicks, withTeacherEdits,
+                          quantifiableTasks, scoreTask, checkDone, hasChecklist, attempted, asksForWork, withMarkingTicks, withTeacherEdits,
                           pagesLock, defaultLocks, fetchLockedPages, markRoster,
                           levelChain, levelName, levelReached, levelLadder, rubricLevels,
                           rubricRun, showsGrades, rubricEntry, gradeRange, checklistOnly, checklistTicks,

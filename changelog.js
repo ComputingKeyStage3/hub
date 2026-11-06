@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"16.8", text:"Publishing home learning now offers Arbor instructions and a link to copy, and Copy link takes the place of Manage on its card. The link opens the home learning straight away, signing in first if needed. Standard assessments and home learning open on the Mark book, which for home learning shows who has and has not completed it, with their scores. Students now see the Home Learning pill." },
   { v:"16.7.1", text:"The Add new button in a unit now says Add existing." },
   { v:"16.7", text:"Publish now goes by your timetable: a lesson can open for the class's next lesson, and home learning can go out now and be due next lesson. Add new has the Lessons, Home Learning and Cover tabs, and the buttons now say Add new and Build new." },
   { v:"16.6", text:"A unit now has Lessons, Home Learning and Cover tabs, in Lessons and in a class. A class opens straight on its units, with tabs along the top for Students and Progress. Every lesson you publish closes at 23:59 that day unless you pick a different closing day." },

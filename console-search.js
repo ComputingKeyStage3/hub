@@ -50,7 +50,7 @@
   const CLASS_PAGES = [
     { name:"Students",        icon:"classes",  words:"logins passwords pupils", tile:"openStudents" },
     { name:"Units",           icon:"lessons",  words:"lessons publish lock mark work", tile:"openLessons" },
-    { name:"Progress",        icon:"progress", words:"markbook grid results", tile:"openProgress" }
+    { name:"Progress",        icon:"progress", words:"markbook mark book grid results", tile:"openProgress" }
   ];
 
   const low = (s) => String(s || "").toLowerCase();

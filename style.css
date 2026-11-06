@@ -8266,3 +8266,30 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
 .cover-facts-box{ margin:0 0 10px; padding:8px 10px; border:1px solid var(--line); border-radius:var(--rad-sm); font-size:var(--text-sm) }
 .cover-facts-box p{ margin:0 0 4px }
 .cover-facts-warn{ color:var(--red); font-weight:700 }
+
+/* What the Arbor instructions say, before they are copied. Read only, and
+   selectable, so they can still be taken by hand where a school has switched
+   off the clipboard. */
+.sharewords{ display:block; width:100%; margin:0 0 12px; padding:10px 12px; resize:none;
+             font-size:var(--text-sm); line-height:1.45; background:var(--panel-2);
+             border:1px solid var(--line); border-radius:var(--rad-md); color:inherit }
+/* Who has done their home learning, in the mark book. */
+.hlstate{ display:inline-block; padding:2px 10px; border-radius:var(--rad-pill); white-space:nowrap;
+          font-size:var(--text-sm); font-weight:700; border:1px solid var(--line); color:var(--muted) }
+.hlstate.done{ background:var(--mint-dim); color:var(--mint); border-color:var(--mint) }
+.hlstate.started{ color:var(--amber-dark); border-color:var(--amber) }
+.hlsaved{ white-space:nowrap; font-size:var(--text-sm); color:var(--muted) }
+/* The students at the bottom of this list are the ones it is opened to find,
+   so it takes the height it needs and the page scrolls, rather than being
+   squeezed into what the figures above leave and cut off after a few rows. */
+.lessonmb.hlbook > .progresswrap{ flex:0 0 auto; max-height:78vh; max-height:78dvh }
+/* A pill beside the title made a card wider than a phone, and every card in
+   the list with it, because a grid column grows to its widest. Under the title
+   on a phone, where there is not the room for both. */
+@media (max-width:600px){
+  .lessons{ grid-template-columns:minmax(0,1fr) }
+  .lessons .lessonCard{ flex-wrap:wrap }
+  .lessons .lessonCard .body{ flex:1 1 60% }
+  .lessons .lessonCard .go{ order:2 }
+  .lessons .lessonCard .badge{ order:3 }
+}
