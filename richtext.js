@@ -285,6 +285,9 @@
           if (alt) keep.setAttribute("alt", alt);
           if (n.style && n.style.width) keep.style.width = n.style.width;
           if (n.style && n.style.height) keep.style.height = n.style.height;
+          /* a turn from its handle, and nothing else that a transform could do */
+          const turned = n.style && /^rotate\(-?\d+(\.\d+)?deg\)$/.exec(String(n.style.transform || "").replace(/\s/g, ""));
+          if (turned) keep.style.transform = turned[0];
         }
         if (tag === "OL" || tag === "UL"){
           const kind = n.style && n.style.listStyleType;
@@ -358,7 +361,7 @@
      and table menus are put on the page rather than in the box, so pressing
      inside one of those does not count as leaving. */
   let autoWired = false;
-  const inRtMenu = (t) => !!(t && t.closest && t.closest(".rt-palette, .rt-menu, .rt-imgsize"));
+  const inRtMenu = (t) => !!(t && t.closest && t.closest(".rt-palette, .rt-menu, .bk-frame"));
   function wireAutoBars(){
     if (autoWired) return;
     autoWired = true;
@@ -1543,43 +1546,60 @@
       }
     });
 
-    /* Clicking a picture offers a size to change it to. */
+    /* Clicking a picture puts handles round it, the same as a picture
+       anywhere else on the site: corners keep its shape, sides stretch it
+       and the dot above turns it. The handles sit in the wrapper, not in
+       the writing, so they are never saved with it. */
+    let picHandles = null, handledPic = null;
+    function dropPicHandles(){
+      if (picHandles) picHandles.remove();
+      picHandles = null; handledPic = null;
+    }
+    function handlesOn(img){
+      dropPicHandles();
+      if (!window.boxKit) return;
+      handledPic = img;
+      picHandles = window.boxKit.overlay(wrap, {
+        min: 24, top: 0,
+        /* Its middle is where it shows, which a turn does not move; its size
+           is the size it was set, which the turned outline on screen is not. */
+        get: () => {
+          if (!handledPic || !handledPic.isConnected) return null;
+          const r = handledPic.getBoundingClientRect(), w0 = wrap.getBoundingClientRect();
+          const turn = /rotate\((-?[\d.]+)deg\)/.exec(handledPic.style.transform || "");
+          return { x: r.left + r.width / 2 - w0.left, y: r.top + r.height / 2 - w0.top,
+                   w: handledPic.offsetWidth, h: handledPic.offsetHeight, rot: turn ? Number(turn[1]) : 0 };
+        },
+        set: (bx, name) => {
+          const img = handledPic;
+          if (!img) return;
+          img.style.width = Math.round(bx.w) + "px";
+          /* Grown from a corner it keeps its own shape, so the height can
+             go on following the width; pulled from a side it cannot. */
+          if (name !== "rot" && (name.length === 1 || img.style.height)) img.style.height = Math.round(bx.h) + "px";
+          img.style.transform = bx.rot ? "rotate(" + bx.rot + "deg)" : "";
+        },
+        done: () => fire()
+      });
+    }
     box.addEventListener("click", (e) => {
       /* Which picture was last clicked, so the line-up buttons know what
          they are lining up: pressing one of them moves the selection off
          the picture before they get a chance to look. */
       lastPicture = (e.target && e.target.tagName === "IMG") ? e.target : null;
       if (!e.target || e.target.tagName !== "IMG") return;
-      const img = e.target;
-      const old = box.querySelector(".rt-imgsize");
-      if (old) old.remove();
-      const tools = document.createElement("span");
-      tools.className = "rt-imgsize";
-      tools.contentEditable = "false";
-      [["Small", 220], ["Medium", 420], ["Large", 680]].forEach(pair => {
-        const b2 = document.createElement("button");
-        b2.type = "button";
-        b2.textContent = pair[0];
-        b2.addEventListener("mousedown", (ev) => ev.preventDefault());
-        b2.addEventListener("click", () => {
-          img.style.width = pair[1] + "px";
-          img.style.height = "auto";
-          tools.remove();
-          fire();
-        });
-        tools.appendChild(b2);
-      });
-      const r = img.getBoundingClientRect();
-      const wrapRect = wrap.getBoundingClientRect();
-      tools.style.left = (r.left - wrapRect.left) + "px";
-      tools.style.top = (r.bottom - wrapRect.top + 4) + "px";
-      wrap.appendChild(tools);
-      setTimeout(() => {
-        document.addEventListener("pointerdown", function away(ev){
-          if (!tools.contains(ev.target)){ tools.remove(); document.removeEventListener("pointerdown", away); }
-        });
-      }, 0);
+      handlesOn(e.target);
     });
+    /* Anywhere else, typing, or the writing moving under them puts them
+       away or moves them with it. */
+    document.addEventListener("pointerdown", (ev) => {
+      if (!picHandles) return;
+      if (picHandles.frame.contains(ev.target) || ev.target === handledPic) return;
+      dropPicHandles();
+    }, true);
+    box.addEventListener("keydown", () => { if (picHandles) dropPicHandles(); });
+    box.addEventListener("scroll", () => { if (picHandles) picHandles.place(); });
+    box.addEventListener("input", () => { if (picHandles) picHandles.place(); });
 
     box.addEventListener("paste", (e) => {
       /* The picture handler further up is a different listener on the same

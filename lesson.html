@@ -19,6 +19,7 @@
 <script src="coverwork.js"></script>
 <script src="ordermarks.js"></script>
 <script src="voice.js"></script>
+<script src="boxkit.js"></script>
 <script src="richtext.js"></script>
 <script src="pyedit.js"></script>
 <script src="teacher.js"></script>
@@ -11841,11 +11842,7 @@ function reviewHotspot(b, q, v){
   const ring = el("div","hotspot-ring");
   ring.style.left = Number(b.x || 0) + "%";
   ring.style.top = Number(b.y || 0) + "%";
-  if (b.shape === "rect"){
-    ring.dataset.shape = "rect";
-    ring.style.width = Number(b.w || 0) + "%";
-    ring.style.height = Number(b.h || 0) + "%";
-  } else ring.style.width = (2 * Number(b.r || 0)) + "%";
+  window.hotspotRing(ring, b);
   holder.appendChild(ring);
   if (v && typeof v.x === "number"){
     const pin = el("div","hotspot-pin");

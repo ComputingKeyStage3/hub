@@ -3780,6 +3780,8 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .label-flyer.held{cursor:grabbing; box-shadow:0 8px 20px rgba(0,0,0,.28)}
 .label-note{margin-top:10px; font-weight:600}
 .label-edit{cursor:crosshair; touch-action:none}
+.label-edit .label-spot{cursor:move}
+.label-edit .label-spot.chosen{border-style:solid; background:color-mix(in srgb, var(--amber) 12%, transparent)}
 .label-ghost{position:absolute; border:2px dashed var(--amber); border-radius:var(--rad-sm);
   background:color-mix(in srgb, var(--amber) 14%, transparent); pointer-events:none}
 
@@ -3932,12 +3934,6 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 /* a picture pasted into writing */
 .rt-box img{max-width:100%; height:auto; border-radius:var(--rad-sm); margin:6px 0; cursor:pointer}
 .rt{position:relative}
-.rt-imgsize{position:absolute; z-index:20; display:flex; gap:4px; padding:4px;
-  background:var(--panel); border:1.5px solid var(--line-2); border-radius:var(--rad-md);
-  box-shadow:0 4px 12px rgba(0,0,0,.14)}
-.rt-imgsize button{padding:5px 10px; border:1px solid var(--line); border-radius:var(--rad-sm);
-  background:var(--panel-2); cursor:pointer; font-size:var(--text-sm); font-family:var(--body); color:var(--text)}
-.rt-imgsize button:hover{border-color:var(--amber)}
 
 /* In the top bar this button sits beside a lesson title that can be any
    length, and flex was shrinking the button rather than the title until its
@@ -7433,17 +7429,30 @@ body.assess-on-questions .stagerow > #blocks{flex:0 1 800px}
 .hotspot-ring{position:absolute; aspect-ratio:1; transform:translate(-50%,-50%); border-radius:50%;
   border:3px dashed var(--mint); background:color-mix(in srgb, var(--mint) 15%, transparent); pointer-events:none}
 .hotspot-ring[data-shape=rect]{aspect-ratio:auto; border-radius:var(--rad-sm)}
-/* In the builder the shape is picked up to move it and the square on its
-   edge to size it. Nothing scrolls under a finger while either is dragged. */
+.hotspot-ring[data-shape=oval]{aspect-ratio:auto}
+/* In the builder the shape is picked up to move it and its handles
+   (boxkit.js) size and turn it. Nothing scrolls under a finger while either is dragged. */
 .hotspot-edit{touch-action:none}
 .hotspot-edit .hotspot-ring{pointer-events:auto; cursor:move}
-/* a knob on the outline itself, drawn like the pin so it reads as part of
-   the ring rather than something laid on top of it */
-.hotspot-grip{position:absolute; width:14px; height:14px; transform:translate(-50%,-50%); border-radius:50%;
-  background:var(--mint); border:2px solid var(--panel); box-shadow:0 1px 3px rgba(0,0,0,.35); cursor:nwse-resize}
-/* a fingertip is wider than the square, so the place to press is too */
-.hotspot-grip::before{content:""; position:absolute; inset:-14px}
 .hotspot-check{display:block; margin-top:12px}
+/* The handles a picture or box is resized and turned with (boxkit.js):
+   dots on the corners keep its shape, bars on the sides stretch it, and
+   the filled dot on its stalk above turns it. Only the handles take a
+   press; the dashed outline lets presses through to what it outlines. */
+.bk-frame{position:absolute; box-sizing:border-box; border:1.5px dashed var(--amber); transform-origin:50% 50%;
+  pointer-events:none; z-index:6}
+.bk-frame[hidden]{display:none}
+.bk-knob{position:absolute; box-sizing:border-box; pointer-events:auto; touch-action:none;
+  background:var(--panel); border:2px solid var(--amber); transform:translate(-50%,-50%)}
+.bk-corner{width:13px; height:13px; border-radius:50%}
+.bk-side-x{width:6px; height:16px; border-radius:3px}
+.bk-side-y{width:16px; height:6px; border-radius:3px}
+.bk-rot{left:50%; width:15px; height:15px; border-radius:50%; background:var(--amber); border-color:var(--panel);
+  box-shadow:0 1px 3px rgba(0,0,0,.35)}
+/* a fingertip is wider than the knob, so the place to press is too */
+.bk-knob::before{content:""; position:absolute; inset:-9px}
+.bk-stalk{position:absolute; left:50%; bottom:100%; width:0; border-left:1.5px solid var(--amber); pointer-events:none}
+.bk-under .bk-stalk{bottom:auto; top:100%}
 .hotspot-said{margin:8px 0 0; font-weight:600}
 .hotspot-said[hidden]{display:none}
 .hotspot-said[data-verdict=yes]{color:var(--mint)}

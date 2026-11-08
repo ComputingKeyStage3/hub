@@ -149,10 +149,12 @@
   function paintStamp(c, st){
     const parts = stampPaths(st.name);
     if (!parts) return;
-    const k = (Number(st.size) || 100) / 100;
+    /* w and h when it has been stretched, size when it is still square */
+    const kx = (Number(st.w) || Number(st.size) || 100) / 100, ky = (Number(st.h) || Number(st.size) || 100) / 100;
     c.save();
     c.translate(st.x, st.y);
-    c.scale(st.flip ? -k : k, k);
+    if (st.rot) c.rotate(st.rot * Math.PI / 180);
+    c.scale(st.flip ? -kx : kx, ky);
     c.translate(-50, -50);
     c.lineJoin = "round"; c.lineCap = "round";
     parts.forEach(p => {
@@ -171,6 +173,11 @@
     c.strokeStyle = st.colour || INK;
     c.lineWidth = st.width || 3;
     c.lineCap = "round"; c.lineJoin = "round";
+    /* A turned rectangle or oval is drawn unturned and turned round its middle. */
+    if (st.rot && (st.shape === "rect" || st.shape === "ellipse")){
+      const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      c.translate(mx, my); c.rotate(st.rot * Math.PI / 180); c.translate(-mx, -my);
+    }
     c.beginPath();
     if (st.shape === "rect"){
       c.rect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
@@ -202,23 +209,50 @@
       return false;
     },
     has: (st) => !!st && (st.kind === "stamp" || st.kind === "shape"),
-    /* [left, top, right, bottom] */
-    box: (st) => {
+    /* The box the handles go round, as boxKit wants it: { x, y, w, h, rot }.
+       Null for a line or an arrow, which have an end to drag instead. */
+    frame: (st) => {
       if (st.kind === "stamp"){
-        const h = (Number(st.size) || 100) / 2;
-        return [st.x - h, st.y - h, st.x + h, st.y + h];
+        const w = Number(st.w) || Number(st.size) || 100, h = Number(st.h) || Number(st.size) || 100;
+        return { x: st.x, y: st.y, w: w, h: h, rot: Number(st.rot) || 0 };
       }
-      return [Math.min(st.from[0], st.to[0]), Math.min(st.from[1], st.to[1]),
-              Math.max(st.from[0], st.to[0]), Math.max(st.from[1], st.to[1])];
+      if (st.kind !== "shape" || st.shape === "line" || st.shape === "arrow") return null;
+      return { x: (st.from[0] + st.to[0]) / 2, y: (st.from[1] + st.to[1]) / 2,
+               w: Math.abs(st.to[0] - st.from[0]), h: Math.abs(st.to[1] - st.from[1]), rot: Number(st.rot) || 0 };
+    },
+    /* and back: a drawing or shape made to fill a box. Rounded, because
+       these are saved with the work and nobody needs the eleventh decimal. */
+    reshape: (st, bx) => {
+      const r1 = (n) => Math.round(n * 10) / 10;
+      const rot = r1(Number(bx.rot) || 0);
+      if (st.kind === "stamp"){
+        st.x = r1(bx.x); st.y = r1(bx.y); st.w = r1(bx.w); st.h = r1(bx.h);
+        st.size = Math.round(Math.max(bx.w, bx.h));
+      } else {
+        st.from = [r1(bx.x - bx.w / 2), r1(bx.y - bx.h / 2)];
+        st.to = [r1(bx.x + bx.w / 2), r1(bx.y + bx.h / 2)];
+      }
+      if (rot) st.rot = rot; else delete st.rot;
+    },
+    /* [left, top, right, bottom], round all of it however it is turned */
+    box: (st) => {
+      const f = window.drawKit.frame(st);
+      if (!f) return [Math.min(st.from[0], st.to[0]), Math.min(st.from[1], st.to[1]),
+                      Math.max(st.from[0], st.to[0]), Math.max(st.from[1], st.to[1])];
+      const a = f.rot * Math.PI / 180, c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a));
+      const hw = (f.w * c + f.h * s) / 2, hh = (f.w * s + f.h * c) / 2;
+      return [f.x - hw, f.y - hh, f.x + hw, f.y + hh];
     },
     move: (st, dx, dy) => {
       if (st.kind === "stamp"){ st.x += dx; st.y += dy; return; }
       st.from[0] += dx; st.from[1] += dy; st.to[0] += dx; st.to[1] += dy;
     },
-    /* A drawing only: a shape is resized by drawing it again. */
+    /* The Smaller and Bigger buttons: a drawing only, keeping its shape. */
     grow: (st, by, least, most) => {
       if (st.kind !== "stamp") return;
-      st.size = Math.round(Math.max(least, Math.min(most, (Number(st.size) || 100) * by)));
+      const f = window.drawKit.frame(st);
+      const k = Math.max(least / Math.min(f.w, f.h), Math.min(most / Math.max(f.w, f.h), by));
+      window.drawKit.reshape(st, { x: f.x, y: f.y, w: f.w * k, h: f.h * k, rot: f.rot });
     },
     /* What a line near the outline counts as touching. Inside a drawing is
        touching it, and so is inside a shape: a thin outline is hard to hit. */
@@ -231,6 +265,8 @@
         const dx = p[0] - (ax + t * (bx - ax)), dy = p[1] - (ay + t * (by - ay));
         return Math.sqrt(dx * dx + dy * dy) <= m + (st.width || 3);
       }
+      const f = window.drawKit.frame(st);
+      if (f && f.rot && window.boxKit) return window.boxKit.inside(f, p, m);
       return p[0] >= b[0] - m && p[0] <= b[2] + m && p[1] >= b[1] - m && p[1] <= b[3] + m;
     },
     /* A row of drawings to drag onto a canvas, or tap to drop in the middle.
@@ -290,6 +326,34 @@
       return tray;
     }
   };
+  /* The handles on a drawing or shape that has been picked up, the same on
+     the whiteboard and the storyboard. unit is how many of the board's
+     units one screen pixel is, so the handles stay finger-sized at any
+     zoom; top is the highest point a press can reach, if there is one. */
+  window.drawKit.handles = {
+    opts: (unit, top) => ({ unit: unit, reach: 13 * unit, gap: 26 * unit, top: top }),
+    draw: (c, st, unit, top) => {
+      if (!window.boxKit) return;
+      const f = window.drawKit.frame(st);
+      if (f) window.boxKit.draw(c, f, window.drawKit.handles.opts(unit, top));
+      else if (st.from && st.to) window.boxKit.drawEnds(c, st.from, st.to, unit);
+    },
+    /* which handle is under p, or null */
+    hit: (st, p, unit, top) => {
+      if (!window.boxKit || !window.drawKit.has(st)) return null;
+      const f = window.drawKit.frame(st);
+      if (f) return window.boxKit.hit(f, p, window.drawKit.handles.opts(unit, top));
+      return window.boxKit.hitEnds(st.from, st.to, p, 13 * unit);
+    },
+    /* Hold on to how it was when the press began, then call move() with
+       each new point. */
+    start: (st, name) => ({ st: st, name: name, frame: window.drawKit.frame(st) }),
+    move: (press, p, round) => {
+      const st = press.st, r = (n) => round ? Math.round(n) : Math.round(n * 10) / 10;
+      if (!press.frame){ st[press.name] = [r(p[0]), r(p[1])]; return; }
+      window.drawKit.reshape(st, window.boxKit.drag(press.frame, press.name, p, { min: 12 }));
+    }
+  };
   /* The four shape buttons, drawn the same on both boards. */
   const SHAPE_ICONS = {
     rect:    '<svg viewBox="0 0 20 20"><path d="M3 5h14v10H3z" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
@@ -322,6 +386,7 @@
     let view = { x: 0, y: 0, scale: 1 };
     let tool = "pen", colour = "#1D1D1B", width = 3;
     let drawing = null, panning = null, moving = null, marquee = null;
+    let reshaping = null;   // a handle being dragged
     let picked = [];        // everything currently selected
 
     /* --- picking things up, and typing straight onto the board --- */
@@ -614,7 +679,11 @@
       strokes.forEach(st => {
         const lit = picked.indexOf(st) >= 0;
         if (window.drawKit.paint(ctx2, st)){
-          if (lit){
+          /* one thing picked up has handles to resize and turn it; several
+             are outlined, and move together */
+          if (lit && picked.length === 1){
+            window.drawKit.handles.draw(ctx2, st, 1 / view.scale);
+          } else if (lit){
             const b = window.drawKit.box(st);
             ctx2.save();
             ctx2.strokeStyle = "#2F6BAE";
@@ -697,6 +766,13 @@
       }
       if (tool === "pick"){
         const where = at(e);
+        /* a handle first: they stick out past the thing they belong to */
+        const handle = picked.length === 1 && window.drawKit.handles.hit(picked[0], where, 1 / view.scale);
+        if (handle){
+          reshaping = window.drawKit.handles.start(picked[0], handle);
+          hidePickTools();
+          return;
+        }
         const hit = topmostAt(where);
         if (hit && picked.indexOf(hit) >= 0){
           /* already selected, so this is the start of dragging it */
@@ -743,6 +819,19 @@
         draw();
         return;
       }
+      if (reshaping){
+        const p = at(e);
+        clampPoint(p);
+        window.drawKit.handles.move(reshaping, p, true);
+        draw();
+        return;
+      }
+      /* the pointer shows what a handle will do before it is pressed */
+      if (tool === "pick" && !moving){
+        const handle = picked.length === 1 && window.drawKit.handles.hit(picked[0], at(e), 1 / view.scale);
+        const f = handle && window.drawKit.frame(picked[0]);
+        canvas.style.cursor = handle ? (f ? window.boxKit.cursor(handle, f.rot) : "crosshair") : "";
+      }
       if (moving && picked.length){
         const now = at(e);
         picked.forEach(item => shift(item, now[0] - moving[0], now[1] - moving[1]));
@@ -769,6 +858,11 @@
       }
       if (drawing){ drawing = null; undone = []; ctx.changed(); }
       if (moving){ moving = null; ctx.changed(); }
+      if (reshaping){
+        reshaping = null;
+        ctx.changed();
+        if (picked.length && e && e.type === "pointerup") showPickTools(e);
+      }
       if (marquee){
         picked = insideBox(marquee);
         marquee = null;
@@ -987,7 +1081,7 @@
   const STORY_POINTS = 3000;
   const STORY_TEXT = 240;
 
-  function storyPaint(c, strokes, w, h, lit){
+  function storyPaint(c, strokes, w, h, lit, unit){
     const k = w / STORY_W;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.fillStyle = "#FFFFFF";
@@ -996,13 +1090,7 @@
     c.lineCap = "round"; c.lineJoin = "round";
     (strokes || []).forEach(st => {
       if (window.drawKit.paint(c, st)){
-        if (st === lit){
-          const b = window.drawKit.box(st);
-          c.save();
-          c.strokeStyle = "#2F6BAE"; c.lineWidth = 2; c.setLineDash([6, 4]);
-          c.strokeRect(b[0] - 5, b[1] - 5, b[2] - b[0] + 10, b[3] - b[1] + 10);
-          c.restore();
-        }
+        if (st === lit) window.drawKit.handles.draw(c, st, unit || 1, 0);
         return;
       }
       const pts = st.points || [];
@@ -1352,7 +1440,7 @@
     /* After anything changes in the panel on screen */
     function paintPanel(){
       if (lit && panels[at].strokes.indexOf(lit) < 0) pick(null);
-      storyPaint(pen, panels[at].strokes, canvas.width, canvas.height, lit);
+      storyPaint(pen, panels[at].strokes, canvas.width, canvas.height, lit, storyUnit());
       placeLitTools();
       paintThumb(at);
       paintTotals();
@@ -1418,6 +1506,10 @@
       try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
       if (tool === "move"){
         const p = where(e), list = panels[at].strokes;
+        /* a handle on what is already picked up comes first, as they stick
+           out past the drawing they belong to */
+        const handle = lit && window.drawKit.handles.hit(lit, p, storyUnit(), 0);
+        if (handle){ reshaping = window.drawKit.handles.start(lit, handle); return; }
         let hit = null;
         for (let k = list.length - 1; k >= 0 && !hit; k--)
           if (window.drawKit.has(list[k]) && window.drawKit.hit(list[k], p, 8)) hit = list[k];
@@ -1437,13 +1529,29 @@
       cleared.delete(panels[at]);
       storyPaint(pen, panels[at].strokes, canvas.width, canvas.height);
     });
-    let dragging = null;
+    let dragging = null, reshaping = null;
+    /* how many of the panel's units one screen pixel is */
+    function storyUnit(){
+      const w = canvas.getBoundingClientRect().width;
+      return w ? STORY_W / w : 1;
+    }
     canvas.addEventListener("pointermove", (e) => {
+      if (reshaping){
+        window.drawKit.handles.move(reshaping, where(e), true);
+        storyPaint(pen, panels[at].strokes, canvas.width, canvas.height, lit, storyUnit());
+        placeLitTools();
+        return;
+      }
+      if (tool === "move" && !dragging){
+        const handle = lit && window.drawKit.handles.hit(lit, where(e), storyUnit(), 0);
+        const f = handle && window.drawKit.frame(lit);
+        canvas.style.cursor = handle ? (f ? window.boxKit.cursor(handle, f.rot) : "crosshair") : "";
+      }
       if (dragging && lit){
         const p = where(e);
         window.drawKit.move(lit, p[0] - dragging[0], p[1] - dragging[1]);
         dragging = p;
-        storyPaint(pen, panels[at].strokes, canvas.width, canvas.height, lit);
+        storyPaint(pen, panels[at].strokes, canvas.width, canvas.height, lit, storyUnit());
         placeLitTools();
         return;
       }
@@ -1461,6 +1569,7 @@
       if (pointsIn(panels[at]) >= STORY_POINTS) finishLine();
     });
     function finishLine(){
+      if (reshaping){ reshaping = null; paintPanel(); ctx.changed(); return; }
       if (dragging){ dragging = null; paintPanel(); ctx.changed(); return; }
       if (!drawing) return;
       /* a shape tapped rather than dragged has no size to see */
@@ -1812,18 +1921,43 @@
      picture's height over its width, so the circle stays a circle on a
      picture that is not square. With shape "rect" it is a rectangle
      instead, centred on the point, w per cent of the width across and h
-     per cent of the height down. What they clicked is saved as a point,
-     never as a picture.
+     per cent of the height down. A circle stretched into an oval has ry
+     as well, its half-height in the same units as r; rot turns either
+     shape round its middle, in degrees. What they clicked is saved as a
+     point, never as a picture.
      =================================================================== */
   window.hotspotHit = function(b, v){
     if (!v || typeof v.x !== "number" || typeof v.y !== "number") return false;
-    if (b.shape === "rect")
-      return Math.abs(v.x - Number(b.x || 0)) <= Number(b.w || 0) / 2 &&
-             Math.abs(v.y - Number(b.y || 0)) <= Number(b.h || 0) / 2;
+    /* Measured in per cent of the width both ways, so a turn is a true
+       turn on a picture that is not square, then turned back upright. */
     const ratio = Number(b.ratio) > 0 ? Number(b.ratio) : 1;
-    const dx = v.x - Number(b.x || 0);
-    const dy = (v.y - Number(b.y || 0)) * ratio;
-    return Math.sqrt(dx * dx + dy * dy) <= Number(b.r || 0);
+    const a = (Number(b.rot) || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
+    const dx = v.x - Number(b.x || 0), dy = (v.y - Number(b.y || 0)) * ratio;
+    const lx = dx * c + dy * sn, ly = -dx * sn + dy * c;
+    if (b.shape === "rect")
+      return Math.abs(lx) <= Number(b.w || 0) / 2 + 1e-9 && Math.abs(ly) <= Number(b.h || 0) / 2 * ratio + 1e-9;
+    const rx = Number(b.r || 0), ry = Number(b.ry) > 0 ? Number(b.ry) : rx;
+    if (!rx || !ry) return false;
+    return (lx / rx) * (lx / rx) + (ly / ry) * (ly / ry) <= 1 + 1e-9;
+  };
+  /* Lays a ring element over the picture where the right spot is. Its
+     height is a share of the picture's height, so an oval's ry, measured
+     against the width, is divided by the picture's shape. */
+  window.hotspotRing = function(ring, b){
+    const ratio = Number(b.ratio) > 0 ? Number(b.ratio) : 1;
+    ring.style.left = Number(b.x || 0) + "%";
+    ring.style.top = Number(b.y || 0) + "%";
+    if (b.shape === "rect"){
+      ring.dataset.shape = "rect";
+      ring.style.width = Number(b.w || 0) + "%";
+      ring.style.height = Number(b.h || 0) + "%";
+    } else {
+      const r = Number(b.r || 0), ry = Number(b.ry) > 0 ? Number(b.ry) : 0;
+      ring.dataset.shape = ry ? "oval" : "circle";
+      ring.style.width = 2 * r + "%";
+      ring.style.height = ry ? 2 * ry / ratio + "%" : "";
+    }
+    ring.style.transform = "translate(-50%,-50%) rotate(" + (Number(b.rot) || 0) + "deg)";
   };
   window.rHotspot = function(b, ctx){
     const s = make("section", "hotspottask");
@@ -2722,18 +2856,42 @@
       const f = posterFont(it.font);
       return f.weight + " " + it.size + "px " + f.face;
     }
-    function boxOf(it){
+    /* Words have a little room round them, so the handles are not on top of the letters. */
+    const PAD_X = 6, PAD_Y = 4;
+    function wordsWide(it){
+      pen.save();
+      pen.font = fontOf(it);
+      const w = Math.max(20, ...textLines(it).map(l => pen.measureText(l).width));
+      pen.restore();
+      return w;
+    }
+    /* What each thing takes up, as boxKit wants it: { x, y, w, h, rot }. */
+    function frameOf(it){
+      const rot = Number(it.rot) || 0;
+      if (it.kind === "text")
+        return { x: it.x, y: it.y, rot: rot,
+                 w: wordsWide(it) * (it.stretch || 1) + PAD_X * 2,
+                 h: textLines(it).length * it.size * 1.15 + PAD_Y * 2 };
+      if (it.kind === "photo") return { x: it.x, y: it.y, w: it.w, h: it.h, rot: rot };
+      return { x: it.x, y: it.y, w: it.w || it.size, h: it.h || it.size, rot: rot };
+    }
+    /* And back: a thing made to fill the box a handle has been dragged to.
+       Words are a size and a stretch rather than a width and a height, so
+       a taller box is bigger letters and a wider one stretches them. */
+    function reshape(it, bx, was){
+      it.x = Math.max(0, Math.min(POSTER_W, bx.x));
+      it.y = Math.max(0, Math.min(POSTER_H, bx.y));
+      if (bx.rot) it.rot = bx.rot; else delete it.rot;
       if (it.kind === "text"){
-        pen.save();
-        pen.font = fontOf(it);
-        const w = Math.max(20, ...textLines(it).map(l => pen.measureText(l).width));
-        pen.restore();
-        const h = textLines(it).length * it.size * 1.15;
-        return [it.x - w / 2 - 6, it.y - h / 2 - 4, it.x + w / 2 + 6, it.y + h / 2 + 4];
+        const tall = (bx.h - PAD_Y * 2) / (was.h - PAD_Y * 2);
+        it.size = Math.max(12, Math.min(260, was.size * tall));
+        const natural = (was.w - PAD_X * 2) / (was.stretch || 1) * it.size / was.size;
+        const stretch = Math.max(0.3, Math.min(4, (bx.w - PAD_X * 2) / natural));
+        if (Math.abs(stretch - 1) < 0.02) delete it.stretch; else it.stretch = Math.round(stretch * 100) / 100;
+        return;
       }
-      if (it.kind === "photo") return [it.x - it.w / 2, it.y - it.h / 2, it.x + it.w / 2, it.y + it.h / 2];
-      const h = it.size / 2;
-      return [it.x - h, it.y - h, it.x + h, it.y + h];
+      it.w = bx.w; it.h = bx.h;
+      if (it.kind === "stamp") it.size = Math.max(bx.w, bx.h);
     }
     function paintBg(c){
       if (bg.kind === "gradient"){
@@ -2746,9 +2904,27 @@
     }
     const FILTERS = { none: "none", bw: "grayscale(1)", bright: "brightness(1.25) saturate(1.15)",
                       warm: "sepia(0.45) saturate(1.3)", faded: "contrast(0.8) brightness(1.1) saturate(0.7)" };
+    /* A sticker stretched with its side handles keeps that shape as it grows. */
+    function growStamp(it, by){
+      const f = frameOf(it);
+      const k = Math.max(30 / Math.min(f.w, f.h), Math.min(700 / Math.max(f.w, f.h), by));
+      it.w = f.w * k; it.h = f.h * k; it.size = Math.max(it.w, it.h);
+    }
     function paintItem(c, it){
+      /* Everything is drawn round its own middle, so turning it is one line. */
+      if (it.rot){
+        c.save();
+        c.translate(it.x, it.y); c.rotate(it.rot * Math.PI / 180); c.translate(-it.x, -it.y);
+        paintFlat(c, it);
+        c.restore();
+      } else paintFlat(c, it);
+    }
+    function paintFlat(c, it){
       if (it.kind === "text"){
         c.save();
+        if (it.stretch && it.stretch !== 1){
+          c.translate(it.x, 0); c.scale(it.stretch, 1); c.translate(-it.x, 0);
+        }
         c.font = fontOf(it);
         c.textAlign = "center";
         c.textBaseline = "middle";
@@ -2775,24 +2951,22 @@
           c.strokeRect(it.x - it.w / 2, it.y - it.h / 2, it.w, it.h); c.restore();
         }
       } else if (it.kind === "stamp"){
-        window.drawKit.paint(c, { kind: "stamp", name: it.name, x: it.x, y: it.y, size: it.size, flip: it.flip });
+        window.drawKit.paint(c, { kind: "stamp", name: it.name, x: it.x, y: it.y, size: it.size,
+                                  w: it.w, h: it.h, flip: it.flip });
       }
     }
-    const HANDLE = 22;
+    /* How many poster units one screen pixel is, so the handles stay the
+       same size on screen however big the poster is drawn. */
+    function unit(){
+      const w = canvas.getBoundingClientRect().width;
+      return w ? POSTER_W / w : 1;
+    }
+    const handleOpts = () => { const u = unit(); return { unit: u, reach: 13 * u, gap: 26 * u, top: 0 }; };
     function draw(){
       pen.setTransform(2, 0, 0, 2, 0, 0);
       paintBg(pen);
       items.forEach(it => paintItem(pen, it));
-      if (picked){
-        const bx = boxOf(picked);
-        pen.save();
-        pen.strokeStyle = "#2F6BAE"; pen.lineWidth = 2; pen.setLineDash([7, 5]);
-        pen.strokeRect(bx[0], bx[1], bx[2] - bx[0], bx[3] - bx[1]);
-        pen.setLineDash([]);
-        pen.fillStyle = "#FFFFFF"; pen.strokeStyle = "#2F6BAE"; pen.lineWidth = 3;
-        pen.beginPath(); pen.arc(bx[2], bx[3], HANDLE / 2, 0, Math.PI * 2); pen.fill(); pen.stroke();
-        pen.restore();
-      }
+      if (picked && window.boxKit) window.boxKit.draw(pen, frameOf(picked), handleOpts());
     }
 
     /* --- saving: the finished picture, a moment after the last change --- */
@@ -2976,13 +3150,14 @@
             remember();
             const k = Math.max(POSTER_W / it.w, POSTER_H / it.h);
             it.w *= k; it.h *= k; it.x = POSTER_W / 2; it.y = POSTER_H / 2;
+            delete it.rot;      // a turned photo would leave the corners bare
             items = [it].concat(items.filter(x => x !== it));
             changed();
           }, "Make the photo the background"));
         } else {
           const zg = group("Sticker");
-          zg.appendChild(chip("−", false, () => { remember(); it.size = Math.max(30, it.size / 1.2); changed(); }, "Smaller"));
-          zg.appendChild(chip("+", false, () => { remember(); it.size = Math.min(700, it.size * 1.2); changed(); }, "Bigger"));
+          zg.appendChild(chip("−", false, () => { remember(); growStamp(it, 1 / 1.2); changed(); }, "Smaller"));
+          zg.appendChild(chip("+", false, () => { remember(); growStamp(it, 1.2); changed(); }, "Bigger"));
           zg.appendChild(chip("Flip", !!it.flip, () => { remember(); it.flip = !it.flip; paintPanel(); changed(); }, "Face the other way"));
         }
         const lg = group("Layer");
@@ -3024,7 +3199,7 @@
       }
       panel.appendChild(make("p", "poster-hint", base
         ? "Your saved poster is now the background, so add new words, photos and stickers on top. To start again from nothing, press Background, then Start again."
-        : "Tap anything on your poster to change it. Drag it to move it, or drag its round handle to make it bigger."));
+        : "Tap anything on your poster to change it. Drag it to move it. Drag a corner to make it bigger or smaller, a side to stretch it, and the dot above it to turn it."));
     }
     let wordsBox = null;
     function pick(it, typeNow){
@@ -3049,20 +3224,19 @@
          and the press is then read against where the poster used to be. */
       canvas.focus({ preventScroll: true });
       const p = at(e);
-      if (picked){
-        const bx = boxOf(picked);
-        if (Math.hypot(p[0] - bx[2], p[1] - bx[3]) <= HANDLE){
-          remember();
-          drag = { mode: "size", it: picked, from: p, start: Object.assign({}, picked), box: bx };
-          try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
-          return;
-        }
+      /* a handle first: the corners and the turning dot stick out past it */
+      const handle = picked && window.boxKit && window.boxKit.hit(frameOf(picked), p, handleOpts());
+      if (handle){
+        remember();
+        const was = frameOf(picked);
+        was.size = picked.size; was.stretch = picked.stretch;
+        drag = { mode: handle, it: picked, start: was };
+        try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+        return;
       }
       let hit = null;
-      for (let i = items.length - 1; i >= 0 && !hit; i--){
-        const bx = boxOf(items[i]);
-        if (p[0] >= bx[0] && p[0] <= bx[2] && p[1] >= bx[1] && p[1] <= bx[3]) hit = items[i];
-      }
+      for (let i = items.length - 1; i >= 0 && !hit; i--)
+        if (window.boxKit.inside(frameOf(items[i]), p)) hit = items[i];
       if (hit !== picked) pick(hit);
       if (hit){
         remember();
@@ -3071,19 +3245,20 @@
       }
     });
     canvas.addEventListener("pointermove", (e) => {
-      if (!drag) return;
-      const p = at(e), it = drag.it;
+      const p = at(e);
+      if (!drag){
+        /* the pointer shows what a handle will do before it is pressed */
+        const handle = picked && window.boxKit.hit(frameOf(picked), p, handleOpts());
+        canvas.style.cursor = handle ? window.boxKit.cursor(handle, picked.rot) : "";
+        return;
+      }
+      const it = drag.it;
       if (drag.mode === "move"){
         it.x = Math.max(0, Math.min(POSTER_W, drag.x + p[0] - drag.from[0]));
         it.y = Math.max(0, Math.min(POSTER_H, drag.y + p[1] - drag.from[1]));
       } else {
-        /* The handle's distance from the middle, then and now, says how much bigger. */
-        const cx = (drag.box[0] + drag.box[2]) / 2, cy = (drag.box[1] + drag.box[3]) / 2;
-        const was = Math.hypot(drag.from[0] - cx, drag.from[1] - cy) || 1;
-        const k = Math.max(0.15, Math.min(8, Math.hypot(p[0] - cx, p[1] - cy) / was));
-        if (it.kind === "text") it.size = Math.max(12, Math.min(260, drag.start.size * k));
-        else if (it.kind === "photo"){ it.w = Math.max(30, drag.start.w * k); it.h = Math.max(30, drag.start.h * k); }
-        else it.size = Math.max(24, Math.min(800, drag.start.size * k));
+        const least = it.kind === "text" ? 16 : it.kind === "photo" ? 30 : 24;
+        reshape(it, window.boxKit.drag(drag.start, drag.mode, p, { min: least, max: 2400 }), drag.start);
       }
       draw();
     });

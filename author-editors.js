@@ -1822,7 +1822,7 @@ EDITORS.hotspot = function(b, k){
   const w = el("div","bfield");
   const head = el("div","brow");
   head.appendChild(el("label","","The right spot"));
-  head.appendChild(helpDot("Drag across the picture to draw the right spot, or click to move it there. Drag the shape to move it and the dot on its edge to change its size. Anywhere inside counts as right."));
+  head.appendChild(helpDot("Drag across the picture to draw the right spot, or click to move it there. Drag the shape to move it. Drag a corner dot to make it bigger or smaller, a side bar to stretch it, and the dot above it to turn it. Anywhere inside counts as right."));
   w.appendChild(head);
 
   const shapes = el("div","brow");
@@ -1864,42 +1864,67 @@ EDITORS.hotspot = function(b, k){
     holder.appendChild(img);
     const area = el("div","hotspot-ring");
     const dot = el("div","hotspot-pin");
-    const grip = el("div","hotspot-grip");
-    grip.title = "Drag to change the size";
-    holder.appendChild(area); holder.appendChild(dot); holder.appendChild(grip);
+    holder.appendChild(area); holder.appendChild(dot);
     const missing = el("p","hint","There is no picture at that address yet.");
     missing.hidden = true;
     picBox.appendChild(holder);
     picBox.appendChild(missing);
 
-    const size = el("div","brow");
-    size.appendChild(el("span","bhelp","How big the ring is"));
-    const range = el("input");
-    range.type = "range"; range.min = "1"; range.max = "50"; range.step = "0.5";
-    range.addEventListener("input", () => { b.r = Number(range.value); paintArea(); saveDraft(); schedulePreview(); });
-    size.appendChild(range);
-    picBox.appendChild(size);
+    /* The spot is kept in per cent of the picture, but turned and stretched
+       in pixels: a per cent across is not a per cent down on a picture that
+       is not square, and a turned shape would come out squashed. These two
+       go between them. A circle's r and ry are both shares of the width. */
+    const tenth = (n) => Math.round(n * 10) / 10;
+    const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+    function spotPx(){
+      const W = img.clientWidth, H = img.clientHeight;
+      if (!W || !H) return null;
+      const x = (Number(b.x) || 0) / 100 * W + img.offsetLeft, y = (Number(b.y) || 0) / 100 * H + img.offsetTop;
+      const rot = Number(b.rot) || 0;
+      if (hotspotShape(b) === "rect")
+        return { x, y, rot, w: (Number(b.w) || 16) / 100 * W, h: (Number(b.h) || 16) / 100 * H };
+      const r = Number(b.r) || 8, ry = Number(b.ry) > 0 ? Number(b.ry) : r;
+      return { x, y, rot, w: 2 * r / 100 * W, h: 2 * ry / 100 * W };
+    }
+    function spotFromPx(bx){
+      const W = img.clientWidth, H = img.clientHeight;
+      b.x = tenth(clamp((bx.x - img.offsetLeft) / W * 100, 0, 100));
+      b.y = tenth(clamp((bx.y - img.offsetTop) / H * 100, 0, 100));
+      if (bx.rot) b.rot = tenth(bx.rot); else delete b.rot;
+      if (hotspotShape(b) === "rect"){
+        b.w = tenth(clamp(bx.w / W * 100, 1, 100)); b.h = tenth(clamp(bx.h / H * 100, 1, 100));
+      } else {
+        b.r = tenth(clamp(bx.w / 2 / W * 100, 1, 50));
+        const ry = tenth(clamp(bx.h / 2 / W * 100, 1, 100));
+        /* still round, so it stays a plain circle in the saved lesson */
+        if (Math.abs(ry - b.r) < 0.15) delete b.ry; else b.ry = ry;
+      }
+    }
 
     paintArea = () => {
       const rect = hotspotShape(b) === "rect";
       shapeBtns.forEach(s => s.btn.classList.toggle("right", s.shape === hotspotShape(b)));
       const x = Number(b.x) || 0, y = Number(b.y) || 0;
-      area.dataset.shape = rect ? "rect" : "circle";
+      area.dataset.shape = rect ? "rect" : Number(b.ry) > 0 ? "oval" : "circle";
       area.style.left = dot.style.left = x + "%";
       area.style.top = dot.style.top = y + "%";
       if (rect){
-        const half = { w: (Number(b.w) || 16) / 2, h: (Number(b.h) || 16) / 2 };
-        area.style.width = 2 * half.w + "%"; area.style.height = 2 * half.h + "%";
-        grip.style.left = (x + half.w) + "%"; grip.style.top = (y + half.h) + "%";
+        area.style.width = (Number(b.w) || 16) + "%"; area.style.height = (Number(b.h) || 16) + "%";
       } else {
         const r = Number(b.r) || 8;
-        area.style.width = 2 * r + "%"; area.style.height = "";
-        grip.style.left = (x + r) + "%"; grip.style.top = y + "%";
-        range.value = String(r);
+        area.style.width = 2 * r + "%";
+        area.style.height = Number(b.ry) > 0 ? 2 * Number(b.ry) / hotspotRatio(b) + "%" : "";
       }
-      size.hidden = rect;
-      grip.style.cursor = rect ? "nwse-resize" : "ew-resize";
+      area.style.transform = "translate(-50%,-50%) rotate(" + (Number(b.rot) || 0) + "deg)";
+      if (handles) handles.place();
     };
+    /* corners, sides and a turning dot, the same as everywhere else */
+    const handles = window.boxKit ? window.boxKit.overlay(holder, {
+      get: spotPx,
+      set: (bx) => { spotFromPx(bx); paintArea(); },
+      done: () => { saveDraft(); schedulePreview(); },
+      min: 8
+    }) : null;
 
     /* The circle is a share of the picture's width, so how tall it is on
        the picture depends on the picture's shape, measured here. */
@@ -1909,15 +1934,16 @@ EDITORS.hotspot = function(b, k){
         const ratio = Math.round(img.naturalHeight / img.naturalWidth * 10000) / 10000;
         if (ratio !== b.ratio){ b.ratio = ratio; saveDraft(); }
       }
+      paintArea();
     });
-    img.addEventListener("error", () => { missing.hidden = false; holder.hidden = true; size.hidden = true; });
+    img.addEventListener("error", () => { missing.hidden = false; holder.hidden = true; });
+    /* the handles are in pixels, so they follow the picture when the card is resized */
+    if (window.ResizeObserver){ try{ new ResizeObserver(() => paintArea()).observe(img); }catch(e){} }
 
-    /* One press does one of three things, decided by what it lands on:
-       the dot on the edge resizes, the shape itself moves, and the bare
-       picture draws a new spot from where the press started (or, if the
-       pointer barely moved, puts the spot there at the size it was). */
-    const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
-    const tenth = (n) => Math.round(n * 10) / 10;
+    /* A press on a handle is the handles' own. Otherwise it does one of two
+       things, decided by what it lands on: the shape itself moves, and the
+       bare picture draws a new spot from where the press started (or, if
+       the pointer barely moved, puts the spot there at the size it was). */
     const at = (e) => {
       const r = img.getBoundingClientRect();
       return { x: (e.clientX - r.left) / r.width * 100, y: (e.clientY - r.top) / r.height * 100,
@@ -1929,11 +1955,8 @@ EDITORS.hotspot = function(b, k){
       e.preventDefault();
       holder.setPointerCapture(e.pointerId);
       const p = at(e);
-      const kind = e.target === grip ? "size" : e.target === area ? "move" : "draw";
-      press = { kind, from: p, moved: false,
-                off: { x: p.x - (Number(b.x) || 0), y: p.y - (Number(b.y) || 0) },
-                corner: { x: (Number(b.x) || 0) - (Number(b.w) || 16) / 2,
-                          y: (Number(b.y) || 0) - (Number(b.h) || 16) / 2 } };
+      press = { kind: e.target === area ? "move" : "draw", from: p, moved: false,
+                off: { x: p.x - (Number(b.x) || 0), y: p.y - (Number(b.y) || 0) } };
     });
     holder.addEventListener("pointermove", (e) => {
       if (!press) return;
@@ -1947,19 +1970,15 @@ EDITORS.hotspot = function(b, k){
       if (press.kind === "move"){
         b.x = tenth(clamp(p.x - press.off.x, 0, 100));
         b.y = tenth(clamp(p.y - press.off.y, 0, 100));
-      } else if (press.kind === "size" && rect){
-        /* the top left corner stays put and the dot drags the other */
-        const wide = clamp(p.x - press.corner.x, 2, 100), tall = clamp(p.y - press.corner.y, 2, 100);
-        b.w = tenth(wide); b.h = tenth(tall);
-        b.x = tenth(press.corner.x + wide / 2); b.y = tenth(press.corner.y + tall / 2);
-      } else if (press.kind === "size"){
-        b.r = tenth(clamp(reach({ x: Number(b.x) || 0, y: Number(b.y) || 0 }), 1, 50));
       } else if (rect){
+        /* a new spot is drawn upright; the dot above turns it afterwards */
+        delete b.rot;
         const left = clamp(Math.min(press.from.x, p.x), 0, 100), right = clamp(Math.max(press.from.x, p.x), 0, 100);
         const top = clamp(Math.min(press.from.y, p.y), 0, 100), bottom = clamp(Math.max(press.from.y, p.y), 0, 100);
         b.w = tenth(Math.max(2, right - left)); b.h = tenth(Math.max(2, bottom - top));
         b.x = tenth((left + right) / 2); b.y = tenth((top + bottom) / 2);
       } else {
+        delete b.rot; delete b.ry;
         b.x = tenth(clamp(press.from.x, 0, 100)); b.y = tenth(clamp(press.from.y, 0, 100));
         b.r = tenth(clamp(reach(press.from), 1, 50));
       }
@@ -1967,7 +1986,7 @@ EDITORS.hotspot = function(b, k){
     });
     const letGo = (e) => {
       if (!press) return;
-      if (!press.moved && press.kind !== "size"){
+      if (!press.moved){
         const p = at(e);
         b.x = tenth(clamp(p.x, 0, 100)); b.y = tenth(clamp(p.y, 0, 100));
         paintArea();
@@ -1998,7 +2017,7 @@ EDITORS.label = function(b, k){
   const w = el("div","bfield");
   const labHead = el("div","brow");
   labHead.appendChild(el("label","","The picture, and where the labels go"));
-  labHead.appendChild(helpDot("Drag on the picture to draw a box, then type the word for it below."));
+  labHead.appendChild(helpDot("Drag on the picture to draw a box, then type the word for it below. Click a box to move it, or drag its corner dots and side bars to change its size."));
   w.appendChild(labHead);
 
   /* With no picture there is nothing to draw boxes on, so only the hint
@@ -2026,15 +2045,75 @@ EDITORS.label = function(b, k){
     const list = el("div","label-list");
     labelBox.appendChild(list);
 
+    /* The box that has been clicked, which has the handles. A label box
+       has no turning dot: the word dropped into it would be on its side. */
+    let chosen = -1;
+    const marks = [];
+    const tenth = (n) => Math.round(n * 10) / 10;
+    const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+    function placeMark(i){
+      const sp = b.spots[i], mark = marks[i];
+      if (!sp || !mark) return;
+      mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
+      mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
+      mark.classList.toggle("chosen", i === chosen);
+    }
+    const handles = window.boxKit ? window.boxKit.overlay(holder, {
+      rotate: false, min: 12,
+      /* the boxes are kept in per cent of the picture, from their top left */
+      get: () => {
+        const sp = b.spots[chosen], W = holder.clientWidth, H = holder.clientHeight;
+        if (!sp || !W || !H) return null;
+        return { x: (sp.x + sp.w / 2) / 100 * W, y: (sp.y + sp.h / 2) / 100 * H,
+                 w: sp.w / 100 * W, h: sp.h / 100 * H, rot: 0 };
+      },
+      set: (bx) => {
+        const sp = b.spots[chosen], W = holder.clientWidth, H = holder.clientHeight;
+        if (!sp) return;
+        sp.w = tenth(clamp(bx.w / W * 100, 2, 100)); sp.h = tenth(clamp(bx.h / H * 100, 2, 100));
+        sp.x = tenth(clamp((bx.x - bx.w / 2) / W * 100, 0, 100 - sp.w));
+        sp.y = tenth(clamp((bx.y - bx.h / 2) / H * 100, 0, 100 - sp.h));
+        placeMark(chosen);
+      },
+      done: () => { saveDraft(); schedulePreview(); }
+    }) : null;
+    function choose(i){
+      chosen = i;
+      marks.forEach((m, k) => m.classList.toggle("chosen", k === i));
+      if (handles) handles.place();
+    }
+    if (window.ResizeObserver){ try{ new ResizeObserver(() => { if (handles) handles.place(); }).observe(holder); }catch(e){} }
+
     function paintSpots(){
       holder.querySelectorAll(".label-spot").forEach(n => n.remove());
+      marks.length = 0;
       list.innerHTML = "";
+      if (chosen >= b.spots.length) chosen = -1;
       b.spots.forEach((sp, i) => {
         const mark = el("div","label-spot");
-        mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
-        mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
         mark.textContent = sp.answer || String(i + 1);
         holder.appendChild(mark);
+        marks[i] = mark;
+        placeMark(i);
+        /* pressed to pick it, and dragged to move it */
+        let grab = null;
+        mark.addEventListener("pointerdown", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          choose(i);
+          try{ mark.setPointerCapture(e.pointerId); }catch(err){}
+          const r = holder.getBoundingClientRect();
+          grab = { r, x: e.clientX, y: e.clientY, sx: sp.x, sy: sp.y };
+        });
+        mark.addEventListener("pointermove", (e) => {
+          if (!grab) return;
+          sp.x = tenth(clamp(grab.sx + (e.clientX - grab.x) / grab.r.width * 100, 0, 100 - sp.w));
+          sp.y = tenth(clamp(grab.sy + (e.clientY - grab.y) / grab.r.height * 100, 0, 100 - sp.h));
+          placeMark(i);
+          if (handles) handles.place();
+        });
+        const drop = () => { if (!grab) return; grab = null; saveDraft(); schedulePreview(); };
+        mark.addEventListener("pointerup", drop);
+        mark.addEventListener("pointercancel", drop);
 
         /* the word for this box, typed underneath rather than in a list
            of commas somewhere else */
@@ -2050,11 +2129,12 @@ EDITORS.label = function(b, k){
         });
         const rm = el("button","btn-ghost bmini","\u2715");
         rm.title = "Remove this box";
-        rm.addEventListener("click", () => { b.spots.splice(i, 1); saveDraft(); paintSpots(); schedulePreview(); });
+        rm.addEventListener("click", () => { b.spots.splice(i, 1); chosen = -1; saveDraft(); paintSpots(); schedulePreview(); });
         row.appendChild(word); row.appendChild(rm);
         list.appendChild(row);
       });
       if (!b.spots.length) list.appendChild(el("p","hint","No boxes yet. Drag on the picture to draw one."));
+      if (handles) handles.place();
     }
 
     let from = null;
@@ -2066,6 +2146,7 @@ EDITORS.label = function(b, k){
     holder.addEventListener("pointerdown", (e) => {
       if (e.target.classList.contains("label-spot")) return;
       e.preventDefault();
+      choose(-1);           // the bare picture puts the handles away and starts a new box
       holder.setPointerCapture(e.pointerId);
       from = pct(e);
       ghost.hidden = false;
@@ -2089,6 +2170,7 @@ EDITORS.label = function(b, k){
       ghost.hidden = true;
       if (spot.w < 3 || spot.h < 3) return;      // a stray click, not a box
       b.spots.push(spot);
+      chosen = b.spots.length - 1;               // ready to be nudged into place
       saveDraft(); paintSpots(); schedulePreview();
     });
 

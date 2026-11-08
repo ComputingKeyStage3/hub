@@ -22,6 +22,7 @@
 <!-- for the wording a practical uses for a student who was not there, kept
      in one place with the marking screens that use it -->
 <script src="progressmath.js"></script>
+<script src="boxkit.js"></script>
 <script src="richtext.js"></script>
 <script src="pyedit.js"></script>
 <script src="scratchhub.js"></script>
@@ -1480,6 +1481,9 @@ function compileOne(b, id, target){
         x: pct(b.x, 50), y: pct(b.y, 50), r: Math.max(1, Math.min(50, Number(b.r) || 8)),
         w: rect ? Math.max(1, pct(b.w, 16)) : undefined,
         h: rect ? Math.max(1, pct(b.h, 16)) : undefined,
+        /* an oval's half-height, and how far either shape is turned */
+        ry: !rect && Number(b.ry) > 0 ? Math.max(1, Math.min(100, Math.round(Number(b.ry) * 10) / 10)) : undefined,
+        rot: Number(b.rot) ? Math.round(Number(b.rot) * 10) / 10 : undefined,
         ratio: Number(b.ratio) > 0 ? Math.round(Number(b.ratio) * 10000) / 10000 : undefined,
         topic: lesson.assessment ? b.topic : "" }));
     }

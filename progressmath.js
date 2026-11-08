@@ -47,12 +47,18 @@
      window.hotspotHit in tasks-extra.js, which this page does not load. */
   function hotspotScore(b, v){
     if (!v || typeof v.x !== "number" || typeof v.y !== "number") return { got: 0, max: 1 };
-    if (b.shape === "rect")
-      return { got: Math.abs(v.x - Number(b.x || 0)) <= Number(b.w || 0) / 2 &&
-                    Math.abs(v.y - Number(b.y || 0)) <= Number(b.h || 0) / 2 ? 1 : 0, max: 1 };
     const ratio = Number(b.ratio) > 0 ? Number(b.ratio) : 1;
+    const a = (Number(b.rot) || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
     const dx = v.x - Number(b.x || 0), dy = (v.y - Number(b.y || 0)) * ratio;
-    return { got: Math.sqrt(dx * dx + dy * dy) <= Number(b.r || 0) ? 1 : 0, max: 1 };
+    const lx = dx * c + dy * sn, ly = -dx * sn + dy * c;
+    let inside;
+    if (b.shape === "rect")
+      inside = Math.abs(lx) <= Number(b.w || 0) / 2 + 1e-9 && Math.abs(ly) <= Number(b.h || 0) / 2 * ratio + 1e-9;
+    else {
+      const rx = Number(b.r || 0), ry = Number(b.ry) > 0 ? Number(b.ry) : rx;
+      inside = !!rx && !!ry && (lx / rx) * (lx / rx) + (ly / ry) * (ly / ry) <= 1 + 1e-9;
+    }
+    return { got: inside ? 1 : 0, max: 1 };
   }
   /* The tasks a practical's ticks are counted from: Python and web tasks,
      and a Screenshot task set to take a Photoshop or Blender file. Scratch is left out

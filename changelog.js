@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.3", text:"Pictures and boxes resize like other programs: corner dots keep the shape, side bars stretch it, and a dot above turns it. On posters, whiteboards, storyboards, pictures in writing, and Click the right spot and Label a picture in the builder." },
   { v:"17.2", text:"Two new tasks: Poster, an easy photo editor with words, photos, stickers and backgrounds that saves the finished poster, and Boss battle, a quiz where right answers beat a boss and wrong ones cost a heart." },
   { v:"17.1", text:"Block coding tasks can have an Instructions tab beside Scratch, open first with the Scratch tab pulsing until pressed. Whiteboards and storyboards gain rectangles, circles, lines, arrows, and characters and objects to drag in." },
   { v:"17.0.3", text:"In a quiz, the answer a student picked now turns green if it was right and red if it was wrong." },
