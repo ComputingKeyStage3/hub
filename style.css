@@ -8316,6 +8316,113 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
 .story-canvas[data-tool=move]{cursor:move}
 .story-picktools{transform:translate(-50%, calc(-100% - 6px))}
 .story-picktools[hidden]{display:none}
+/* =====================================================================
+   POSTER: a photo editor simple enough to need no explaining. Big labelled
+   buttons, the choices for whatever is picked underneath, the poster below.
+   ===================================================================== */
+.poster{width:100%}
+.poster-body{display:grid; grid-template-columns:180px minmax(0,1fr) 240px; align-items:start;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+/* The side columns take the poster's height, not their own: height 0 with
+   min-height 100% lets the middle column set the row, and anything taller
+   scrolls inside its column instead of pushing the poster off the screen. */
+.poster-bar{display:flex; flex-direction:column; gap:6px; padding:10px; height:0; min-height:100%; overflow-y:auto; align-self:stretch;
+  background:var(--panel); border-right:1px solid var(--line)}
+.poster-btn{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:54px; padding:6px;
+  border:1.5px solid var(--line-2); border-radius:var(--rad-md); background:var(--panel); color:var(--text);
+  font:inherit; font-size:var(--text-sm); font-weight:700; line-height:1.2; text-align:center; cursor:pointer}
+.poster-btn svg{width:22px; height:22px; fill:currentColor; flex:none}
+.poster-btn:hover, .poster-btn.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, var(--panel))}
+.poster-btn-quiet{font-weight:600; min-height:40px; flex-direction:row}
+.poster-btn-quiet svg{width:20px; height:20px}
+.poster-brief{margin-top:6px; padding:10px; border-radius:var(--rad-md); background:color-mix(in srgb, var(--gold) 18%, var(--panel));
+  border:1.5px solid color-mix(in srgb, var(--gold) 55%, var(--panel)); font-size:var(--text-sm); line-height:1.45}
+.poster-brief-head{display:block; margin-bottom:4px}
+.poster-brief-text p{margin:0 0 4px}
+.poster-panel{display:flex; flex-direction:column; gap:14px; padding:12px; height:0; min-height:100%; overflow-y:auto; align-self:stretch;
+  background:var(--panel); border-left:1px solid var(--line)}
+.poster-group{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+.poster-label{flex-basis:100%; font-size:var(--text-xs); font-weight:700; color:var(--muted); text-transform:uppercase;
+  letter-spacing:.06em}
+.poster-hint{margin:0; color:var(--muted); font-size:var(--text-sm); line-height:1.5}
+.poster-words{width:100%; min-height:64px; resize:vertical; font:inherit; font-size:var(--text-md);
+  padding:6px 10px; border:1.5px solid var(--amber); border-radius:var(--rad-sm); background:var(--panel); color:var(--text)}
+.poster-swatch{width:30px; height:30px; padding:0; border-radius:50%; border:2px solid var(--panel);
+  box-shadow:0 0 0 1.5px var(--line-2); cursor:pointer}
+.poster-swatch.on{box-shadow:0 0 0 3px var(--amber)}
+.poster-chip{min-height:36px; padding:6px 12px; border:1.5px solid var(--line-2); border-radius:var(--rad-pill);
+  background:var(--panel); color:var(--text); font:inherit; font-size:var(--text-sm); font-weight:700; cursor:pointer}
+.poster-chip.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 14%, var(--panel))}
+.poster-chip-delete{color:var(--red)}
+.poster-tray{border:none; padding:0; background:none}
+.poster-tray .draw-stamp{width:50px; height:50px}
+.poster-stage{display:flex; justify-content:center; padding:14px; min-width:0; container-type:inline-size}
+/* As tall as the screen leaves room for, and never wider than the middle
+   column: the whole poster has to be in view to arrange it. The vh line is
+   for a browser without dvh, the plain one for a browser without cqw. */
+.poster-canvas{display:block; height:auto; aspect-ratio:600/848; background:#FFFFFF;
+  width:min(100%, max(260px, calc((100vh - 300px) * 0.7075)));
+  width:min(100%, max(260px, calc((100dvh - 300px) * 0.7075)));
+  box-shadow:0 4px 18px rgba(0,0,0,.18); touch-action:none; cursor:pointer; outline:none}
+/* Too narrow for three columns: tools in a row on top, choices underneath. */
+@media (max-width:900px){
+  .poster-body{grid-template-columns:minmax(0,1fr)}
+  .poster-bar{flex-direction:row; flex-wrap:wrap; height:auto; min-height:0; overflow:visible; border-right:none; border-bottom:1px solid var(--line)}
+  .poster-btn{flex:1 1 30%; min-height:52px}
+  .poster-brief{flex-basis:100%}
+  .poster-panel{order:2; height:auto; min-height:0; overflow:visible; border-left:none; border-top:1px solid var(--line)}
+  .poster-canvas{width:min(100%, 480px)}
+}
+.poster-note{margin:6px 0 0; color:var(--red); font-size:var(--text-sm); font-weight:700}
+.poster-note[hidden]{display:none}
+
+/* =====================================================================
+   BOSS BATTLE: the boss and both lots of hearts above, one question below.
+   The shakes are kept in custom properties, so the reduced-motion line can
+   let them through the way it lets the waiting dots through: every school
+   machine reports reduced motion, and a hit nobody sees is no hit at all.
+   ===================================================================== */
+.boss-arena{display:flex; flex-wrap:wrap; align-items:center; gap:18px 26px; padding:16px 18px;
+  background:linear-gradient(180deg, var(--code-bg), color-mix(in srgb, var(--help) 40%, var(--code-bg))); color:#FFFFFF; border-radius:12px 12px 0 0}
+.boss-foe{flex:none; width:150px; height:150px}
+.boss-art{width:100%; height:100%; display:block}
+.boss-foe.boss-beaten{opacity:.35; filter:grayscale(1)}
+.boss-stats{flex:1 1 260px; display:flex; flex-direction:column; gap:8px; min-width:0}
+.boss-name{font-size:var(--text-xl); font-weight:800}
+.boss-hp{height:20px; border-radius:var(--rad-pill); background:rgba(255,255,255,.18); overflow:hidden}
+.boss-hp-fill{height:100%; width:100%; border-radius:inherit; background:linear-gradient(90deg, var(--red), var(--gold));
+  transition:width .4s ease}
+.boss-hp-words{font-size:var(--text-sm); color:rgba(255,255,255,.8)}
+.boss-you{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:4px}
+.boss-you-label{font-size:var(--text-sm); font-weight:700}
+.boss-hearts{display:inline-flex; gap:4px}
+.boss-heart svg{width:26px; height:26px; fill:#E8456B; display:block}
+.boss-heart.lost svg{fill:rgba(255,255,255,.22)}
+.boss-card{padding:18px; background:var(--panel); border:1px solid var(--line); border-top:none; border-radius:0 0 12px 12px}
+.boss-q-count{margin:0 0 4px; font-size:var(--text-xs); font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em}
+.boss-q{margin:0 0 12px; font-size:var(--text-lg); font-weight:700}
+.boss-opts{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:8px}
+.boss-opt{min-height:48px; padding:10px 14px; text-align:left; border:1.5px solid var(--line-2); border-radius:var(--rad-md);
+  background:var(--panel); color:var(--text); font:inherit; font-size:var(--text-md); cursor:pointer}
+.boss-opt:hover:not(:disabled){border-color:var(--amber)}
+.boss-opt.right{border-color:var(--mint); background:var(--mint-dim)}
+.boss-opt.wrong{border-color:var(--red); background:var(--red-dim)}
+.boss-opt:disabled{cursor:default}
+.boss-fb{margin-top:12px; padding:10px 14px; border-radius:var(--rad-md)}
+.boss-fb.ok{background:var(--mint-dim)}
+.boss-fb.no{background:var(--red-dim)}
+.boss-fb p{margin:4px 0 0}
+.boss-next{margin-top:12px}
+.boss-end-title{margin:0 0 6px; font-size:var(--text-xl); font-weight:800}
+.boss-end-words{margin:0 0 12px; color:var(--muted)}
+.boss-foe.boss-hit{--boss-shake:bossshake .5s ease; animation:var(--boss-shake)}
+.boss-foe.boss-laugh{--boss-shake:bossbounce .6s ease; animation:var(--boss-shake)}
+.boss-hearts.boss-hurt{--boss-shake:bossshake .5s ease; animation:var(--boss-shake)}
+@keyframes bossshake{0%,100%{transform:translateX(0)} 20%{transform:translateX(-10px) rotate(-4deg)}
+  40%{transform:translateX(9px) rotate(3deg)} 60%{transform:translateX(-6px)} 80%{transform:translateX(4px)}}
+@keyframes bossbounce{0%,100%{transform:translateY(0)} 30%{transform:translateY(-14px) scale(1.06)} 60%{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){ .boss-foe.boss-hit, .boss-foe.boss-laugh, .boss-hearts.boss-hurt{animation:var(--boss-shake) !important} }
+@media (max-width:600px){ .boss-foe{width:100px; height:100px} }
 /* Nothing to write and nothing to draw, so the picture gets the width. */
 .story-demo .story-main{ grid-template-columns:minmax(0,1fr) }
 .story-demo .story-canvas{ cursor:default }

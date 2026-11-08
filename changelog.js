@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.2", text:"Two new tasks: Poster, an easy photo editor with words, photos, stickers and backgrounds that saves the finished poster, and Boss battle, a quiz where right answers beat a boss and wrong ones cost a heart." },
   { v:"17.1", text:"Block coding tasks can have an Instructions tab beside Scratch, open first with the Scratch tab pulsing until pressed. Whiteboards and storyboards gain rectangles, circles, lines, arrows, and characters and objects to drag in." },
   { v:"17.0.3", text:"In a quiz, the answer a student picked now turns green if it was right and red if it was wrong." },
   { v:"17.0.3", text:"Cover details on a draft says the lesson needs publishing to get the Sign-in backup code, with a Publish button that brings you back to the code." },

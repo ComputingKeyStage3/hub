@@ -398,6 +398,8 @@ const TASK_ICONS = {
   mindmap:   '<circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5.5" r="1.8"/><circle cx="19.5" cy="5.5" r="1.8"/><circle cx="4.5" cy="18.5" r="1.8"/><circle cx="19.5" cy="18.5" r="1.8"/><path d="M9.8 9.8 5.8 6.8M14.2 9.8l4-3M9.8 14.2l-4 3M14.2 14.2l4 3"/>',
   board:     '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 13c2-4 3 1 5-2s3 1 5-1M9 21l3-4 3 4"/>',
   storyboard:'<rect x="2.5" y="7" width="5.6" height="10" rx="1"/><rect x="9.2" y="7" width="5.6" height="10" rx="1"/><rect x="15.9" y="7" width="5.6" height="10" rx="1"/>',
+  poster:    '<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><path d="M8 6.5h8M7.5 18l3.2-4 2.3 2.6 1.7-1.9 2.3 3.3z"/>',
+  boss:      '<path d="M3.5 18.5h17l1-11-5.5 4.5L12 5l-4 7-5.5-4.5zM3.5 21h17"/>',
   code:      '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   ide:       '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   web:       '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M10 13l-2 2 2 2M14 13l2 2-2 2"/>',
@@ -1762,6 +1764,27 @@ EDITORS.board = function(b, k){
     F("How tall, in pixels", "height", { num:true,
       help:"What they draw is kept as the strokes themselves, not a picture, so it takes very little room." });
   });
+};
+
+/* A poster made in the lesson's own photo editor. The finished poster is
+   saved as one compressed picture, so there is nothing more to set. */
+EDITORS.poster = function(b, k){
+  const { F } = k;
+  F("Heading", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2,
+    help:"What the poster is about, for example: make a poster that explains how to convert binary to denary." });
+  F("Words already on the poster (optional)", "heading",
+    { help:"The title the poster starts with, ready for them to change. Leave empty for Your title here." });
+};
+
+/* The quiz's own question editor, with the boss on top. */
+EDITORS.boss = function(b, k){
+  const { F, pickRow } = k;
+  F("Boss name", "boss", { help:"Shown above the boss's health bar, for example The Pixel Goblin." });
+  EDITORS.quiz(b, k);
+  F("Hits to win", "hits", { num:true, help:"How many right answers beat the boss. Questions come round again if there are fewer." });
+  F("Student hearts", "hearts", { num:true, help:"How many wrong answers before the boss wins. They can always try again." });
+  F("How the boss looks", "look", { help:"goblin, dragon, robot or ghost." });
 };
 
 EDITORS.storyboard = function(b, k){

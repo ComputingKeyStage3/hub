@@ -1186,7 +1186,7 @@ if (OFFLINE){
    screenshot or a whiteboard therefore keep the PDF instead, and there is
    a length check behind that in case some other task grows unexpectedly.
    ===================================================================== */
-const HEAVY_TASKS = ["image", "board", "storyboard", "scratch"];
+const HEAVY_TASKS = ["image", "board", "storyboard", "scratch", "poster"];
 
 /* Screenshots and whiteboards can sit inside a page, so this looks all the
    way down rather than only at the top level. */
@@ -3720,6 +3720,13 @@ const TASK_ICON = {
   storyboard:{ name:"Storyboard",
                d:'<rect x="2.5" y="7" width="5.6" height="10" rx="1"/><rect x="9.2" y="7" width="5.6" height="10" rx="1"/>' +
                  '<rect x="15.9" y="7" width="5.6" height="10" rx="1"/>' },
+  /* a sheet with a picture and a title on it */
+  poster:    { name:"Poster",
+               d:'<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><path d="M8 6.5h8"/>' +
+                 '<path d="M7.5 18l3.2-4 2.3 2.6 1.7-1.9 2.3 3.3z"/>' },
+  /* a crown, for the boss */
+  boss:      { name:"Boss battle",
+               d:'<path d="M3.5 18.5h17l1-11-5.5 4.5L12 5l-4 7-5.5-4.5z"/><path d="M3.5 21h17"/>' },
   /* a board on a stand */
   board:     { name:"Whiteboard",
                d:'<rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M12 17v3"/>' +
@@ -4914,7 +4921,8 @@ function buildBlock(b, i){
               keywords:rKeywordsTask, helper:rHelperTask,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
               exam:rExamTask, table:rTableTask, hotspot:rHotspotTask,
-              extension:rExtension, group:rGroup, choice:rChoice }[b.type];
+              extension:rExtension, group:rGroup, choice:rChoice,
+              poster:rPosterTask, boss:rBossTask }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try {
     const made = R(b);
@@ -8628,6 +8636,12 @@ const rStoryboardTask = (b) => wrapExtra(b, window.rStoryboard, "Storyboard");
 const rKeywordsTask = (b) => wrapExtra(b, window.rKeywords, "Keywords");
 const rTableTask  = (b) => wrapExtra(b, window.rTable,    "Table");
 const rLabelTask   = (b) => wrapExtra(b, window.rLabel,   "Labelling");
+/* The poster shows its instructions in a box beside its own tools, so the
+   card above it carries only the heading: the same words twice would push
+   the poster down the screen. */
+const rPosterTask  = (b) => Object.assign(wrapExtra(b, window.rPoster, "Poster"),
+                                          { brief: { eyebrow: "Poster", title: b.title || "", text: "" } });
+const rBossTask    = (b) => wrapExtra(b, window.rBoss,    "Boss battle");
 const rHotspotTask = (b) => wrapExtra(b, window.rHotspot, "Click the right spot");
 /* An exam question is nearly one of the four above, but it also reports what
    it scored, which wrapExtra has no room for: fields[] would drop result()
@@ -12782,6 +12796,7 @@ function lessonTaskScore(b, v){
     return m.max ? { got: m.got, max: m.max } : null;
   }
   if (b.type === "hotspot") return { got: window.hotspotHit(b, v) ? 1 : 0, max: 1 };
+  if (b.type === "boss") return { got: (v && v.won) ? 1 : 0, max: 1 };
   if ((isCodeTask(b) || isFileTask(b)) && Array.isArray(b.checks) && b.checks.length){
     const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
     const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
@@ -13795,6 +13810,26 @@ function buildPdf(){
         if (secs > 0) out.push({ t: "text", face: "small",
           text: "Total: " + secs + " seconds, " + Math.round(secs * fps) + " frames" });
       }
+      return out;
+    }
+    if (b.type === "poster"){
+      out.push({ t: "text", face: "task", text: title || "Poster" });
+      const data = window.posterImage ? window.posterImage(v) : "";
+      if (!data){ out.push(answerBox("", "No poster made")); return out; }
+      /* Half the page across: a poster is tall, and full width would
+         run it over onto a second sheet. */
+      const w = W * 0.55;
+      out.push({ t: "img", data: data, fmt: "JPEG", w: w, h: w * 848 / 600 });
+      return out;
+    }
+    if (b.type === "boss"){
+      out.push({ t: "text", face: "task", text: title || ("Boss battle: " + (b.boss || "the boss")) });
+      const won = !!(v && v.won), tries = (v && Number(v.tries)) || 0;
+      out.push({ t: "text", face: "p",
+                 text: won ? "Beat " + (b.boss || "the boss") + " (best: " + ((v && v.bestHearts) || 0) + " hearts left)"
+                     : tries ? "Fought " + tries + (tries === 1 ? " time" : " times") + ", not beaten yet" : "Not started",
+                 colour: won ? PDF.GREEN : tries ? PDF.AMBER : PDF.RED });
+      if (v && v.asked) out.push({ t: "text", face: "small", text: v.right + " right out of " + v.asked + " answered" });
       return out;
     }
     if (b.type === "image" || b.type === "board"){

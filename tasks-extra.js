@@ -1,5 +1,5 @@
 /* =====================================================================
-   tasks-extra.js — four more things a lesson can ask for.
+   tasks-extra.js — more things a lesson can ask for.
 
    Everything here saves what the student *did*, not a picture of it:
    a whiteboard is a list of strokes, a mindmap is a list of nodes. A
@@ -2648,4 +2648,704 @@
       })
     };
   };
+  /* ===================================================================
+     POSTER
+     { type:"poster", title, task, heading }
+     A photo editor simple enough to use without being shown: one row of
+     big buttons (Background, Add words, Add a photo, Stickers), and
+     whatever is picked shows its own few choices underneath. Anything on
+     the poster is moved by dragging it and resized by its corner handle.
+
+     Saved as one compressed picture, not as the pieces. A poster holds the
+     student's own photos, and keeping those as pieces would cost far more
+     than the finished JPEG: 600 x 848 at this quality is 40 to 150KB, so a
+     year group making one each is about 80MB, once. Reopened, the saved
+     poster comes back as the background, and anything new goes on top.
+     =================================================================== */
+  const POSTER_W = 600, POSTER_H = 848;
+  const POSTER_MAX = 350000;          // characters of JPEG data URL
+  const POSTER_FONTS = [
+    { id: "bold",    label: "Bold",    face: '"Segoe UI", system-ui, sans-serif', weight: 800 },
+    { id: "fun",     label: "Fun",     face: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive', weight: 700 },
+    { id: "classic", label: "Classic", face: 'Georgia, "Times New Roman", serif', weight: 700 }
+  ];
+  const POSTER_COLOURS = ["#1D1D1B","#FFFFFF","#C0392B","#E67E22","#F2B705","#2E7D5B","#2F6BAE","#8C5BC4","#E88C9A","#7B5A3C"];
+  const POSTER_BGS = [
+    { kind: "colour", c1: "#FFFFFF" }, { kind: "colour", c1: "#FFF4C2" }, { kind: "colour", c1: "#D9ECFF" },
+    { kind: "colour", c1: "#DFF3E4" }, { kind: "colour", c1: "#1D1D1B" }, { kind: "colour", c1: "#2F6BAE" },
+    { kind: "gradient", c1: "#FFB25E", c2: "#E8456B" }, { kind: "gradient", c1: "#6DD5FA", c2: "#2F6BAE" },
+    { kind: "gradient", c1: "#A8E063", c2: "#2E7D5B" }, { kind: "gradient", c1: "#C9A7F5", c2: "#4B2C83" }
+  ];
+  const posterFont = (id) => POSTER_FONTS.find(f => f.id === id) || POSTER_FONTS[0];
+
+  window.rPoster = function(b, ctx){
+    const s = make("section", "poster");
+    /* Tools down the left, the poster in the middle, and the choices for
+       whatever is picked down the right, so the whole poster fits on a
+       laptop screen with nothing to scroll past. */
+    const body = make("div", "poster-body");
+    s.appendChild(body);
+    const bar = make("div", "poster-bar");
+    body.appendChild(bar);
+    const stage = make("div", "poster-stage");
+    body.appendChild(stage);
+    const panel = make("div", "poster-panel");      // the choices for whatever is picked
+    body.appendChild(panel);
+    const canvas = make("canvas", "poster-canvas");
+    canvas.width = POSTER_W * 2; canvas.height = POSTER_H * 2;
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", "Your poster");
+    canvas.tabIndex = 0;
+    stage.appendChild(canvas);
+    const note = make("p", "poster-note");
+    s.appendChild(note);
+    const pen = canvas.getContext("2d");
+
+    let bg = { kind: "colour", c1: "#FFFFFF" };
+    let base = null;            // the poster as last saved, put back as the background
+    let items = [];
+    let picked = null;
+    let saved = null;           // { img } once there is anything to keep
+    let touched = false;        // whether they have changed anything yet
+    const history = [];
+
+    /* --- what is on the poster --- */
+    function snapshot(){
+      return { bg: Object.assign({}, bg), base: base, items: items.map(it => Object.assign({}, it)) };
+    }
+    function remember(){
+      history.push(snapshot());
+      if (history.length > 40) history.shift();
+    }
+    function textLines(it){ return String(it.text || " ").split("\n"); }
+    function fontOf(it){
+      const f = posterFont(it.font);
+      return f.weight + " " + it.size + "px " + f.face;
+    }
+    function boxOf(it){
+      if (it.kind === "text"){
+        pen.save();
+        pen.font = fontOf(it);
+        const w = Math.max(20, ...textLines(it).map(l => pen.measureText(l).width));
+        pen.restore();
+        const h = textLines(it).length * it.size * 1.15;
+        return [it.x - w / 2 - 6, it.y - h / 2 - 4, it.x + w / 2 + 6, it.y + h / 2 + 4];
+      }
+      if (it.kind === "photo") return [it.x - it.w / 2, it.y - it.h / 2, it.x + it.w / 2, it.y + it.h / 2];
+      const h = it.size / 2;
+      return [it.x - h, it.y - h, it.x + h, it.y + h];
+    }
+    function paintBg(c){
+      if (bg.kind === "gradient"){
+        const g = c.createLinearGradient(0, 0, 0, POSTER_H);
+        g.addColorStop(0, bg.c1); g.addColorStop(1, bg.c2);
+        c.fillStyle = g;
+      } else c.fillStyle = bg.c1;
+      c.fillRect(0, 0, POSTER_W, POSTER_H);
+      if (base) c.drawImage(base, 0, 0, POSTER_W, POSTER_H);
+    }
+    const FILTERS = { none: "none", bw: "grayscale(1)", bright: "brightness(1.25) saturate(1.15)",
+                      warm: "sepia(0.45) saturate(1.3)", faded: "contrast(0.8) brightness(1.1) saturate(0.7)" };
+    function paintItem(c, it){
+      if (it.kind === "text"){
+        c.save();
+        c.font = fontOf(it);
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.lineJoin = "round";
+        const lines = textLines(it), lh = it.size * 1.15;
+        lines.forEach((line, i) => {
+          const y = it.y - (lines.length - 1) * lh / 2 + i * lh;
+          if (it.outline){
+            c.strokeStyle = it.colour === "#FFFFFF" || it.colour === "#F2B705" ? "#1D1D1B" : "#FFFFFF";
+            c.lineWidth = Math.max(3, it.size / 7);
+            c.strokeText(line, it.x, y);
+          }
+          c.fillStyle = it.colour;
+          c.fillText(line, it.x, y);
+        });
+        c.restore();
+      } else if (it.kind === "photo"){
+        c.save();
+        c.filter = FILTERS[it.filter] || "none";
+        c.drawImage(it.img, it.x - it.w / 2, it.y - it.h / 2, it.w, it.h);
+        c.restore();
+        if (it.frame){
+          c.save(); c.strokeStyle = "#FFFFFF"; c.lineWidth = 10;
+          c.strokeRect(it.x - it.w / 2, it.y - it.h / 2, it.w, it.h); c.restore();
+        }
+      } else if (it.kind === "stamp"){
+        window.drawKit.paint(c, { kind: "stamp", name: it.name, x: it.x, y: it.y, size: it.size, flip: it.flip });
+      }
+    }
+    const HANDLE = 22;
+    function draw(){
+      pen.setTransform(2, 0, 0, 2, 0, 0);
+      paintBg(pen);
+      items.forEach(it => paintItem(pen, it));
+      if (picked){
+        const bx = boxOf(picked);
+        pen.save();
+        pen.strokeStyle = "#2F6BAE"; pen.lineWidth = 2; pen.setLineDash([7, 5]);
+        pen.strokeRect(bx[0], bx[1], bx[2] - bx[0], bx[3] - bx[1]);
+        pen.setLineDash([]);
+        pen.fillStyle = "#FFFFFF"; pen.strokeStyle = "#2F6BAE"; pen.lineWidth = 3;
+        pen.beginPath(); pen.arc(bx[2], bx[3], HANDLE / 2, 0, Math.PI * 2); pen.fill(); pen.stroke();
+        pen.restore();
+      }
+    }
+
+    /* --- saving: the finished picture, a moment after the last change --- */
+    let saveTimer = null;
+    function changed(){
+      touched = true;
+      draw();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveNow, 700);
+    }
+    function exportPoster(){
+      const out = make("canvas");
+      out.width = POSTER_W; out.height = POSTER_H;
+      const c = out.getContext("2d");
+      paintBg(c);
+      items.forEach(it => paintItem(c, it));
+      let url = out.toDataURL("image/jpeg", 0.78);
+      for (const q of [0.62, 0.48, 0.35]) if (url.length > POSTER_MAX) url = out.toDataURL("image/jpeg", q);
+      return url;
+    }
+    function saveNow(){
+      clearTimeout(saveTimer);
+      if (!touched) return;
+      try{ saved = { img: exportPoster() }; }catch(e){ return; }
+      ctx.changed();
+    }
+
+    /* --- the buttons along the top --- */
+    const ICON = {
+      bg: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 100 18c1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a5 5 0 005-5C21 6.5 17 3 12 3z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.5" cy="11" r="1.4"/><circle cx="10" cy="7" r="1.4"/><circle cx="15" cy="7" r="1.4"/></svg>',
+      text: '<svg viewBox="0 0 24 24"><path d="M4 5h16v3h-2V7h-5v11h2v2H9v-2h2V7H6v1H4z"/></svg>',
+      photo: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-5 4 4 3-3 4 4z"/></svg>',
+      stickers: '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.8 6 6.5.7-4.9 4.4 1.4 6.4L12 16.8 6.2 20l1.4-6.4L2.7 9.2l6.5-.7z"/></svg>',
+      undo: '<svg viewBox="0 0 24 24"><path d="M7 8h7a6 6 0 010 12h-4v-2.5h4a3.5 3.5 0 000-7H7V14L1.5 9.2 7 4.5z"/></svg>'
+    };
+    function bigBtn(icon, label, fn){
+      const btn = make("button", "poster-btn");
+      btn.type = "button";
+      btn.innerHTML = icon + "<span>" + label + "</span>";
+      btn.addEventListener("click", fn);
+      bar.appendChild(btn);
+      return btn;
+    }
+    let open = "";                 // which of Background or Stickers is showing
+    const bgBtn = bigBtn(ICON.bg, "Background", () => { pick(null); open = open === "bg" ? "" : "bg"; paintPanel(); });
+    bigBtn(ICON.text, "Add words", addWords);
+    const photoInp = make("input");
+    photoInp.type = "file"; photoInp.accept = "image/*"; photoInp.hidden = true;
+    s.appendChild(photoInp);
+    bigBtn(ICON.photo, "Add a photo", () => photoInp.click());
+    const stickBtn = bigBtn(ICON.stickers, "Stickers", () => { pick(null); open = open === "stickers" ? "" : "stickers"; paintPanel(); });
+    const undoBtn = bigBtn(ICON.undo, "Undo", () => {
+      const last = history.pop();
+      if (!last) return;
+      bg = last.bg; base = last.base; items = last.items; picked = null;
+      paintPanel(); changed();
+    });
+    undoBtn.classList.add("poster-btn-quiet");
+    /* What the poster is about, kept beside the tools so it is in view the
+       whole time they are making it, rather than scrolled away above. */
+    if (b.task){
+      const brief = make("div", "poster-brief");
+      brief.appendChild(make("b", "poster-brief-head", "Your poster should..."));
+      const words = make("div", "poster-brief-text");
+      words.innerHTML = b.task;
+      brief.appendChild(words);
+      bar.appendChild(brief);
+    }
+
+    function addWords(){
+      remember();
+      const it = { kind: "text", text: "Your words", x: POSTER_W / 2, y: POSTER_H / 2, size: 48,
+                   colour: bg.kind === "colour" && /^#(1D1D1B|2F6BAE)$/.test(bg.c1) ? "#FFFFFF" : "#1D1D1B",
+                   font: "bold", outline: false };
+      items.push(it);
+      pick(it, true);
+      changed();
+    }
+    function loadPhoto(file){
+      if (!file || !/^image\//.test(file.type)){ say("That file is not a picture."); return; }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        /* Shrunk on the way in: a phone photo is 4000 pixels across, and
+           nothing on a 600 pixel poster needs more than this. */
+        const k = Math.min(1, 1000 / Math.max(img.width, img.height));
+        const c = make("canvas");
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        const small = new Image();
+        small.onload = () => {
+          remember();
+          const fit = Math.min((POSTER_W * 0.7) / small.width, (POSTER_H * 0.5) / small.height);
+          const it = { kind: "photo", img: small, x: POSTER_W / 2, y: POSTER_H / 2,
+                       w: small.width * fit, h: small.height * fit, filter: "none", frame: false };
+          items.push(it);
+          pick(it);
+          changed();
+          say("");
+        };
+        small.src = c.toDataURL("image/jpeg", 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); say("That picture could not be opened."); };
+      img.src = url;
+    }
+    photoInp.addEventListener("change", () => { if (photoInp.files[0]) loadPhoto(photoInp.files[0]); photoInp.value = ""; });
+    /* A picture copied from anywhere can be pasted straight in, while the
+       poster is the last thing they pressed on. */
+    let mine = false;
+    document.addEventListener("pointerdown", (e) => { mine = s.contains(e.target); }, true);
+    document.addEventListener("paste", (e) => {
+      if (!mine || s.offsetParent === null) return;
+      const file = [...((e.clipboardData && e.clipboardData.items) || [])]
+        .filter(x => x.kind === "file" && /^image\//.test(x.type)).map(x => x.getAsFile())[0];
+      if (file){ e.preventDefault(); loadPhoto(file); }
+    });
+    function say(text){ note.textContent = text; note.hidden = !text; }
+    say("");
+
+    /* --- the choices under the buttons --- */
+    function swatch(colour, on, fn, title){
+      const d = make("button", "poster-swatch" + (on ? " on" : ""));
+      d.type = "button";
+      d.style.background = colour;
+      d.title = title || "This colour";
+      d.setAttribute("aria-label", d.title);
+      d.addEventListener("click", fn);
+      return d;
+    }
+    function chip(label, on, fn, title){
+      const c = make("button", "poster-chip" + (on ? " on" : ""), label);
+      c.type = "button";
+      if (title) c.title = title;
+      c.addEventListener("click", fn);
+      return c;
+    }
+    function group(label){
+      const g = make("div", "poster-group");
+      g.appendChild(make("span", "poster-label", label));
+      panel.appendChild(g);
+      return g;
+    }
+    function paintPanel(){
+      panel.innerHTML = "";
+      bgBtn.classList.toggle("on", open === "bg" && !picked);
+      stickBtn.classList.toggle("on", open === "stickers" && !picked);
+      if (picked){
+        const it = picked;
+        if (it.kind === "text"){
+          const g = group("Words");
+          const box = make("textarea", "poster-words");
+          box.rows = 2;
+          box.value = it.text;
+          box.addEventListener("focus", () => remember(), { once: true });
+          box.addEventListener("input", () => { it.text = box.value; changed(); });
+          g.appendChild(box);
+          wordsBox = box;
+          const cg = group("Colour");
+          POSTER_COLOURS.forEach(c => cg.appendChild(swatch(c, it.colour === c, () => { remember(); it.colour = c; paintPanel(); changed(); })));
+          const sg = group("Style");
+          POSTER_FONTS.forEach(f => {
+            const b2 = chip(f.label, it.font === f.id, () => { remember(); it.font = f.id; paintPanel(); changed(); });
+            b2.style.fontFamily = f.face;
+            sg.appendChild(b2);
+          });
+          sg.appendChild(chip("Outline", !!it.outline, () => { remember(); it.outline = !it.outline; paintPanel(); changed(); },
+                              "A line round the letters, so they stand out"));
+          const zg = group("Size");
+          zg.appendChild(chip("−", false, () => { remember(); it.size = Math.max(14, Math.round(it.size / 1.15)); changed(); }, "Smaller"));
+          zg.appendChild(chip("+", false, () => { remember(); it.size = Math.min(220, Math.round(it.size * 1.15)); changed(); }, "Bigger"));
+        } else if (it.kind === "photo"){
+          const fg = group("Look");
+          [["none","Normal"],["bw","Black and white"],["bright","Brighter"],["warm","Warm"],["faded","Faded"]].forEach(([id, label]) =>
+            fg.appendChild(chip(label, it.filter === id, () => { remember(); it.filter = id; paintPanel(); changed(); })));
+          fg.appendChild(chip("White border", !!it.frame, () => { remember(); it.frame = !it.frame; paintPanel(); changed(); }));
+          const zg = group("Size");
+          zg.appendChild(chip("−", false, () => { remember(); it.w /= 1.15; it.h /= 1.15; changed(); }, "Smaller"));
+          zg.appendChild(chip("+", false, () => { remember(); it.w *= 1.15; it.h *= 1.15; changed(); }, "Bigger"));
+          zg.appendChild(chip("Fill the poster", false, () => {
+            remember();
+            const k = Math.max(POSTER_W / it.w, POSTER_H / it.h);
+            it.w *= k; it.h *= k; it.x = POSTER_W / 2; it.y = POSTER_H / 2;
+            items = [it].concat(items.filter(x => x !== it));
+            changed();
+          }, "Make the photo the background"));
+        } else {
+          const zg = group("Sticker");
+          zg.appendChild(chip("−", false, () => { remember(); it.size = Math.max(30, it.size / 1.2); changed(); }, "Smaller"));
+          zg.appendChild(chip("+", false, () => { remember(); it.size = Math.min(700, it.size * 1.2); changed(); }, "Bigger"));
+          zg.appendChild(chip("Flip", !!it.flip, () => { remember(); it.flip = !it.flip; paintPanel(); changed(); }, "Face the other way"));
+        }
+        const lg = group("Layer");
+        lg.appendChild(chip("To front", false, () => { remember(); items = items.filter(x => x !== it).concat([it]); changed(); }));
+        lg.appendChild(chip("To back", false, () => { remember(); items = [it].concat(items.filter(x => x !== it)); changed(); }));
+        const del = chip("Delete", false, () => { remember(); items = items.filter(x => x !== it); pick(null); changed(); });
+        del.classList.add("poster-chip-delete");
+        lg.appendChild(del);
+        lg.appendChild(chip("Done", false, () => pick(null)));
+        return;
+      }
+      if (open === "bg"){
+        const g = group("Background");
+        POSTER_BGS.forEach(o => {
+          const fill = o.kind === "gradient" ? "linear-gradient(" + o.c1 + "," + o.c2 + ")" : o.c1;
+          const on = bg.kind === o.kind && bg.c1 === o.c1 && bg.c2 === o.c2;
+          g.appendChild(swatch(fill, on, () => { remember(); bg = Object.assign({}, o); paintPanel(); changed(); },
+                               o.kind === "gradient" ? "A colour that fades" : "This colour"));
+        });
+        if (base){
+          g.appendChild(chip("Start again", false, () => { remember(); base = null; items = []; bg = { kind: "colour", c1: "#FFFFFF" }; paintPanel(); changed(); },
+                             "Clear the poster you made before"));
+        }
+        return;
+      }
+      if (open === "stickers"){
+        const tray = window.drawKit.tray(canvas, (name, cx, cy) => {
+          remember();
+          const p = cx === null ? [POSTER_W / 2, POSTER_H / 2] : at({ clientX: cx, clientY: cy });
+          const it = { kind: "stamp", name: name, x: p[0], y: p[1], size: 150, flip: false };
+          items.push(it);
+          open = "";
+          pick(it);
+          changed();
+        });
+        tray.classList.add("poster-tray");
+        panel.appendChild(tray);
+        return;
+      }
+      panel.appendChild(make("p", "poster-hint", base
+        ? "Your saved poster is now the background, so add new words, photos and stickers on top. To start again from nothing, press Background, then Start again."
+        : "Tap anything on your poster to change it. Drag it to move it, or drag its round handle to make it bigger."));
+    }
+    let wordsBox = null;
+    function pick(it, typeNow){
+      picked = it;
+      if (it) open = "";
+      wordsBox = null;
+      paintPanel();
+      draw();
+      if (typeNow && wordsBox){ wordsBox.focus(); wordsBox.select(); }
+    }
+
+    /* --- moving and resizing on the poster --- */
+    function at(e){
+      const r = canvas.getBoundingClientRect();
+      return [ (e.clientX - r.left) / (r.width || 1) * POSTER_W, (e.clientY - r.top) / (r.height || 1) * POSTER_H ];
+    }
+    let drag = null;
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.button) return;
+      e.preventDefault();
+      /* Without preventScroll, focusing scrolls the poster into view first,
+         and the press is then read against where the poster used to be. */
+      canvas.focus({ preventScroll: true });
+      const p = at(e);
+      if (picked){
+        const bx = boxOf(picked);
+        if (Math.hypot(p[0] - bx[2], p[1] - bx[3]) <= HANDLE){
+          remember();
+          drag = { mode: "size", it: picked, from: p, start: Object.assign({}, picked), box: bx };
+          try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+          return;
+        }
+      }
+      let hit = null;
+      for (let i = items.length - 1; i >= 0 && !hit; i--){
+        const bx = boxOf(items[i]);
+        if (p[0] >= bx[0] && p[0] <= bx[2] && p[1] >= bx[1] && p[1] <= bx[3]) hit = items[i];
+      }
+      if (hit !== picked) pick(hit);
+      if (hit){
+        remember();
+        drag = { mode: "move", it: hit, from: p, x: hit.x, y: hit.y };
+        try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+      }
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const p = at(e), it = drag.it;
+      if (drag.mode === "move"){
+        it.x = Math.max(0, Math.min(POSTER_W, drag.x + p[0] - drag.from[0]));
+        it.y = Math.max(0, Math.min(POSTER_H, drag.y + p[1] - drag.from[1]));
+      } else {
+        /* The handle's distance from the middle, then and now, says how much bigger. */
+        const cx = (drag.box[0] + drag.box[2]) / 2, cy = (drag.box[1] + drag.box[3]) / 2;
+        const was = Math.hypot(drag.from[0] - cx, drag.from[1] - cy) || 1;
+        const k = Math.max(0.15, Math.min(8, Math.hypot(p[0] - cx, p[1] - cy) / was));
+        if (it.kind === "text") it.size = Math.max(12, Math.min(260, drag.start.size * k));
+        else if (it.kind === "photo"){ it.w = Math.max(30, drag.start.w * k); it.h = Math.max(30, drag.start.h * k); }
+        else it.size = Math.max(24, Math.min(800, drag.start.size * k));
+      }
+      draw();
+    });
+    const endDrag = () => { if (drag){ drag = null; changed(); } };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+    canvas.addEventListener("dblclick", () => { if (picked && picked.kind === "text" && wordsBox){ wordsBox.focus(); wordsBox.select(); } });
+    canvas.addEventListener("keydown", (e) => {
+      if ((e.key === "Delete" || e.key === "Backspace") && picked){
+        e.preventDefault();
+        remember(); items = items.filter(x => x !== picked); pick(null); changed();
+      }
+    });
+
+    /* A poster to start from: a title waiting to be written. It is not
+       their work until they change something, so it is not saved yet. */
+    items.push({ kind: "text", text: b.heading || "Your title here", x: POSTER_W / 2, y: 110, size: 64,
+                 colour: "#1D1D1B", font: "bold", outline: false });
+    paintPanel();
+    draw();
+
+    return {
+      section: s,
+      get: () => { if (touched) saveNow(); return saved; },
+      set: (v) => {
+        if (!v || typeof v.img !== "string" || !/^data:image\//.test(v.img)) return;
+        saved = { img: v.img };
+        const img = new Image();
+        img.onload = () => { base = img; items = []; picked = null; paintPanel(); draw(); };
+        img.src = v.img;
+      },
+      done: () => !!saved
+    };
+  };
+  /* For the PDF and anything else that only wants the picture. */
+  window.posterImage = (v) => (v && typeof v.img === "string") ? v.img : "";
+
+  /* ===================================================================
+     BOSS BATTLE
+     { type:"boss", title, task, boss, look, hits, hearts,
+       questions:[{ q, options, answers:[i], why, hint }] }
+     A quiz with something at stake. Every right answer knocks a heart off
+     the boss's health bar; every wrong one costs the student a heart, and
+     shows them the right answer and why, so a lost heart still teaches
+     something. Run out of questions and they come round again in a new
+     order. Lose, and Try again starts a fresh fight: nobody is stuck, and
+     the second go is easier because they have just learnt the answers.
+     =================================================================== */
+  const BOSS_LOOKS = {
+    goblin: { body: "#5DAA4B", dark: "#3C7A2F", extra: "horns" },
+    dragon: { body: "#D9533F", dark: "#9E3527", extra: "spikes" },
+    robot:  { body: "#8FA0B0", dark: "#5D6F80", extra: "antenna" },
+    ghost:  { body: "#B9A6E8", dark: "#7D67B8", extra: "none" }
+  };
+  function bossSvg(look){
+    const L = BOSS_LOOKS[look] || BOSS_LOOKS.goblin;
+    const extra = L.extra === "horns"
+      ? '<path d="M40 38 L30 10 L55 30 Z M120 38 L130 10 L105 30 Z" fill="#F2E3B3" stroke="#1D1D1B" stroke-width="3"/>'
+      : L.extra === "spikes"
+      ? '<path d="M50 30 L60 8 L70 28 L80 4 L90 28 L100 8 L110 30 Z" fill="' + L.dark + '" stroke="#1D1D1B" stroke-width="3"/>'
+      : L.extra === "antenna"
+      ? '<path d="M80 30 V10" stroke="#1D1D1B" stroke-width="4"/><circle cx="80" cy="8" r="7" fill="#C0392B" stroke="#1D1D1B" stroke-width="3"/>'
+      : "";
+    const shape = look === "robot"
+      ? '<rect x="25" y="28" width="110" height="110" rx="18" fill="' + L.body + '" stroke="#1D1D1B" stroke-width="4"/>'
+      : look === "ghost"
+      ? '<path d="M25 140 V80 a55 55 0 0 1 110 0 V140 l-18 -14 -18 14 -19 -14 -18 14 -19 -14 z" fill="' + L.body + '" stroke="#1D1D1B" stroke-width="4"/>'
+      : '<ellipse cx="80" cy="88" rx="58" ry="56" fill="' + L.body + '" stroke="#1D1D1B" stroke-width="4"/>';
+    return '<svg class="boss-art" viewBox="0 0 160 160" aria-hidden="true">' + extra + shape +
+      '<path d="M48 66 l20 8 M112 66 l-20 8" stroke="#1D1D1B" stroke-width="5" stroke-linecap="round"/>' +
+      '<circle cx="60" cy="84" r="10" fill="#FFFFFF" stroke="#1D1D1B" stroke-width="3"/><circle cx="100" cy="84" r="10" fill="#FFFFFF" stroke="#1D1D1B" stroke-width="3"/>' +
+      '<circle class="boss-eye" cx="62" cy="86" r="4.5" fill="#1D1D1B"/><circle class="boss-eye" cx="98" cy="86" r="4.5" fill="#1D1D1B"/>' +
+      '<path class="boss-mouth" d="M58 112 q22 -14 44 0" fill="none" stroke="#1D1D1B" stroke-width="5" stroke-linecap="round"/>' +
+      '<path d="M66 108 l4 8 4 -7 M86 109 l4 7 4 -8" fill="#FFFFFF" stroke="#1D1D1B" stroke-width="2"/></svg>';
+  }
+  const HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.2 0 3.6 1.3 4.3 2.5h2c.7-1.2 2.1-2.5 4.3-2.5 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg>';
+
+  window.rBoss = function(b, ctx){
+    const qs = (b.questions || []).filter(q => q && q.q && Array.isArray(q.options) && q.options.length > 1);
+    const maxHits = Math.max(1, Math.min(30, Number(b.hits) || Math.min(8, qs.length || 1)));
+    const maxHearts = Math.max(1, Math.min(10, Number(b.hearts) || 3));
+    const name = b.boss || "The Boss";
+    const s = make("section", "boss");
+
+    const arena = make("div", "boss-arena");
+    s.appendChild(arena);
+    const foe = make("div", "boss-foe");
+    foe.innerHTML = bossSvg(b.look);
+    arena.appendChild(foe);
+    const stats = make("div", "boss-stats");
+    arena.appendChild(stats);
+    stats.appendChild(make("b", "boss-name", name));
+    const hpOuter = make("div", "boss-hp");
+    hpOuter.setAttribute("role", "progressbar");
+    hpOuter.setAttribute("aria-label", name + "'s health");
+    const hpFill = make("div", "boss-hp-fill");
+    hpOuter.appendChild(hpFill);
+    stats.appendChild(hpOuter);
+    const hpWords = make("span", "boss-hp-words");
+    stats.appendChild(hpWords);
+    const you = make("div", "boss-you");
+    stats.appendChild(you);
+    you.appendChild(make("span", "boss-you-label", "Your hearts"));
+    const heartRow = make("span", "boss-hearts");
+    you.appendChild(heartRow);
+
+    const card = make("div", "boss-card");
+    s.appendChild(card);
+
+    let hp = maxHits, hearts = maxHearts, order = [], at = 0;
+    let won = false, tries = 0, bestHearts = 0, right = 0, asked = 0;
+    let state = "start";              // start, ask, answered, won, lost
+
+    function shuffle(list){
+      const a = list.slice();
+      for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+      return a;
+    }
+    function nextQuestion(){
+      if (at >= order.length){ order = shuffle(qs.map((q, i) => i)); at = 0; }
+      return qs[order[at++]];
+    }
+    function paintStats(){
+      hpFill.style.width = (hp / maxHits * 100) + "%";
+      hpOuter.setAttribute("aria-valuenow", String(hp));
+      hpOuter.setAttribute("aria-valuemax", String(maxHits));
+      hpWords.textContent = hp + " of " + maxHits + " health left";
+      heartRow.innerHTML = "";
+      for (let i = 0; i < maxHearts; i++){
+        const h = make("span", "boss-heart" + (i < hearts ? "" : " lost"));
+        h.innerHTML = HEART;
+        heartRow.appendChild(h);
+      }
+      heartRow.setAttribute("aria-label", hearts + " hearts left");
+    }
+    /* A short shake or flash. Kept in a custom property so the
+       reduced-motion rule lets it through, the same as the waiting dots. */
+    function flash(el, cls){
+      el.classList.remove(cls);
+      void el.offsetWidth;
+      el.classList.add(cls);
+      setTimeout(() => el.classList.remove(cls), 700);
+    }
+    function startFight(){
+      hp = maxHits; hearts = maxHearts;
+      order = shuffle(qs.map((q, i) => i)); at = 0;
+      state = "ask";
+      foe.classList.remove("boss-beaten");
+      paintStats();
+      ask();
+    }
+    function ask(){
+      const q = nextQuestion();
+      card.innerHTML = "";
+      card.appendChild(make("p", "boss-q-count", "Question " + (asked + 1)));
+      const qt = make("p", "boss-q");
+      qt.innerHTML = q.q;
+      card.appendChild(qt);
+      const opts = make("div", "boss-opts");
+      card.appendChild(opts);
+      const answers = (q.answers || [q.answer || 0]).map(Number);
+      q.options.forEach((o, i) => {
+        const btn = make("button", "boss-opt");
+        btn.type = "button";
+        btn.innerHTML = o;
+        btn.addEventListener("click", () => answer(q, i, answers, opts));
+        opts.appendChild(btn);
+      });
+    }
+    function answer(q, i, answers, opts){
+      if (state !== "ask") return;
+      state = "answered";
+      asked++;
+      const ok = answers.indexOf(i) >= 0;
+      [...opts.children].forEach((btn, k) => {
+        btn.disabled = true;
+        if (answers.indexOf(k) >= 0) btn.classList.add("right");
+        else if (k === i) btn.classList.add("wrong");
+      });
+      const fb = make("div", "boss-fb " + (ok ? "ok" : "no"));
+      if (ok){
+        right++; hp--;
+        fb.appendChild(make("b", "", hp > 0 ? "Hit! " + name + " loses a heart." : "Final hit!"));
+        flash(foe, "boss-hit");
+      } else {
+        hearts--;
+        fb.appendChild(make("b", "", "Ouch! You lose a heart."));
+        flash(foe, "boss-laugh");
+        flash(heartRow, "boss-hurt");
+      }
+      if (q.why){
+        const w = make("p", "");
+        w.innerHTML = q.why;
+        fb.appendChild(w);
+      }
+      card.appendChild(fb);
+      paintStats();
+      ctx.changed();
+      const go = make("button", "btn-primary boss-next");
+      go.type = "button";
+      if (hp <= 0){ go.textContent = "See what happened"; go.addEventListener("click", winFight); }
+      else if (hearts <= 0){ go.textContent = "See what happened"; go.addEventListener("click", loseFight); }
+      else { go.textContent = "Next question"; go.addEventListener("click", () => { state = "ask"; ask(); }); }
+      card.appendChild(go);
+      go.focus();
+    }
+    function endCard(title, words, again){
+      card.innerHTML = "";
+      card.appendChild(make("p", "boss-end-title", title));
+      card.appendChild(make("p", "boss-end-words", words));
+      const btn = make("button", "btn-primary", again);
+      btn.type = "button";
+      btn.addEventListener("click", startFight);
+      card.appendChild(btn);
+    }
+    function winFight(){
+      state = "won"; won = true; tries++;
+      bestHearts = Math.max(bestHearts, hearts);
+      foe.classList.add("boss-beaten");
+      ctx.changed();
+      endCard("You beat " + name + "!",
+        "You won with " + hearts + (hearts === 1 ? " heart" : " hearts") + " left. " +
+        (hearts === maxHearts ? "Not a single heart lost. Legendary!" : "Can you win without losing a heart?"),
+        "Fight again");
+    }
+    function loseFight(){
+      state = "lost"; tries++;
+      ctx.changed();
+      endCard(name + " won this time.",
+        "Every answer you saw was a clue. Try again: you know more than you did a minute ago.", "Try again");
+    }
+    function startCard(){
+      state = "start";
+      card.innerHTML = "";
+      card.appendChild(make("p", "boss-end-title", "Can you beat " + name + "?"));
+      card.appendChild(make("p", "boss-end-words",
+        "Each right answer knocks a heart off " + name + ". Each wrong answer costs you one of your " + maxHearts +
+        ". Hit " + maxHits + " times to win."));
+      const btn = make("button", "btn-primary", "Start the battle");
+      btn.type = "button";
+      btn.addEventListener("click", startFight);
+      card.appendChild(btn);
+      paintStats();
+    }
+    if (!qs.length){ card.appendChild(make("p", "boss-end-words", "This battle has no questions yet.")); }
+    else startCard();
+
+    return {
+      section: s,
+      get: () => ({ won: won, tries: tries, bestHearts: bestHearts, right: right, asked: asked }),
+      set: (v) => {
+        if (!v || typeof v !== "object") return;
+        won = !!v.won; tries = Number(v.tries) || 0; bestHearts = Number(v.bestHearts) || 0;
+        right = Number(v.right) || 0; asked = Number(v.asked) || 0;
+        if (won && state === "start" && qs.length){
+          foe.classList.add("boss-beaten");
+          hp = 0; paintStats();
+          endCard("You beat " + name + "!", "Your best: " + bestHearts + (bestHearts === 1 ? " heart" : " hearts") + " left.", "Fight again");
+        }
+      },
+      done: () => won || tries >= 2
+    };
+  };
+
 })();

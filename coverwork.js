@@ -125,10 +125,15 @@
         return v && Array.isArray(v.nodes) && v.nodes.length >= 3 ? "" : "Add at least two branches to the mind map.";
       case "board":
         return v && Array.isArray(v.strokes) && v.strokes.length ? "" : "Draw on the whiteboard.";
+      case "poster":
+        return v && typeof v.img === "string" && v.img ? "" : "Make your poster.";
+      /* Beaten, or two real goes at it: losing twice must not strand anyone. */
+      case "boss":
+        return v && (v.won || Number(v.tries) >= 2) ? "" : "Battle the boss.";
       case "notes":
         return String(v == null ? "" : v).replace(/<[^>]*>/g, "").trim() ? "" : "Write your notes.";
       case "choice": {
-        if (typeof v !== "number" || v < 0) return "Choose your challenge.";
+        if (typeof v !== "number" || v < 0) return "Make your choice.";
         const picked = (b.options || [])[v];
         return listNeed(picked ? picked.blocks : [], ctx);
       }
@@ -139,7 +144,7 @@
   /* Whether a task is something to do rather than something to read. Reading
      has nothing to finish, so only Understood ends it. */
   const WORK = ["quiz","short","table","blanks","order","mc","hotspot","label","question",
-                "storyboard","mindmap","board","notes","choice","group"];
+                "storyboard","mindmap","board","notes","choice","group","poster","boss"];
   const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo;
   /* Everything right, so there is nothing left to decide and Finished can be
      pressed for them. A quiz waits for its score to be up, and a short answer
