@@ -31,8 +31,11 @@
 
   /* ===================================================================
      BOARD GAME
-     { type:"boardgame", title, task, squares, questions:[{ q, options,
+     { type:"boardgame", title, task, squares, goal, questions:[{ q, options,
        answers:[i], why }] }
+     goal is coins to bank across as many games as it takes, so one quick
+     game is not the whole task. Answering that many questions also counts,
+     so a student getting a lot wrong is never left behind.
      The questions are a quiz's own. The board is made from squares alone,
      so a teacher only writes questions: the same number always gives the
      same board, with shortcuts, sharks, power banks and chests in the same
@@ -64,6 +67,15 @@
     return out;
   }
   window.boardGameSquares = boardSquares;
+  /* Whether a board game has had enough play, the same rule coverwork.js
+     keeps: with a coin bank, filling it or answering as many questions as
+     it holds coins; without one, reaching the boat once or ten questions. */
+  window.boardGameDone = function(b, v){
+    const goal = clampInt(b && b.goal, 0, 500, 0);
+    const n = (k) => Math.max(0, parseInt(v && v[k], 10) || 0);
+    if (goal) return n("bank") >= goal || n("asked") >= goal;
+    return n("games") > 0 || n("asked") >= 10;
+  };
   const DICE = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
   window.rBoardGame = function(b, ctx){
@@ -73,7 +85,8 @@
     const kinds = boardSquares(N);
     const pool = (b.questions || []).filter(q => q && q.q && Array.isArray(q.options) && q.options.length > 1);
 
-    let pos = 0, coins = 0, best = 0, games = 0, asked = 0, right = 0;
+    let pos = 0, coins = 0, best = 0, games = 0, asked = 0, right = 0, bank = 0;
+    const goal = clampInt(b.goal, 0, 500, 0);
     let busy = false, waitingAnswer = false, finished = false;
     let deck = [], touched = false;
 
@@ -117,6 +130,13 @@
     side.appendChild(top);
     const score = make("div", "bg-score");
     side.appendChild(score);
+    const bankBox = make("div", "bg-bank");
+    const bankBar = make("div", "bg-bank-bar");
+    const bankFill = make("div", "bg-bank-fill");
+    const bankSay = make("span", "bg-bank-say");
+    bankBar.appendChild(bankFill);
+    bankBox.appendChild(bankSay); bankBox.appendChild(bankBar);
+    if (goal) side.appendChild(bankBox);
     const said = make("p", "bg-said");
     said.setAttribute("aria-live", "polite");
     side.appendChild(said);
@@ -130,7 +150,16 @@
       score.appendChild(make("span", "bg-coins", "\u{1FA99} " + coins + (coins === 1 ? " coin" : " coins")));
       score.appendChild(make("span", "bg-where", "Square " + (pos + 1) + " of " + N));
       if (games) score.appendChild(make("span", "bg-best", "Best: " + best + " coins"));
+      if (goal){
+        const full = bank >= goal;
+        bankFill.style.width = Math.min(100, bank / goal * 100) + "%";
+        bankBox.classList.toggle("full", full);
+        bankSay.textContent = full ? "\u2B50 Coin bank full: " + bank + " coins banked. Keep playing for a high score!"
+                                   : "Coin bank: " + bank + " of " + goal + " coins. Keep playing to fill it.";
+      }
     }
+    /* every coin goes in the bank as well as this game's score */
+    function earn(n){ coins += n; bank += n; }
     function place(){
       cells[pos].appendChild(token);
       cells.forEach((c, i) => c.classList.toggle("here", i === pos));
@@ -166,7 +195,7 @@
         say(sp.say);
         if (kind === "shortcut"){ await wait(500); await hop(Math.min(N - 1, pos + 4)); return land(true); }
         if (kind === "shark"){ await wait(500); await hop(Math.max(0, pos - 3)); return land(true); }
-        if (kind === "chest"){ coins += 3; paintScore(); }
+        if (kind === "chest"){ earn(3); paintScore(); }
         busy = false; canRoll(true);
         return;
       }
@@ -194,7 +223,7 @@
             if (k === want) x.classList.add("right");
             else if (k === i) x.classList.add("wrong");
           });
-          if (ok){ right++; coins += 2; }
+          if (ok){ right++; earn(2); }
           const fb = make("div", "bg-fb " + (ok ? "ok" : "no"));
           fb.appendChild(make("b", "", ok ? "Right! 2 coins." : "Not this time. The answer is: " + q.options[want]));
           if (q.why) fb.appendChild(make("p", "", q.why));
@@ -218,8 +247,11 @@
       card.hidden = false;
       card.innerHTML = "";
       card.appendChild(make("p", "bg-finish", "⛵ You made it to the boat!"));
+      const more = goal && bank < goal
+        ? " Your coin bank needs " + (goal - bank) + " more. Play again to fill it!"
+        : " Play again for different questions, and try to beat your score.";
       card.appendChild(make("p", "bg-endsay", "You finished with " + coins + (coins === 1 ? " coin" : " coins") +
-        (games > 1 ? ". Your best is " + best + "." : ".") + " Play again for different questions, and try to beat your score."));
+        (games > 1 ? ". Your best is " + best + "." : ".") + more));
       const again = make("button", "btn-primary", "Play again");
       again.type = "button";
       again.addEventListener("click", () => {
@@ -259,7 +291,7 @@
 
     return {
       section: s,
-      get: () => touched ? { pos, coins, best, games, asked, right } : null,
+      get: () => touched ? { pos, coins, best, games, asked, right, bank } : null,
       set: (v) => {
         if (!v || typeof v !== "object") return;
         pos = clampInt(v.pos, 0, N - 1, 0);
@@ -268,12 +300,13 @@
         games = Math.max(0, parseInt(v.games, 10) || 0);
         asked = Math.max(0, parseInt(v.asked, 10) || 0);
         right = Math.max(0, parseInt(v.right, 10) || 0);
+        bank = Math.max(0, parseInt(v.bank, 10) || 0);
         touched = true;
         /* back on the last square means they were looking at the end of a game */
         if (pos === N - 1){ pos = 0; coins = 0; }
         place();
       },
-      done: () => games > 0 || asked >= 10
+      done: () => window.boardGameDone(b, { games, asked, bank })
     };
   };
 

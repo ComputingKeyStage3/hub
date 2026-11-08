@@ -390,6 +390,7 @@ const TASK_ICONS = {
   hotspot:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="14" cy="11" r="3.5"/><path d="M14 11h.01M7 16l2.5-2.5"/>',
   boardgame: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/>',
   swipe:     '<rect x="6" y="4" width="11" height="15" rx="2" transform="rotate(10 12 12)"/><path d="M3 20h5M16 20h5"/>',
+  quest:     '<path d="M3 20c4-6 14-6 18 0"/><path d="M12 15V4l6 3-6 3"/>',
   pixels:    '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>',
   picture:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 8"/>',
   embed:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
@@ -1466,6 +1467,8 @@ EDITORS.choice = function(b, k){
   const another = el("button","btn-ghost bmini2","+ Another choice");
   another.addEventListener("click", () => { b.options.push({ label:"", blocks:[] }); redraw(); schedulePreview(); });
   add(another);
+  k.settings(() => k.toggleRow([["swap", "Continue moves to a choice not tried yet", false]], "Options",
+    "With this on, pressing Continue after one choice opens the other instead of the next page, if they have not touched it. It does this once for each choice."));
 };
 
 EDITORS.image = function(b, k){
@@ -1885,7 +1888,101 @@ EDITORS.boardgame = function(b, k){
   const { F } = k;
   F("Instruction (optional)", "task", { area:true, rows:2 });
   F("Squares on the board", "squares", { num:true, help:"20 to 48. About 36 makes a game of five minutes or so. Shortcuts, sharks and treasure are put in for you." });
+  F("Coins to bank (optional)", "goal", { num:true, help:"Coins to collect across as many games as it takes, so they play more than once. A game earns about 10 to 15. Answering this many questions also counts, so nobody is stuck." });
   EDITORS.quiz(b, k);           // its own Heading box comes first in here
+};
+
+/* Quest: a look, a coin bank, and worlds, each a name and its own
+   questions. One answer is right, picked with the round button beside it. */
+EDITORS.quest = function(b, k){
+  const { F, add, redraw } = k;
+  F("Heading (optional)", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+  const tw = el("div","bfield");
+  const th = el("div","brow");
+  th.appendChild(el("label","","How it looks"));
+  th.appendChild(helpDot("Changes the sky, the ground, the hazards and the finish. It plays the same whichever you pick."));
+  tw.appendChild(th);
+  const tr = el("div","brow");
+  [["islands","Floating islands"],["space","Outer space"],["city","City rooftops"],["snow","Snowy peaks"]].forEach(pair => {
+    const btn = el("button","btn-ghost bmini2" + ((b.theme || "islands") === pair[0] ? " right" : ""), pair[1]);
+    btn.type = "button";
+    btn.addEventListener("click", () => { b.theme = pair[0]; saveDraft(); redraw(); schedulePreview(); });
+    tr.appendChild(btn);
+  });
+  tw.appendChild(tr);
+  add(tw);
+  F("Coins to bank (optional)", "goal", { num:true, help:"Coins to collect across levels, so they keep playing. One level earns about 50 to 70, so 150 is roughly three levels. Answering a question for every 12 coins also counts, so nobody is stuck." });
+  F("What a hazard says (optional)", "hazard", { help:"Shown when a hazard knocks them back, for example: A phishing hook! Do not take the bait." });
+
+  if (!Array.isArray(b.worlds) || !b.worlds.length) b.worlds = [{ name:"", questions: Array.isArray(b.questions) ? b.questions : [] }];
+  const changed = () => { saveDraft(); schedulePreview(); };
+  const input = (value, ph, set) => {
+    const i = el("input"); i.type = "text"; i.value = value || ""; i.placeholder = ph;
+    i.addEventListener("input", () => { set(i.value); changed(); });
+    return i;
+  };
+  b.worlds.forEach((w, wi) => {
+    if (!Array.isArray(w.questions)) w.questions = [];
+    const box = el("div","quest-world");
+    const head = el("div","brow");
+    head.appendChild(el("b","", "World " + (wi + 1)));
+    head.appendChild(input(w.name, "Its name, for example Password Peak", v => { w.name = v; }));
+    if (b.worlds.length > 1){
+      const rm = el("button","btn-ghost bmini2","Remove world");
+      rm.type = "button";
+      rm.addEventListener("click", () => askDelete("World " + (wi + 1), () => { b.worlds.splice(wi, 1); changed(); redraw(); }));
+      head.appendChild(rm);
+    }
+    box.appendChild(head);
+    w.questions.forEach((q, qi) => {
+      if (!Array.isArray(q.options)) q.options = ["", ""];
+      if (!Array.isArray(q.answers)) q.answers = [0];
+      const qb = el("div","quest-q");
+      const qh = el("div","brow");
+      qh.appendChild(input(q.q, "Question " + (qi + 1), v => { q.q = v; }));
+      const rm = el("button","btn-ghost bmini","\u2715"); rm.type = "button"; rm.title = "Remove this question";
+      rm.addEventListener("click", () => { w.questions.splice(qi, 1); changed(); redraw(); });
+      qh.appendChild(rm);
+      qb.appendChild(qh);
+      const group = "qw" + wi + "_" + qi + "_" + Math.random().toString(36).slice(2, 7);
+      q.options.forEach((o, oi) => {
+        const row = el("label","quest-opt");
+        const radio = el("input"); radio.type = "radio"; radio.name = group; radio.checked = Number(q.answers[0]) === oi;
+        radio.title = "The right answer";
+        radio.addEventListener("change", () => { q.answers = [oi]; changed(); });
+        row.appendChild(radio);
+        row.appendChild(input(o, "Answer " + (oi + 1), v => { q.options[oi] = v; }));
+        if (q.options.length > 2){
+          const x = el("button","btn-ghost bmini","\u2715"); x.type = "button"; x.title = "Remove this answer";
+          x.addEventListener("click", (ev) => { ev.preventDefault(); q.options.splice(oi, 1);
+            if (Number(q.answers[0]) >= q.options.length) q.answers = [0]; changed(); redraw(); });
+          row.appendChild(x);
+        }
+        qb.appendChild(row);
+      });
+      const qr = el("div","brow");
+      if (q.options.length < 4){
+        const more = el("button","btn-ghost bmini2","+ Answer"); more.type = "button";
+        more.addEventListener("click", () => { q.options.push(""); changed(); redraw(); });
+        qr.appendChild(more);
+      }
+      const tf = el("button","btn-ghost bmini2","True / False"); tf.type = "button";
+      tf.title = "Make the answers True and False";
+      tf.addEventListener("click", () => { q.options = ["True", "False"]; q.answers = [0]; changed(); redraw(); });
+      qr.appendChild(tf);
+      qb.appendChild(qr);
+      qb.appendChild(input(q.why, "Why (optional), shown after they answer", v => { q.why = v; }));
+      box.appendChild(qb);
+    });
+    const addQ = el("button","btn-ghost bmini2","+ Question"); addQ.type = "button";
+    addQ.addEventListener("click", () => { w.questions.push({ q:"", options:["",""], answers:[0], why:"" }); changed(); redraw(); });
+    box.appendChild(addQ);
+    add(box);
+  });
+  const addW = el("button","btn-ghost bmini2","+ Another world"); addW.type = "button";
+  addW.addEventListener("click", () => { b.worlds.push({ name:"", questions:[{ q:"", options:["",""], answers:[0], why:"" }] }); changed(); redraw(); });
+  add(addW);
 };
 
 /* Swipe: two answers, and a pile of cards each belonging to one of them. */

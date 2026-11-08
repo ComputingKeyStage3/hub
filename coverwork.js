@@ -151,8 +151,22 @@
       }
       /* Easy games for a class that needs one: once round the board or
          through the pile, or a fair go at it, is enough. */
-      case "boardgame":
-        return v && (Number(v.games) > 0 || Number(v.asked) >= 10) ? "" : "Play until you reach the boat.";
+      case "boardgame": {
+        /* the same rule as window.boardGameDone in games.js, which Mark
+           work does not load */
+        const goal = Math.max(0, Math.min(500, parseInt(b.goal, 10) || 0));
+        const n = (k) => Math.max(0, parseInt(v && v[k], 10) || 0);
+        if (goal) return n("bank") >= goal || n("asked") >= goal ? "" : "Keep playing to fill your coin bank.";
+        return n("games") > 0 || n("asked") >= 10 ? "" : "Play until you reach the boat.";
+      }
+      case "quest": {
+        /* the same rule as window.questDone in quest.js */
+        const goal = Math.max(0, Math.min(500, parseInt(b.goal, 10) || 0));
+        const n = (k) => Math.max(0, parseInt(v && v[k], 10) || 0);
+        const worlds = Array.isArray(b.worlds) && b.worlds.length ? b.worlds.length : 1;
+        if (goal) return n("bank") >= goal || n("asked") >= Math.max(10, Math.ceil(goal / 12)) ? "" : "Keep exploring to fill your coin bank.";
+        return n("levels") >= worlds || n("asked") >= 10 ? "" : "Play through every world.";
+      }
       case "swipe": {
         const n = (b.cards || []).length;
         return v && (Number(v.rounds) > 0 || Number(v.at) >= Math.min(10, n)) ? "" : "Sort the cards.";
@@ -171,7 +185,7 @@
   /* Whether a task is something to do rather than something to read. Reading
      has nothing to finish, so only Understood ends it. */
   const WORK = ["quiz","short","table","blanks","order","mc","hotspot","label","question",
-                "storyboard","mindmap","board","notes","choice","group","poster","boss","pixels","boardgame","swipe"];
+                "storyboard","mindmap","board","notes","choice","group","poster","boss","pixels","boardgame","swipe","quest"];
   const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo;
   /* Everything right, so there is nothing left to decide and Finished can be
      pressed for them. A quiz waits for its score to be up, and a short answer

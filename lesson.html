@@ -26,6 +26,7 @@
 <script src="tasks-extra.js"></script>
 <script src="pixels.js"></script>
 <script src="games.js"></script>
+<script src="quest.js"></script>
 <script src="psd.js"></script>
 <script src="blend.js"></script>
 <script src="blendview.js"></script>
@@ -3238,6 +3239,21 @@ let askingToMoveOn = false;
    answer box, the checklist beside code, the quiz's own marking. A pop-up on
    top of that was one more thing to press past, and it taught a class that
    the way through a task is the button reading "move on anyway". */
+/* A choice on this page set to swap moves on to the option not yet tried
+   instead of the page changing. See swapOnContinue in rChoice. */
+function swapChoiceHere(){
+  const here = steps[step] && steps[step].qid;
+  const page = ((lesson && lesson.blocks) || []).find(b => b.id === here);
+  let moved = false;
+  const walk = (list) => (list || []).forEach(b => {
+    if (moved || !b) return;
+    if (b.type === "choice" && b.swap === true && fields[b.id] && fields[b.id].swapOnContinue)
+      moved = fields[b.id].swapOnContinue();
+    else if (b.type === "extension" || b.type === "group" || b.type === "page") walk(b.blocks);
+  });
+  walk(page ? (page.type === "page" ? page.blocks : [page]) : []);
+  return moved;
+}
 async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
   if (assessPages){
@@ -3268,6 +3284,7 @@ async function tryContinue(){
     return;
   }
   if (coverHolds()) return;
+  if (swapChoiceHere()) return;
   if (step === steps.length - 1){ await tryFinish(); return; }
 
   askingToMoveOn = true;
@@ -3715,6 +3732,9 @@ const TASK_ICON = {
   /* a dice */
   boardgame: { name:"Board game",
                d:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/>' },
+  /* a flag on a hill */
+  quest:     { name:"Quest",
+               d:'<path d="M3 20c4-6 14-6 18 0"/><path d="M12 15V4l6 3-6 3"/>' },
   /* a card leaning to one side */
   swipe:     { name:"Swipe",
                d:'<rect x="6" y="4" width="11" height="15" rx="2" transform="rotate(10 12 12)"/><path d="M3 20h5M16 20h5"/>' },
@@ -4936,7 +4956,7 @@ function buildBlock(b, i){
               exam:rExamTask, table:rTableTask, hotspot:rHotspotTask,
               extension:rExtension, group:rGroup, choice:rChoice,
               poster:rPosterTask, boss:rBossTask, pixels:rPixelsTask,
-              boardgame:rBoardGameTask, swipe:rSwipeTask }[b.type];
+              boardgame:rBoardGameTask, swipe:rSwipeTask, quest:rQuestTask }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try {
     const made = R(b);
@@ -5610,9 +5630,23 @@ function rChoice(b){
     s.appendChild(panel);
     opts.push({ btn, panel, kids });
   });
+  /* With swap on, Continue takes a student to the option they have not
+     tried rather than off the page, once each: a poster finished early is
+     followed by the Scratch game. "Not tried" is that option's tasks still
+     holding what they held when the page was built, before any saved work
+     was put back, so work from an earlier visit counts as tried. */
+  const swapNote = el("p","choice-swap");
+  swapNote.hidden = true;
+  s.insertBefore(swapNote, row.nextSibling);
+  const holding = (k) => JSON.stringify((b.options[k].blocks || []).map(c => {
+    try{ return fields[c.id] ? fields[c.id].get() : null; }catch(e){ return null; }
+  }));
+  const atStart = opts.map((_, k) => holding(k));
+  const seen = new Set();
   let picked = -1;
   function pick(k, chosenNow){
     picked = k;
+    seen.add(k);
     opts.forEach((o, i) => {
       o.btn.classList.toggle("on", i === k);
       o.panel.hidden = i !== k;
@@ -5631,7 +5665,20 @@ function rChoice(b){
     get: () => picked,
     /* Older work may have been saved before this task had any options, so a
        number that no longer points at one is treated as no choice at all. */
-    set: (v) => { const n = Number(v); if (n >= 0 && n < opts.length) pick(n); }
+    set: (v) => { const n = Number(v); if (n >= 0 && n < opts.length) pick(n); },
+    /* true if it moved them on to another option, so Continue stays put */
+    swapOnContinue: () => {
+      if (b.swap !== true || picked < 0) return false;
+      const k = opts.findIndex((_, i) => i !== picked && !seen.has(i) && holding(i) === atStart[i]);
+      if (k < 0) return false;
+      const from = (b.options[picked] && b.options[picked].label) || "that";
+      pick(k, true);
+      markDirty();
+      swapNote.textContent = "You have had a go at " + from + ". Now try " + ((b.options[k] && b.options[k].label) || "the other one") + "!";
+      swapNote.hidden = false;
+      s.scrollIntoView({ block: "start", behavior: "smooth" });
+      return true;
+    }
   };
   return { section:s,
            onShow: () => { if (picked >= 0) opts[picked].kids.forEach(k => { if (k.onShow) k.onShow(); }); },
@@ -8660,6 +8707,7 @@ const rHotspotTask = (b) => wrapExtra(b, window.rHotspot, "Click the right spot"
 const rPixelsTask  = (b) => wrapExtra(b, window.rPixels,  "Pixel studio");
 const rBoardGameTask = (b) => wrapExtra(b, window.rBoardGame, "Board game");
 const rSwipeTask   = (b) => wrapExtra(b, window.rSwipe,   "Swipe");
+const rQuestTask   = (b) => wrapExtra(b, window.rQuest,   "Quest");
 /* An exam question is nearly one of the four above, but it also reports what
    it scored, which wrapExtra has no room for: fields[] would drop result()
    and the coverage screen would have nothing to read. */
@@ -13804,6 +13852,16 @@ function buildPdf(){
                  text: games ? "Reached the boat " + games + (games === 1 ? " time" : " times") + ", best " + ((v && v.best) || 0) + " coins"
                      : asked ? "Started, not finished yet" : "Not started",
                  colour: games ? PDF.GREEN : asked ? PDF.AMBER : PDF.RED });
+      if (asked) out.push({ t: "text", face: "small", text: v.right + " right out of " + asked + " questions answered" });
+      return out;
+    }
+    if (b.type === "quest"){
+      out.push({ t: "text", face: "task", text: title || "Quest" });
+      const levels = (v && Number(v.levels)) || 0, asked = (v && Number(v.asked)) || 0;
+      out.push({ t: "text", face: "p",
+                 text: levels ? "Finished " + levels + (levels === 1 ? " level" : " levels") + ", " + ((v && v.bank) || 0) + " coins banked"
+                     : asked ? "Started, no level finished yet" : "Not started",
+                 colour: levels ? PDF.GREEN : asked ? PDF.AMBER : PDF.RED });
       if (asked) out.push({ t: "text", face: "small", text: v.right + " right out of " + asked + " questions answered" });
       return out;
     }

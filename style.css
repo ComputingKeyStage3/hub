@@ -7521,6 +7521,8 @@ body.assess-on-questions .stagerow > #blocks{flex:0 1 800px}
   .pix-palette{grid-template-columns:repeat(8, 1fr)}
   .pix-canvas{max-width:min(100%, 520px)}
 }
+.choice-swap{margin:8px 0 0; padding:8px 12px; border-radius:var(--rad-md); background:var(--mint-dim); font-weight:700}
+.choice-swap[hidden]{display:none}
 .swipe-edit{display:grid; grid-template-columns:minmax(0,2fr) auto minmax(0,1.4fr); gap:6px; align-items:center; margin:0 0 6px}
 @media (max-width:700px){ .swipe-edit{grid-template-columns:minmax(0,1fr)} }
 /* Board game: the island on the left, the dice, coins and question on the
@@ -7556,6 +7558,11 @@ body.assess-on-questions .stagerow > #blocks{flex:0 1 800px}
 .bg-score{display:flex; flex-wrap:wrap; gap:6px 14px; font-weight:700}
 .bg-coins{font-size:var(--text-xl)}
 .bg-where,.bg-best{align-self:center; font-size:var(--text-sm); color:var(--muted)}
+.bg-bank{display:flex; flex-direction:column; gap:5px; font-size:var(--text-sm); font-weight:700}
+.bg-bank-bar{height:14px; border-radius:var(--rad-pill); background:var(--line); overflow:hidden}
+.bg-bank-fill{height:100%; width:0; border-radius:inherit; background:var(--gold); transition:width .3s ease}
+.bg-bank.full .bg-bank-fill{background:var(--mint)}
+.bg-bank.full .bg-bank-say{color:var(--mint)}
 .bg-said{margin:0; min-height:1.4em; font-weight:600}
 .bg-card{padding:14px; border:1.5px solid var(--line); border-radius:var(--rad-md); background:var(--panel)}
 .bg-card[hidden]{display:none}
@@ -7574,6 +7581,64 @@ body.assess-on-questions .stagerow > #blocks{flex:0 1 800px}
 .bg-finish{margin:0 0 6px; font-size:var(--text-xl); font-weight:800}
 .bg-endsay{margin:0 0 12px}
 
+/* Quest: the bar of coins and worlds, the game, and big buttons under it
+   for a touch screen. The game keeps a wide shape and never runs taller
+   than what is left of the screen. */
+.quest{margin:6px 0}
+.qs-top{display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; margin-bottom:8px}
+.qs-level{font-weight:800; font-size:var(--text-lg)}
+.qs-coins{font-weight:800; font-size:var(--text-lg)}
+.qs-map{display:flex; flex-wrap:wrap; gap:5px}
+.qs-chip{padding:3px 10px; border-radius:var(--rad-pill); border:1.5px solid var(--line-2); font-size:var(--text-sm); font-weight:700; color:var(--muted)}
+.qs-chip.here{border-color:var(--amber); color:var(--amber-dark)}
+.qs-chip.done{border-color:var(--mint); color:var(--mint)}
+.qs-bank{display:flex; flex-direction:column; gap:3px; min-width:180px; flex:1; font-size:var(--text-sm); font-weight:700}
+.qs-bank-bar{height:12px; border-radius:var(--rad-pill); background:var(--line); overflow:hidden}
+.qs-bank-fill{height:100%; width:0; border-radius:inherit; background:var(--gold); transition:width .3s ease}
+.qs-bank.full .qs-bank-fill{background:var(--mint)}
+.qs-bank.full .qs-bank-say{color:var(--mint)}
+.qs-stage{position:relative; width:100%; aspect-ratio:2 / 1; min-height:240px;
+  max-height:calc(100vh - 330px); max-height:calc(100dvh - 330px);
+  border-radius:var(--rad-lg); overflow:hidden; border:2px solid var(--line-2)}
+.qs-canvas{display:block; width:100%; height:100%; touch-action:none}
+.qs-canvas:focus-visible{outline:none}
+.qs-stage:focus-within{border-color:var(--amber)}
+.qs-overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:12px;
+  background:rgba(10,20,40,.35); overflow-y:auto}
+.qs-overlay[hidden]{display:none}
+.qs-card{width:min(520px, 100%); max-height:100%; overflow-y:auto; padding:16px 18px; border-radius:var(--rad-lg);
+  background:var(--panel); box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.qs-title{margin:0 0 6px; font-size:var(--text-xl); font-weight:800}
+.qs-text{margin:0 0 12px}
+.qs-who{margin:0 0 4px; font-size:var(--text-sm); font-weight:700; color:var(--muted)}
+.qs-q{margin:0 0 10px; font-size:var(--text-lg); font-weight:700}
+.qs-opts{display:flex; flex-direction:column; gap:7px}
+.qs-opt{min-height:44px; padding:9px 13px; text-align:left; border:1.5px solid var(--line-2); border-radius:var(--rad-md);
+  background:var(--panel); color:var(--text); font:inherit; font-size:var(--text-md); cursor:pointer}
+.qs-opt:hover:not(:disabled){border-color:var(--amber)}
+.qs-opt.right{border-color:var(--mint); background:var(--mint-dim)}
+.qs-opt.wrong{border-color:var(--red); background:var(--red-dim)}
+.qs-opt:disabled{cursor:default}
+.qs-fb{margin-top:10px; padding:9px 12px; border-radius:var(--rad-md)}
+.qs-fb.ok{background:var(--mint-dim)}
+.qs-fb.no{background:var(--red-dim)}
+.qs-fb p{margin:4px 0 0}
+.qs-go{margin-top:12px; font-size:var(--text-lg); padding:10px 22px}
+.qs-pad{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px}
+.qs-padside{display:flex; gap:10px}
+.qs-padbtn{min-width:64px; min-height:52px; border-radius:var(--rad-md); border:2px solid var(--line-2); background:var(--panel);
+  color:var(--text); font-size:var(--text-2xl); font-weight:800; cursor:pointer; touch-action:none; user-select:none}
+.qs-padbtn:active{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, var(--panel))}
+.qs-jump{min-width:110px; font-size:var(--text-lg)}
+.qs-help{font-size:var(--text-sm); color:var(--muted); text-align:center}
+.quest-world{border:1.5px solid var(--line); border-radius:var(--rad-md); padding:10px; margin:0 0 10px}
+.quest-q{border-top:1px dashed var(--line); padding-top:8px; margin-top:8px; display:flex; flex-direction:column; gap:5px}
+.quest-opt{display:flex; gap:6px; align-items:center}
+.quest-opt input[type=text]{flex:1}
+@media (max-width:700px){
+  .qs-stage{aspect-ratio:4 / 3; max-height:none}
+  .qs-help{display:none}
+}
 /* Swipe: one card in the middle, the two answers either side of it. */
 .swipe{margin:6px 0; max-width:760px}
 .sw-bar{display:flex; flex-wrap:wrap; gap:6px 18px; font-weight:700; margin-bottom:10px}

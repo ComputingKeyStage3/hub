@@ -248,6 +248,7 @@
           <button class="pal" data-add="pixels"><b>Pixel studio</b><span>Colour a grid square by square, or animate it</span></button>
           <button class="pal" data-add="boardgame"><b>Board game</b><span>Roll a dice round an island, answering questions</span></button>
           <button class="pal" data-add="swipe"><b>Swipe</b><span>Sort cards left or right, with a streak</span></button>
+          <button class="pal" data-add="quest"><b>Quest</b><span>Run and jump through worlds, answering robots</span></button>
           <button class="pal" data-add="helper"><b>Photoshop help</b><span>A help chat they can ask</span></button>
         </div>
       </div>
@@ -657,6 +658,8 @@ const BLANK = {
   pixels:   () => ({ type:"pixels", title:"", task:"", w:8, h:8, depth:1 }),
   boardgame:() => ({ type:"boardgame", title:"", task:"", squares:36,
                      questions:[{ q:"", options:["True","False"], answers:[0], hint:"", why:"" }] }),
+  quest:    () => ({ type:"quest", title:"", task:"", theme:"islands", goal:30,
+                     worlds:[{ name:"", questions:[{ q:"", options:["",""], answers:[0], why:"" }] }] }),
   swipe:    () => ({ type:"swipe", title:"", task:"", left:"No", right:"Yes",
                      cards:[{ text:"", side:"right", why:"" }, { text:"", side:"left", why:"" }] }),
   boss:     () => ({ type:"boss", title:"", boss:"The Quiz Goblin", look:"goblin", hits:8, hearts:3,
@@ -755,7 +758,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boardgame:"Board game", swipe:"Swipe", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boardgame:"Board game", swipe:"Swipe", quest:"Quest", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -1243,7 +1246,7 @@ function compileOne(b, id, target){
     if (opts.length < 2) return;                     // nothing to choose between
     push({ type:"choice", id, title: b.title || "", task: b.task || "",
            prompt: b.prompt ? (window.cleanRichText ? window.cleanRichText(b.prompt) : b.prompt) : "",
-           options: opts });
+           options: opts, swap: b.swap === true ? true : undefined });
     return;
   }
   if (b.type === "extension"){
@@ -1468,6 +1471,7 @@ function compileOne(b, id, target){
     else if (b.type === "boardgame")
       push({ type:"boardgame", id, title: b.title || "", task: b.task || "",
         squares: Math.max(20, Math.min(48, parseInt(b.squares, 10) || 36)),
+        goal: parseInt(b.goal, 10) > 0 ? Math.min(500, parseInt(b.goal, 10)) : undefined,
         /* the same shape as a quiz's questions, because the editor is the quiz's */
         questions: (b.questions || []).map(q => {
           const opts = (q.options || []);
@@ -1476,6 +1480,21 @@ function compileOne(b, id, target){
           return { q: q.q || "", options: opts.filter(x => x !== ""),
                    answers: answers.length ? answers : [0], hint: q.hint || "", why: q.why || "" };
         }).filter(q => q.q && q.options.length > 1) });
+    else if (b.type === "quest")
+      push({ type:"quest", id, title: b.title || "", task: b.task || "",
+        theme: ["islands","space","city","snow"].includes(b.theme) ? b.theme : "islands",
+        goal: parseInt(b.goal, 10) > 0 ? Math.min(500, parseInt(b.goal, 10)) : undefined,
+        hazard: String(b.hazard || "").trim() || undefined,
+        worlds: (b.worlds || []).map(w => ({
+          name: String((w && w.name) || "").trim(),
+          questions: ((w && w.questions) || []).map(q => {
+            const opts = (q.options || []).map(o => String(o == null ? "" : o));
+            const keep = opts.map((o, i) => i).filter(i => opts[i].trim() !== "");
+            const want = Number((q.answers || [0])[0]) || 0;
+            return { q: String(q.q || "").trim(), options: keep.map(i => opts[i]),
+                     answers: [Math.max(0, keep.indexOf(want))], why: String(q.why || "").trim() || undefined };
+          }).filter(q => q.q && q.options.length > 1)
+        })).filter(w => w.questions.length) });
     else if (b.type === "swipe")
       push({ type:"swipe", id, title: b.title || "", task: b.task || "",
         left: String(b.left || "").trim() || "No", right: String(b.right || "").trim() || "Yes",
@@ -8118,7 +8137,7 @@ function fromCompiled(data, meta){
                                      task:b.task || "",
                                      blocks:(b.blocks || []).map(back) };
     if (b.type === "choice") return { type:"choice", title:b.title || "", task:b.task || "",
-                                      prompt:b.prompt || "",
+                                      prompt:b.prompt || "", swap:b.swap === true ? true : undefined,
                                       options:(b.options || []).map(o => ({
                                         label:o.label || "",
                                         blocks:(o.blocks || []).map(back) })) };
