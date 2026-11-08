@@ -1009,6 +1009,9 @@ EDITORS.scratch = function(b, k){
   const { F, R, add, redraw } = k;
   F("Heading (optional)", "title");
   R("Subheading (optional)", "task", { rows:2 });
+  R("Instructions (optional)", "instructions", { rows:8,
+    placeholder: "What to make, step by step. Start with the fun part: a sprite and something to draw.",
+    help: "Shown in an Instructions tab beside the editor. Students see it first, and the Scratch tab pulses until they open it." });
   const w = el("div","bfield");
   w.appendChild(el("label","","Starter project"));
   const has = !!(b.project && typeof b.project === "object");
