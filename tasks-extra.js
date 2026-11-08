@@ -21,6 +21,286 @@
   };
 
   /* ===================================================================
+     SHAPES AND DRAWINGS, shared by the whiteboard and the storyboard
+     A shape is { kind:"shape", shape:"rect"|"ellipse"|"line"|"arrow",
+                  from:[x,y], to:[x,y], colour, width }.
+     A drawing dragged in is { kind:"stamp", name, x, y, size, flip }: its
+     name and where it sits, never the picture. The pictures themselves are
+     drawn here from paths, so a board with ten characters on it is a few
+     hundred bytes, and every drawing looks the same wherever it is opened.
+     Each is designed in a 100 x 100 box and drawn at size across, centred
+     on x, y.
+     =================================================================== */
+  const INK = "#1D1D1B";
+  const dot = (cx, cy, r) => "M" + (cx - r) + " " + cy + "a" + r + " " + r + " 0 1 0 " + (2 * r) +
+                             " 0a" + r + " " + r + " 0 1 0 " + (-2 * r) + " 0z";
+  const SKIN = "#F2C29B", SKIN_DARK = "#B9804E", GLASS = "#9CD3F0";
+  /* Each part is [fill, path] or [null, path, line width, line colour] for a
+     line only. A fill of "eye" is a small solid dot with no outline. */
+  const face = (y) => [["eye", dot(45, y, 1.8)], ["eye", dot(55, y, 1.8)], [null, "M45 " + (y + 6) + "q5 4 10 0"]];
+  const STAMP_LIST = [
+    { name:"boy", label:"Boy", group:"Characters", parts: [
+      ["#2F4A7A", "M39 68h9v25h-9z"], ["#2F4A7A", "M52 68h9v25h-9z"],
+      [INK, "M36 92h13v5h-13z"], [INK, "M51 92h13v5h-13z"],
+      [SKIN, "M29 40h8v27h-8z"], [SKIN, "M63 40h8v27h-8z"],
+      ["#C0392B", "M34 37h32v33h-32z"],
+      [SKIN, dot(50, 22, 13)], ["#5A3A1E", "M37 21a13 13 0 0 1 26 0q-6-5-13-4t-13 4z"]
+    ].concat(face(23)) },
+    { name:"girl", label:"Girl", group:"Characters", parts: [
+      ["#2B1B10", "M35 23a15 15 0 0 1 30 0v19h-30z"],
+      [SKIN_DARK, "M41 73h7v20h-7z"], [SKIN_DARK, "M52 73h7v20h-7z"],
+      [INK, "M38 92h11v5h-11z"], [INK, "M51 92h11v5h-11z"],
+      [SKIN_DARK, "M29 40h7v26h-7z"], [SKIN_DARK, "M64 40h7v26h-7z"],
+      ["#8C5BC4", "M37 37h26l9 37h-44z"],
+      [SKIN_DARK, dot(50, 22, 13)], ["#2B1B10", "M37 21a13 13 0 0 1 26 0q-13-7-26 0z"]
+    ].concat(face(23)) },
+    { name:"adult", label:"Grown-up", group:"Characters", parts: [
+      ["#5E5E5C", "M39 66h10v27h-10z"], ["#5E5E5C", "M51 66h10v27h-10z"],
+      [INK, "M36 92h13v5h-13z"], [INK, "M51 92h13v5h-13z"],
+      ["#2F6BAE", "M27 35h9v29h-9z"], ["#2F6BAE", "M64 35h9v29h-9z"],
+      [SKIN, "M27 64h9v6h-9z"], [SKIN, "M64 64h9v6h-9z"],
+      ["#2F6BAE", "M34 33h32v36h-32z"], ["#C0392B", "M48 33h4l2 15-4 5-4-5z"],
+      [SKIN, dot(50, 19, 12)], ["#3B3B3B", "M38 17a12 12 0 0 1 24 0q-12-5-24 0z"]
+    ].concat(face(20)) },
+    { name:"robot", label:"Robot", group:"Characters", parts: [
+      [null, "M50 6v9"], ["#C0392B", dot(50, 6, 3.5)],
+      ["#B8C2CC", "M33 15h34v24h-34z"],
+      ["#2F6BAE", dot(43, 26, 4)], ["#2F6BAE", dot(57, 26, 4)], [null, "M43 34h14"],
+      ["#8FA0B0", "M19 44h10v24h-10z"], ["#8FA0B0", "M71 44h10v24h-10z"],
+      ["#8FA0B0", "M29 42h42v34h-42z"], ["#F2B705", "M42 50h16v12h-16z"],
+      ["#8FA0B0", "M35 76h11v16h-11z"], ["#8FA0B0", "M54 76h11v16h-11z"],
+      [INK, "M33 92h15v5h-15z"], [INK, "M52 92h15v5h-15z"]
+    ] },
+    { name:"cat", label:"Cat", group:"Characters", parts: [
+      [null, "M66 86q24-2 16-30", 6, "#E07B24"],
+      ["#F4A340", "M30 92q0-40 20-40t20 40z"],
+      ["#F4A340", "M35 33l2-17 11 10z"], ["#F4A340", "M65 33l-2-17-11 10z"],
+      ["#F4A340", dot(50, 40, 16)],
+      ["eye", dot(44, 39, 2)], ["eye", dot(56, 39, 2)], ["#E88C9A", "M47 45h6l-3 3z"],
+      [null, "M30 44l12 2"], [null, "M30 50h12"], [null, "M70 44l-12 2"], [null, "M70 50h-12"]
+    ] },
+    { name:"dog", label:"Dog", group:"Characters", parts: [
+      ["#A0703C", "M28 92q0-38 22-38t22 38z"],
+      ["#C08A50", dot(50, 40, 16)],
+      ["#6B4423", "M36 28q-12 6-7 24l8-4z"], ["#6B4423", "M64 28q12 6 7 24l-8-4z"],
+      ["eye", dot(44, 38, 2)], ["eye", dot(56, 38, 2)], [INK, dot(50, 45, 3)], [null, "M45 50q5 4 10 0"]
+    ] },
+    { name:"tree", label:"Tree", group:"Objects", parts: [
+      ["#8B5A2B", "M44 58h12v36h-12z"],
+      ["#3E9B4F", dot(34, 46, 15)], ["#3E9B4F", dot(66, 46, 15)], ["#3E9B4F", dot(50, 30, 22)]
+    ] },
+    { name:"house", label:"House", group:"Objects", parts: [
+      ["#F2D7A6", "M18 48h64v46h-64z"], ["#C0392B", "M12 50l38-34 38 34z"],
+      ["#8B5A2B", "M44 66h12v28h-12z"], [GLASS, "M24 58h14v12h-14z"], [GLASS, "M62 58h14v12h-14z"]
+    ] },
+    { name:"car", label:"Car", group:"Objects", parts: [
+      ["#C0392B", "M7 74v-10q0-10 12-11l13-1 11-15h24l12 15h7q9 1 9 12v10z"],
+      [GLASS, "M39 51l7-10h9v10z"], [GLASS, "M60 41h6l8 10h-14z"],
+      [INK, dot(28, 76, 9)], [INK, dot(72, 76, 9)], ["#B8C2CC", dot(28, 76, 3.5)], ["#B8C2CC", dot(72, 76, 3.5)]
+    ] },
+    { name:"sun", label:"Sun", group:"Objects", parts: (() => {
+      const rays = [];
+      for (let k = 0; k < 8; k++){
+        const a = k * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
+        rays.push([null, "M" + (50 + 25 * c).toFixed(1) + " " + (50 + 25 * s).toFixed(1) +
+                         "L" + (50 + 38 * c).toFixed(1) + " " + (50 + 38 * s).toFixed(1), 5, "#E8A100"]);
+      }
+      return rays.concat([["#F2B705", dot(50, 50, 18)]]);
+    })() },
+    { name:"cloud", label:"Cloud", group:"Objects", parts: [
+      ["#FFFFFF", "M24 70a14 14 0 0 1 3-27a18 18 0 0 1 34-7a14 14 0 0 1 20 14a11 11 0 0 1-3 20z"]
+    ] },
+    { name:"star", label:"Star", group:"Objects", parts: [
+      ["#F2B705", (() => {
+        let d = "";
+        for (let k = 0; k < 10; k++){
+          const r = k % 2 ? 17 : 40, a = -Math.PI / 2 + k * Math.PI / 5;
+          d += (k ? "L" : "M") + (50 + r * Math.cos(a)).toFixed(1) + " " + (54 + r * Math.sin(a)).toFixed(1);
+        }
+        return d + "z";
+      })()]
+    ] },
+    { name:"ball", label:"Ball", group:"Objects", parts: [
+      ["#F2B705", dot(50, 52, 30)],
+      ["#C0392B", "M50 52V22A30 30 0 0 1 76 67z"], ["#2F6BAE", "M50 52L76 67A30 30 0 0 1 24 67z"],
+      [null, dot(50, 52, 30)]
+    ] },
+    { name:"laptop", label:"Laptop", group:"Objects", parts: [
+      ["#2B2B2B", "M22 26h56v40h-56z"], [GLASS, "M26 30h48v32h-48z"], ["#B8C2CC", "M12 68h76l-6 9h-64z"]
+    ] },
+    { name:"phone", label:"Phone", group:"Objects", parts: [
+      ["#2B2B2B", "M36 12h28a4 4 0 0 1 4 4v68a4 4 0 0 1-4 4h-28a4 4 0 0 1-4-4v-68a4 4 0 0 1 4-4z"],
+      [GLASS, "M36 20h28v56h-28z"], ["#B8C2CC", dot(50, 82, 2.5)]
+    ] },
+    { name:"speech", label:"Speech bubble", group:"Objects", parts: [
+      ["#FFFFFF", "M14 18h72a6 6 0 0 1 6 6v36a6 6 0 0 1-6 6h-46l-16 16v-16h-10a6 6 0 0 1-6-6v-36a6 6 0 0 1 6-6z"]
+    ] }
+  ];
+  const STAMPS = {};
+  STAMP_LIST.forEach(st => { STAMPS[st.name] = st; });
+  /* Path2D objects are made once, the first time each drawing is needed. */
+  const pathCache = {};
+  function stampPaths(name){
+    if (pathCache[name]) return pathCache[name];
+    const def = STAMPS[name];
+    if (!def || typeof Path2D === "undefined") return null;
+    return (pathCache[name] = def.parts.map(p => ({ fill: p[0], path: new Path2D(p[1]), w: p[2], line: p[3] })));
+  }
+  function paintStamp(c, st){
+    const parts = stampPaths(st.name);
+    if (!parts) return;
+    const k = (Number(st.size) || 100) / 100;
+    c.save();
+    c.translate(st.x, st.y);
+    c.scale(st.flip ? -k : k, k);
+    c.translate(-50, -50);
+    c.lineJoin = "round"; c.lineCap = "round";
+    parts.forEach(p => {
+      if (p.fill === "eye"){ c.fillStyle = INK; c.fill(p.path); return; }
+      if (p.fill){ c.fillStyle = p.fill; c.fill(p.path); }
+      c.strokeStyle = p.line || INK;
+      c.lineWidth = p.w || 2.5;
+      c.stroke(p.path);
+    });
+    c.restore();
+  }
+  function paintShape(c, st){
+    const a = st.from, b = st.to;
+    if (!a || !b) return;
+    c.save();
+    c.strokeStyle = st.colour || INK;
+    c.lineWidth = st.width || 3;
+    c.lineCap = "round"; c.lineJoin = "round";
+    c.beginPath();
+    if (st.shape === "rect"){
+      c.rect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+    } else if (st.shape === "ellipse"){
+      c.ellipse((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.abs(b[0] - a[0]) / 2 || 0.1, Math.abs(b[1] - a[1]) / 2 || 0.1, 0, 0, Math.PI * 2);
+    } else {
+      c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]);
+      if (st.shape === "arrow"){
+        /* The head grows with the line's width, so a thick arrow still looks like one. */
+        const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+        const head = Math.max(14, (st.width || 3) * 4);
+        c.moveTo(b[0], b[1]);
+        c.lineTo(b[0] - head * Math.cos(ang - 0.45), b[1] - head * Math.sin(ang - 0.45));
+        c.moveTo(b[0], b[1]);
+        c.lineTo(b[0] - head * Math.cos(ang + 0.45), b[1] - head * Math.sin(ang + 0.45));
+      }
+    }
+    c.stroke();
+    c.restore();
+  }
+  window.drawKit = {
+    STAMPS: STAMP_LIST,
+    /* Draws a shape or a drawing. False for anything else, which the caller
+       draws itself as it always has. */
+    paint: (c, st) => {
+      if (!st) return false;
+      if (st.kind === "stamp"){ paintStamp(c, st); return true; }
+      if (st.kind === "shape"){ paintShape(c, st); return true; }
+      return false;
+    },
+    has: (st) => !!st && (st.kind === "stamp" || st.kind === "shape"),
+    /* [left, top, right, bottom] */
+    box: (st) => {
+      if (st.kind === "stamp"){
+        const h = (Number(st.size) || 100) / 2;
+        return [st.x - h, st.y - h, st.x + h, st.y + h];
+      }
+      return [Math.min(st.from[0], st.to[0]), Math.min(st.from[1], st.to[1]),
+              Math.max(st.from[0], st.to[0]), Math.max(st.from[1], st.to[1])];
+    },
+    move: (st, dx, dy) => {
+      if (st.kind === "stamp"){ st.x += dx; st.y += dy; return; }
+      st.from[0] += dx; st.from[1] += dy; st.to[0] += dx; st.to[1] += dy;
+    },
+    /* A drawing only: a shape is resized by drawing it again. */
+    grow: (st, by, least, most) => {
+      if (st.kind !== "stamp") return;
+      st.size = Math.round(Math.max(least, Math.min(most, (Number(st.size) || 100) * by)));
+    },
+    /* What a line near the outline counts as touching. Inside a drawing is
+       touching it, and so is inside a shape: a thin outline is hard to hit. */
+    hit: (st, p, slack) => {
+      const b = window.drawKit.box(st), m = slack || 8;
+      if (st.kind === "shape" && (st.shape === "line" || st.shape === "arrow")){
+        const ax = st.from[0], ay = st.from[1], bx = st.to[0], by = st.to[1];
+        const len = (bx - ax) * (bx - ax) + (by - ay) * (by - ay) || 1;
+        const t = Math.max(0, Math.min(1, ((p[0] - ax) * (bx - ax) + (p[1] - ay) * (by - ay)) / len));
+        const dx = p[0] - (ax + t * (bx - ax)), dy = p[1] - (ay + t * (by - ay));
+        return Math.sqrt(dx * dx + dy * dy) <= m + (st.width || 3);
+      }
+      return p[0] >= b[0] - m && p[0] <= b[2] + m && p[1] >= b[1] - m && p[1] <= b[3] + m;
+    },
+    /* A row of drawings to drag onto a canvas, or tap to drop in the middle.
+       Pointer events rather than HTML drag and drop, which does nothing on a
+       tablet. drop(name, clientX, clientY) is given no position for a tap. */
+    tray: (target, drop) => {
+      const tray = make("div", "draw-tray");
+      let group = "";
+      STAMP_LIST.forEach(def => {
+        if (def.group !== group){
+          group = def.group;
+          tray.appendChild(make("span", "draw-tray-head", group));
+        }
+        const btn = make("button", "draw-stamp");
+        btn.type = "button";
+        btn.title = def.label + ": drag it in, or tap to add it";
+        btn.setAttribute("aria-label", "Add " + def.label);
+        const cv = make("canvas");
+        cv.width = 96; cv.height = 96;
+        paintStamp(cv.getContext("2d"), { name: def.name, x: 48, y: 48, size: 88 });
+        btn.appendChild(cv);
+        let start = null, ghost = null;
+        btn.addEventListener("pointerdown", (e) => {
+          if (e.button) return;
+          e.preventDefault();
+          start = [e.clientX, e.clientY];
+          try{ btn.setPointerCapture(e.pointerId); }catch(err){}
+        });
+        btn.addEventListener("pointermove", (e) => {
+          if (!start) return;
+          if (!ghost && Math.abs(e.clientX - start[0]) + Math.abs(e.clientY - start[1]) > 6){
+            ghost = make("canvas", "draw-ghost");
+            ghost.width = 96; ghost.height = 96;
+            paintStamp(ghost.getContext("2d"), { name: def.name, x: 48, y: 48, size: 88 });
+            document.body.appendChild(ghost);
+          }
+          if (ghost){
+            ghost.style.left = (e.clientX - 40) + "px";
+            ghost.style.top = (e.clientY - 40) + "px";
+          }
+        });
+        const end = (e, cancelled) => {
+          if (!start) return;
+          const dragged = !!ghost;
+          if (ghost){ ghost.remove(); ghost = null; }
+          start = null;
+          if (cancelled) return;
+          if (!dragged){ drop(def.name, null, null); return; }
+          const r = target.getBoundingClientRect();
+          if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom)
+            drop(def.name, e.clientX, e.clientY);
+        };
+        btn.addEventListener("pointerup", (e) => end(e, false));
+        btn.addEventListener("pointercancel", (e) => end(e, true));
+        tray.appendChild(btn);
+      });
+      return tray;
+    }
+  };
+  /* The four shape buttons, drawn the same on both boards. */
+  const SHAPE_ICONS = {
+    rect:    '<svg viewBox="0 0 20 20"><path d="M3 5h14v10H3z" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+    ellipse: '<svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="7.5" ry="5.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+    line:    '<svg viewBox="0 0 20 20"><path d="M3 16L17 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    arrow:   '<svg viewBox="0 0 20 20"><path d="M3 16L16 4M9.5 4H16v6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    stamps:  '<svg viewBox="0 0 20 20"><circle cx="7" cy="6" r="3"/><path d="M2.5 17v-3.5A3.5 3.5 0 016 10h2a3.5 3.5 0 013.5 3.5V17z"/><path d="M12.5 17l3-8 3 8z" opacity=".7"/></svg>'
+  };
+  const SHAPE_NAMES = { rect:"Draw a rectangle", ellipse:"Draw a circle or oval", line:"Draw a straight line", arrow:"Draw an arrow" };
+
+  /* ===================================================================
      WHITEBOARD
      { type:"board", title, task, height, starter:[strokes] }
      Draw, write, rub out, and move around a board bigger than the screen.
@@ -50,6 +330,10 @@
     function topmostAt(where){
       for (let i = strokes.length - 1; i >= 0; i--){
         const st = strokes[i];
+        if (window.drawKit.has(st)){
+          if (window.drawKit.hit(st, where, 10 / view.scale)) return st;
+          continue;
+        }
         if (st.kind === "text"){
           const w = String(st.text).length * (st.size || 20) * 0.55;
           if (where[0] >= st.x && where[0] <= st.x + w &&
@@ -67,6 +351,10 @@
       const x1 = Math.min(box.from[0], box.to[0]), x2 = Math.max(box.from[0], box.to[0]);
       const y1 = Math.min(box.from[1], box.to[1]), y2 = Math.max(box.from[1], box.to[1]);
       return strokes.filter(st => {
+        if (window.drawKit.has(st)){
+          const b = window.drawKit.box(st);
+          return b[2] >= x1 && b[0] <= x2 && b[3] >= y1 && b[1] <= y2;
+        }
         if (st.kind === "text"){
           return st.x >= x1 && st.x <= x2 && st.y >= y1 && st.y <= y2;
         }
@@ -90,6 +378,16 @@
       p[1] = Math.max(-EDGE, Math.min(EDGE, p[1]));
     }
     function shift(item, dx, dy){
+      if (window.drawKit.has(item)){
+        /* Held by its middle, so a drawing can sit half off the edge but
+           never be lost past it. */
+        const b = window.drawKit.box(item);
+        const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+        dx = Math.max(-EDGE - cx, Math.min(EDGE - cx, dx));
+        dy = Math.max(-EDGE - cy, Math.min(EDGE - cy, dy));
+        window.drawKit.move(item, dx, dy);
+        return;
+      }
       if (item.kind === "text"){
         item.x = Math.max(-EDGE, Math.min(EDGE, item.x + dx));
         item.y = Math.max(-EDGE, Math.min(EDGE, item.y + dy));
@@ -146,8 +444,23 @@
         pickTools.appendChild(editBtn);
       }
 
+      /* a drawing can be made bigger or smaller, and turned to face the other way */
+      if (only && only.kind === "stamp"){
+        [["−", "Smaller", 1 / 1.25], ["+", "Bigger", 1.25]].forEach(([sign, title, by]) => {
+          const btn = make("button", "board-tool", sign);
+          btn.title = title;
+          btn.addEventListener("click", () => { window.drawKit.grow(only, by, 30, 900); draw(); ctx.changed(); });
+          pickTools.appendChild(btn);
+        });
+        const flipBtn = make("button", "board-tool");
+        flipBtn.innerHTML = ICONS.flip;
+        flipBtn.title = "Face the other way";
+        flipBtn.addEventListener("click", () => { only.flip = !only.flip; draw(); ctx.changed(); });
+        pickTools.appendChild(flipBtn);
+      }
+
       /* and anything picked up can be recoloured from here */
-      ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
+      if (!(only && only.kind === "stamp")) ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
         const dot = make("button", "board-colour board-pickcolour");
         dot.style.background = c;
         dot.title = "Change to this colour";
@@ -300,6 +613,18 @@
                         view.x * devicePixelRatio, view.y * devicePixelRatio);
       strokes.forEach(st => {
         const lit = picked.indexOf(st) >= 0;
+        if (window.drawKit.paint(ctx2, st)){
+          if (lit){
+            const b = window.drawKit.box(st);
+            ctx2.save();
+            ctx2.strokeStyle = "#2F6BAE";
+            ctx2.lineWidth = Math.max(2.2, 2.2 / view.scale);
+            ctx2.setLineDash([6 / view.scale, 4 / view.scale]);
+            ctx2.strokeRect(b[0] - 6, b[1] - 6, b[2] - b[0] + 12, b[3] - b[1] + 12);
+            ctx2.restore();
+          }
+          return;
+        }
         if (st.kind === "text"){
           ctx2.fillStyle = st.colour;
           ctx2.font = (st.size || 20) + "px " + BOARD_FONT;
@@ -395,6 +720,12 @@
       }
       const start = at(e);
       clampPoint(start);
+      if (SHAPE_ICONS[tool] && tool !== "stamps"){
+        const round = start.map(Math.round);
+        drawing = { kind:"shape", shape: tool, from: round, to: round.slice(), colour: colour, width: width };
+        strokes.push(drawing);
+        return;
+      }
       drawing = { kind:"line", colour: tool === "rub" ? "#FFFFFF" : colour,
                   width: tool === "rub" ? 24 : width, points: [start] };
       strokes.push(drawing);
@@ -423,10 +754,19 @@
       if (!drawing) return;
       const p = at(e);
       clampPoint(p);
-      drawing.points.push(p);
+      if (drawing.kind === "shape") drawing.to = p.map(Math.round);
+      else drawing.points.push(p);
       draw();
     });
     const stop = (e) => {
+      /* A shape tapped rather than dragged has no size, and would be an
+         invisible thing to select later. */
+      if (drawing && drawing.kind === "shape" &&
+          Math.abs(drawing.to[0] - drawing.from[0]) + Math.abs(drawing.to[1] - drawing.from[1]) < 4){
+        strokes = strokes.filter(x => x !== drawing);
+        drawing = null;
+        draw();
+      }
       if (drawing){ drawing = null; undone = []; ctx.changed(); }
       if (moving){ moving = null; ctx.changed(); }
       if (marquee){
@@ -480,11 +820,12 @@
       undo: '<svg viewBox="0 0 20 20"><path d="M6 7h6a5 5 0 010 10h-3v-2h3a3 3 0 000-6H6v3L1.5 8 6 4z"/></svg>',
       redo: '<svg viewBox="0 0 20 20"><path d="M14 7H8a5 5 0 000 10h3v-2H8a3 3 0 010-6h6v3l4.5-4L14 4z"/></svg>',
       home: '<svg viewBox="0 0 20 20"><path d="M10 2l8 7h-2.4v9h-4v-5h-3.2v5h-4V9H2z"/></svg>',
-      wipe: '<svg viewBox="0 0 20 20"><path d="M7 2h6v2h4v2H3V4h4zM5 7h10l-.8 11H5.8z"/></svg>'
+      wipe: '<svg viewBox="0 0 20 20"><path d="M7 2h6v2h4v2H3V4h4zM5 7h10l-.8 11H5.8z"/></svg>',
+      flip: '<svg viewBox="0 0 20 20"><path d="M9 3v14H2zM11 3l7 14h-7z" opacity=".85"/></svg>'
     };
     function toolBtn(name, label, title){
       const btn = make("button", "board-tool");
-      btn.innerHTML = ICONS[name] || label;
+      btn.innerHTML = ICONS[name] || SHAPE_ICONS[name] || label;
       btn.title = title || label;
       btn.addEventListener("click", () => {
         tool = name;
@@ -492,6 +833,9 @@
         btn.classList.add("on");
         /* the pointer says what will happen when it is pressed */
         stage.dataset.tool = name;
+        /* Any other tool lets go of what was picked up, or a drawing dropped
+           in a moment ago stays outlined while the next thing is drawn. */
+        if (name !== "pick" && picked.length){ picked = []; hidePickTools(); draw(); }
         sizesFollowPicked();
       });
       if (name === "pen") btn.classList.add("on");
@@ -503,6 +847,35 @@
     toolBtn("pen",  "", "Draw");
     toolBtn("rub",  "", "Rub out");
     toolBtn("text", "", "Add words");
+    ["rect","ellipse","line","arrow"].forEach(n => toolBtn(n, "", SHAPE_NAMES[n]));
+
+    /* Characters and objects to drag in. Opening the tray picks up the
+       select tool too, since what comes next is moving the drawing about. */
+    const trayBtn = make("button", "board-tool board-traybtn");
+    trayBtn.innerHTML = SHAPE_ICONS.stamps;
+    trayBtn.title = "Characters and objects";
+    trayBtn.setAttribute("aria-label", "Characters and objects");
+    bar.appendChild(trayBtn);
+    const tray = window.drawKit.tray(stage, (name, cx, cy) => {
+      const rect = stage.getBoundingClientRect();
+      const where = cx === null
+        ? [(rect.width / 2 - view.x) / view.scale, (rect.height / 2 - view.y) / view.scale]
+        : at({ clientX: cx, clientY: cy });
+      clampPoint(where);
+      const item = { kind:"stamp", name: name, x: Math.round(where[0]), y: Math.round(where[1]), size: 120 };
+      strokes.push(item);
+      undone = [];
+      picked = [item];
+      bar.querySelector('.board-tool[title="Select things"]').click();
+      draw(); ctx.changed();
+    });
+    tray.hidden = true;
+    inner.insertBefore(tray, stage);
+    trayBtn.addEventListener("click", () => {
+      tray.hidden = !tray.hidden;
+      trayBtn.classList.toggle("open", !tray.hidden);
+      setTimeout(fit, 0);
+    });
 
     ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
       const dot = make("button", "board-colour");
@@ -614,7 +987,7 @@
   const STORY_POINTS = 3000;
   const STORY_TEXT = 240;
 
-  function storyPaint(c, strokes, w, h){
+  function storyPaint(c, strokes, w, h, lit){
     const k = w / STORY_W;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.fillStyle = "#FFFFFF";
@@ -622,6 +995,16 @@
     c.setTransform(k, 0, 0, k, 0, 0);
     c.lineCap = "round"; c.lineJoin = "round";
     (strokes || []).forEach(st => {
+      if (window.drawKit.paint(c, st)){
+        if (st === lit){
+          const b = window.drawKit.box(st);
+          c.save();
+          c.strokeStyle = "#2F6BAE"; c.lineWidth = 2; c.setLineDash([6, 4]);
+          c.strokeRect(b[0] - 5, b[1] - 5, b[2] - b[0] + 10, b[3] - b[1] + 10);
+          c.restore();
+        }
+        return;
+      }
       const pts = st.points || [];
       if (!pts.length) return;
       c.strokeStyle = st.colour || "#1D1D1B";
@@ -713,13 +1096,21 @@
     function paintTools(){
       penBtn.classList.toggle("on", tool === "pen");
       rubBtn.classList.toggle("on", tool === "rub");
+      moveBtn.classList.toggle("on", tool === "move");
+      shapeBtns.forEach(x => x.btn.classList.toggle("on", tool === x.name));
+      canvas.dataset.tool = tool;
       thinBtn.classList.toggle("on", width === 4);
       thickBtn.classList.toggle("on", width === 10);
-      dots.forEach(d => d.dot.classList.toggle("story-dot-on", tool === "pen" && colour === d.colour));
+      dots.forEach(d => d.dot.classList.toggle("story-dot-on", (tool === "pen" || !!SHAPE_NAMES[tool]) && colour === d.colour));
     }
     const penBtn = toolBtn(svg("M14.5 2.5l3 3L7 16 3 17l1-4z"), "Draw", () => { tool = "pen"; paintTools(); });
     const rubBtn = toolBtn('<svg viewBox="0 0 20 20"><path d="M8 16H4l-2-2 8-8 6 6-4 4z" opacity=".55"/><path d="M2 17h16v1.6H2z"/></svg>',
-                           "Rub out", () => { tool = "rub"; paintTools(); });
+                           "Rub out", () => { tool = "rub"; pick(null); paintTools(); });
+    /* Picks up a drawing or a shape to drag it somewhere else. */
+    const moveBtn = toolBtn(svg("M10 2l2.5 2.5h-1.7v4.6h4.6V7.5L18 10l-2.6 2.5v-1.7h-4.6v4.6h1.7L10 18l-2.5-2.6h1.7v-4.6H4.6v1.7L2 10l2.6-2.5v1.7h4.6V4.5H7.5z"),
+                            "Move a drawing or a shape", () => { tool = "move"; paintTools(); });
+    const shapeBtns = ["rect","ellipse","line","arrow"].map(n => ({ name: n,
+      btn: toolBtn(SHAPE_ICONS[n], SHAPE_NAMES[n], () => { tool = n; pick(null); paintTools(); }) }));
     /* The five the whiteboard has, plus the two a winter scene runs out of
        first. There is no white: the rubber is white, and the paper is. */
     const dots = ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A","#DC8A3E","#8C5BC4"].map(c => {
@@ -728,7 +1119,11 @@
       dot.style.background = c;
       dot.title = "Draw in this colour";
       dot.setAttribute("aria-label", "Draw in this colour");
-      dot.addEventListener("click", () => { colour = c; tool = "pen"; paintTools(); });
+      dot.addEventListener("click", () => {
+        colour = c;
+        if (tool !== "pen" && !SHAPE_NAMES[tool]) tool = "pen";
+        paintTools();
+      });
       bar.appendChild(dot);
       return { dot: dot, colour: c };
     });
@@ -738,6 +1133,7 @@
                              () => { width = 10; paintTools(); });
     toolBtn(svg("M6 7h6a5 5 0 010 10h-3v-2h3a3 3 0 000-6H6v3L1.5 8 6 4z"), "Undo", () => {
       const p = panels[at];
+      pick(null);
       if (p.strokes.length) p.strokes.pop();
       else if (cleared.has(p)){ p.strokes = cleared.get(p); cleared.delete(p); }
       else return;
@@ -746,11 +1142,17 @@
     const wipeBtn = toolBtn(svg("M7 2h6v2h4v2H3V4h4zM5 7h10l-.8 11H5.8z"), "Clear this drawing", () => {
       const p = panels[at];
       if (!p.strokes.length) return;
+      pick(null);
       cleared.set(p, p.strokes);
       p.strokes = [];
       paintPanel(); ctx.changed();
     });
     wipeBtn.classList.add("board-wipe");
+    const trayBtn = toolBtn(SHAPE_ICONS.stamps, "Characters and objects", () => {
+      tray.hidden = !tray.hidden;
+      trayBtn.classList.toggle("open", !tray.hidden);
+    });
+    trayBtn.classList.add("board-traybtn");
 
     /* --- the panel being worked on --- */
     const main = make("div", "story-main");
@@ -762,6 +1164,66 @@
     canvas.setAttribute("role", "img");
     paper.appendChild(canvas);
     const pen = canvas.getContext("2d");
+    /* Dropped where it lands, or in the middle for a tap, and picked up
+       straight away with the move tool so it can be put in its place. */
+    const tray = window.drawKit.tray(canvas, (name, cx, cy) => {
+      if (demo) return;
+      if (pointsIn(panels[at]) >= STORY_POINTS){
+        full.textContent = "This drawing is full. Undo a few things to carry on.";
+        full.hidden = false;
+        return;
+      }
+      const p = cx === null ? [STORY_W / 2, STORY_H / 2] : where({ clientX: cx, clientY: cy });
+      const item = { kind:"stamp", name: name, x: p[0], y: p[1], size: 110 };
+      panels[at].strokes.push(item);
+      cleared.delete(panels[at]);
+      tool = "move";
+      pick(item);
+      paintTools();
+      paintPanel(); ctx.changed();
+    });
+    tray.hidden = true;
+    inner.insertBefore(tray, main);
+    /* What the move tool has hold of, and the small strip of buttons above it. */
+    let lit = null;
+    const litTools = make("div", "board-picktools story-picktools");
+    litTools.hidden = true;
+    paper.appendChild(litTools);
+    function pick(item){
+      lit = item;
+      litTools.innerHTML = "";
+      litTools.hidden = !item;
+      if (!item) return;
+      const btn = (label, title, fn, html) => {
+        const b2 = make("button", "board-tool", html ? undefined : label);
+        b2.type = "button";
+        if (html) b2.innerHTML = html;
+        b2.title = title;
+        b2.setAttribute("aria-label", title);
+        b2.addEventListener("pointerdown", (e) => e.stopPropagation());
+        b2.addEventListener("click", (e) => { e.stopPropagation(); fn(); paintPanel(); ctx.changed(); });
+        litTools.appendChild(b2);
+      };
+      if (item.kind === "stamp"){
+        btn("\u2212", "Smaller", () => window.drawKit.grow(item, 1 / 1.25, 24, 600));
+        btn("+", "Bigger", () => window.drawKit.grow(item, 1.25, 24, 600));
+        btn("", "Face the other way", () => { item.flip = !item.flip; },
+            '<svg viewBox="0 0 20 20"><path d="M9 3v14H2zM11 3l7 14h-7z" opacity=".85"/></svg>');
+      }
+      btn("", "Remove it", () => {
+        panels[at].strokes = panels[at].strokes.filter(x => x !== item);
+        pick(null);
+      }, '<svg viewBox="0 0 20 20"><path d="M7 2h6v2h4v2H3V4h4zM5 7h10l-.8 11H5.8z"/></svg>');
+      placeLitTools();
+    }
+    /* Above the thing picked up, in the paper's own percentages so it stays
+       put whatever size the paper is drawn at. */
+    function placeLitTools(){
+      if (!lit) return;
+      const b = window.drawKit.box(lit);
+      litTools.style.left = Math.max(0, Math.min(100, (b[0] + b[2]) / 2 / STORY_W * 100)) + "%";
+      litTools.style.top = Math.max(0, b[1] / STORY_H * 100) + "%";
+    }
     const full = make("p", "story-full");
     full.hidden = true;
     paper.appendChild(full);
@@ -889,7 +1351,9 @@
     }
     /* After anything changes in the panel on screen */
     function paintPanel(){
-      storyPaint(pen, panels[at].strokes, canvas.width, canvas.height);
+      if (lit && panels[at].strokes.indexOf(lit) < 0) pick(null);
+      storyPaint(pen, panels[at].strokes, canvas.width, canvas.height, lit);
+      placeLitTools();
       paintThumb(at);
       paintTotals();
       paintCopy();
@@ -898,6 +1362,7 @@
     function show(i){
       const was = at;
       at = Math.max(0, Math.min(panels.length - 1, i));
+      if (at !== was) pick(null);
       const p = panels[at];
       panelName.textContent = nameOf(at);
       canvas.setAttribute("aria-label", "Drawing for panel " + (at + 1));
@@ -938,7 +1403,9 @@
       return [ Math.round(Math.max(0, Math.min(STORY_W, x))),
                Math.round(Math.max(0, Math.min(STORY_H, y))) ];
     }
-    const pointsIn = (p) => p.strokes.reduce((n, st) => n + st.points.length, 0);
+    /* A drawing or a shape counts as a short line towards the limit: it is
+       tiny to store, but a panel stacked with hundreds is still too many. */
+    const pointsIn = (p) => p.strokes.reduce((n, st) => n + (Array.isArray(st.points) ? st.points.length : 20), 0);
     canvas.addEventListener("pointerdown", (e) => {
       if (e.button || demo) return;
       e.preventDefault();
@@ -949,14 +1416,43 @@
         return;
       }
       try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
-      drawing = { colour: tool === "rub" ? "#FFFFFF" : colour,
-                  width: tool === "rub" ? 24 : width, points: [where(e)] };
+      if (tool === "move"){
+        const p = where(e), list = panels[at].strokes;
+        let hit = null;
+        for (let k = list.length - 1; k >= 0 && !hit; k--)
+          if (window.drawKit.has(list[k]) && window.drawKit.hit(list[k], p, 8)) hit = list[k];
+        pick(hit);
+        dragging = hit ? p : null;
+        paintPanel();
+        return;
+      }
+      if (SHAPE_NAMES[tool]){
+        const p = where(e);
+        drawing = { kind:"shape", shape: tool, from: p, to: p.slice(), colour: colour, width: width };
+      } else {
+        drawing = { colour: tool === "rub" ? "#FFFFFF" : colour,
+                    width: tool === "rub" ? 24 : width, points: [where(e)] };
+      }
       panels[at].strokes.push(drawing);
       cleared.delete(panels[at]);
       storyPaint(pen, panels[at].strokes, canvas.width, canvas.height);
     });
+    let dragging = null;
     canvas.addEventListener("pointermove", (e) => {
+      if (dragging && lit){
+        const p = where(e);
+        window.drawKit.move(lit, p[0] - dragging[0], p[1] - dragging[1]);
+        dragging = p;
+        storyPaint(pen, panels[at].strokes, canvas.width, canvas.height, lit);
+        placeLitTools();
+        return;
+      }
       if (!drawing) return;
+      if (drawing.kind === "shape"){
+        drawing.to = where(e);
+        storyPaint(pen, panels[at].strokes, canvas.width, canvas.height);
+        return;
+      }
       const p = where(e), last = drawing.points[drawing.points.length - 1];
       /* Points closer than this draw the same line and only take up room. */
       if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 2) return;
@@ -965,7 +1461,12 @@
       if (pointsIn(panels[at]) >= STORY_POINTS) finishLine();
     });
     function finishLine(){
+      if (dragging){ dragging = null; paintPanel(); ctx.changed(); return; }
       if (!drawing) return;
+      /* a shape tapped rather than dragged has no size to see */
+      if (drawing.kind === "shape" &&
+          Math.abs(drawing.to[0] - drawing.from[0]) + Math.abs(drawing.to[1] - drawing.from[1]) < 4)
+        panels[at].strokes = panels[at].strokes.filter(x => x !== drawing);
       drawing = null;
       paintPanel();
       ctx.changed();

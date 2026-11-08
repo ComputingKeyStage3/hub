@@ -7159,11 +7159,37 @@ html[data-bg=night]{--avg:#C39BF0}
   border-radius:var(--rad-sm); background:#fff}
 .scratch-sum{margin:0; font-size:var(--text-md); color:var(--muted); font-weight:700}
 .scratch-warn{margin:0; padding:8px 18px; color:var(--red); font-size:var(--text-md); font-weight:700}
+/* Instructions and Scratch as two tabs in the bar. The instructions are laid
+   over the editor, filling exactly the room the editor has. */
+.scratch-area{position:relative}
+.scratch-tabs{flex:none; display:flex; gap:6px; padding:4px; margin-right:6px; border-radius:var(--rad-pill);
+  border:1.5px solid var(--ed-gut)}
+.scratch-tab{border:0; border-radius:var(--rad-pill); padding:9px 22px; min-height:42px; font:inherit;
+  font-size:var(--text-md); font-weight:800; color:var(--ed-fg); background:transparent; cursor:pointer}
+.scratch-tab:hover{background:var(--ed-line)}
+.scratch-tab.on, .scratch-tab.on:hover{background:var(--amber); color:var(--amber-ink)}
+/* Until Scratch has been opened once. Kept in a custom property so the
+   reduced-motion line near the top of the file can let this one through, the
+   same as the waiting dots: the school's machines all report reduced motion,
+   and a pulse that never pulses does not point at anything. */
+.scratch-tab.scratch-tab-pulse{background:var(--gold); color:var(--gold-ink);
+  --tab-pulse:scratchpulse 1.4s ease-in-out infinite; animation:var(--tab-pulse)}
+@keyframes scratchpulse{0%,100%{box-shadow:0 0 0 0 rgba(242,183,5,.8)} 50%{box-shadow:0 0 0 8px rgba(242,183,5,0)}}
+@media (prefers-reduced-motion:reduce){ .scratch-tab.scratch-tab-pulse{animation:var(--tab-pulse) !important} }
+.scratch-howto{position:absolute; inset:0; z-index:2; overflow:auto; background:var(--panel);
+  padding:22px max(18px, calc((100% - 820px) / 2)) 28px}
+.scratch-howto[hidden]{display:none}
+.scratch-howto-text{font-size:var(--text-md); line-height:1.55}
+.scratch-howto-text p{margin:0 0 10px}
+.scratch-howto-text ol, .scratch-howto-text ul{margin:0 0 14px; padding-left:24px}
+.scratch-howto-text li{margin-bottom:4px}
+.scratch-howto-go{margin-top:8px}
 /* Full screen: the task fills the window, the bar stays on top, and the
    editor takes the rest. Escape or the button puts it back. The width and
    height lesson.html gave it for the page are set aside meanwhile. */
 .scratch.scratch-full{position:fixed; inset:0; z-index:9000; margin:0 !important; width:auto !important;
   padding:0; display:flex; flex-direction:column; background:var(--bg)}
+.scratch.scratch-full .scratch-area{flex:1; min-height:0; display:flex; flex-direction:column}
 .scratch.scratch-full .scratch-box{flex:1; height:auto !important; min-height:0}
 body.scratch-fullpage{overflow:hidden}
 /* The lesson builder's starter project editor, over the whole page. */
@@ -8272,6 +8298,24 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
 .story-speed.on{ border-color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, var(--panel)) }
 .story-thumb.key{ border-color:var(--amber); border-width:3px }
 .story-flip .story-total{ flex:1 1 120px }
+/* Characters and objects to drag in, and the shapes, on the storyboard and
+   the whiteboard alike. The tray opens under the tools. */
+.draw-tray{display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:8px 10px;
+  background:var(--panel); border:1px solid var(--line); border-top:none}
+.draw-tray[hidden]{display:none}
+.draw-tray-head{flex-basis:100%; font-size:var(--text-xs); font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.06em}
+.draw-tray-head:not(:first-child){margin-top:4px}
+.draw-stamp{width:58px; height:58px; padding:4px; border:1.5px solid var(--line-2); border-radius:var(--rad-sm);
+  background:#FFFFFF; cursor:grab; touch-action:none}
+.draw-stamp:hover{border-color:var(--amber)}
+.draw-stamp canvas{display:block; width:100%; height:100%; pointer-events:none}
+.draw-ghost{position:fixed; z-index:10000; width:80px; height:80px; pointer-events:none; opacity:.85}
+.board-traybtn.open{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 12%, var(--panel))}
+.story-paper{position:relative}
+.story-canvas[data-tool=move]{cursor:move}
+.story-picktools{transform:translate(-50%, calc(-100% - 6px))}
+.story-picktools[hidden]{display:none}
 /* Nothing to write and nothing to draw, so the picture gets the width. */
 .story-demo .story-main{ grid-template-columns:minmax(0,1fr) }
 .story-demo .story-canvas{ cursor:default }

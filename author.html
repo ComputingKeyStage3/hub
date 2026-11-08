@@ -1372,6 +1372,8 @@ function compileOne(b, id, target){
       const blk = { type:"scratch", id };
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
+      if (b.instructions && (/<img/i.test(b.instructions) || String(b.instructions).replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim()))
+        blk.instructions = b.instructions;
       if (b.project && typeof b.project === "object"){
         blk.project = b.project;
         if (b.own && Object.keys(b.own).length) blk.own = b.own;

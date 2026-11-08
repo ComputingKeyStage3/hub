@@ -8055,7 +8055,63 @@ function rScratch(b){
   warn.hidden = true;
   s.appendChild(warn);
   const box = el("div","scratch-box");
-  s.appendChild(box);
+  /* The editor and the instructions share one space, so the editor keeps its
+     full height and only one of them is ever in front. The instructions sit
+     over the editor rather than replacing it: the frame keeps loading behind
+     them, and taking it out of the page would start Scratch again from
+     nothing every time the tab was changed. */
+  const area = el("div","scratch-area");
+  area.appendChild(box);
+  s.appendChild(area);
+
+  /* ---------- Instructions and Scratch, as two tabs ----------
+     A student meets the instructions first, and the Scratch tab pulses until
+     it has been pressed once, so nobody is left reading with no idea where
+     the editor went. Having been once is saved with the work, so coming back
+     to the lesson opens straight on Scratch with nothing pulsing. A teacher
+     looking at work starts on Scratch: the project is what they came for. */
+  const howto = (b.instructions && stripTags(b.instructions)) ? b.instructions : "";
+  let seenScratch = false;
+  let showTab = () => {};
+  if (howto){
+    const tabs = el("div","scratch-tabs");
+    tabs.setAttribute("role", "tablist");
+    const howBtn = el("button","scratch-tab","Instructions");
+    const codeBtn = el("button","scratch-tab","Scratch");
+    [howBtn, codeBtn].forEach(t => { t.type = "button"; t.setAttribute("role", "tab"); tabs.appendChild(t); });
+    /* First in the bar and bigger than Download and Full screen: switching
+       between these two is what the bar is for. */
+    bar.insertBefore(tabs, named);
+    const panel = el("div","scratch-howto");
+    panel.setAttribute("role", "tabpanel");
+    const words = el("div","prose scratch-howto-text", howto);
+    scrollWideTables(words);
+    fillImageIds(words);
+    panel.appendChild(words);
+    const go = el("button","btn-primary scratch-howto-go","Go to Scratch");
+    go.type = "button";
+    panel.appendChild(go);
+    area.appendChild(panel);
+    showTab = (which) => {
+      const onHow = which === "howto";
+      panel.hidden = !onHow;
+      howBtn.classList.toggle("on", onHow);
+      codeBtn.classList.toggle("on", !onHow);
+      howBtn.setAttribute("aria-selected", String(onHow));
+      codeBtn.setAttribute("aria-selected", String(!onHow));
+      if (!onHow && !seenScratch){
+        seenScratch = true;
+        if (!spectate) markDirty();
+      }
+      codeBtn.classList.toggle("scratch-tab-pulse", !seenScratch);
+      if (onHow) panel.scrollTop = 0;
+    };
+    howBtn.addEventListener("click", () => showTab("howto"));
+    codeBtn.addEventListener("click", () => showTab("scratch"));
+    go.addEventListener("click", () => showTab("scratch"));
+    if (spectate){ seenScratch = true; showTab("scratch"); }
+    else showTab("howto");
+  }
 
   const starter = () => (b.project && typeof b.project === "object") ? b.project : null;
   /* What was put back from their saved work, then whatever last saved
@@ -8243,6 +8299,7 @@ function rScratch(b){
       const v = { runs: runs, changed: !!(changed && saved),
                   checks: checklist ? checkFlags(checklist) : undefined,
                   manual: checklist ? checklist.list.getManual() : undefined };
+      if (howto && seenScratch) v.seen = true;
       if (changed && saved){
         v.project = saved.project;
         v.own = saved.own || {};
@@ -8252,6 +8309,8 @@ function rScratch(b){
     },
     set: (v) => {
       if (!v || typeof v !== "object") return;
+      /* Been to the editor before: back on it, and nothing pulses. */
+      if (howto && v.seen === true && !seenScratch) showTab("scratch");
       runs = Number(v.runs) || 0;
       if (v.project && typeof v.project === "object"){
         saved = { project: v.project, own: (v.own && typeof v.own === "object") ? v.own : {},
@@ -13127,8 +13186,12 @@ function boardImage(strokes){
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     const seen = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y;
                              if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
+    const kit = window.drawKit;
     strokes.forEach(st => {
-      if (st.kind === "text"){
+      if (kit && kit.has(st)){
+        const b = kit.box(st);
+        seen(b[0], b[1]); seen(b[2], b[3]);
+      } else if (st.kind === "text"){
         const w = String(st.text || "").length * (st.size || 20) * 0.55;
         seen(st.x, st.y - (st.size || 20)); seen(st.x + w, st.y + 6);
       } else if (Array.isArray(st.points)){
@@ -13147,6 +13210,8 @@ function boardImage(strokes){
     c.fillStyle = "#FFFFFF"; c.fillRect(0, 0, cv.width, cv.height);
     c.setTransform(scale, 0, 0, scale, -minX * scale, -minY * scale);
     strokes.forEach(st => {
+      /* shapes and the drawings dragged in, painted the way the board paints them */
+      if (kit && kit.paint(c, st)) return;
       if (st.kind === "text"){
         c.fillStyle = st.colour || "#1D1D1B";
         c.font = (st.size || 20) + "px 'Segoe UI', Arial, sans-serif";
