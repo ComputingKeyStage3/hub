@@ -388,6 +388,8 @@ const TASK_ICONS = {
   table:     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M10 4v16"/>',
   label:     '<path d="M3 12V4h8l10 10-7 7z"/><circle cx="7.5" cy="8.5" r="1.3"/>',
   hotspot:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="14" cy="11" r="3.5"/><path d="M14 11h.01M7 16l2.5-2.5"/>',
+  boardgame: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/>',
+  swipe:     '<rect x="6" y="4" width="11" height="15" rx="2" transform="rotate(10 12 12)"/><path d="M3 20h5M16 20h5"/>',
   pixels:    '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>',
   picture:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 8"/>',
   embed:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
@@ -1875,6 +1877,55 @@ EDITORS.pixels = function(b, k){
       F("Frames a second to start at", "fps", { num:true, help:"1 to 24. They can change it with the slider." });
     }
   });
+};
+
+/* Board game: the board is made from the number of squares, so all a
+   teacher writes is the questions, in the quiz's own editor. */
+EDITORS.boardgame = function(b, k){
+  const { F } = k;
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+  F("Squares on the board", "squares", { num:true, help:"20 to 48. About 36 makes a game of five minutes or so. Shortcuts, sharks and treasure are put in for you." });
+  EDITORS.quiz(b, k);           // its own Heading box comes first in here
+};
+
+/* Swipe: two answers, and a pile of cards each belonging to one of them. */
+EDITORS.swipe = function(b, k){
+  const { F, add, redraw } = k;
+  F("Heading (optional)", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+  F("Left answer", "left", { help:"What swiping left means, for example Scam or Not safe." });
+  F("Right answer", "right", { help:"What swiping right means, for example Real or Safe." });
+  if (!Array.isArray(b.cards)) b.cards = [];
+  const w = el("div","bfield");
+  const head = el("div","brow");
+  head.appendChild(el("label","","Cards (" + b.cards.length + ")"));
+  head.appendChild(helpDot("Each card goes to one side. The reason shows after they choose, so a wrong answer still teaches something."));
+  w.appendChild(head);
+  b.cards.forEach((c, i) => {
+    const row = el("div","swipe-edit");
+    const words = el("input"); words.type = "text"; words.value = c.text || ""; words.placeholder = "Card " + (i + 1);
+    words.addEventListener("input", () => { c.text = words.value; saveDraft(); schedulePreview(); });
+    const sides = el("div","brow");
+    [["left", b.left || "Left"], ["right", b.right || "Right"]].forEach(pair => {
+      const btn = el("button","btn-ghost bmini2" + ((c.side === "left" ? "left" : "right") === pair[0] ? " right" : ""), pair[1]);
+      btn.type = "button";
+      btn.addEventListener("click", () => { c.side = pair[0]; saveDraft(); redraw(); schedulePreview(); });
+      sides.appendChild(btn);
+    });
+    const rm = el("button","btn-ghost bmini2","Remove");
+    rm.type = "button";
+    rm.addEventListener("click", () => { b.cards.splice(i, 1); saveDraft(); redraw(); schedulePreview(); });
+    sides.appendChild(rm);
+    const why = el("input"); why.type = "text"; why.value = c.why || ""; why.placeholder = "Why (optional)";
+    why.addEventListener("input", () => { c.why = why.value; saveDraft(); schedulePreview(); });
+    row.appendChild(words); row.appendChild(sides); row.appendChild(why);
+    w.appendChild(row);
+  });
+  const more = el("button","btn-ghost bmini2","+ Add a card");
+  more.type = "button";
+  more.addEventListener("click", () => { b.cards.push({ text:"", side:"right", why:"" }); saveDraft(); redraw(); });
+  w.appendChild(more);
+  add(w);
 };
 
 EDITORS.storyboard = function(b, k){

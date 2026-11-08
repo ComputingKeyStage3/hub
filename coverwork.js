@@ -149,6 +149,14 @@
         const squares = list.reduce((t, f) => t + (String(f || "").match(/[1-9a-f]/gi) || []).length, 0);
         return squares >= 6 ? "" : "Colour in some squares on the grid.";
       }
+      /* Easy games for a class that needs one: once round the board or
+         through the pile, or a fair go at it, is enough. */
+      case "boardgame":
+        return v && (Number(v.games) > 0 || Number(v.asked) >= 10) ? "" : "Play until you reach the boat.";
+      case "swipe": {
+        const n = (b.cards || []).length;
+        return v && (Number(v.rounds) > 0 || Number(v.at) >= Math.min(10, n)) ? "" : "Sort the cards.";
+      }
       case "notes":
         return String(v == null ? "" : v).replace(/<[^>]*>/g, "").trim() ? "" : "Write your notes.";
       case "choice": {
@@ -163,7 +171,7 @@
   /* Whether a task is something to do rather than something to read. Reading
      has nothing to finish, so only Understood ends it. */
   const WORK = ["quiz","short","table","blanks","order","mc","hotspot","label","question",
-                "storyboard","mindmap","board","notes","choice","group","poster","boss","pixels"];
+                "storyboard","mindmap","board","notes","choice","group","poster","boss","pixels","boardgame","swipe"];
   const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo;
   /* Everything right, so there is nothing left to decide and Finished can be
      pressed for them. A quiz waits for its score to be up, and a short answer

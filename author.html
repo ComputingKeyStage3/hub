@@ -246,6 +246,8 @@
           <button class="pal" data-add="storyboard"><b>Storyboard</b><span>Plan an animation, panel by panel</span></button>
           <button class="pal" data-add="poster"><b>Poster</b><span>Make a poster in an easy photo editor</span></button>
           <button class="pal" data-add="pixels"><b>Pixel studio</b><span>Colour a grid square by square, or animate it</span></button>
+          <button class="pal" data-add="boardgame"><b>Board game</b><span>Roll a dice round an island, answering questions</span></button>
+          <button class="pal" data-add="swipe"><b>Swipe</b><span>Sort cards left or right, with a streak</span></button>
           <button class="pal" data-add="helper"><b>Photoshop help</b><span>A help chat they can ask</span></button>
         </div>
       </div>
@@ -653,6 +655,10 @@ const BLANK = {
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
   poster:   () => ({ type:"poster", title:"Make a poster", task:"", heading:"" }),
   pixels:   () => ({ type:"pixels", title:"", task:"", w:8, h:8, depth:1 }),
+  boardgame:() => ({ type:"boardgame", title:"", task:"", squares:36,
+                     questions:[{ q:"", options:["True","False"], answers:[0], hint:"", why:"" }] }),
+  swipe:    () => ({ type:"swipe", title:"", task:"", left:"No", right:"Yes",
+                     cards:[{ text:"", side:"right", why:"" }, { text:"", side:"left", why:"" }] }),
   boss:     () => ({ type:"boss", title:"", boss:"The Quiz Goblin", look:"goblin", hits:8, hearts:3,
                      questions:[{ q:"", options:["",""], answers:[0], hint:"", why:"" }] }),
   storyboard:() => ({ type:"storyboard", title:"", task:"", panels:6, names:[], timing:true, minSecs:0, maxSecs:0 }),
@@ -749,7 +755,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boardgame:"Board game", swipe:"Swipe", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -953,7 +959,7 @@ function fitsQuestions(b){
 /* Drafts written by the older builder had one question per quiz. */
 function migrate(arr){
   (arr || []).forEach(b => {
-      if ((b.type === "quiz" || b.type === "boss") && b.questions){
+      if ((b.type === "quiz" || b.type === "boss" || b.type === "boardgame") && b.questions){
       b.questions.forEach(q => { if (!q.answers) q.answers = [q.answer === undefined ? 0 : q.answer]; });
     }
     if (b.type === "text" && b.body !== undefined && b.html === undefined){
@@ -1459,6 +1465,23 @@ function compileOne(b, id, target){
           return { q: q.q || "", options: opts.filter(x => x !== ""),
                    answers: answers.length ? answers : [0], hint: q.hint || "", why: q.why || "" };
         }).filter(q => q.q && q.options.length > 1) });
+    else if (b.type === "boardgame")
+      push({ type:"boardgame", id, title: b.title || "", task: b.task || "",
+        squares: Math.max(20, Math.min(48, parseInt(b.squares, 10) || 36)),
+        /* the same shape as a quiz's questions, because the editor is the quiz's */
+        questions: (b.questions || []).map(q => {
+          const opts = (q.options || []);
+          const answers = (q.answers !== undefined ? q.answers : [q.answer || 0])
+            .map(Number).filter(x => !isNaN(x) && x >= 0 && x < opts.length);
+          return { q: q.q || "", options: opts.filter(x => x !== ""),
+                   answers: answers.length ? answers : [0], hint: q.hint || "", why: q.why || "" };
+        }).filter(q => q.q && q.options.length > 1) });
+    else if (b.type === "swipe")
+      push({ type:"swipe", id, title: b.title || "", task: b.task || "",
+        left: String(b.left || "").trim() || "No", right: String(b.right || "").trim() || "Yes",
+        cards: (b.cards || []).filter(c => c && String(c.text || "").trim())
+          .map(c => keepArrays({ text: String(c.text).trim(), side: c.side === "left" ? "left" : "right",
+                                 why: String(c.why || "").trim() })) });
     else if (b.type === "storyboard")
       push(keepArrays({ type:"storyboard", id, title: b.title || "", task: b.task || "",
         panels: Math.max(2, Math.min(b.flip === true ? 24 : 12, Number(b.panels) || 6)),

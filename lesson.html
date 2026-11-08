@@ -25,6 +25,7 @@
 <script src="teacher.js"></script>
 <script src="tasks-extra.js"></script>
 <script src="pixels.js"></script>
+<script src="games.js"></script>
 <script src="psd.js"></script>
 <script src="blend.js"></script>
 <script src="blendview.js"></script>
@@ -3711,6 +3712,12 @@ const TASK_ICON = {
   hotspot:   { name:"Click the right spot",
                d:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 12h.01"/>' },
   /* a grid with some squares filled */
+  /* a dice */
+  boardgame: { name:"Board game",
+               d:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/>' },
+  /* a card leaning to one side */
+  swipe:     { name:"Swipe",
+               d:'<rect x="6" y="4" width="11" height="15" rx="2" transform="rotate(10 12 12)"/><path d="M3 20h5M16 20h5"/>' },
   pixels:    { name:"Pixel studio",
                d:'<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>' },
   /* a speech bubble with a question in it */
@@ -4928,7 +4935,8 @@ function buildBlock(b, i){
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
               exam:rExamTask, table:rTableTask, hotspot:rHotspotTask,
               extension:rExtension, group:rGroup, choice:rChoice,
-              poster:rPosterTask, boss:rBossTask, pixels:rPixelsTask }[b.type];
+              poster:rPosterTask, boss:rBossTask, pixels:rPixelsTask,
+              boardgame:rBoardGameTask, swipe:rSwipeTask }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try {
     const made = R(b);
@@ -8650,6 +8658,8 @@ const rPosterTask  = (b) => Object.assign(wrapExtra(b, window.rPoster, "Poster")
 const rBossTask    = (b) => wrapExtra(b, window.rBoss,    "Boss battle");
 const rHotspotTask = (b) => wrapExtra(b, window.rHotspot, "Click the right spot");
 const rPixelsTask  = (b) => wrapExtra(b, window.rPixels,  "Pixel studio");
+const rBoardGameTask = (b) => wrapExtra(b, window.rBoardGame, "Board game");
+const rSwipeTask   = (b) => wrapExtra(b, window.rSwipe,   "Swipe");
 /* An exam question is nearly one of the four above, but it also reports what
    it scored, which wrapExtra has no room for: fields[] would drop result()
    and the coverage screen would have nothing to read. */
@@ -13785,6 +13795,27 @@ function buildPdf(){
       out.push({ t: "text", face: "p",
                  text: !clicked ? "Not answered" : hit ? "Clicked the right spot" : "Clicked the wrong spot",
                  colour: !clicked ? PDF.RED : hit ? PDF.GREEN : PDF.RED });
+      return out;
+    }
+    if (b.type === "boardgame"){
+      out.push({ t: "text", face: "task", text: title || "Board game" });
+      const games = (v && Number(v.games)) || 0, asked = (v && Number(v.asked)) || 0;
+      out.push({ t: "text", face: "p",
+                 text: games ? "Reached the boat " + games + (games === 1 ? " time" : " times") + ", best " + ((v && v.best) || 0) + " coins"
+                     : asked ? "Started, not finished yet" : "Not started",
+                 colour: games ? PDF.GREEN : asked ? PDF.AMBER : PDF.RED });
+      if (asked) out.push({ t: "text", face: "small", text: v.right + " right out of " + asked + " questions answered" });
+      return out;
+    }
+    if (b.type === "swipe"){
+      out.push({ t: "text", face: "task", text: title || "Swipe" });
+      const rounds = (v && Number(v.rounds)) || 0, at = (v && Number(v.at)) || 0;
+      const total = (b.cards || []).length;
+      out.push({ t: "text", face: "p",
+                 text: rounds ? "Sorted all " + total + " cards " + rounds + (rounds === 1 ? " time" : " times") + ", best " + ((v && v.bestScore) || 0) + " right"
+                     : at ? "Sorted " + at + " of " + total + " cards" : "Not started",
+                 colour: rounds ? PDF.GREEN : at ? PDF.AMBER : PDF.RED });
+      if (v && v.bestStreak) out.push({ t: "text", face: "small", text: "Longest streak: " + v.bestStreak });
       return out;
     }
     if (b.type === "pixels"){
