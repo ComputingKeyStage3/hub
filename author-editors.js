@@ -388,6 +388,7 @@ const TASK_ICONS = {
   table:     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M10 4v16"/>',
   label:     '<path d="M3 12V4h8l10 10-7 7z"/><circle cx="7.5" cy="8.5" r="1.3"/>',
   hotspot:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="14" cy="11" r="3.5"/><path d="M14 11h.01M7 16l2.5-2.5"/>',
+  pixels:    '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>',
   picture:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 8"/>',
   embed:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
   video:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18M10.5 10.3l3.5 1.7-3.5 1.7z"/>',
@@ -1785,6 +1786,95 @@ EDITORS.boss = function(b, k){
   F("Hits to win", "hits", { num:true, help:"How many right answers beat the boss. Questions come round again if there are fewer." });
   F("Student hearts", "hearts", { num:true, help:"How many wrong answers before the boss wins. They can always try again." });
   F("How the boss looks", "look", { help:"goblin, dragon, robot or ghost." });
+};
+
+/* Pixel studio. The grid in the builder is the student's own grid, so what
+   is drawn here is exactly what they will see; what it is for (a picture
+   to copy, binary to decode, or the frames they start from) is chosen above. */
+EDITORS.pixels = function(b, k){
+  const { F, add, redraw, toggleRow, settings } = k;
+  F("Heading (optional)", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+
+  const pick = (label, help, list, now, set) => {
+    const w = el("div","bfield");
+    const head = el("div","brow");
+    head.appendChild(el("label","",label));
+    if (help) head.appendChild(helpDot(help));
+    w.appendChild(head);
+    const row = el("div","brow");
+    list.forEach(pair => {
+      const btn = el("button","btn-ghost bmini2" + (now() === pair[0] ? " right" : ""), pair[1]);
+      btn.type = "button";
+      btn.addEventListener("click", () => { set(pair[0]); saveDraft(); redraw(); schedulePreview(); });
+      row.appendChild(btn);
+    });
+    w.appendChild(row);
+    add(w);
+  };
+  const size = () => (Number(b.w) || 8) + "x" + (Number(b.h) || 8);
+  pick("Size of the grid", "Squares across by squares down. Changing it clears the drawing below.",
+    [["8x8","8 \u00d7 8"],["10x10","10 \u00d7 10"],["12x12","12 \u00d7 12"],["16x16","16 \u00d7 16"],["16x12","16 \u00d7 12"],["24x24","24 \u00d7 24"]],
+    size, (v) => {
+      if (v === size()) return;
+      const two = v.split("x").map(Number);
+      b.w = two[0]; b.h = two[1];
+      delete b.target; delete b.start;
+    });
+  pick("Colours", "Bits for each pixel. 1 bit gives black and white, 2 bits four colours, 4 bits all sixteen.",
+    [["1","2 colours (1 bit)"],["2","4 colours (2 bits)"],["3","8 colours (3 bits)"],["4","16 colours (4 bits)"]],
+    () => String(Number(b.depth) || 1), (v) => { b.depth = Number(v); });
+  /* what the drawing is for, worked out from what the task holds, so a
+     lesson written by hand opens on the right one */
+  const mode = () => b.target ? (b.clue === "binary" ? "decode" : "copy")
+                   : (Array.isArray(b.start) && b.start.length ? "start" : (b.drawFor || "none"));
+  const want = mode();
+  pick("The drawing below is", "A picture to copy is checked square by square. Binary to decode shows the same picture as rows of bits instead. Where they start is a picture or animation they open with and change.",
+    [["none","Not used"],["copy","A picture to copy"],["decode","Binary to decode"],["start","Where they start"]],
+    mode, (v) => {
+      b.drawFor = v;
+      const frames = Array.isArray(b.start) && b.start.length ? b.start : (b.target ? [b.target] : []);
+      delete b.target; delete b.start; delete b.clue;
+      if ((v === "copy" || v === "decode") && frames.length) b.target = frames[0];
+      if (v === "decode") b.clue = "binary";
+      if (v === "start" && frames.length) b.start = frames;
+    });
+
+  if (want !== "none" && window.rPixels){
+    const w = el("div","bfield");
+    w.appendChild(el("label","", want === "start" ? "Draw where they start" : "Draw the picture"));
+    /* the student's grid, with nothing to copy and no binary, holding what
+       has been drawn so far */
+    const drawing = { type:"pixels", w: b.w, h: b.h, depth: 4, binary: false,
+      frames: want === "start" && b.frames === true, maxFrames: b.maxFrames, fps: b.fps,
+      start: want === "start" ? b.start : (b.target ? [b.target] : undefined) };
+    let made = null;
+    made = window.rPixels(drawing, { changed: () => {
+      const v = made && made.get();
+      if (!v) return;
+      if (want === "start") b.start = v.frames;
+      else b.target = v.frames[0];
+      if (want === "decode") b.clue = "binary";
+      /* the student's colours have to be able to make the picture */
+      const most = Math.max.apply(null, v.frames.join("").split("").map(c => parseInt(c, 16) || 0));
+      let d = Number(b.depth) || 1;
+      while ((1 << d) <= most && d < 4) d++;
+      if (d !== (Number(b.depth) || 1)) b.depth = d;
+      saveDraft(); schedulePreview();
+    }});
+    w.appendChild(made.section);
+    add(w);
+  }
+
+  settings(() => {
+    toggleRow([["depthChoice", "They choose how many colours", false],
+               ["frames", "Frames and Play", false],
+               ["binary", "Show the binary button", true]]);
+    if (b.frames === true){
+      F("Most frames", "maxFrames", { num:true, help:"Up to 24." });
+      F("Frames a second to start at", "fps", { num:true, help:"1 to 24. They can change it with the slider." });
+    }
+  });
 };
 
 EDITORS.storyboard = function(b, k){

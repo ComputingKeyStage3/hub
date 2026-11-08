@@ -70,6 +70,7 @@
   function selfCheck(b){
     if (!b) return false;
     if (b.type === "hotspot") return true;
+    if (b.type === "pixels") return !!b.target;
     if (b.type === "label") return Array.isArray(b.spots) && b.spots.length > 0;
     if (b.type === "short"){
       const list = window.shortAnswer ? window.shortAnswer.accepted(b) : b.answers;
@@ -130,6 +131,24 @@
       /* Beaten, or two real goes at it: losing twice must not strand anyone. */
       case "boss":
         return v && (v.won || Number(v.tries) >= 2) ? "" : "Battle the boss.";
+      /* A picture to copy is right once checked, or two real goes at it, the
+         same as a spot on a picture: nobody is held behind a square they
+         cannot find. Otherwise it wants a real drawing, and an animation at
+         least two frames with something in them. */
+      case "pixels": {
+        const list = v && Array.isArray(v.frames) ? v.frames : [];
+        const drawn = list.filter(f => /[1-9a-f]/i.test(String(f || ""))).length;
+        if (b.target){
+          const sc = ctx.score(b, v);
+          const checked = !ctx.checked || ctx.checked(b.id);
+          if (sc && sc.got >= sc.max && checked) return "";
+          if (ctx.tries(b.id) >= 2) return "";
+          return "Colour in the grid and press Check my picture.";
+        }
+        if (b.frames === true && drawn < 2) return "Draw at least two frames.";
+        const squares = list.reduce((t, f) => t + (String(f || "").match(/[1-9a-f]/gi) || []).length, 0);
+        return squares >= 6 ? "" : "Colour in some squares on the grid.";
+      }
       case "notes":
         return String(v == null ? "" : v).replace(/<[^>]*>/g, "").trim() ? "" : "Write your notes.";
       case "choice": {
@@ -144,7 +163,7 @@
   /* Whether a task is something to do rather than something to read. Reading
      has nothing to finish, so only Understood ends it. */
   const WORK = ["quiz","short","table","blanks","order","mc","hotspot","label","question",
-                "storyboard","mindmap","board","notes","choice","group","poster","boss"];
+                "storyboard","mindmap","board","notes","choice","group","poster","boss","pixels"];
   const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo;
   /* Everything right, so there is nothing left to decide and Finished can be
      pressed for them. A quiz waits for its score to be up, and a short answer

@@ -23,6 +23,7 @@
      in one place with the marking screens that use it -->
 <script src="progressmath.js"></script>
 <script src="boxkit.js"></script>
+<script src="pixels.js"></script>
 <script src="richtext.js"></script>
 <script src="pyedit.js"></script>
 <script src="scratchhub.js"></script>
@@ -244,6 +245,7 @@
           <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
           <button class="pal" data-add="storyboard"><b>Storyboard</b><span>Plan an animation, panel by panel</span></button>
           <button class="pal" data-add="poster"><b>Poster</b><span>Make a poster in an easy photo editor</span></button>
+          <button class="pal" data-add="pixels"><b>Pixel studio</b><span>Colour a grid square by square, or animate it</span></button>
           <button class="pal" data-add="helper"><b>Photoshop help</b><span>A help chat they can ask</span></button>
         </div>
       </div>
@@ -650,6 +652,7 @@ const BLANK = {
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
   poster:   () => ({ type:"poster", title:"Make a poster", task:"", heading:"" }),
+  pixels:   () => ({ type:"pixels", title:"", task:"", w:8, h:8, depth:1 }),
   boss:     () => ({ type:"boss", title:"", boss:"The Quiz Goblin", look:"goblin", hits:8, hearts:3,
                      questions:[{ q:"", options:["",""], answers:[0], hint:"", why:"" }] }),
   storyboard:() => ({ type:"storyboard", title:"", task:"", panels:6, names:[], timing:true, minSecs:0, maxSecs:0 }),
@@ -746,7 +749,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -1426,6 +1429,24 @@ function compileOne(b, id, target){
     else if (b.type === "poster")
       push(keepArrays({ type:"poster", id, title: b.title || "", task: b.task || "",
         heading: b.heading || "" }));
+    else if (b.type === "pixels"){
+      /* Frames are strings of hex digits, one a square, cut or padded to the
+         grid, so a hand-written lesson with a short row still saves whole. */
+      const w = Math.max(2, Math.min(32, parseInt(b.w, 10) || 8)), h = Math.max(2, Math.min(32, parseInt(b.h, 10) || 8));
+      const frame = (f) => { const t = String(f || "").toLowerCase().replace(/[^0-9a-f]/g, "").slice(0, w * h); return t + "0".repeat(w * h - t.length); };
+      const animated = b.frames === true;
+      push(keepArrays({ type:"pixels", id, title: b.title || "", task: b.task || "",
+        w, h, depth: Math.max(1, Math.min(4, parseInt(b.depth, 10) || 1)),
+        depthChoice: b.depthChoice === true ? true : undefined,
+        target: b.target ? frame(b.target) : undefined,
+        clue: b.target && b.clue === "binary" ? "binary" : undefined,
+        frames: animated ? true : undefined,
+        maxFrames: animated ? Math.max(2, Math.min(24, parseInt(b.maxFrames, 10) || 8)) : undefined,
+        fps: animated ? Math.max(1, Math.min(24, parseInt(b.fps, 10) || 6)) : undefined,
+        start: Array.isArray(b.start) && b.start.length ? b.start.slice(0, animated ? 24 : 1).map(frame) : undefined,
+        binary: b.binary === false ? false : b.binary === "open" ? "open" : undefined,
+        topic: lesson.assessment ? b.topic : "" }));
+    }
     else if (b.type === "boss")
       push({ type:"boss", id, title: b.title || "", task: b.task || "",
         boss: b.boss || "The Boss", look: ["goblin","dragon","robot","ghost"].includes(b.look) ? b.look : "goblin",

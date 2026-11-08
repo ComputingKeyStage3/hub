@@ -9,7 +9,7 @@
                        blanks:"Fill the gaps", short:"Short answer",
                        ide:"Coding task", web:"Coding task", scratch:"Coding task", image:"Photoshop task",
                        table:"Table", label:"Label a picture", hotspot:"Click the right spot",
-                       exam:"Exam question" };
+                       exam:"Exam question", pixels:"Pixel studio" };
   function plainText(html){ return String(html || "").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
   function normAns(x){ return String(x || "").toLowerCase().trim().replace(/\s+/g," ").replace(/[.,!?;:'"]+$/g,""); }
 
@@ -60,6 +60,16 @@
     }
     return { got: inside ? 1 : 0, max: 1 };
   }
+  /* A picture to copy in Pixel studio: one mark for every square the same.
+     The same rule as window.pixelMatch in pixels.js, which this page
+     does not load, so the two must be kept alike. */
+  function pixelsScore(b, v){
+    const w = Math.max(2, Math.min(32, parseInt(b.w, 10) || 8)), h = Math.max(2, Math.min(32, parseInt(b.h, 10) || 8));
+    const want = String(b.target || ""), mine = String(v && Array.isArray(v.frames) ? v.frames[0] || "" : "");
+    const at = (str, i) => { const n = parseInt(str[i], 16); return isNaN(n) ? 0 : n; };
+    for (let i = 0; i < w * h; i++) if (at(want, i) !== at(mine, i)) return { got: 0, max: 1 };
+    return { got: 1, max: 1 };
+  }
   /* The tasks a practical's ticks are counted from: Python and web tasks,
      and a Screenshot task set to take a Photoshop or Blender file. Scratch is left out
      on purpose, as it always was here: counting it now would change how
@@ -80,6 +90,7 @@
     /* nothing to mark against, so not a task with a score */
     if (b.type === "table" && !tableScore(b, null).max) return null;
     if (b.type === "label" && !labelScore(b, null).max) return null;
+    if (b.type === "pixels" && !b.target) return null;
     return { id: b.id, type: b.type, label: label,
              title: plainText(b.prompt || b.title) || label, block: b };
   }
@@ -153,6 +164,7 @@
     if (b.type === "table") return tableScore(b, v);
     if (b.type === "label") return labelScore(b, v);
     if (b.type === "hotspot") return hotspotScore(b, v);
+    if (b.type === "pixels") return pixelsScore(b, v);
     /* a checklist: every line counts once, whether a run ticked it or a
        teacher did, the same as the checklist's own "done of counted" score */
     let got = 0;
