@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.8.4", text:"Cover details has gone from cover lesson cards, along with cover notes in Lesson options and the Word template. A cover lesson card has Publish, View work and the menu." },
   { v:"17.8.3", text:"Cover lessons: the eye on every task in the builder chooses whether the next task waits for this one or shows with it, so a Pixel studio drawing and its quiz can sit together with no Understood between them. A short answer with the eye set no longer opens what is below it until Check answer is pressed." },
   { v:"17.8.2", text:"Cover details is just the cover notes and the lesson. The Sign-in backup section and its link page have gone, because Forgot password on the front page now does their job. Links copied before this no longer work." },
   { v:"17.8.1", text:"Cover lessons: a student who cannot sign in presses Forgot password? and, if their class has a cover lesson on today, just types their name to do it. The QR code has gone, Copy link stays for anyone without an account, and work done this way shows their username beside their name." },
