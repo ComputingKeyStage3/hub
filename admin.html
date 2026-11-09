@@ -4910,7 +4910,21 @@ async function timetableReady(){
   try{ await window.timetable.load(); }catch(e){}
 }
 const lessonAfter = (moment) => window.timetable ? window.timetable.lessonAfter(cls, moment) : null;
+const lessonDuring = (moment) => window.timetable && window.timetable.lessonDuring ? window.timetable.lessonDuring(cls, moment) : null;
 const lessonWhen = (n) => n.name + ", " + (ymd(n.date) === ymd(new Date()) ? "today" : niceDate(ymd(n.date))) + " at " + n.start;
+/* Home learning is due at the class's lesson next week, not the next lesson:
+   set on Monday for a class seen on Tuesday, tomorrow is too soon to do it.
+   "Next week" is the school week after the one a moment is in, so a holiday
+   week passes on to the lesson after it. */
+function lessonNextWeek(moment){
+  const d = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate());
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));   // the Monday after
+  return lessonAfter(d);
+}
+/* It closes the day before that lesson, because a closing day means open until
+   23:59, and closing on the lesson's own day would leave it open after the
+   lesson it was wanted for. */
+const dayBefore = (date) => { const d = new Date(date); d.setDate(d.getDate() - 1); return ymd(d); };
 
 /* Publishing is nearly always one of a few things, so those are what is
    offered, with the form for anything else behind the last of them. A lesson
@@ -4921,8 +4935,9 @@ async function publishPopup(id){
   const already = assignOf(id);
   if (already && already.published){ await schedulePopup(id); return; }
   await timetableReady();
-  const next = lessonAfter(new Date());
   const homework = kindOf(catOf(id)) === "homework";
+  const next = homework ? lessonNextWeek(new Date()) : lessonAfter(new Date());
+  const during = homework ? null : lessonDuring(new Date());
   openModal(box => {
     modalTitle(box, "Publish \u201c" + titleOf(id) + "\u201d");
     const choice = (style, words, note, go) => {
@@ -4938,11 +4953,20 @@ async function publishPopup(id){
       await setPublish(id, true, releaseAt, closeOn);
       offerHomeLearningLink(id);
     };
-    if (!next) box.appendChild(el("p","modal-text", cls + " is not on your timetable, so there is no lesson to go by."));
+    if (!next && !during) box.appendChild(el("p","modal-text", cls + " is not on your timetable, so there is no lesson to go by."));
     if (homework){
-      if (next) choice("btn-primary", "Publish now, due next lesson", "Due " + lessonWhen(next) + ". Closes at " + CLOSES_AT + " that day.",
-                       publish("", ymd(next.date)));
+      if (next){
+        const due = dayBefore(next.date);
+        choice("btn-primary", "Publish now, due next week’s lesson",
+               "For " + lessonWhen(next) + ". Closes at " + CLOSES_AT + " on " + niceDate(due) + ".",
+               publish("", due));
+      }
       else choice("btn-primary", "Publish now", "Closes at " + CLOSES_AT + " today.", publish("", ymd(new Date())));
+    } else if (during){
+      /* The class is in the room, so now is when it is wanted. Their next
+         lesson would make them wait for something meant for today. */
+      choice("btn-primary", "Publish now", cls + " is in " + during.name + " now, until " + during.end + ". Closes at " + CLOSES_AT + " today.",
+             publish("", ymd(new Date())));
     } else {
       if (next){
         const at = new Date(ymd(next.date) + "T" + next.start + ":00");
@@ -4967,10 +4991,11 @@ async function schedulePopup(id){
     let time = (already && already.release_at) ? hhmm(already.release_at) : "";
     let close = (already && already.close_on) ? already.close_on : "";
     /* The day it closes unless a teacher says otherwise: the day it opens, or
-       for home learning the day of the first lesson after that. */
+       for home learning the day before the class's lesson the week after,
+       the same as Publish now offers. */
     const closeFor = (moment, day) => {
-      const next = homework ? lessonAfter(moment) : null;
-      return next ? ymd(next.date) : day;
+      const next = homework ? lessonNextWeek(moment) : null;
+      return next ? dayBefore(next.date) : day;
     };
     /* Counted from now at the earliest: with no time picked yet, today's date
        means midnight, and a lesson taught this morning would come back as the

@@ -1337,6 +1337,25 @@
     return null;
   }
 
+  /* The lesson with a class going on at a moment, or null. A double counts as
+     one lesson from its first start to its last end, so publishing in the
+     second half still finds the class in front of the teacher. */
+  function lessonDuring(name, moment){
+    const k = String(name || "").toLowerCase();
+    if (!tt || !k || isNaN(moment)) return null;
+    const mins = moment.getHours() * 60 + moment.getMinutes();
+    const day = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate());
+    const plan = dayPlan(tt, day);
+    if (plan.kind !== "school") return null;
+    for (const x of withDoubles(plan.list)){
+      if (String(x.slot.cls || "").toLowerCase() !== k) continue;
+      const a = toMins(x.start), b = toMins(x.end);
+      if (a !== null && b !== null && a <= mins && mins < b)
+        return { date: day, start: x.start, end: x.end, name: partsName(x.parts) };
+    }
+    return null;
+  }
+
   /* ================= hooking in ================= */
   const baseShow = window.show;
   window.show = function(view){
@@ -1350,7 +1369,7 @@
   /* Whatever is on screen already, since the sign-in may have gone up first. */
   if ($("homeView") && !$("homeView").hidden) paintHome();
 
-  window.timetable = { open, paintEditor, paintHome, load, nextLessonFor, lessonAfter,
+  window.timetable = { open, paintEditor, paintHome, load, nextLessonFor, lessonAfter, lessonDuring,
                        hasLessons: () => !!tt && hasLessons(tt),
                        weekOf: (d) => tt ? weekOf(tt, d || new Date()) : undefined,
                        _test: { normal, weekOf, holsOf, dayPlan, holidayWeek, nextSchoolDay, fromArbor, withDoubles } };
