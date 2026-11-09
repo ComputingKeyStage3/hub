@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.7.1", text:"Keep working on this task now shows in the middle of the bottom bar and fades after 8 seconds, with a tip by Continue asking students to complete the tasks on the page first. Storyboards and flip books fit the screen, so Play and the frames are always in view." },
   { v:"17.7", text:"Mind maps are redrawn: coloured branches joined by curved lines, a + on each side of the middle that adds a branch on that side, and Enter adds the next branch. Whiteboards and storyboards can now take pictures like the poster, and all three use one Add an image pop-up: paste a picture copied from the internet, or browse for one." },
   { v:"17.6.3", text:"In a lesson the page title and subtitle now sit in a box in the middle of the top bar, giving the tasks more room." },
   { v:"17.6.2", text:"Copied Arbor instructions and links now paste into Arbor as a link students can click, and the instructions are shorter." },

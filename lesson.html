@@ -96,7 +96,13 @@
 <p class="cover-left no-print" id="coverLeft" role="status" hidden></p>
 <div class="dock" id="dock">
   <button class="btn-ghost" id="backBtn">&larr; Back</button>
-  <div class="mid"><button class="btn-ghost dock-rubric" id="rubricBtn" hidden>Show rubric</button></div>
+  <div class="mid">
+    <div class="wait-note" id="waitNote" role="status" aria-live="polite" hidden>
+      <b class="wait-title" id="waitTitle">Keep working on this task</b>
+      <span class="wait-text" id="waitText">Your teacher will let you know when to move on.</span>
+    </div>
+    <button class="btn-ghost dock-rubric" id="rubricBtn" hidden>Show rubric</button>
+  </div>
   <span id="bypassDot" role="button" tabindex="-1" aria-label="Teacher options">&#183;</span>
   <span class="btn-wrap" id="btnWrap">
     <button class="btn-primary btn-continue" id="nextBtn">Continue &rarr;</button>
@@ -104,14 +110,6 @@
   </span>
 </div>
 
-<div class="modal-back no-print" id="waitModal" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="waitTitle">
-    <p class="modal-eyebrow">Not yet</p>
-    <h2 id="waitTitle">Keep working on this task</h2>
-    <p class="modal-text" id="waitText">Your teacher will let you know when to move on.</p>
-    <button class="btn-primary modal-cta" id="waitOk">OK</button>
-  </div>
-</div>
 
 
 <script>
@@ -1545,12 +1543,17 @@ function coolingDown(){ return Date.now() < cooldownUntil; }
    until somebody points at it. */
 function startCooldown(fromBar){
   cooldownUntil = Date.now() + COOLDOWN_SECONDS * 1000;
+  firstTipUntil = Date.now() + 3000;
   $("btnWrap").classList.add("cooling");
   paintTip();
   if (!fromBar) $("nextTip").hidden = false;   // the cursor is already on the button
   clearInterval(cooldownTimer);
   cooldownTimer = setInterval(paintTip, 250);
 }
+/* For the first moments after Continue is turned down, the tip says what to
+   do about it rather than how long to wait. */
+const FIRST_TIP = "Complete all the tasks on this page first.";
+let firstTipUntil = 0;
 function paintTip(){
   const left = Math.ceil((cooldownUntil - Date.now()) / 1000);
   if (left <= 0){
@@ -1559,19 +1562,41 @@ function paintTip(){
     $("nextTip").hidden = true;
     return;
   }
-  $("nextTip").textContent = "Please wait " + left + " second" + (left === 1 ? "" : "s") + " before trying again...";
+  $("nextTip").textContent = Date.now() < firstTipUntil ? FIRST_TIP
+    : "Please wait " + left + " second" + (left === 1 ? "" : "s") + " before trying again...";
 }
 $("nextBtn").addEventListener("mouseenter", () => { if (coolingDown()) $("nextTip").hidden = false; });
 $("nextBtn").addEventListener("mouseleave", () => { $("nextTip").hidden = true; });
 
-/* ---------- "not yet" pop-up ---------- */
+/* ---------- "not yet" ----------
+   A note in the middle of the bar along the bottom, beside the Continue that
+   was just pressed, which fades away on its own after eight seconds. It used
+   to be a pop-up in the middle of the screen with an OK to press, which was
+   one more thing between a student and their work, covering the very task
+   it was telling them to get on with. Nothing here takes the focus. */
+const WAIT_SECONDS = 8;
+let waitTimer = null, waitFade = null;
 function showWaitModal(words){
   const w = words || {};
+  const note = $("waitNote");
   $("waitTitle").textContent = w.title || "Keep working on this task";
   $("waitText").textContent = w.text || "Your teacher will let you know when to move on.";
-  $("waitModal").hidden = false; $("waitOk").focus();
+  clearTimeout(waitTimer); clearTimeout(waitFade);
+  note.classList.remove("fading");
+  note.hidden = false;
+  /* pressed again while it shows: start it again, so it is seen to answer */
+  note.classList.remove("shown"); void note.offsetWidth; note.classList.add("shown");
+  waitTimer = setTimeout(() => {
+    note.classList.add("fading");
+    waitFade = setTimeout(hideWaitModal, 600);
+  }, WAIT_SECONDS * 1000);
 }
-function hideWaitModal(){ $("waitModal").hidden = true; }
+function hideWaitModal(){
+  clearTimeout(waitTimer); clearTimeout(waitFade);
+  const note = $("waitNote");
+  note.hidden = true;
+  note.classList.remove("fading", "shown");
+}
 
 /* ---------- load ---------- */
 
@@ -3349,7 +3374,7 @@ async function tryJumpAhead(i, seg){
     seg.classList.remove("checking");
     $("nextBtn").classList.remove("checking");
   }
-  if (isLocked(i)){ paintTracker(); showWaitModal(); startCooldown(true); return; }
+  if (isLocked(i)){ paintTracker(); showWaitModal(); startCooldown(true); showLockTip(seg, FIRST_TIP); return; }
   if (OFFLINE && !(await passGate(i))) return;
   const fresh = i > furthestStep;
   hideWaitModal(); showStep(i);
@@ -4591,8 +4616,6 @@ function homeworkFinish(){
 }
 
 /* ---------- finish pop-up ---------- */
-$("waitOk").addEventListener("click", hideWaitModal);
-$("waitModal").addEventListener("mousedown", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
 
 document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); } });
 

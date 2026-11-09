@@ -273,6 +273,27 @@ body.lesson > .dock{grid-row:5}
   padding:4px 20px; background:var(--panel); border-top:1px solid var(--line);
 }
 .dock .mid{flex:1; text-align:center; min-width:0}
+/* "Keep working on this task", in the middle of the bar beside Continue.
+   It fades by itself after eight seconds (WAIT_SECONDS in lesson.html). A
+   fade is not movement, so it is allowed through the blanket rule that
+   stops every transition for prefers-reduced-motion, which every school
+   machine reports: without that it would simply vanish. */
+.wait-note{display:inline-flex; flex-direction:column; align-items:center; gap:1px; max-width:100%;
+  padding:7px 16px; border:1.5px solid var(--amber); border-radius:var(--rad-md);
+  background:var(--panel-2); color:var(--text); line-height:1.3; opacity:1; transition:opacity .6s ease}
+.wait-note[hidden]{display:none}
+.wait-note.fading{opacity:0}
+.wait-title{font-size:var(--text-md); font-weight:700}
+.wait-text{font-size:var(--text-sm); color:var(--muted)}
+.mid:has(> .wait-note:not([hidden])) > .dock-rubric{display:none}
+@media (prefers-reduced-motion:reduce){ .wait-note.fading{transition:opacity .6s ease !important} }
+/* On a phone the middle of the bar is a few words wide, so the note sits
+   just above the bar instead, across the screen. */
+@media (max-width:640px){
+  .dock{position:relative}
+  .wait-note{position:absolute; left:12px; right:12px; bottom:calc(100% + 8px); z-index:35;
+    box-shadow:0 8px 22px rgba(0,0,0,.18)}
+}
 .btn-continue{border-radius:var(--rad-md)}
 .btn-continue:disabled{background:var(--line); border-color:var(--line); color:var(--dim)}
 #backBtn:disabled{opacity:.35}
@@ -8641,6 +8662,25 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
   .story-main{ grid-template-columns:minmax(0,1fr) }
   .story-thumb{ flex:0 0 96px }
 }
+/* Kept on screen whole: fitHeight() in tasks-extra.js narrows the paper so
+   the drawing's height fits the room above the bottom bar, and it sits in
+   the middle of its column when it has been narrowed. The words beside it
+   are held to the drawing's height and scroll inside, so they cannot make
+   the row taller again. story-tight is a short screen: a smaller strip and
+   less padding, so the drawing keeps as much of the room as it can. */
+.story-paper{ width:100%; margin:0 auto }
+.story-side{ overflow-y:auto }
+.story-tight .story-main{ padding:8px 10px; gap:10px }
+.story-tight .story-strip{ padding:6px 10px }
+.story-tight .story-thumb{ flex:1 0 80px; max-width:104px }
+.story-tight .story-foot{ padding:6px 10px; gap:8px }
+.story-tight .story-play, .story-tight .story-speed{ padding-top:6px; padding-bottom:6px }
+.story-tight .story-words{ min-height:44px }
+.story-tight .story-side{ gap:5px }
+.story-tight .story-next, .story-tight .story-copy{ padding-top:6px; padding-bottom:6px }
+/* the box's own "What can we see?" says the same, so the label is for a
+   screen reader only when room is short */
+.story-tight .story-side > .story-label:first-of-type{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap }
 
 /* =====================================================================
    COVER LESSONS

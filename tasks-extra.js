@@ -2071,6 +2071,74 @@
     paintTools();
     paintSpeeds();
 
+    /* --- all of it on screen at once ---
+       The drawing is 16:9 at the full width of its column, so on a wide,
+       short laptop screen it alone was taller than the room there is, and
+       Play, the speeds and the frames were under the bar along the bottom.
+       Scrolling down to press Play, then back up to draw, is not something
+       anybody should have to do on every frame of a flip book. So the room
+       between the top of the scrolling area and the bottom bar is measured,
+       everything that is not the drawing is taken off it, and the drawing
+       is made narrow enough that its height fits what is left. Short
+       screens also get the compact strip and buttons first. Below
+       STORY_LEAST tall the drawing is too small to draw on, and the page
+       scrolls rather than shrinking it further. */
+    const STORY_LEAST = 170;
+    function scroller(){
+      for (let e = s.parentElement; e && e !== document.body; e = e.parentElement){
+        if (/(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.clientHeight) return e;
+      }
+      return null;
+    }
+    let fitting = false;
+    function fitHeight(){
+      if (fitting || !s.offsetParent) return;
+      const box = scroller();
+      let room;
+      if (box){
+        const cs = getComputedStyle(box);
+        room = box.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - 24;
+      } else {
+        const dock = document.getElementById("dock");
+        room = (dock && dock.offsetParent ? dock.getBoundingClientRect().top : window.innerHeight) - 24;
+      }
+      if (!(room > 0)) return;
+      fitting = true;
+      try{
+        s.classList.toggle("story-tight", room < 640);
+        /* measured with nothing held back, so it is what the drawing wants */
+        paper.style.maxWidth = "";
+        side.style.maxHeight = "";
+        const whole = inner.getBoundingClientRect().height;
+        const drawn = canvas.getBoundingClientRect().height;
+        const sideBox = side.getBoundingClientRect(), paperBox = paper.getBoundingClientRect();
+        /* side by side on a laptop, one under the other in a demo or on a phone */
+        const beside = !side.hidden && sideBox.height > 0 && Math.abs(sideBox.top - paperBox.top) < 4;
+        const row = beside ? Math.max(paperBox.height, sideBox.height) : paperBox.height;
+        const rest = whole - row + (paperBox.height - drawn);
+        const tall = Math.max(STORY_LEAST, Math.floor(room - rest));
+        if (tall < drawn) paper.style.maxWidth = Math.floor(tall * STORY_W / STORY_H + 2) + "px";
+        /* the words beside it scroll, rather than stretching the row back out */
+        if (beside) side.style.maxHeight = Math.max(STORY_LEAST, Math.min(tall, drawn)) + "px";
+      } finally { fitting = false; }
+    }
+    if (window.ResizeObserver){
+      try{
+        let lastW = 0, lastH = 0;
+        const watch = new ResizeObserver(() => {
+          const box = scroller();
+          const w = s.clientWidth, h = box ? box.clientHeight : window.innerHeight;
+          if (w === lastW && h === lastH) return;
+          lastW = w; lastH = h;
+          fitHeight();
+        });
+        watch.observe(s);
+        /* the scrolling area is only known once the task is on the page */
+        setTimeout(() => { const box = scroller(); if (box) watch.observe(box); fitHeight(); }, 0);
+      }catch(e){}
+    }
+    window.addEventListener("resize", fitHeight);
+
     return {
       section: s,
       /* A demo is the teacher's drawing, so there is nothing of theirs to keep. */
