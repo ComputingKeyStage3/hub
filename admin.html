@@ -5204,35 +5204,21 @@ function sharePopup(id, justPublished){
 function offerHomeLearningLink(id){
   const a = assignOf(id);
   if (kindOf(catOf(id)) === "homework" && a && a.published) sharePopup(id, true);
-  /* Published from Cover details, so back there for the code it was done for. */
-  if (reopenCoverFor === id){
-    reopenCoverFor = "";
-    if (a && a.published) coverDetails(id);
-  }
 }
 
-/* ---------- the sign-in backup for a cover lesson ----------
-   For the student who cannot sign in, with a cover teacher in the room who
-   cannot reset a password. In a class with a cover lesson on today, Forgot
-   password on the front page offers the lesson with just a name, so there is
-   nothing to hand out. The link here is for anyone that does not reach: a
-   student with no account yet, or one who cannot work out their username.
-   The server seals the class and the lesson into it, so nothing in it can be
-   read or changed by hand, and access.html asks for a name in place of a
-   password. What comes back either way is kept apart from the class's own
-   work, and joins the class in View work. There used to be a QR code as
-   well; Forgot password took its place. */
-let reopenCoverFor = "";
-/* Three things to do, a section each and nothing more: get the notes, show the
-   code, see how the lesson goes. It was a page of reading once, and whoever is
-   setting a cover is usually doing it in a hurry. */
+/* ---------- Cover details ----------
+   Two things, a section each and nothing more: get the notes, see how the
+   lesson goes. It was a page of reading once, and whoever is setting a cover
+   is usually doing it in a hurry. A student who cannot sign in needs nothing
+   from here: Forgot password on the front page offers a cover lesson that is
+   on today with just their name. */
 async function coverDetails(id){
   const group = cls;
   const a = assignOf(id);
   const live = !!(a && a.published);
   const later = live && a.release_at && a.release_at > new Date().toISOString();
-  const section = (cardId, heading, extra) => {
-    const card = el("section","covercard" + (extra ? " " + extra : ""));
+  const section = (cardId, heading) => {
+    const card = el("section","covercard");
     card.id = cardId;
     card.appendChild(el("h3","covercard-head", heading));
     return card;
@@ -5246,59 +5232,13 @@ async function coverDetails(id){
       : group + " · Open now"));
     const grid = el("div","covergrid");
     grid.appendChild(section("coverNotesCard", "Cover notes"));
-    const scan = section("coverScanCard", "Sign-in backup", "coverscan");
-    scan.appendChild(el("p","hint", live
-      ? "A student who cannot sign in presses Forgot password? on the front page and types their name instead. For anyone without an account, copy the link and send it to them."
-      : "Publish this lesson first. Until then, students cannot open it without signing in."));
-    /* Saying it needs publishing left a teacher looking for a code that was
-       never going to appear, so the way to do it is here, and it comes back. */
-    if (!live){
-      const pub = el("button","btn-primary","Publish");
-      pub.type = "button";
-      pub.addEventListener("click", () => { reopenCoverFor = id; closeModal(); publishPopup(id); });
-      scan.appendChild(pub);
-    }
-    grid.appendChild(scan);
-    grid.appendChild(section("coverPlanCard", "Lesson structure", "coverplan"));
+    grid.appendChild(section("coverPlanCard", "Lesson structure"));
     box.appendChild(grid);
     const done = el("button","btn-ghost modal-stay","Done");
     done.addEventListener("click", closeModal);
     box.appendChild(done);
   });
   paintCoverLesson(id);
-  if (live) paintCoverCode(id, group);
-}
-async function paintCoverCode(id, group){
-  try{
-    const r = await fetch(API + "/api/teacher/guest-link?lesson=" + encodeURIComponent(id) +
-                          "&group=" + encodeURIComponent(group), { headers: H(), cache: "no-store" });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Could not make the link.");
-    const card = $("coverScanCard");
-    if (!card) return;
-    const url = new URL("access.html", location.href);
-    url.search = "?k=" + d.k;
-    /* Only shown if the clipboard says no, for picking out by hand. */
-    const link = el("pre","codeblock accesslink", url.href);
-    link.hidden = true;
-    const copy = el("button","btn-ghost","Copy link");
-    copy.type = "button";
-    copy.addEventListener("click", async () => {
-      try{ await navigator.clipboard.writeText(url.href); copy.textContent = "Copied \u2713"; }
-      catch(e){
-        /* a school can switch off the clipboard for scripts */
-        link.hidden = false;
-        const pick = document.createRange(); pick.selectNodeContents(link);
-        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(pick);
-        copy.textContent = "Now press Ctrl+C";
-      }
-    });
-    card.appendChild(copy);
-    card.appendChild(link);
-  }catch(e){
-    const card = $("coverScanCard");
-    if (card) card.appendChild(el("p","hint", e.message));
-  }
 }
 /* The lesson is fetched rather than read from the catalogue, which knows only
    its title: the notes and the pages are inside it. */

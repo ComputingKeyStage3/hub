@@ -145,8 +145,8 @@ let inspectList = null, inspectIdx = 0, keepStep = null, inspectUser = "";
 const INSPECT_KEY = qs.get("box") === "next" ? "hub_inspect_next" : "hub_inspect";
 let teacherTools = false;   // a teacher is looking at this work
 const lessonId = qs.get("id") || "demo";
-/* A student with no sign-in, here through Sign-in backup on a cover lesson.
-   access.html took their name and left it in this browser. Their own key for
+/* A student with no sign-in, here through Forgot password on a cover lesson.
+   The front page took their name and left it in this browser. Their own key for
    the work, because an iPad passed along a row is several children on one
    lesson, and each of them starting on the last one's answers would be worse
    than having nothing at all. */
