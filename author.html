@@ -1215,6 +1215,10 @@ function compileOne(b, id, target){
        reopening the lesson would find every task back to None. */
     if (x && b && GATE_TYPES.includes(b.type) && ["attempted","partial","full"].includes(b.gate))
       x.gate = b.gate;
+    /* In a cover lesson, a task that shows the next one with it rather than
+       waiting for Understood. Only the off ones are written down, so every
+       cover lesson made before this keeps one task at a time. */
+    if (x && b && b.coverHold === false) x.coverHold = false;
     target.push(x);
   };
   if (b.type === "page"){
@@ -2443,15 +2447,18 @@ function gateChoices(b){
     ["attempted","Attempted","They have answered at least one question, right or wrong."],
     ["pass","Pass mark","They finish the quiz and get enough right. You choose how many below."]];
   const code = b.type === "ide" || b.type === "web" || b.type === "scratch";
+  const short = b.type === "short";
   const out = [none, ["attempted","Attempted", code
     ? "They have changed the code or run it, whether or not it works yet."
+    : short ? "They have typed an answer and pressed Check answer, right or wrong."
     : "They have had a go, right or wrong."]];
   if (code && !(Array.isArray(b.checks) && b.checks.some(c => String(c.label || "").trim()))) return out;
   if (code || b.type === "blanks")
     out.push(["partial","Partial", code ? "At least one line on the checklist is ticked."
                                         : "At least one gap is right."]);
   out.push(["full","Full", code ? "Every line on the checklist is ticked. Lines you tick by hand only count once you have ticked them."
-                              : b.type === "blanks" ? "Every gap is right." : "They get it right."]);
+                              : b.type === "blanks" ? "Every gap is right."
+                              : short ? "They get it right and press Check answer." : "They get it right."]);
   return out;
 }
 function setGate(b, level){
@@ -2490,6 +2497,47 @@ function askGate(b){
     });
     box.appendChild(list);
     if (now === "pass") box.appendChild(passMarkEditor(b));
+    const done = el("button","btn-primary modal-cta","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+}
+/* The eye in a cover lesson. On, the task after this one stays hidden until
+   this is done and Understood or Finished is pressed, which is how every
+   cover lesson has always worked. Off, the next task shows with it and this
+   one has no Understood at all, which is how a drawing and the quiz about it
+   sit on screen together. Either way Continue still asks for this task to be
+   done, as lesson.html decides. */
+function askCoverHold(b, arr){
+  openModal(box => {
+    box.appendChild(el("h2","","When does the next task appear?"));
+    box.appendChild(el("p","modal-text",
+      "In a cover lesson a page opens one task at a time. To put the next task on screen " +
+      "beside this one, show it with this one. Students still have to do both before Continue moves them on."));
+    const rest = (arr || []).filter(x => x.type !== "extension");
+    if (rest[rest.length - 1] === b)
+      box.appendChild(el("p","modal-text", "This is the last task on the page, so there is no next task. " +
+        "This decides whether the extension tasks wait for it."));
+    const now = b.coverHold !== false;
+    const list = el("div","modepick");
+    [[true, "Wait for this task",
+      "The next task is hidden until this one is done and they press Understood or Finished."],
+     [false, "Show the next task with this one",
+      "The next task is there from the start, and this one has no Understood or Finished button."]]
+      .forEach(choice => {
+        const row = el("button","modepick-item gatepick" + (choice[0] === now ? " on" : ""));
+        row.type = "button";
+        row.setAttribute("aria-pressed", choice[0] === now ? "true" : "false");
+        row.appendChild(el("b","", choice[1]));
+        row.appendChild(el("span","", choice[2]));
+        row.addEventListener("click", () => {
+          if (choice[0]) delete b.coverHold; else b.coverHold = false;
+          saveDraft(); render(); schedulePreview();
+          askCoverHold(b, arr);
+        });
+        list.appendChild(row);
+      });
+    box.appendChild(list);
     const done = el("button","btn-primary modal-cta","Done");
     done.addEventListener("click", closeModal);
     box.appendChild(done);
@@ -2681,7 +2729,22 @@ function card(b, i, arr){
      open one after another by exactly this, so it gets the button too. Lit
      up while a level is set, so a teacher can see which tasks are holding
      their page from the outline. */
-  if (onAPage && b !== bankRoot && GATE_TYPES.includes(b.type)
+  /* A cover lesson opens a page one task at a time whatever the task, and
+     the levels below mean nothing there, so its eye is on every task and
+     asks only whether the next task waits for this one. Extension tasks
+     already sit apart from the rest, so they have none. */
+  if (lesson.cover && onAPage && b !== bankRoot && b.type !== "extension"){
+    const waits = b.coverHold !== false;
+    const gb = el("button","btn-ghost bmini gatebtn" + (waits ? " on" : ""));
+    gb.type = "button";
+    gb.innerHTML = EYE_SHUT;
+    gb.title = waits ? "The next task waits until Understood or Finished is pressed on this one"
+                     : "The next task is shown with this one";
+    gb.setAttribute("aria-label", gb.title);
+    gb.addEventListener("click", (e) => { e.stopPropagation(); askCoverHold(b, arr); });
+    tools.appendChild(gb);
+  }
+  else if (onAPage && b !== bankRoot && GATE_TYPES.includes(b.type)
       && !(lesson.assessment && !lesson.practical)){
     const level = gateLevel(b);
     const gb = el("button","btn-ghost bmini gatebtn" + (level === "none" ? "" : " on"));
@@ -8112,6 +8175,7 @@ function fromCompiled(data, meta){
     if (made && b && b.required === false) made.required = false;
     if (made && b && b.confused) made.confused = b.confused;
     if (made && b && ["attempted","partial","full"].includes(b.gate)) made.gate = b.gate;
+    if (made && b && b.coverHold === false) made.coverHold = false;
     /* A checklist line saved with no kind (switched over from Teacher before
        that was put right) is repaired as it opens, so the lesson is fixed by
        opening it and saving it again. */

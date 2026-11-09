@@ -211,18 +211,26 @@
     }
     return "";
   }
+  /* Whether a task keeps the next one out of sight until its button is
+     pressed. On unless the teacher turned it off with the eye in the builder,
+     which they do to put two tasks side by side, a Pixel studio drawing and
+     the quiz about it, say. Turned off, the next task is already showing, so
+     the task has no Understood or Finished to press. */
+  const holdsNext = (b) => !!b && b.coverHold !== false;
+
   /* Every task on a page still wanting something, top level only: a task
      inside a choice or a group is scrolled to through the thing around it.
      Extension tasks are never in the way. Each task but the last also wants
      its button pressed, Understood or Finished, ctx.ok saying which have
-     been: the last has nothing under it to open, so it has no such button. */
+     been: the last has nothing under it to open, so it has no such button,
+     and neither has a task whose next one is shown with it. */
   function left(page, ctx){
     const kids = (page && page.type === "page" ? (page.blocks || []) : (page ? [page] : []))
       .filter(b => b.type !== "extension");
     const out = [];
     kids.forEach((b, i) => {
       const words = need(b, ctx) ||
-        (ctx.ok && i < kids.length - 1 && !ctx.ok(b.id)
+        (ctx.ok && i < kids.length - 1 && holdsNext(b) && !ctx.ok(b.id)
           ? (selfCheck(b) ? "Just a moment."
              : isWork(b) ? "Press Finished when you are done." : "Press Understood when you are ready.") : "");
       if (words) out.push({ id: b.id, words: words });
@@ -260,5 +268,5 @@
              confused: Object.keys(c.confused || {}).length };
   }
 
-  window.coverWork = { need, left, junk, quizzes, facts, isWork, allRight, selfCheck };
+  window.coverWork = { need, left, junk, quizzes, facts, isWork, allRight, selfCheck, holdsNext };
 })();

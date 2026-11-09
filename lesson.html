@@ -345,9 +345,10 @@ function coverOnShow(){
 }
 /* What keeps the rest of a page back in a Cover lesson. rPage already knows how
    to hide everything under a task that is holding, so this only answers it.
-   The last task has no Understood, so it opens the extension by being done. */
+   The last task has no Understood, so it opens the extension by being done.
+   A task the teacher set to show the next one with it holds nothing back. */
 function coverHold(child, last){
-  return { on: () => true,
+  return { on: () => window.coverWork.holdsNext(child),
            passed: () => last ? !window.coverWork.need(child, coverAsk) : !!coverData().ok[child.id],
            words: () => "", watch: () => {} };
 }
@@ -358,7 +359,9 @@ function coverRow(child, last, opened){
   const row = el("div","cover-row");
   const buttons = el("div","cover-btns");
   row.appendChild(buttons);
-  if (!last){
+  /* The next task is already on screen when this one does not hold it, so
+     there is nothing for Understood or Finished to open. */
+  if (!last && window.coverWork.holdsNext(child)){
     const ok = el("button","btn-primary cover-ok", window.coverWork.isWork(child) ? "Finished" : "Understood");
     ok.type = "button";
     ok.dataset.task = child.id;
@@ -5049,6 +5052,13 @@ const FINISHABLE = ["quiz","mc","blanks","binary","binadd","label","caesar","pas
    right and then carried on past would otherwise hide the rest of the page
    in the middle of a sentence. */
 const GATE_LEVELS = ["attempted", "partial", "full"];
+/* The answer each short answer last had Check answer pressed on. The hold
+   below a short answer read the box as it was typed, so the next task opened
+   the moment the right word was in it, before the student had asked whether
+   it was right, and with Attempted at the first letter. A cover lesson keeps
+   its own record of this in __cover. */
+const shortChecked = {};
+const shortHasCheck = () => !(lesson && lesson.assessment) && !homeworkView();
 function taskGate(b){
   if (!b || !GATE_LEVELS.includes(b.gate)) return null;
   let opened = false;
@@ -5058,6 +5068,7 @@ function taskGate(b){
   };
   function reached(){
     const v = value();
+    if (b.type === "short" && shortHasCheck() && shortChecked[b.id] !== String(v == null ? "" : v)) return false;
     const sc = gateScore(b, v);
     if (b.gate === "attempted") return gateAttempted(b, v) || !!(sc && sc.got > 0);
     /* Nothing in it can be got right, so there is nothing to wait for. */
@@ -5121,9 +5132,12 @@ function gateWords(b){
   /* A checklist the builder hid cannot be pointed at, so a level behind
      one is asked for in the words any other task uses. */
   const code = isCodeTask(b) && b.checksHidden !== true;
+  const check = b.type === "short" && shortHasCheck();
   if (b.gate === "attempted")
     return b.type === "quiz" ? "Answer a question in the quiz above to open it."
-                             : "Have a go at the task above to open it.";
+         : check ? "Type an answer above and press Check answer to open it."
+                 : "Have a go at the task above to open it.";
+  if (check) return "Get the answer above right and press Check answer to open it.";
   if (b.gate === "partial"){
     if (code) return "Tick off at least one thing on the checklist above to open it.";
     if (b.type === "blanks") return "Get at least one gap above right to open it.";
@@ -10820,6 +10834,7 @@ function rShort(b){
         return;
       }
       const r = window.shortAnswer.mark(b, ans.value);
+      shortChecked[b.id] = ans.value;
       if (coverOn()) coverData().checked[b.id] = JSON.stringify(coverAsk.read(b.id));
       fb.hidden = false;
       fb.dataset.verdict = r.ok ? "correct" : "incorrect";
@@ -10857,7 +10872,10 @@ function rShort(b){
     s.appendChild(fb);
   }
 
-  fields[b.id] = { get:() => ans.value, set:(v) => { ans.value = v || ""; paintLength(); } };
+  /* An answer coming back from last time counts as checked, so a page that
+     was open when they left is open when they return, without pressing
+     Check answer again on something already marked. */
+  fields[b.id] = { get:() => ans.value, set:(v) => { ans.value = v || ""; shortChecked[b.id] = ans.value; paintLength(); } };
   return { section:s,
            check:() => !ans.value.trim() ? { ok:false, message:"Write an answer" }
                      : window.shortAnswer.tooLong(b, ans.value).over ? { ok:false, message:tooLong.textContent }
