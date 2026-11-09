@@ -3808,17 +3808,6 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .label-edit img{user-select:none; -webkit-user-drag:none; pointer-events:none}
 .label-edit{position:relative; display:block; width:100%}
 
-/* a mind map on a phone: narrower nodes, and branches stacked */
-@media (max-width:640px){
-  .map-node.is-centre .map-text{min-width:0; width:100%}
-  .map-text{min-width:0}
-  .map-radial{flex-direction:column; align-items:stretch; gap:12px}
-  .map-left{text-align:left}
-  .map-left .map-node{flex-direction:row}
-  .map-left .map-limb{padding-left:18px; padding-right:0}
-  .map-left .map-limb::before{left:0; right:auto}
-  }
-
 /* labelling: a picture that reads well rather than filling the screen */
 
 .label-pic img{user-select:none; -webkit-user-drag:none}
@@ -3841,75 +3830,76 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 
 /* =====================================================================
    MIND MAP
-   The middle sits in the centre. Branches grow outwards to left and
-   right, and each branch's own branches grow further out beside it,
-   joined by lines rather than indented like a list.
+   Every box is placed by layout() in tasks-extra.js, so nothing here
+   decides where anything goes, only how it looks. The sizes of the words
+   matter, though: layout() measures them with these fonts and sizes, so a
+   change here moves the boxes and the lines together, as it should.
+   --branch is the colour of the first branch a box belongs to.
    ===================================================================== */
-.map-holder{overflow-x:auto; padding:14px 0}
-.map-radial{display:flex; align-items:center; justify-content:center; min-width:min-content}
+.mindmap{text-align:left}
+.map-bar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 10px}
+.map-hint{margin:0; color:var(--muted); font-size:var(--text-sm)}
+.map-undo{flex:none; padding:6px 16px; font-size:var(--text-sm)}
+.map-holder{overflow-x:auto; overflow-y:hidden; padding:14px 6px; border:1px solid var(--line);
+  border-radius:var(--rad-lg); background-color:var(--panel);
+  background-image:radial-gradient(var(--line) 1px, transparent 1.4px); background-size:20px 20px}
+.map-sizer{position:relative; margin:0 auto}
+.map-board{position:absolute; left:0; top:0; transform-origin:0 0}
+.map-lines{position:absolute; left:0; top:0; pointer-events:none}
+.map-node{position:absolute; --branch:#8A8A85}
+/* look.css colours every box's border from --field-line, and with a longer
+   selector than this, so the branch colour is handed over through it. */
+.map-node .map-text{display:block; box-sizing:border-box; width:auto; min-width:0; max-width:none; min-height:0;
+  margin:0; resize:none; overflow:hidden; padding:8px 14px;
+  border:2px solid var(--branch); border-radius:14px; background:var(--panel); color:var(--text);
+  --field-line:var(--branch);
+  font-family:var(--body); font-size:15px; font-weight:500; line-height:21px; text-align:center;
+  box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.map-node.is-first .map-text{background:var(--panel); background:color-mix(in srgb, var(--branch) 13%, var(--panel)); font-weight:600}
+.map-node.is-deep .map-text{border-width:1.5px; font-size:14px; line-height:20px; padding:7px 12px}
+.map-node.is-centre .map-text{padding:11px 18px; border:3px solid var(--text); border-radius:18px; --field-line:var(--text);
+  font-size:19px; line-height:26px; font-weight:700}
+.map-node .map-text:focus{outline:none; box-shadow:0 0 0 3px var(--line-2);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--branch) 40%, transparent)}
+.map-node.is-centre .map-text:focus{box-shadow:0 0 0 3px var(--amber)}
+.map-node .map-text::placeholder{color:var(--muted); font-weight:400}
+.map-narrow .map-node .map-text{text-align:left}
+/* The cross sits on the box's own corner, so the pointer never leaves the
+   box on its way to it and it cannot vanish under them. Shown on hover and
+   while the box is being typed in, which is how a tablet reaches it. */
+.map-del{position:absolute; top:-9px; right:-9px; width:22px; height:22px; padding:0; border-radius:50%;
+  border:1.5px solid var(--line-2); background:var(--panel); color:var(--muted); font-size:11px; line-height:1;
+  display:none; place-items:center; cursor:pointer; z-index:2}
+.map-node:hover .map-del,.map-node:focus-within .map-del{display:grid}
+.map-del:hover{background:var(--red); border-color:var(--red); color:#FFFFFF}
+.map-add{position:absolute; width:26px; height:26px; padding:0; border-radius:50%;
+  border:2px solid var(--branch, var(--line-2)); background:var(--panel); color:var(--branch, var(--muted));
+  font-size:18px; font-weight:700; line-height:1; display:grid; place-items:center; cursor:pointer; opacity:.7}
+.map-add:hover,.map-add:focus-visible{opacity:1; background:var(--branch, var(--amber)); color:#FFFFFF}
+.map-add-root{--branch:var(--amber-dark); opacity:.9}
+.map-add[hidden]{display:none}
+.map-full{margin:8px 0 0; color:var(--red); font-size:var(--text-sm)}
 
-.map-centre{flex:none; display:flex; align-items:center; gap:8px; z-index:2}
-.map-grow{opacity:.55}
-.map-grow:hover{opacity:1}
-
-.map-node{display:flex; align-items:center; gap:4px}
-.map-text{height:38px; padding:0 12px; border:1.5px solid var(--line-2); border-radius:var(--rad-pill);
-  background:var(--panel); color:var(--text); font-family:var(--body); font-size:var(--text-md);
-  min-width:120px; max-width:200px}
-.map-node.is-centre .map-text{height:52px; font-size:var(--text-xl); font-weight:700; min-width:170px;
-  border-color:var(--amber); border-width:2.5px; text-align:center}
-
-
-.map-btn{width:26px; min-width:26px; height:26px; flex:0 0 auto; border-radius:50%;
-  border:1.5px solid var(--line-2); background:var(--panel); cursor:pointer; font-size:var(--text-sm);
-  color:var(--muted); padding:0; display:inline-flex; align-items:center; justify-content:center}
-.map-btn:hover{border-color:var(--amber); color:var(--amber-dark)}
-
-/* each side is a column of branches, joined to the middle by one spine */
-.map-side{position:relative; display:flex; flex-direction:column; gap:14px; justify-content:center}
-.map-side:not(:empty){padding:0 26px}
-.map-side:not(:empty)::before{content:""; position:absolute; top:22px; bottom:22px; width:2px;
-  background:var(--line-2)}
-.map-right:not(:empty)::before{left:12px}
-.map-left:not(:empty)::before{right:12px}
-
-/* a branch: itself, then its own branches beside it */
-.map-limb{position:relative; display:flex; align-items:center}
-.map-own{position:relative; flex:none}
-/* the line joining this branch back to the spine */
-.map-own::before{content:""; position:absolute; top:50%; width:14px; height:2px;
-  background:var(--line-2)}
-.map-right .map-own::before{left:-14px}
-.map-left .map-own::before{right:-14px}
-
-/* branches off a branch, further out rather than indented under it */
-.map-twigs{position:relative; display:flex; flex-direction:column; gap:10px; justify-content:center}
-.map-right .map-twigs{margin-left:26px; padding-left:14px}
-.map-left  .map-twigs{margin-right:26px; padding-right:14px; order:-1}
-.map-twigs::before{content:""; position:absolute; top:22px; bottom:22px; width:2px;
-  background:var(--line-2)}
-.map-right .map-twigs::before{left:0}
-.map-left  .map-twigs::before{right:0}
-/* and the line out to them from their branch */
-.map-limb.has-twigs > .map-own::after{content:""; position:absolute; top:50%; width:26px; height:2px;
-  background:var(--line-2)}
-.map-right .map-limb.has-twigs > .map-own::after{right:-26px}
-.map-left  .map-limb.has-twigs > .map-own::after{left:-26px}
-
-.map-left .map-limb{flex-direction:row}
-.map-left .map-node{flex-direction:row-reverse}
-
+/* =====================================================================
+   ADD AN IMAGE: the pop-up every drawing task shares (pictureKit in
+   tasks-extra.js). Three short steps, then Paste image, the thing they
+   will nearly always want, and Browse images under it, quieter.
+   ===================================================================== */
+.pic-modal{max-width:470px; text-align:left}
+.pic-modal h2{text-align:left}
+.pic-steps{list-style:none; margin:4px 0 20px; padding:0; display:flex; flex-direction:column; gap:12px}
+.pic-steps li{display:flex; align-items:center; gap:12px; font-size:var(--text-lg); line-height:1.45; color:var(--muted)}
+.pic-steps b{color:var(--text)}
+.pic-steps .paste-num{width:30px; height:30px; font-size:var(--text-md)}
+.pic-msg{margin:0 0 14px; padding:10px 12px; border-radius:var(--rad-md); background:var(--bg);
+  color:var(--text); font-size:var(--text-md); line-height:1.45}
+.pic-msg[hidden]{display:none}
+.pic-browse{display:block; width:100%; padding:12px; font-size:var(--text-lg)}
+.pic-modal.pic-over{outline:3px dashed var(--amber); outline-offset:-10px}
 @media (max-width:640px){
-  .map-radial{flex-direction:column; align-items:stretch; gap:14px}
-  .map-side:not(:empty){padding:0 0 0 20px}
-  .map-side:not(:empty)::before{left:6px; right:auto}
-  .map-left .map-node{flex-direction:row}
-  .map-left .map-own::before{left:-14px; right:auto}
-  .map-left .map-twigs{margin-right:0; margin-left:26px; padding-right:0; padding-left:14px; order:0}
-  .map-left .map-twigs::before{right:auto; left:0}
-  .map-left .map-limb.has-twigs > .map-own::after{left:auto; right:-26px}
-  .map-text{min-width:0; max-width:none}
-  .map-node.is-centre .map-text{min-width:0}
+  .map-bar{flex-direction:column; align-items:stretch}
+  .map-undo{align-self:flex-end}
+  .map-holder{padding:10px 4px}
 }
 
 /* the whiteboard tools: bigger marks, and colours that stay circles */
@@ -3973,9 +3963,6 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .board-tool svg{width:17px; height:17px; fill:currentColor; display:block; pointer-events:none}
 .board-tool.on svg{fill:var(--amber-dark)}
 .board-canvas{cursor:crosshair}
-/* mind map tools take no room until they are wanted */
-.map-node{position:relative}
-.map-node:hover .map-tools,.map-node:focus-within .map-tools{opacity:1; pointer-events:auto}
 /* these tasks sit in the middle of the column */
 
 .labeltask .label-words,.labeltask .label-list{justify-content:center}
@@ -3995,10 +3982,7 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
   background:var(--panel); border:1.5px solid var(--amber); text-align:center;
 }
 
-/* mind map tools: no room taken, and reachable once shown */
 
-/* the whole branch keeps them alive, so the pointer can travel to them */
-.map-limb:hover .map-tools,.map-node:focus-within .map-tools{opacity:1; pointer-events:auto}
 
 /* notes and whiteboard, centred in the column */
 
@@ -4062,13 +4046,6 @@ body.allmode .tracker,body.allmode .trackmeta,body.allmode .crumbbar{display:non
 .board-inner, .notes-inner{ width:80%; max-width:820px; min-width:0 }
 @media (max-width:900px){ .board-inner, .notes-inner{ width:100% } }
 
-/* the mind map tools have no gap to cross, so hover does not break */
-.map-tools{ position:absolute; left:100%; top:50%; transform:translateY(-50%);
-  margin:0; padding-left:6px; display:flex; gap:2px;
-  opacity:0; pointer-events:none; transition:opacity .12s ease .35s }
-.map-limb:hover .map-tools,.map-node:hover .map-tools,.map-node:focus-within .map-tools,
-.map-tools:hover{ opacity:1; pointer-events:auto; transition-delay:0s }
-.map-left .map-tools{ left:auto; right:100%; padding-left:0; padding-right:6px }
 
 /* =====================================================================
    LABELLING: the picture in the middle, its words in a column beside it

@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.7", text:"Mind maps are redrawn: coloured branches joined by curved lines, a + on each side of the middle that adds a branch on that side, and Enter adds the next branch. Whiteboards and storyboards can now take pictures like the poster, and all three use one Add an image pop-up: paste a picture copied from the internet, or browse for one." },
   { v:"17.6.3", text:"In a lesson the page title and subtitle now sit in a box in the middle of the top bar, giving the tasks more room." },
   { v:"17.6.2", text:"Copied Arbor instructions and links now paste into Arbor as a link students can click, and the instructions are shorter." },
   { v:"17.6.1", text:"Publishing while the class is in front of you now offers Publish now first. Home learning published now is due at the class's lesson next week and closes the day before it." },

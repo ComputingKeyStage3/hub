@@ -21,6 +21,296 @@
   };
 
   /* ===================================================================
+     ADDING A PICTURE, the same on every drawing task
+     The poster, the whiteboard and the storyboard all take a picture the
+     same way, through one pop-up: find one on the internet, right-click it,
+     Copy image, come back and press Paste image. Browse images is there
+     for a picture already saved on the computer. Ctrl + V works too, both
+     in the pop-up and straight onto the drawing.
+
+     window.pictureKit.ask(got, full) opens the pop-up. got(file) is handed
+     the picture as soon as there is one, and the pop-up closes itself, so
+     it lands on the drawing in the same press. full, when given, is said
+     instead, for a drawing that has no room for another picture.
+     =================================================================== */
+  const PIC_TYPES = /^image\/(png|jpe?g|gif|webp|bmp|avif)$/i;
+  /* The first picture on the clipboard as a file, or null when there is
+     none. Throws when the browser will not let the page look. */
+  async function clipboardPictureFile(){
+    const items = await navigator.clipboard.read();
+    for (const item of items){
+      const type = item.types.find(t => t.indexOf("image/") === 0);
+      if (type) return new File([await item.getType(type)], "picture", { type: type });
+    }
+    return null;
+  }
+  /* After a refused look: true once the browser has been told yes and the
+     page has the focus back, false if it says no or nobody answers. */
+  async function clipboardYes(){
+    let status;
+    try{ status = await navigator.permissions.query({ name: "clipboard-read" }); }
+    catch(e){ return false; }
+    if (status.state === "denied") return false;
+    const yes = status.state === "granted" || await new Promise(resolve => {
+      const give = (v) => { clearTimeout(timer); status.onchange = null; resolve(v); };
+      const timer = setTimeout(() => give(false), 60000);
+      status.onchange = () => { if (status.state !== "prompt") give(status.state === "granted"); };
+    });
+    if (!yes) return false;
+    if (document.hasFocus()) return true;
+    return new Promise(resolve => {
+      const timer = setTimeout(() => { window.removeEventListener("focus", back); resolve(false); }, 10000);
+      function back(){ clearTimeout(timer); window.removeEventListener("focus", back); resolve(true); }
+      window.addEventListener("focus", back);
+    });
+  }
+  const pastedFile = (e) => [...((e.clipboardData && e.clipboardData.items) || [])]
+    .filter(x => x.kind === "file" && /^image\//.test(x.type)).map(x => x.getAsFile())[0] || null;
+
+  window.pictureKit = {
+    ask: function(got, full){
+      const back = make("div", "modal-back no-print pic-back");
+      const box = make("div", "modal pic-modal");
+      box.setAttribute("role", "dialog");
+      box.setAttribute("aria-modal", "true");
+      box.setAttribute("aria-label", "Add an image");
+      const x = make("button", "btn-ghost iconbtn modal-x", "✕");
+      x.type = "button";
+      x.title = "Close";
+      x.setAttribute("aria-label", "Close");
+      box.appendChild(x);
+      /* the scrolling middle, so nothing is cut off on a small screen */
+      const middle = make("div", "modal-scroll");
+      box.appendChild(middle);
+      middle.appendChild(make("h2", "", "Add an image"));
+      const close = () => {
+        back.remove();
+        document.removeEventListener("paste", onPaste, true);
+        document.removeEventListener("keydown", onKey, true);
+      };
+      function onKey(e){ if (e.key === "Escape"){ e.preventDefault(); close(); } }
+      function onPaste(e){
+        const file = pastedFile(e);
+        if (!file) return;
+        e.preventDefault(); e.stopPropagation();
+        take(file);
+      }
+      x.addEventListener("click", close);
+      back.addEventListener("pointerdown", (e) => { if (e.target === back) close(); });
+      document.addEventListener("keydown", onKey, true);
+
+      if (full){
+        middle.appendChild(make("p", "modal-text", full));
+        const ok = make("button", "btn-primary modal-cta", "OK");
+        ok.type = "button";
+        ok.addEventListener("click", close);
+        box.appendChild(ok);
+        back.appendChild(box);
+        document.body.appendChild(back);
+        setTimeout(() => ok.focus(), 30);
+        return;
+      }
+
+      const steps = make("ol", "pic-steps");
+      [["Find a picture", " on the internet."],
+       ["Right-click it", " and choose Copy image."],
+       ["Come back here", " and press Paste image."]].forEach((words, i) => {
+        const li = make("li");
+        li.appendChild(make("span", "paste-num", String(i + 1)));
+        const said = make("span");
+        said.appendChild(make("b", "", words[0]));
+        said.appendChild(document.createTextNode(words[1]));
+        li.appendChild(said);
+        steps.appendChild(li);
+      });
+      middle.appendChild(steps);
+      const msg = make("p", "pic-msg");
+      msg.setAttribute("role", "status");
+      msg.hidden = true;
+      middle.appendChild(msg);
+      const say = (text) => { msg.textContent = text; msg.hidden = !text; };
+
+      const pasteBtn = make("button", "btn-primary modal-cta pic-paste", "Paste image");
+      pasteBtn.type = "button";
+      box.appendChild(pasteBtn);
+      const browseBtn = make("button", "btn-ghost pic-browse", "Browse images");
+      browseBtn.type = "button";
+      browseBtn.title = "Choose a picture saved on this computer";
+      box.appendChild(browseBtn);
+
+      let done = false;
+      function take(file){
+        if (done) return;
+        if (!file || !PIC_TYPES.test(file.type || "")){ say("That file is not a picture. Try a different one."); return; }
+        done = true;
+        close();
+        got(file);
+      }
+
+      const NOTHING = "There was no picture copied. Right-click a picture, choose Copy image, then press Paste image again.";
+      pasteBtn.addEventListener("click", async () => {
+        say("");
+        if (!navigator.clipboard || !navigator.clipboard.read){
+          say("Press Ctrl + V on your keyboard to paste the picture.");
+          return;
+        }
+        let file;
+        try{ file = await clipboardPictureFile(); }
+        catch(err){
+          /* Asked once by the browser: wait for their answer, then look again. */
+          pasteBtn.textContent = "Press Allow at the top…";
+          const ok = await clipboardYes();
+          pasteBtn.textContent = "Paste image";
+          if (!ok){ say("Your browser will not let this page see what you copied. Press Ctrl + V on your keyboard instead."); return; }
+          try{ file = await clipboardPictureFile(); }
+          catch(e2){ say("Press Ctrl + V on your keyboard to paste the picture."); return; }
+        }
+        if (!file){ say(NOTHING); return; }
+        take(file);
+      });
+
+      /* The Pictures folder where the browser can open there, and the usual
+         file picker everywhere else. A page inside a frame is not allowed
+         the first, so it falls back the same way. */
+      const fileInp = make("input");
+      fileInp.type = "file";
+      fileInp.accept = "image/*";
+      fileInp.hidden = true;
+      box.appendChild(fileInp);
+      fileInp.addEventListener("change", () => { if (fileInp.files[0]) take(fileInp.files[0]); fileInp.value = ""; });
+      browseBtn.addEventListener("click", async () => {
+        say("");
+        if (window.showOpenFilePicker){
+          try{
+            const handles = await window.showOpenFilePicker({ startIn: "pictures", multiple: false,
+              types: [{ description: "Pictures", accept: { "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"] } }] });
+            if (handles && handles[0]) take(await handles[0].getFile());
+            return;
+          }catch(err){
+            if (err && err.name === "AbortError") return;      // they closed it
+          }
+        }
+        fileInp.click();
+      });
+
+      /* and a picture dragged onto the pop-up from another window */
+      box.addEventListener("dragover", (e) => { e.preventDefault(); box.classList.add("pic-over"); });
+      box.addEventListener("dragleave", () => box.classList.remove("pic-over"));
+      box.addEventListener("drop", (e) => {
+        e.preventDefault();
+        box.classList.remove("pic-over");
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (file) take(file);
+        else say(NOTHING);
+      });
+
+      document.addEventListener("paste", onPaste, true);
+      back.appendChild(box);
+      document.body.appendChild(back);
+      setTimeout(() => pasteBtn.focus(), 30);
+    },
+
+    /* Ctrl + V straight onto a drawing, while it is the last thing pressed
+       on. section is the task's own section; got(file) as for ask. */
+    listen: function(section, got){
+      let mine = false;
+      document.addEventListener("pointerdown", (e) => { mine = section.contains(e.target); }, true);
+      document.addEventListener("paste", (e) => {
+        if (!mine || section.offsetParent === null) return;
+        /* typing in a box on the drawing pastes words, not a picture */
+        const t = e.target;
+        if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT") && !pastedFile(e)) return;
+        const file = pastedFile(e);
+        if (file){ e.preventDefault(); got(file); }
+      });
+    },
+
+    /* A picture made small enough to keep. longest is the most pixels
+       across or down; most is the most characters of data the result may
+       be. WebP keeps a see-through background, which a JPEG would turn
+       black; where the browser cannot make WebP, it is a JPEG on white. */
+    shrink: function(file, longest, most){
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let k = Math.min(1, longest / Math.max(img.width, img.height));
+          const c = make("canvas");
+          let out = "";
+          for (let tries = 0; tries < 5; tries++){
+            c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+            const pen = c.getContext("2d");
+            pen.clearRect(0, 0, c.width, c.height);
+            pen.drawImage(img, 0, 0, c.width, c.height);
+            for (const q of [0.8, 0.65, 0.5]){
+              out = c.toDataURL("image/webp", q);
+              if (out.indexOf("data:image/webp") !== 0){
+                pen.globalCompositeOperation = "destination-over";
+                pen.fillStyle = "#FFFFFF";
+                pen.fillRect(0, 0, c.width, c.height);
+                pen.globalCompositeOperation = "source-over";
+                out = c.toDataURL("image/jpeg", q);
+              }
+              if (!most || out.length <= most) return resolve({ src: out, w: c.width, h: c.height });
+            }
+            k *= 0.75;
+          }
+          resolve({ src: out, w: c.width, h: c.height });
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("unreadable")); };
+        img.src = url;
+      });
+    }
+  };
+
+  /* ===================================================================
+     PICTURES ON A BOARD
+     A picture on the whiteboard or the storyboard is
+       { kind:"photo", pic, x, y, w, h, rot }
+     centred on x, y like a drawing. pic names the picture, and the picture
+     itself is kept once, beside the strokes, in pics: { name: data }. A
+     storyboard panel copied from the one before shares its pictures rather
+     than storing them again.
+
+     The cost, worked out before it was built: a picture is shrunk to 480
+     pixels across and kept under 45,000 characters, and a task holds four
+     at most, so 180KB is the most one student can keep on one task. A whole
+     year group doing that on one task is under 50MB, against the poster's
+     80MB, and most will add one or two.
+     =================================================================== */
+  const PIC_MOST = 4;
+  const PIC_LONGEST = 480;
+  const PIC_CHARS = 45000;
+  const PICS = {};                  // name -> { src, img }
+  const picWaits = [];              // pictures still loading, for the PDF
+  function picLoad(name, src){
+    if (!name || typeof src !== "string" || !/^data:image\//.test(src)) return;
+    if (PICS[name] && PICS[name].src === src) return;
+    const img = new Image();
+    PICS[name] = { src: src, img: img };
+    picWaits.push(new Promise(resolve => {
+      img.onload = () => { resolve(); document.dispatchEvent(new Event("drawkit-picture")); };
+      img.onerror = () => resolve();
+    }));
+    img.src = src;
+  }
+  function paintPhoto(c, st){
+    const w = Number(st.w) || 100, h = Number(st.h) || 100;
+    const p = PICS[st.pic];
+    c.save();
+    c.translate(st.x, st.y);
+    if (st.rot) c.rotate(st.rot * Math.PI / 180);
+    if (p && p.img.complete && p.img.naturalWidth) c.drawImage(p.img, -w / 2, -h / 2, w, h);
+    else {
+      /* still loading, or gone: a grey box the size it will be */
+      c.fillStyle = "#E4E4E0";
+      c.fillRect(-w / 2, -h / 2, w, h);
+    }
+    c.restore();
+  }
+
+  /* ===================================================================
      SHAPES AND DRAWINGS, shared by the whiteboard and the storyboard
      A shape is { kind:"shape", shape:"rect"|"ellipse"|"line"|"arrow",
                   from:[x,y], to:[x,y], colour, width }.
@@ -206,13 +496,61 @@
       if (!st) return false;
       if (st.kind === "stamp"){ paintStamp(c, st); return true; }
       if (st.kind === "shape"){ paintShape(c, st); return true; }
+      if (st.kind === "photo"){ paintPhoto(c, st); return true; }
       return false;
     },
-    has: (st) => !!st && (st.kind === "stamp" || st.kind === "shape"),
+    has: (st) => !!st && (st.kind === "stamp" || st.kind === "shape" || st.kind === "photo"),
+    /* Pictures, kept once beside the strokes. lists is every list of
+       strokes the task has: one for a whiteboard, a panel each for a
+       storyboard. */
+    pictures: {
+      most: PIC_MOST,
+      /* puts saved pictures back where paint() can find them */
+      load: (pics) => { if (pics && typeof pics === "object") Object.keys(pics).forEach(k => picLoad(k, pics[k])); },
+      add: (src) => {
+        const name = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        picLoad(name, src);
+        return name;
+      },
+      /* only the pictures still on the drawing, so a removed one is not kept */
+      keep: (lists) => {
+        const out = {};
+        lists.forEach(list => (list || []).forEach(st => {
+          if (st && st.kind === "photo" && PICS[st.pic]) out[st.pic] = PICS[st.pic].src;
+        }));
+        return Object.keys(out).length ? out : undefined;
+      },
+      count: (lists) => {
+        const seen = new Set();
+        lists.forEach(list => (list || []).forEach(st => { if (st && st.kind === "photo") seen.add(st.pic); }));
+        return seen.size;
+      },
+      /* The pop-up, then the picture made small and handed to place(item)
+         as a new { kind:"photo" } sized to fit inside fitW x fitH. */
+      ask: (lists, fitW, fitH, place, oops) => {
+        const room = window.drawKit.pictures.count(lists) < PIC_MOST;
+        window.pictureKit.ask((file) => window.drawKit.pictures.fromFile(file, fitW, fitH, place, oops),
+          room ? null : "There are already " + PIC_MOST + " pictures here, which is as many as one drawing can keep. Remove one to add another.");
+      },
+      fromFile: (file, fitW, fitH, place, oops, lists) => {
+        if (lists && window.drawKit.pictures.count(lists) >= PIC_MOST){
+          if (oops) oops("There are already " + PIC_MOST + " pictures here. Remove one to add another.");
+          return;
+        }
+        window.pictureKit.shrink(file, PIC_LONGEST, PIC_CHARS).then(got => {
+          const k = Math.min(fitW / got.w, fitH / got.h, 1.5);
+          place({ kind: "photo", pic: window.drawKit.pictures.add(got.src),
+                  w: Math.round(got.w * k), h: Math.round(got.h * k) });
+        }).catch(() => { if (oops) oops("That picture could not be opened. Try a different one."); });
+      }
+    },
+    /* Resolves once every picture handed over has loaded, so a PDF made
+       straight after opening a piece of work has them in it. */
+    ready: () => Promise.all(picWaits.slice()),
     /* The box the handles go round, as boxKit wants it: { x, y, w, h, rot }.
        Null for a line or an arrow, which have an end to drag instead. */
     frame: (st) => {
-      if (st.kind === "stamp"){
+      if (st.kind === "stamp" || st.kind === "photo"){
         const w = Number(st.w) || Number(st.size) || 100, h = Number(st.h) || Number(st.size) || 100;
         return { x: st.x, y: st.y, w: w, h: h, rot: Number(st.rot) || 0 };
       }
@@ -225,9 +563,9 @@
     reshape: (st, bx) => {
       const r1 = (n) => Math.round(n * 10) / 10;
       const rot = r1(Number(bx.rot) || 0);
-      if (st.kind === "stamp"){
+      if (st.kind === "stamp" || st.kind === "photo"){
         st.x = r1(bx.x); st.y = r1(bx.y); st.w = r1(bx.w); st.h = r1(bx.h);
-        st.size = Math.round(Math.max(bx.w, bx.h));
+        if (st.kind === "stamp") st.size = Math.round(Math.max(bx.w, bx.h));
       } else {
         st.from = [r1(bx.x - bx.w / 2), r1(bx.y - bx.h / 2)];
         st.to = [r1(bx.x + bx.w / 2), r1(bx.y + bx.h / 2)];
@@ -244,12 +582,12 @@
       return [f.x - hw, f.y - hh, f.x + hw, f.y + hh];
     },
     move: (st, dx, dy) => {
-      if (st.kind === "stamp"){ st.x += dx; st.y += dy; return; }
+      if (st.kind === "stamp" || st.kind === "photo"){ st.x += dx; st.y += dy; return; }
       st.from[0] += dx; st.from[1] += dy; st.to[0] += dx; st.to[1] += dy;
     },
-    /* The Smaller and Bigger buttons: a drawing only, keeping its shape. */
+    /* The Smaller and Bigger buttons: a drawing or a picture, keeping its shape. */
     grow: (st, by, least, most) => {
-      if (st.kind !== "stamp") return;
+      if (st.kind !== "stamp" && st.kind !== "photo") return;
       const f = window.drawKit.frame(st);
       const k = Math.max(least / Math.min(f.w, f.h), Math.min(most / Math.max(f.w, f.h), by));
       window.drawKit.reshape(st, { x: f.x, y: f.y, w: f.w * k, h: f.h * k, rot: f.rot });
@@ -353,6 +691,11 @@
       if (!press.frame){ st[press.name] = [r(p[0]), r(p[1])]; return; }
       window.drawKit.reshape(st, window.boxKit.drag(press.frame, press.name, p, { min: 12 }));
     }
+  };
+  /* The picture buttons, the same on both boards. */
+  const PIC_ICONS = {
+    add: '<svg viewBox="0 0 20 20"><rect x="2" y="4" width="16" height="12" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="7" cy="8.2" r="1.5"/><path d="M3.5 15l4.2-4.2 3 3 2.3-2.3 3.5 3.5z"/></svg>',
+    behind: '<svg viewBox="0 0 20 20"><rect x="2.5" y="2.5" width="10" height="10" rx="1" opacity=".45"/><rect x="7.5" y="7.5" width="10" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>'
   };
   /* The four shape buttons, drawn the same on both boards. */
   const SHAPE_ICONS = {
@@ -509,14 +852,29 @@
         pickTools.appendChild(editBtn);
       }
 
-      /* a drawing can be made bigger or smaller, and turned to face the other way */
-      if (only && only.kind === "stamp"){
+      /* a drawing or a picture can be made bigger or smaller */
+      if (only && (only.kind === "stamp" || only.kind === "photo")){
         [["−", "Smaller", 1 / 1.25], ["+", "Bigger", 1.25]].forEach(([sign, title, by]) => {
           const btn = make("button", "board-tool", sign);
           btn.title = title;
-          btn.addEventListener("click", () => { window.drawKit.grow(only, by, 30, 900); draw(); ctx.changed(); });
+          btn.addEventListener("click", () => { window.drawKit.grow(only, by, 30, 1200); draw(); ctx.changed(); });
           pickTools.appendChild(btn);
         });
+      }
+      /* A picture goes on top when it is added, over anything drawn
+         already, so it can be sent behind the drawing instead. */
+      if (only && only.kind === "photo"){
+        const backBtn = make("button", "board-tool");
+        backBtn.innerHTML = ICONS.behind;
+        backBtn.title = "Put it behind the drawing";
+        backBtn.addEventListener("click", () => {
+          strokes = [only].concat(strokes.filter(x => x !== only));
+          draw(); ctx.changed();
+        });
+        pickTools.appendChild(backBtn);
+      }
+      /* and a drawing turned to face the other way */
+      if (only && only.kind === "stamp"){
         const flipBtn = make("button", "board-tool");
         flipBtn.innerHTML = ICONS.flip;
         flipBtn.title = "Face the other way";
@@ -525,7 +883,7 @@
       }
 
       /* and anything picked up can be recoloured from here */
-      if (!(only && only.kind === "stamp")) ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
+      if (!(only && (only.kind === "stamp" || only.kind === "photo"))) ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
         const dot = make("button", "board-colour board-pickcolour");
         dot.style.background = c;
         dot.title = "Change to this colour";
@@ -915,7 +1273,8 @@
       redo: '<svg viewBox="0 0 20 20"><path d="M14 7H8a5 5 0 000 10h3v-2H8a3 3 0 010-6h6v3l4.5-4L14 4z"/></svg>',
       home: '<svg viewBox="0 0 20 20"><path d="M10 2l8 7h-2.4v9h-4v-5h-3.2v5h-4V9H2z"/></svg>',
       wipe: '<svg viewBox="0 0 20 20"><path d="M7 2h6v2h4v2H3V4h4zM5 7h10l-.8 11H5.8z"/></svg>',
-      flip: '<svg viewBox="0 0 20 20"><path d="M9 3v14H2zM11 3l7 14h-7z" opacity=".85"/></svg>'
+      flip: '<svg viewBox="0 0 20 20"><path d="M9 3v14H2zM11 3l7 14h-7z" opacity=".85"/></svg>',
+      behind: PIC_ICONS.behind
     };
     function toolBtn(name, label, title){
       const btn = make("button", "board-tool");
@@ -970,6 +1329,47 @@
       trayBtn.classList.toggle("open", !tray.hidden);
       setTimeout(fit, 0);
     });
+
+    /* A picture from the internet or the computer, through the same pop-up
+       the poster uses. It lands in the middle of what is on screen, picked
+       up, so the next thing to do with it is move it. */
+    const picBtn = make("button", "board-tool board-picbtn");
+    picBtn.innerHTML = PIC_ICONS.add;
+    picBtn.title = "Add an image";
+    picBtn.setAttribute("aria-label", "Add an image");
+    bar.appendChild(picBtn);
+    function placePicture(item){
+      const rect = stage.getBoundingClientRect();
+      const where = [(rect.width / 2 - view.x) / view.scale, (rect.height / 2 - view.y) / view.scale];
+      clampPoint(where);
+      item.x = Math.round(where[0]); item.y = Math.round(where[1]);
+      strokes.push(item);
+      undone = [];
+      picked = [item];
+      bar.querySelector('.board-tool[title="Select things"]').click();
+      draw(); ctx.changed();
+    }
+    const pictureFit = () => {
+      const rect = stage.getBoundingClientRect();
+      return [Math.max(160, (rect.width || 600) * 0.5 / view.scale), Math.max(120, (rect.height || 400) * 0.6 / view.scale)];
+    };
+    const boardSay = (text) => {
+      const note = make("div", "board-ask");
+      note.appendChild(make("p", "", text));
+      const ok = make("button", "btn-ghost", "OK");
+      ok.addEventListener("click", () => note.remove());
+      note.appendChild(ok);
+      stage.appendChild(note);
+    };
+    picBtn.addEventListener("click", () => {
+      const fit = pictureFit();
+      window.drawKit.pictures.ask([strokes], fit[0], fit[1], placePicture, boardSay);
+    });
+    window.pictureKit.listen(s, (file) => {
+      const fit = pictureFit();
+      window.drawKit.pictures.fromFile(file, fit[0], fit[1], placePicture, boardSay, [strokes]);
+    });
+    document.addEventListener("drawkit-picture", () => { if (s.isConnected) draw(); });
 
     ["#1D1D1B","#C0392B","#2F6BAE","#2E7D5B","#B8930A"].forEach(c => {
       const dot = make("button", "board-colour");
@@ -1044,9 +1444,15 @@
 
     return {
       section: s,
-      get: () => ({ strokes: strokes, view: view }),
+      get: () => {
+        const out = { strokes: strokes, view: view };
+        const pics = window.drawKit.pictures.keep([strokes]);
+        if (pics) out.pics = pics;
+        return out;
+      },
       set: (v) => {
         if (!v) return;
+        window.drawKit.pictures.load(v.pics);
         if (Array.isArray(v.strokes)) strokes = v.strokes;
         if (v.view) view = v.view;
         draw();
@@ -1241,6 +1647,12 @@
       trayBtn.classList.toggle("open", !tray.hidden);
     });
     trayBtn.classList.add("board-traybtn");
+    /* A picture, through the same pop-up the poster uses. It goes on the
+       panel on screen, in the middle, picked up with the move tool. */
+    const picBtn = toolBtn(PIC_ICONS.add, "Add an image", () => {
+      window.drawKit.pictures.ask(panels.map(p => p.strokes), STORY_W * 0.55, STORY_H * 0.7, placePicture, storySay);
+    });
+    picBtn.classList.add("board-picbtn");
 
     /* --- the panel being worked on --- */
     const main = make("div", "story-main");
@@ -1292,9 +1704,14 @@
         b2.addEventListener("click", (e) => { e.stopPropagation(); fn(); paintPanel(); ctx.changed(); });
         litTools.appendChild(b2);
       };
-      if (item.kind === "stamp"){
+      if (item.kind === "stamp" || item.kind === "photo"){
         btn("\u2212", "Smaller", () => window.drawKit.grow(item, 1 / 1.25, 24, 600));
         btn("+", "Bigger", () => window.drawKit.grow(item, 1.25, 24, 600));
+      }
+      if (item.kind === "photo") btn("", "Put it behind the drawing", () => {
+        panels[at].strokes = [item].concat(panels[at].strokes.filter(x => x !== item));
+      }, PIC_ICONS.behind);
+      if (item.kind === "stamp"){
         btn("", "Face the other way", () => { item.flip = !item.flip; },
             '<svg viewBox="0 0 20 20"><path d="M9 3v14H2zM11 3l7 14h-7z" opacity=".85"/></svg>');
       }
@@ -1315,6 +1732,23 @@
     const full = make("p", "story-full");
     full.hidden = true;
     paper.appendChild(full);
+    function storySay(text){ full.textContent = text; full.hidden = !text; }
+    function placePicture(item){
+      if (demo) return;
+      item.x = STORY_W / 2; item.y = STORY_H / 2;
+      stopPlay();
+      panels[at].strokes.push(item);
+      cleared.delete(panels[at]);
+      tool = "move";
+      pick(item);
+      paintTools();
+      paintPanel(); ctx.changed();
+    }
+    if (!demo) window.pictureKit.listen(s, (file) => {
+      window.drawKit.pictures.fromFile(file, STORY_W * 0.55, STORY_H * 0.7, placePicture, storySay,
+                                       panels.map(p => p.strokes));
+    });
+    document.addEventListener("drawkit-picture", () => { if (s.isConnected){ paintPanel(); paintStrip(); } });
 
     const side = make("div", "story-side");
     main.appendChild(side);
@@ -1640,9 +2074,16 @@
     return {
       section: s,
       /* A demo is the teacher's drawing, so there is nothing of theirs to keep. */
-      get: () => demo ? null : { panels: panels },
+      get: () => {
+        if (demo) return null;
+        const out = { panels: panels };
+        const pics = window.drawKit.pictures.keep(panels.map(p => p.strokes));
+        if (pics) out.pics = pics;
+        return out;
+      },
       set: (v) => {
         if (demo || !v || !Array.isArray(v.panels)) return;
+        window.drawKit.pictures.load(v.pics);
         const got = v.panels.map(p => ({
           strokes: Array.isArray(p && p.strokes) ? p.strokes : [],
           text: String((p && p.text) || "").slice(0, STORY_TEXT),
@@ -2214,130 +2655,483 @@
 
   /* ===================================================================
      MINDMAP
-     { type:"mindmap", centre, starter:[{id,text,parent}] }
-     A middle idea with branches off it. The teacher can set the middle
-     and some first branches; students add their own from there.
+     { type:"mindmap", centre, lockCentre, starter:[{id,text,parent,side}] }
+     Saved as { nodes:[{ id, text, parent, side }] }: the words and what
+     each one hangs off, never where it sits. side is only on the first
+     branches, "left" or "right".
+
+     It used to be built out of nested flex boxes with lines drawn by CSS,
+     and that was the trouble with it. Both "+" buttons by the middle did
+     the same thing and the branches were then shared out half and half, so
+     a branch added on the left could turn up on the right and push one
+     already there across. The lines were drawn to where a box was expected
+     to be rather than where it was, and the buttons only showed on hover,
+     on top of the next branch along, which a tablet cannot do at all.
+
+     Now every box is placed by layout() from the sizes the words need, and
+     the lines are drawn between the places it worked out, so they meet.
+     Each first branch keeps the side it was added on. Below 620 pixels
+     across, a map with two sides does not fit, so it is laid out as a tree
+     down the page instead, from the same data.
      =================================================================== */
+  const MAP_COLOURS = ["#2F6BAE","#C0392B","#2E7D5B","#8C5BC4","#DC8A3E","#1F8A8A","#B8930A","#D35D8A"];
+  const MAP_MOST = 60;          // boxes in one map, the middle included
+  const MAP_DEEP = 3;           // a branch, a branch off that, and one more
+  const MAP_WORDS = 80;         // characters in one box
+
   window.rMindmap = function(b, ctx){
     const s = make("section", "mindmap");
+    const bar = make("div", "map-bar");
+    const hint = make("p", "map-hint",
+      "Press + to add a branch. Press Enter in a box to add another one beside it.");
+    const undoBtn = make("button", "btn-ghost map-undo", "Undo");
+    undoBtn.type = "button";
+    undoBtn.disabled = true;
+    bar.appendChild(hint);
+    bar.appendChild(undoBtn);
+    s.appendChild(bar);
     const holder = make("div", "map-holder");
+    const sizer = make("div", "map-sizer");
+    const board = make("div", "map-board");
+    const NS = "http://www.w3.org/2000/svg";
+    const lines = document.createElementNS(NS, "svg");
+    lines.setAttribute("class", "map-lines");
+    lines.setAttribute("aria-hidden", "true");
+    board.appendChild(lines);
+    sizer.appendChild(board);
+    holder.appendChild(sizer);
     s.appendChild(holder);
+    const full = make("p", "map-full");
+    full.hidden = true;
+    s.appendChild(full);
 
-    let nodes = Array.isArray(b.starter) && b.starter.length
-      ? JSON.parse(JSON.stringify(b.starter))
-      : [{ id:"root", text: b.centre || "The big idea", parent:null }];
+    let nodes = [];
     let nextId = 1;
+    const history = [];
+    const boxes = new Map();      // id -> { wrap, text, add, del }
+    const rootAdds = { left: null, right: null };
 
-    const childrenOf = (id) => nodes.filter(n => n.parent === id);
-
-    /* A real map rather than a list: the middle sits in the centre and the
-       first branches go around it, each with its own branches below. */
-    function paint(){
-      holder.innerHTML = "";
-      const root = nodes.find(n => n.parent === null) || nodes[0];
-      if (!root) return;
-
-      const map = make("div", "map-radial");
-      const first = childrenOf(root.id);
-      /* half the branches to each side, so the middle stays in the middle */
-      const half = Math.ceil(first.length / 2);
-      const left = make("div", "map-side map-left");
-      const right = make("div", "map-side map-right");
-      first.slice(0, half).forEach(n => left.appendChild(limb(n, "left")));
-      first.slice(half).forEach(n => right.appendChild(limb(n, "right")));
-
-      map.appendChild(left);
-      map.appendChild(centre(root));
-      map.appendChild(right);
-      holder.appendChild(map);
+    const rootOf = () => nodes.find(n => n.parent === null);
+    const kidsOf = (id) => nodes.filter(n => n.parent === id);
+    const byId = (id) => nodes.find(n => n.id === id);
+    function depthOf(n){
+      let d = 0, at = n;
+      while (at && at.parent !== null && d < 20){ at = byId(at.parent); d++; }
+      return d;
+    }
+    /* The first branch a box belongs to, which decides its colour and side. */
+    function limbOf(n){
+      let at = n;
+      while (at && at.parent !== null){
+        const up = byId(at.parent);
+        if (!up || up.parent === null) return at;
+        at = up;
+      }
+      return null;
+    }
+    function colourOf(n){
+      const limb = limbOf(n);
+      if (!limb) return "";
+      const firsts = kidsOf(rootOf().id);
+      return MAP_COLOURS[Math.max(0, firsts.indexOf(limb)) % MAP_COLOURS.length];
     }
 
-    function nodeBox(node, cls){
-      const wrap = make("div", "map-node " + cls);
-      const text = make("input", "map-text");
-      text.value = node.text;
-      text.placeholder = node.parent === null ? "The idea in the middle" : "A branch";
-      text.readOnly = node.parent === null && b.lockCentre === true;
-      text.addEventListener("input", () => { node.text = text.value; ctx.changed(); });
+    /* Anything handed over is made safe to draw: one middle, every box
+       hanging off something that exists, and a side on every first branch.
+       Old saved maps have no sides, so they alternate, starting on the
+       right, which is what they looked like before. */
+    function tidy(list){
+      const out = [];
+      const seen = new Set();
+      (Array.isArray(list) ? list : []).forEach(n => {
+        if (!n || n.id === undefined || n.id === null || seen.has(String(n.id))) return;
+        seen.add(String(n.id));
+        out.push({ id: String(n.id), text: String(n.text || "").slice(0, MAP_WORDS),
+                   parent: n.parent === null || n.parent === undefined ? null : String(n.parent),
+                   side: n.side === "left" || n.side === "right" ? n.side : undefined });
+      });
+      let root = out.find(n => n.parent === null);
+      if (!root){
+        root = { id: "root", text: b.centre || "", parent: null };
+        out.unshift(root);
+      }
+      /* a second middle, or a box whose branch has gone, hangs off the middle */
+      const ids = new Set(out.map(n => n.id));
+      out.forEach(n => { if (n !== root && (n.parent === null || !ids.has(n.parent) || n.parent === n.id)) n.parent = root.id; });
+      let flip = 0;
+      out.forEach(n => {
+        if (n.parent === root.id){ if (!n.side) n.side = flip % 2 ? "left" : "right"; flip++; }
+        else delete n.side;
+      });
+      return out.slice(0, MAP_MOST);
+    }
+
+    function newId(){ return "n" + (nextId++) + "-" + Date.now().toString(36); }
+    function remember(){
+      history.push(JSON.stringify(nodes));
+      if (history.length > 40) history.shift();
+      undoBtn.disabled = false;
+    }
+    function say(text){ full.textContent = text; full.hidden = !text; }
+
+    /* --- adding and taking away --- */
+    function addUnder(parent, side, after){
+      if (nodes.length >= MAP_MOST){ say("This mind map is full. Remove a branch to add another."); return null; }
+      if (parent.parent !== null && depthOf(parent) >= MAP_DEEP) return null;
+      remember();
+      const n = { id: newId(), text: "", parent: parent.id };
+      if (parent.parent === null) n.side = side || quieterSide();
+      /* straight after the box Enter was pressed in, so it lands beside it */
+      const at = after ? nodes.indexOf(after) : -1;
+      if (at >= 0) nodes.splice(at + 1, 0, n); else nodes.push(n);
+      paint();
+      ctx.changed();
+      focusOn(n);
+      return n;
+    }
+    /* Enter in the middle adds to whichever side has less on it. */
+    function quieterSide(){
+      const firsts = kidsOf(rootOf().id);
+      const right = firsts.filter(n => n.side === "right").length;
+      return right > firsts.length - right ? "left" : "right";
+    }
+    function remove(n){
+      if (n.parent === null) return;
+      remember();
+      const doomed = new Set([n.id]);
+      let grew = true;
+      while (grew){
+        grew = false;
+        nodes.forEach(x => { if (x.parent !== null && doomed.has(x.parent) && !doomed.has(x.id)){ doomed.add(x.id); grew = true; } });
+      }
+      /* where the typing goes next: the box before it, or what it hung off */
+      const sibs = kidsOf(n.parent);
+      const before = sibs[sibs.indexOf(n) - 1];
+      nodes = nodes.filter(x => !doomed.has(x.id));
+      say("");
+      paint();
+      ctx.changed();
+      focusOn(before || byId(n.parent));
+    }
+    function focusOn(n){
+      const box = n && boxes.get(n.id);
+      if (!box) return;
+      /* without preventScroll the page jumps to put the box at the top */
+      try{ box.text.focus({ preventScroll: true }); }catch(e){ box.text.focus(); }
+      const end = box.text.value.length;
+      try{ box.text.setSelectionRange(end, end); }catch(e){}
+    }
+    undoBtn.addEventListener("click", () => {
+      const last = history.pop();
+      undoBtn.disabled = !history.length;
+      if (!last) return;
+      nodes = JSON.parse(last);
+      say("");
+      paint();
+      ctx.changed();
+    });
+
+    /* --- the boxes themselves --- */
+    function plusButton(title, fn){
+      const btn = make("button", "map-add", "+");
+      btn.type = "button";
+      btn.title = title;
+      btn.setAttribute("aria-label", title);
+      btn.addEventListener("click", fn);
+      board.appendChild(btn);
+      return btn;
+    }
+    function boxFor(n){
+      if (boxes.has(n.id)) return boxes.get(n.id);
+      const isRoot = n.parent === null;
+      const wrap = make("div", "map-node" + (isRoot ? " is-centre" : ""));
+      const text = make("textarea", "map-text");
+      text.rows = 1;
+      text.maxLength = MAP_WORDS;
+      text.spellcheck = true;
+      text.value = n.text;
+      text.setAttribute("aria-label", isRoot ? "The idea in the middle" : "A branch");
+      text.readOnly = isRoot && b.lockCentre === true;
       wrap.appendChild(text);
+      const box = { wrap: wrap, text: text, add: null, del: null, node: n };
+      text.addEventListener("focus", () => { box.typedFrom = text.value; });
+      text.addEventListener("input", () => {
+        /* one undo step for a run of typing, taken as it starts */
+        if (box.typedFrom !== undefined && box.typedFrom === box.node.text){
+          history.push(JSON.stringify(nodes));
+          undoBtn.disabled = false;
+          box.typedFrom = undefined;
+        }
+        /* a pasted line break would make a box no layout expects */
+        if (/\n/.test(text.value)) text.value = text.value.replace(/\s*\n\s*/g, " ");
+        box.node.text = text.value;
+        layout();
+        ctx.changed();
+      });
+      text.addEventListener("keydown", (e) => {
+        const me = box.node;
+        if (e.key === "Enter"){
+          e.preventDefault();
+          if (me.parent === null) addUnder(me, quieterSide());
+          else addUnder(byId(me.parent), me.side, me);
+        } else if (e.key === "Backspace" && me.parent !== null && !text.value && !kidsOf(me.id).length){
+          e.preventDefault();
+          remove(me);
+        }
+      });
+      if (!isRoot){
+        const del = make("button", "map-del", "✕");
+        del.type = "button";
+        del.title = "Remove this branch and anything on it";
+        del.setAttribute("aria-label", del.title);
+        /* pressed before the box loses the focus, or it vanishes first */
+        del.addEventListener("pointerdown", (e) => e.preventDefault());
+        del.addEventListener("click", () => remove(box.node));
+        wrap.appendChild(del);
+        box.del = del;
+        box.add = plusButton("Add a branch coming off this one", () => addUnder(box.node));
+      }
+      board.appendChild(wrap);
+      boxes.set(n.id, box);
+      return box;
+    }
 
-      const tools = make("span", "map-tools");
-      if (node.parent !== null){
-        const add = make("button", "map-btn", "+");
-        add.title = "Add a branch from here";
-        add.addEventListener("click", () => {
-          nodes.push({ id: "n" + (nextId++) + "-" + Date.now(), text: "", parent: node.id });
-          paint(); ctx.changed();
+    /* --- how much room the words take --- */
+    let ruler = null;
+    function textWidth(str, el){
+      if (!ruler) ruler = document.createElement("canvas").getContext("2d");
+      const cs = getComputedStyle(el);
+      ruler.font = cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+      return ruler.measureText(str).width;
+    }
+    /* Fits the box to its words: wider up to a limit, then onto a second line. */
+    function fitBox(box, most){
+      const n = box.node, isRoot = n.parent === null;
+      const least = isRoot ? 150 : 96;
+      const el = box.text;
+      const shown = el.value || el.placeholder || "";
+      const pad = 30;
+      const w = Math.round(Math.max(least, Math.min(most, textWidth(shown, el) + pad + 4)));
+      el.style.width = w + "px";
+      el.style.height = "auto";
+      /* a box on a page not shown yet measures nothing, so it is guessed */
+      /* scrollHeight leaves out the border, and the box's height includes it */
+      let h = el.scrollHeight ? el.scrollHeight + (el.offsetHeight - el.clientHeight) : 0;
+      if (!h){
+        const line = isRoot ? 26 : 21;
+        h = Math.ceil(Math.max(1, (textWidth(shown, el) + pad) / Math.max(40, w - pad))) * line + (isRoot ? 22 : 16);
+      }
+      h = Math.max(isRoot ? 50 : 38, h);
+      el.style.height = h + "px";
+      return { w: w, h: h };
+    }
+
+    /* --- where everything goes --- */
+    const GAP_OUT = 64;      // from the middle out to the first branches
+    const GAP_X = 50;        // between a branch and the ones off it
+    const GAP_Y = 12;        // between one branch and the next down
+    const PLUS = 26;         // the + on the end of a branch
+    const INDENT = 30;       // each step in on a phone
+    let narrow = false;
+
+    function layout(){
+      const root = rootOf();
+      if (!root) return;
+      const avail = holder.clientWidth || s.clientWidth || 900;
+      narrow = avail < 620;
+      s.classList.toggle("map-narrow", narrow);
+      const size = {};
+      nodes.forEach(n => {
+        const d = depthOf(n);
+        const most = narrow ? Math.max(120, Math.min(260, avail - 30 - d * INDENT - PLUS - 16))
+                            : (n.parent === null ? 240 : 190);
+        size[n.id] = fitBox(boxes.get(n.id), most);
+      });
+      const pos = {};
+      if (narrow){
+        /* a tree down the page: each box under the one it hangs off */
+        let y = 0;
+        const place = (n, d) => {
+          pos[n.id] = { x: d * INDENT, y: y, w: size[n.id].w, h: size[n.id].h, d: d };
+          y += size[n.id].h + (d === 0 ? 16 : 10);
+          kidsOf(n.id).forEach(k => place(k, d + 1));
+        };
+        place(root, 0);
+      } else {
+        /* How tall each branch is with everything on it, so the ones off
+           a branch are centred on it and nothing overlaps. */
+        const tall = {};
+        const measure = (n) => {
+          const kids = kidsOf(n.id);
+          const under = kids.reduce((a, k) => a + measure(k), 0) + GAP_Y * Math.max(0, kids.length - 1);
+          return (tall[n.id] = Math.max(size[n.id].h, under));
+        };
+        const place = (n, dir, edge, top, d) => {
+          const w = size[n.id].w, h = size[n.id].h, mid = top + tall[n.id] / 2;
+          const x = dir > 0 ? edge : edge - w;
+          pos[n.id] = { x: x, y: mid - h / 2, w: w, h: h, dir: dir, d: d };
+          const kids = kidsOf(n.id);
+          const under = kids.reduce((a, k) => a + tall[k.id], 0) + GAP_Y * Math.max(0, kids.length - 1);
+          let y = mid - under / 2;
+          const next = dir > 0 ? x + w + GAP_X : x - GAP_X;
+          kids.forEach(k => { place(k, dir, next, y, d + 1); y += tall[k.id] + GAP_Y; });
+        };
+        const rw = size[root.id].w, rh = size[root.id].h;
+        pos[root.id] = { x: -rw / 2, y: -rh / 2, w: rw, h: rh, d: 0 };
+        ["right", "left"].forEach(side => {
+          const firsts = kidsOf(root.id).filter(n => n.side === side);
+          const dir = side === "right" ? 1 : -1;
+          firsts.forEach(measure);
+          /* the first branches a little further apart than the rest */
+          const gap = GAP_Y + 8;
+          const total = firsts.reduce((a, k) => a + tall[k.id], 0) + gap * Math.max(0, firsts.length - 1);
+          let y = -total / 2;
+          firsts.forEach(k => { place(k, dir, dir * (rw / 2 + GAP_OUT), y, 1); y += tall[k.id] + gap; });
         });
-        tools.appendChild(add);
       }
-      if (node.parent !== null){
-        const del = make("button", "map-btn", "\u2715");
-        del.title = "Remove this and anything on it";
-        del.addEventListener("click", () => {
-          const doomed = new Set([node.id]);
-          let grew = true;
-          while (grew){
-            grew = false;
-            nodes.forEach(n => {
-              if (n.parent && doomed.has(n.parent) && !doomed.has(n.id)){ doomed.add(n.id); grew = true; }
-            });
-          }
-          nodes = nodes.filter(n => !doomed.has(n.id));
-          paint(); ctx.changed();
-        });
-        tools.appendChild(del);
+
+      /* Where each + goes: on the outside end of its box, which is where a
+         branch off it will leave from. */
+      const plus = {};
+      nodes.forEach(n => {
+        const p = pos[n.id];
+        if (n.parent === null || p.d >= MAP_DEEP) return;
+        plus[n.id] = { x: narrow || p.dir > 0 ? p.x + p.w + 6 : p.x - 6 - PLUS, y: p.y + p.h / 2 - PLUS / 2 };
+      });
+      const rp = pos[root.id];
+      const rootPlus = { right: { x: rp.x + rp.w + 8, y: rp.y + rp.h / 2 - PLUS / 2 },
+                         left: narrow ? null : { x: rp.x - 8 - PLUS, y: rp.y + rp.h / 2 - PLUS / 2 } };
+
+      /* everything moved so the top left corner is at the edge of the board */
+      let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+      const reach = (x, y, w, h) => { x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x + w); y2 = Math.max(y2, y + h); };
+      Object.values(pos).forEach(p => reach(p.x, p.y, p.w, p.h));
+      Object.values(plus).concat([rootPlus.right, rootPlus.left]).forEach(q => { if (q) reach(q.x, q.y, PLUS, PLUS); });
+      const PAD = 10;
+      const W = Math.ceil(x2 - x1 + PAD * 2), H = Math.ceil(y2 - y1 + PAD * 2);
+      const dx = PAD - x1, dy = PAD - y1;
+      Object.values(pos).forEach(p => { p.x += dx; p.y += dy; });
+      Object.values(plus).concat([rootPlus.right, rootPlus.left]).forEach(q => { if (q){ q.x += dx; q.y += dy; } });
+
+      /* the boxes */
+      nodes.forEach(n => {
+        const p = pos[n.id], box = boxes.get(n.id);
+        box.wrap.style.left = p.x + "px";
+        box.wrap.style.top = p.y + "px";
+        box.wrap.classList.toggle("is-left", !narrow && p.dir < 0);
+        box.wrap.classList.toggle("is-first", p.d === 1);
+        box.wrap.classList.toggle("is-deep", p.d > 1);
+        const c = colourOf(n);
+        if (c) box.wrap.style.setProperty("--branch", c); else box.wrap.style.removeProperty("--branch");
+        if (box.add){
+          /* Only as deep as a map can usefully go. Past that the + is gone
+             rather than greyed, since there is nothing it could ever do. */
+          const q = plus[n.id];
+          box.add.hidden = !q;
+          if (q){ box.add.style.left = q.x + "px"; box.add.style.top = q.y + "px"; }
+          if (c) box.add.style.setProperty("--branch", c);
+        }
+      });
+      rootAdds.right.style.left = rootPlus.right.x + "px";
+      rootAdds.right.style.top = rootPlus.right.y + "px";
+      rootAdds.right.title = narrow ? "Add a branch" : "Add a branch on the right";
+      rootAdds.right.setAttribute("aria-label", rootAdds.right.title);
+      rootAdds.left.hidden = !rootPlus.left;
+      if (rootPlus.left){
+        rootAdds.left.style.left = rootPlus.left.x + "px";
+        rootAdds.left.style.top = rootPlus.left.y + "px";
       }
-      wrap.appendChild(tools);
-      return wrap;
+
+      /* the lines, drawn between where the boxes really are */
+      lines.setAttribute("width", W); lines.setAttribute("height", H);
+      lines.setAttribute("viewBox", "0 0 " + W + " " + H);
+      let svg = "";
+      /* Down the page, every line from the middle runs down the same trunk.
+         Drawn last first, each stretch of trunk shows the branch it leads to,
+         rather than the last branch's colour covering the whole of it. */
+      (narrow ? nodes.slice().reverse() : nodes).forEach(n => {
+        if (n.parent === null) return;
+        const p = pos[n.id], up = pos[n.parent];
+        if (!p || !up) return;
+        const c = colourOf(n) || "#8A8A85";
+        const thick = p.d === 1 ? 4 : p.d === 2 ? 2.6 : 1.8;
+        let d;
+        if (narrow){
+          const x = up.x + 16, top = up.y + up.h, y = p.y + p.h / 2;
+          d = "M" + x + " " + top + "V" + (y - 8) + "Q" + x + " " + y + " " + (x + 8) + " " + y + "H" + p.x;
+        } else {
+          const fromX = p.dir > 0 ? up.x + up.w : up.x;
+          const fromY = up.y + up.h / 2;
+          const toX = p.dir > 0 ? p.x : p.x + p.w;
+          const toY = p.y + p.h / 2;
+          const bend = (toX - fromX) / 2;
+          d = "M" + fromX + " " + fromY + "C" + (fromX + bend) + " " + fromY + " " + (toX - bend) + " " + toY + " " + toX + " " + toY;
+        }
+        svg += '<path d="' + d + '" stroke="' + c + '" stroke-width="' + thick + '" fill="none" stroke-linecap="round"/>';
+      });
+      lines.innerHTML = svg;
+
+      /* Smaller to fit rather than a sideways scroll, down to where the
+         words are still easy to read. Past that it scrolls. */
+      board.style.width = W + "px";
+      board.style.height = H + "px";
+      const k = Math.max(0.7, Math.min(1, (avail - 4) / W));
+      board.style.transform = k < 1 ? "scale(" + k + ")" : "";
+      sizer.style.width = Math.ceil(W * k) + "px";
+      sizer.style.height = Math.ceil(H * k) + "px";
     }
 
-    function centre(root){
-      const mid = make("div", "map-centre");
-      /* a way to grow the map on either side, so it stays balanced */
-      const growLeft = make("button", "map-btn map-grow", "+");
-      growLeft.title = "Add a branch on the left";
-      const growRight = make("button", "map-btn map-grow", "+");
-      growRight.title = "Add a branch on the right";
-      const branchOff = () => {
-        nodes.push({ id: "n" + (nextId++) + "-" + Date.now(), text: "", parent: root.id });
-        paint(); ctx.changed();
-      };
-      growLeft.addEventListener("click", branchOff);
-      growRight.addEventListener("click", branchOff);
-      mid.appendChild(growLeft);
-      mid.appendChild(nodeBox(root, "is-centre"));
-      mid.appendChild(growRight);
-      return mid;
+    /* Boxes are kept between paints, so typing in one is never interrupted
+       by it being made again. */
+    function paint(){
+      const keep = new Set(nodes.map(n => n.id));
+      boxes.forEach((box, id) => {
+        if (keep.has(id)) return;
+        box.wrap.remove();
+        if (box.add) box.add.remove();
+        boxes.delete(id);
+      });
+      nodes.forEach(n => {
+        const box = boxFor(n);
+        box.node = n;                 // undo hands back new objects with the same ids
+        if (box.text.value !== n.text) box.text.value = n.text;
+        box.text.placeholder = n.parent === null ? (b.centre ? "" : "The big idea")
+                             : depthOf(n) === 1 ? "A branch" : "An idea";
+      });
+      layout();
     }
 
-    /* A branch and whatever grows off it, laid out sideways: the branch on
-       one side, its own branches beside it, so it reads as a map rather than
-       an indented list. */
-    function limb(node, side){
-      const wrap = make("div", "map-limb map-" + side);
-      const own = make("div", "map-own");
-      own.appendChild(nodeBox(node, "is-branch"));
-      wrap.appendChild(own);
+    rootAdds.right = plusButton("Add a branch on the right", () => addUnder(rootOf(), narrow ? quieterSide() : "right"));
+    rootAdds.left = plusButton("Add a branch on the left", () => addUnder(rootOf(), "left"));
+    rootAdds.right.classList.add("map-add-root");
+    rootAdds.left.classList.add("map-add-root");
 
-      const kids = childrenOf(node.id);
-      if (kids.length){
-        const twigs = make("div", "map-twigs");
-        kids.forEach(k => twigs.appendChild(limb(k, side)));
-        wrap.appendChild(twigs);
-        wrap.classList.add("has-twigs");
-      }
-      return wrap;
-    }
-
+    nodes = tidy(Array.isArray(b.starter) && b.starter.length ? JSON.parse(JSON.stringify(b.starter)) : []);
     paint();
+
+    /* A page not on screen yet has no width, so it is laid out again once
+       it has one, and again when the fonts arrive and the words change size. */
+    if (window.ResizeObserver){
+      let lastW = 0;
+      try{ new ResizeObserver(() => {
+        const w = holder.clientWidth;
+        if (w && w !== lastW){ lastW = w; layout(); }
+      }).observe(holder); }catch(e){}
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => layout());
 
     return {
       section: s,
-      get: () => ({ nodes: nodes }),
+      get: () => ({ nodes: nodes.map(n => {
+        const o = { id: n.id, text: n.text, parent: n.parent };
+        if (n.side) o.side = n.side;
+        return o;
+      }) }),
       set: (v) => {
         if (!v || !Array.isArray(v.nodes) || !v.nodes.length) return;
-        nodes = v.nodes;
+        nodes = tidy(v.nodes);
+        history.length = 0;
+        undoBtn.disabled = true;
         paint();
       },
       done: () => nodes.filter(n => n.parent !== null && String(n.text).trim()).length > 0
@@ -2786,7 +3580,7 @@
      POSTER
      { type:"poster", title, task, heading }
      A photo editor simple enough to use without being shown: one row of
-     big buttons (Background, Add words, Add a photo, Stickers), and
+     big buttons (Background, Add words, Add an image, Stickers), and
      whatever is picked shows its own few choices underneath. Anything on
      the poster is moved by dragging it and resized by its corner handle.
 
@@ -3013,10 +3807,9 @@
     let open = "";                 // which of Background or Stickers is showing
     const bgBtn = bigBtn(ICON.bg, "Background", () => { pick(null); open = open === "bg" ? "" : "bg"; paintPanel(); });
     bigBtn(ICON.text, "Add words", addWords);
-    const photoInp = make("input");
-    photoInp.type = "file"; photoInp.accept = "image/*"; photoInp.hidden = true;
-    s.appendChild(photoInp);
-    bigBtn(ICON.photo, "Add a photo", () => photoInp.click());
+    /* the same pop-up as every other drawing: paste one copied from the
+       internet, or browse for one on the computer */
+    bigBtn(ICON.photo, "Add an image", () => window.pictureKit.ask(loadPhoto));
     const stickBtn = bigBtn(ICON.stickers, "Stickers", () => { pick(null); open = open === "stickers" ? "" : "stickers"; paintPanel(); });
     const undoBtn = bigBtn(ICON.undo, "Undo", () => {
       const last = history.pop();
@@ -3068,22 +3861,17 @@
           changed();
           say("");
         };
-        small.src = c.toDataURL("image/jpeg", 0.85);
+        /* A JPEG would turn a see-through background black, and clip art
+           off the internet often has one. This copy only lives while the
+           poster is open, so its size does not matter. */
+        small.src = /jpe?g/i.test(file.type) ? c.toDataURL("image/jpeg", 0.85) : c.toDataURL("image/png");
       };
       img.onerror = () => { URL.revokeObjectURL(url); say("That picture could not be opened."); };
       img.src = url;
     }
-    photoInp.addEventListener("change", () => { if (photoInp.files[0]) loadPhoto(photoInp.files[0]); photoInp.value = ""; });
     /* A picture copied from anywhere can be pasted straight in, while the
        poster is the last thing they pressed on. */
-    let mine = false;
-    document.addEventListener("pointerdown", (e) => { mine = s.contains(e.target); }, true);
-    document.addEventListener("paste", (e) => {
-      if (!mine || s.offsetParent === null) return;
-      const file = [...((e.clipboardData && e.clipboardData.items) || [])]
-        .filter(x => x.kind === "file" && /^image\//.test(x.type)).map(x => x.getAsFile())[0];
-      if (file){ e.preventDefault(); loadPhoto(file); }
-    });
+    window.pictureKit.listen(s, loadPhoto);
     function say(text){ note.textContent = text; note.hidden = !text; }
     say("");
 

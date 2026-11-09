@@ -4499,6 +4499,8 @@ async function manualSave(){
     setTimeout(async () => {
       try{
         if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
+        /* pictures on a whiteboard or storyboard load a moment after the work */
+        if (window.drawKit && window.drawKit.ready) await window.drawKit.ready();
         buildPdf().save(fileName());
         settle("Saved a PDF ✓", "flash-ok");
       }catch(e){
@@ -12526,6 +12528,8 @@ async function showPdfView(){
   document.body.appendChild(shell);
   try{
     if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
+    /* pictures on a whiteboard or storyboard load a moment after the work */
+    if (window.drawKit && window.drawKit.ready) await window.drawKit.ready();
     const doc = buildPdf();
     frame.src = doc.output("bloburl");
     dl.addEventListener("click", () => doc.save(fileName()));
@@ -12719,6 +12723,8 @@ function pdfButton(statusEl, primary){
     setTimeout(async () => {
       try{
         if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
+        /* pictures on a whiteboard or storyboard load a moment after the work */
+        if (window.drawKit && window.drawKit.ready) await window.drawKit.ready();
         buildPdf().save(fileName());
         btn.textContent = "\u2713 Saved as a PDF";
         if (statusEl) statusEl.textContent = "Saved as " + fileName() + ", hand that in.";
