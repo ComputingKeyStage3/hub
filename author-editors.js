@@ -1876,6 +1876,9 @@ EDITORS.pixels = function(b, k){
                ["frames", "Frames and Play", false],
                ["binary", "Show the binary button", true]]);
     if (b.frames === true){
+      /* An animation to watch: drawn here under Where they start, played
+         there, with nothing for them to change and nothing saved. */
+      toggleRow([["viewOnly", "Watch only, no drawing", false]]);
       F("Most frames", "maxFrames", { num:true, help:"Up to 24." });
       F("Frames a second to start at", "fps", { num:true, help:"1 to 24. They can change it with the slider." });
     }

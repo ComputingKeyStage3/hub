@@ -30,6 +30,10 @@
      it as rows of bits to decode rather than as a picture. Check compares
      the first frame with it. frames:true adds the frame strip, Play and a
      frames-a-second slider; start is the frames it opens with.
+
+     viewOnly:true is an animation to watch and nothing more: no tools, no
+     colours, no adding frames, nothing saved. The frames can still be
+     stepped through and played, at any speed.
      =================================================================== */
   const PIXEL_COLOURS = [
     ["#FFFFFF", "white"], ["#1B1B1F", "black"], ["#E23B3B", "red"], ["#2F6BDE", "blue"],
@@ -130,6 +134,8 @@
     const sh = pixelShape(b), N = sh.w * sh.h;
     const target = b.target ? pixelFrame(b.target, N, 15) : null;
     const animated = b.frames === true;
+    /* Something to watch: a picture to copy would need the tools to copy it. */
+    const watchOnly = b.viewOnly === true && !target;
     const maxFrames = pixClamp(b.maxFrames, 2, 24, 8);
     /* the picture to copy decides the colours too: it would be unfair to
        ask for a colour the grid cannot make */
@@ -149,7 +155,7 @@
     let wrong = null, right = false, cursor = null, touched = false;
     const undo = [];
 
-    const s = make("section", "pixtask");
+    const s = make("section", "pixtask" + (watchOnly ? " pix-watch" : ""));
     const wrap = make("div", "pix-wrap");
     s.appendChild(wrap);
 
@@ -195,7 +201,7 @@
     const bitsBtn = make("button", "btn-ghost pix-tool pix-bitsbtn", "Show the binary");
     bitsBtn.type = "button";
     if (b.binary !== false) tools.appendChild(bitsBtn);
-    wrap.appendChild(tools);
+    if (!watchOnly) wrap.appendChild(tools);
 
     /* ---------- the grid ---------- */
     const board = make("div", "pix-board");
@@ -206,7 +212,10 @@
     canvas.style.setProperty("--pix-ratio", String(sh.w / sh.h));
     canvas.tabIndex = 0;
     canvas.setAttribute("role", "application");
-    canvas.setAttribute("aria-label", "A grid of " + sh.w + " by " + sh.h + " squares. Click a square to colour it, or use the arrow keys and press Space.");
+    canvas.setAttribute("aria-label", watchOnly
+      ? "An animation of " + sh.w + " by " + sh.h + " squares. Press Play to watch it."
+      : "A grid of " + sh.w + " by " + sh.h + " squares. Click a square to colour it, or use the arrow keys and press Space.");
+    if (watchOnly) canvas.tabIndex = -1;
     board.appendChild(canvas);
     const bitsOut = make("div", "pix-binary");
     bitsOut.hidden = true;
@@ -286,7 +295,7 @@
       onionBtn = make("button", "btn-ghost pix-tool", "See the last frame");
       onionBtn.type = "button"; onionBtn.title = "Shows the frame before this one faintly, so you can line things up";
       frow.appendChild(addBtn); frow.appendChild(delBtn); frow.appendChild(onionBtn);
-      fcard.appendChild(frow);
+      if (!watchOnly) fcard.appendChild(frow);
       addBtn.addEventListener("click", () => {
         if (frames.length >= maxFrames) return;
         remember();
@@ -326,32 +335,91 @@
       fpsIn.addEventListener("input", () => {
         fps = pixClamp(fpsIn.value, 1, 24, 6);
         paintFps();
-        if (timer){ stopPlay(); startPlay(); }
-        ctx.changed && ctx.changed();
+        if (timer) runTimer();       // a new speed, without flying back and out again
+        if (!watchOnly) ctx.changed && ctx.changed();
       });
       playBtn.addEventListener("click", () => timer ? stopPlay() : startPlay());
     }
 
-    /* ---------- playing ---------- */
-    let timer = null, shown = 0;
+    /* ---------- playing ----------
+       The little picture by Play is where the animation lives while they
+       draw. Pressing Play lifts it up and over the grid, growing to the
+       grid's size, so it is big enough to see and plainly not the grid
+       they draw on: the tools fade while it plays, and Stop shrinks it
+       back into its corner. */
+    let timer = null, shown = 0, big = null, bigCanvas = null, landTimer = null;
+    const FLY_MS = 380;
+    function makeBig(){
+      big = make("div", "pix-big");
+      big.hidden = true;
+      bigCanvas = make("canvas", "pix-bigcanvas");
+      bigCanvas.width = sh.w * CELL; bigCanvas.height = sh.h * CELL;
+      big.appendChild(bigCanvas);
+      big.appendChild(make("span", "pix-bigsay", watchOnly ? "Playing" : "Playing. Press Stop to draw again."));
+      big.title = "Stop";
+      big.addEventListener("click", stopPlay);
+      board.appendChild(big);
+    }
+    /* over the grid, exactly */
+    function placeBig(){
+      big.style.left = canvas.offsetLeft + "px";
+      big.style.top = canvas.offsetTop + "px";
+      big.style.width = canvas.offsetWidth + "px";
+      big.style.height = canvas.offsetHeight + "px";
+    }
+    /* the transform that puts the big picture where the little one is */
+    function overPreview(){
+      const from = preview.getBoundingClientRect(), to = big.getBoundingClientRect();
+      if (!to.width || !from.width) return "none";
+      return "translate(" + (from.left - to.left) + "px," + (from.top - to.top) + "px) scale(" +
+             (from.width / to.width) + "," + (from.height / to.height) + ")";
+    }
+    function tick(){
+      /* gone from the page: a lesson moved on or the task redrawn */
+      if (!s.isConnected){ stopPlay(); return; }
+      const f = frames[shown % frames.length];
+      paintPixels(bigCanvas, f, sh, CELL, {});
+      paintPixels(preview, f, sh, Number(preview.dataset.cell), {});
+      Array.from(strip.children).forEach((t, i) => t.classList.toggle("playing", i === shown % frames.length));
+      shown++;
+    }
+    function runTimer(){
+      clearInterval(timer);
+      timer = setInterval(tick, 1000 / fps);
+    }
     function startPlay(){
       if (!preview) return;
+      if (!big) makeBig();
+      clearTimeout(landTimer);
       playBtn.textContent = "Stop";
       shown = 0;
-      timer = setInterval(() => {
-        /* gone from the page: a lesson moved on or the task redrawn */
-        if (!s.isConnected){ stopPlay(); return; }
-        paintPixels(preview, frames[shown % frames.length], sh, Number(preview.dataset.cell), {});
-        Array.from(strip.children).forEach((t, i) => t.classList.toggle("playing", i === shown % frames.length));
-        shown++;
-      }, 1000 / fps);
+      s.classList.add("pix-playing");
+      big.hidden = false;
+      placeBig();
+      big.style.transition = "none";
+      big.style.transform = overPreview();
+      void big.offsetWidth;          // start from there before moving
+      big.style.transition = "";
+      big.style.transform = "none";
+      preview.style.visibility = "hidden";
+      tick();
+      runTimer();
     }
     function stopPlay(){
+      const wasPlaying = !!timer;
       clearInterval(timer); timer = null;
       if (playBtn) playBtn.textContent = "Play";
       if (strip) Array.from(strip.children).forEach(t => t.classList.remove("playing"));
       if (preview) paintPixels(preview, frames[cur], sh, Number(preview.dataset.cell), {});
+      s.classList.remove("pix-playing");
+      if (!big || big.hidden) return;
+      if (!wasPlaying || !s.isConnected){ big.hidden = true; preview.style.visibility = ""; return; }
+      /* lands showing the frame the little picture shows */
+      paintPixels(bigCanvas, frames[cur], sh, CELL, {});
+      big.style.transform = overPreview();
+      landTimer = setTimeout(() => { big.hidden = true; preview.style.visibility = ""; }, FLY_MS);
     }
+    window.addEventListener("resize", () => { if (timer && big) placeBig(); });
     function paintFps(){
       if (!fpsSaid) return;
       fpsSaid.textContent = fps + (fps === 1 ? " frame a second" : " frames a second");
@@ -429,7 +497,7 @@
         lines: true,
         ghost: onion && cur > 0 ? frames[cur - 1] : null,
         wrong: cur === 0 ? wrong : null,
-        cursor: document.activeElement === canvas ? cursor : null
+        cursor: document.activeElement === canvas && !watchOnly ? cursor : null
       });
       if (preview && !timer) paintPixels(preview, frames[cur], sh, Number(preview.dataset.cell), {});
       paintBits();
@@ -516,6 +584,7 @@
     }
     let stroke = null;
     canvas.addEventListener("pointerdown", (e) => {
+      if (watchOnly) return;
       const at = cellAt(e);
       if (at === null) return;
       e.preventDefault();
@@ -540,6 +609,7 @@
     canvas.addEventListener("focus", () => { if (cursor === null) cursor = 0; draw(); });
     canvas.addEventListener("blur", () => draw());
     canvas.addEventListener("keydown", (e) => {
+      if (watchOnly) return;
       const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -sh.w, ArrowDown: sh.w }[e.key];
       if (step){
         e.preventDefault();
@@ -561,12 +631,14 @@
     return {
       section: s,
       get: () => {
+        if (watchOnly) return null;           // nothing of theirs to keep
         if (!touched && !right) return null;
         const v = { depth: depth, frames: frames.map(pixelString) };
         if (animated) v.fps = fps;
         return v;
       },
       set: (v) => {
+        if (watchOnly) return;
         if (!v || !Array.isArray(v.frames) || !v.frames.length) return;
         if (b.depthChoice === true || !target) depth = pixClamp(v.depth, 1, 4, depth);
         frames = v.frames.slice(0, animated ? maxFrames : 1).map(str => pixelFrame(str, N, colours() - 1));
@@ -576,7 +648,7 @@
         if (target) right = matches() === N;
         paintAll();
       },
-      done: () => right || anyDrawn()
+      done: () => watchOnly || right || anyDrawn()
     };
   };
 

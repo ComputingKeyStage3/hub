@@ -1452,6 +1452,7 @@ function compileOne(b, id, target){
         frames: animated ? true : undefined,
         maxFrames: animated ? Math.max(2, Math.min(24, parseInt(b.maxFrames, 10) || 8)) : undefined,
         fps: animated ? Math.max(1, Math.min(24, parseInt(b.fps, 10) || 6)) : undefined,
+        viewOnly: animated && !b.target && b.viewOnly === true ? true : undefined,
         start: Array.isArray(b.start) && b.start.length ? b.start.slice(0, animated ? 24 : 1).map(frame) : undefined,
         binary: b.binary === false ? false : b.binary === "open" ? "open" : undefined,
         topic: lesson.assessment ? b.topic : "" }));

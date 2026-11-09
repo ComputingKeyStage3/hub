@@ -668,29 +668,45 @@
      the whiteboard and the storyboard. unit is how many of the board's
      units one screen pixel is, so the handles stay finger-sized at any
      zoom; top is the highest point a press can reach, if there is one. */
+  /* The press being dragged, so the turning dot stays on the side it
+     started on until it is let go, and the last options hit() was given,
+     which say where that side is. */
+  let heldPress = null, lastHandleOpts = null;
+  const handleOpts = (st, unit, top) => {
+    const o = { unit: unit, reach: 13 * unit, gap: 26 * unit, top: top };
+    if (heldPress && heldPress.st === st) o.under = heldPress.under;
+    return o;
+  };
   window.drawKit.handles = {
     opts: (unit, top) => ({ unit: unit, reach: 13 * unit, gap: 26 * unit, top: top }),
     draw: (c, st, unit, top) => {
       if (!window.boxKit) return;
       const f = window.drawKit.frame(st);
-      if (f) window.boxKit.draw(c, f, window.drawKit.handles.opts(unit, top));
+      if (f) window.boxKit.draw(c, f, handleOpts(st, unit, top));
       else if (st.from && st.to) window.boxKit.drawEnds(c, st.from, st.to, unit);
     },
     /* which handle is under p, or null */
     hit: (st, p, unit, top) => {
       if (!window.boxKit || !window.drawKit.has(st)) return null;
       const f = window.drawKit.frame(st);
-      if (f) return window.boxKit.hit(f, p, window.drawKit.handles.opts(unit, top));
+      lastHandleOpts = handleOpts(st, unit, top);
+      if (f) return window.boxKit.hit(f, p, lastHandleOpts);
       return window.boxKit.hitEnds(st.from, st.to, p, 13 * unit);
     },
     /* Hold on to how it was when the press began, then call move() with
        each new point. */
-    start: (st, name) => ({ st: st, name: name, frame: window.drawKit.frame(st) }),
+    start: (st, name) => {
+      const frame = window.drawKit.frame(st);
+      heldPress = { st: st, name: name, frame: frame,
+                    under: !!frame && !!window.boxKit && window.boxKit.under(frame, lastHandleOpts) };
+      return heldPress;
+    },
     move: (press, p, round) => {
       const st = press.st, r = (n) => round ? Math.round(n) : Math.round(n * 10) / 10;
       if (!press.frame){ st[press.name] = [r(p[0]), r(p[1])]; return; }
-      window.drawKit.reshape(st, window.boxKit.drag(press.frame, press.name, p, { min: 12 }));
-    }
+      window.drawKit.reshape(st, window.boxKit.drag(press.frame, press.name, p, { min: 12, under: press.under }));
+    },
+    end: () => { heldPress = null; }
   };
   /* The picture buttons, the same on both boards. */
   const PIC_ICONS = {
@@ -1218,6 +1234,7 @@
       if (moving){ moving = null; ctx.changed(); }
       if (reshaping){
         reshaping = null;
+        window.drawKit.handles.end();
         ctx.changed();
         if (picked.length && e && e.type === "pointerup") showPickTools(e);
       }
@@ -2003,7 +2020,7 @@
       if (pointsIn(panels[at]) >= STORY_POINTS) finishLine();
     });
     function finishLine(){
-      if (reshaping){ reshaping = null; paintPanel(); ctx.changed(); return; }
+      if (reshaping){ reshaping = null; window.drawKit.handles.end(); paintPanel(); ctx.changed(); return; }
       if (dragging){ dragging = null; paintPanel(); ctx.changed(); return; }
       if (!drawing) return;
       /* a shape tapped rather than dragged has no size to see */
@@ -3678,9 +3695,12 @@
     const s = make("section", "poster");
     /* Tools down the left, the poster in the middle, and the choices for
        whatever is picked down the right, so the whole poster fits on a
-       laptop screen with nothing to scroll past. */
+       laptop screen with nothing to scroll past. What the poster should
+       have sits in a box of its own beside all that, not among the tools. */
+    const main = make("div", "poster-main");
+    s.appendChild(main);
     const body = make("div", "poster-body");
-    s.appendChild(body);
+    main.appendChild(body);
     const bar = make("div", "poster-bar");
     body.appendChild(bar);
     const stage = make("div", "poster-stage");
@@ -3694,7 +3714,14 @@
     canvas.tabIndex = 0;
     stage.appendChild(canvas);
     const note = make("p", "poster-note");
-    s.appendChild(note);
+    main.appendChild(note);
+    /* Words are typed on the poster itself, in a box laid exactly over them,
+       so what is typed is where it will be. */
+    const typer = make("textarea", "poster-typer");
+    typer.hidden = true;
+    typer.spellcheck = true;
+    typer.setAttribute("aria-label", "The words on your poster");
+    stage.appendChild(typer);
     const pen = canvas.getContext("2d");
 
     let bg = { kind: "colour", c1: "#FFFFFF" };
@@ -3713,7 +3740,34 @@
       history.push(snapshot());
       if (history.length > 40) history.shift();
     }
-    function textLines(it){ return String(it.text || " ").split("\n"); }
+    /* Words wrap before they reach the edge of the poster, as they would in
+       a word processor, rather than running off it. A word too long for a
+       line on its own is broken where it has to be. */
+    const WRAP_W = POSTER_W - 60;
+    function textLines(it){
+      pen.save();
+      pen.font = fontOf(it);
+      const most = WRAP_W / (it.stretch || 1);
+      const wide = (t) => pen.measureText(t).width;
+      const out = [];
+      String(it.text || " ").split("\n").forEach(para => {
+        let line = null;
+        para.split(" ").forEach(word => {
+          const tryLine = line === null ? word : line + " " + word;
+          if (line === null || wide(tryLine) <= most){ line = tryLine; }
+          else { out.push(line); line = word; }
+          while (wide(line) > most && line.length > 1){
+            let cut = line.length - 1;
+            while (cut > 1 && wide(line.slice(0, cut)) > most) cut--;
+            out.push(line.slice(0, cut));
+            line = line.slice(cut);
+          }
+        });
+        out.push(line === null ? "" : line);
+      });
+      pen.restore();
+      return out;
+    }
     function fontOf(it){
       const f = posterFont(it.font);
       return f.weight + " " + it.size + "px " + f.face;
@@ -3781,6 +3835,7 @@
         c.restore();
       } else paintFlat(c, it);
     }
+    const outlineWidth = (it) => Math.max(2, it.size / 18);
     function paintFlat(c, it){
       if (it.kind === "text"){
         c.save();
@@ -3794,13 +3849,16 @@
         const lines = textLines(it), lh = it.size * 1.15;
         lines.forEach((line, i) => {
           const y = it.y - (lines.length - 1) * lh / 2 + i * lh;
+          /* Outline letters are hollow: the edge of each letter in the
+             colour, and the poster showing through the middle. */
           if (it.outline){
-            c.strokeStyle = it.colour === "#FFFFFF" || it.colour === "#F2B705" ? "#1D1D1B" : "#FFFFFF";
-            c.lineWidth = Math.max(3, it.size / 7);
+            c.strokeStyle = it.colour;
+            c.lineWidth = outlineWidth(it);
             c.strokeText(line, it.x, y);
+          } else {
+            c.fillStyle = it.colour;
+            c.fillText(line, it.x, y);
           }
-          c.fillStyle = it.colour;
-          c.fillText(line, it.x, y);
         });
         c.restore();
       } else if (it.kind === "photo"){
@@ -3823,11 +3881,16 @@
       const w = canvas.getBoundingClientRect().width;
       return w ? POSTER_W / w : 1;
     }
-    const handleOpts = () => { const u = unit(); return { unit: u, reach: 13 * u, gap: 26 * u, top: 0 }; };
+    const handleOpts = () => {
+      const u = unit(), o = { unit: u, reach: 13 * u, gap: 26 * u, top: 0 };
+      if (drag && typeof drag.under === "boolean") o.under = drag.under;
+      return o;
+    };
     function draw(){
       pen.setTransform(2, 0, 0, 2, 0, 0);
       paintBg(pen);
-      items.forEach(it => paintItem(pen, it));
+      /* the words being typed are in the typing box, not under it as well */
+      items.forEach(it => { if (!editing || editing.it !== it) paintItem(pen, it); });
       if (picked && window.boxKit) window.boxKit.draw(pen, frameOf(picked), handleOpts());
     }
 
@@ -3894,7 +3957,8 @@
       const words = make("div", "poster-brief-text");
       words.innerHTML = b.task;
       brief.appendChild(words);
-      bar.appendChild(brief);
+      s.appendChild(brief);
+      s.classList.add("has-brief");
     }
 
     function addWords(){
@@ -3903,8 +3967,9 @@
                    colour: bg.kind === "colour" && /^#(1D1D1B|2F6BAE)$/.test(bg.c1) ? "#FFFFFF" : "#1D1D1B",
                    font: "bold", outline: false };
       items.push(it);
-      pick(it, true);
+      pick(it);
       changed();
+      startTyping(it, true);
     }
     function loadPhoto(file){
       if (!file || !/^image\//.test(file.type)){ say("That file is not a picture."); return; }
@@ -3974,13 +4039,7 @@
         const it = picked;
         if (it.kind === "text"){
           const g = group("Words");
-          const box = make("textarea", "poster-words");
-          box.rows = 2;
-          box.value = it.text;
-          box.addEventListener("focus", () => remember(), { once: true });
-          box.addEventListener("input", () => { it.text = box.value; changed(); });
-          g.appendChild(box);
-          wordsBox = box;
+          g.appendChild(make("p", "poster-hint", "Tap the words on your poster to type."));
           const cg = group("Colour");
           POSTER_COLOURS.forEach(c => cg.appendChild(swatch(c, it.colour === c, () => { remember(); it.colour = c; paintPanel(); changed(); })));
           const sg = group("Style");
@@ -3989,8 +4048,13 @@
             b2.style.fontFamily = f.face;
             sg.appendChild(b2);
           });
-          sg.appendChild(chip("Outline", !!it.outline, () => { remember(); it.outline = !it.outline; paintPanel(); changed(); },
-                              "A line round the letters, so they stand out"));
+          /* Two ways to draw the letters, one of them always chosen, rather
+             than an outline switched on and off over solid letters. */
+          const lg2 = group("Letters");
+          lg2.appendChild(chip("Filled", !it.outline, () => { remember(); delete it.outline; paintPanel(); changed(); },
+                               "Solid letters"));
+          lg2.appendChild(chip("Outline", !!it.outline, () => { remember(); it.outline = true; paintPanel(); changed(); },
+                               "Only the edge of each letter, with the poster showing through"));
           const zg = group("Size");
           zg.appendChild(chip("−", false, () => { remember(); it.size = Math.max(14, Math.round(it.size / 1.15)); changed(); }, "Smaller"));
           zg.appendChild(chip("+", false, () => { remember(); it.size = Math.min(220, Math.round(it.size * 1.15)); changed(); }, "Bigger"));
@@ -4057,15 +4121,77 @@
         ? "Your saved poster is now the background, so add new words, photos and stickers on top. To start again from nothing, press Background, then Start again."
         : "Tap anything on your poster to change it. Drag it to move it. Drag a corner to make it bigger or smaller, a side to stretch it, and the dot above it to turn it."));
     }
-    let wordsBox = null;
-    function pick(it, typeNow){
+    function pick(it){
       picked = it;
       if (it) open = "";
-      wordsBox = null;
       paintPanel();
       draw();
-      if (typeNow && wordsBox){ wordsBox.focus(); wordsBox.select(); }
     }
+
+    /* --- typing on the poster --- */
+    let editing = null;          // { it } while its words are being typed
+    function placeTyper(){
+      if (!editing) return;
+      const it = editing.it, u = unit(), f = posterFont(it.font);
+      /* Drawn unstretched and then stretched, as the letters are, and a few
+         pixels wider than the widest line so the browser wraps the words
+         where the poster will. */
+      const w = (wordsWide(it) + PAD_X * 2) / u + 4;
+      const h = (textLines(it).length * it.size * 1.15 + PAD_Y * 2) / u;
+      typer.style.width = w + "px";
+      typer.style.height = h + "px";
+      typer.style.left = (canvas.offsetLeft + it.x / u - w / 2) + "px";
+      typer.style.top = (canvas.offsetTop + it.y / u - h / 2) + "px";
+      typer.style.padding = (PAD_Y / u) + "px " + (PAD_X / u) + "px";
+      typer.style.font = f.weight + " " + (it.size / u) + "px " + f.face;
+      typer.style.lineHeight = (it.size * 1.15 / u) + "px";
+      typer.style.transform = "rotate(" + (Number(it.rot) || 0) + "deg) scaleX(" + (it.stretch || 1) + ")";
+      typer.style.color = it.outline ? "transparent" : it.colour;
+      typer.style.webkitTextStroke = it.outline ? (outlineWidth(it) / u) + "px " + it.colour : "";
+      typer.style.caretColor = it.colour === "#FFFFFF" ? "#1D1D1B" : it.colour;
+    }
+    function startTyping(it, selectAll){
+      if (!it || it.kind !== "text") return;
+      remember();
+      editing = { it: it };
+      typer.value = it.text;
+      typer.hidden = false;
+      placeTyper();
+      draw();
+      typer.focus({ preventScroll: true });
+      if (selectAll) typer.select();
+      else typer.setSelectionRange(typer.value.length, typer.value.length);
+    }
+    function stopTyping(){
+      if (!editing) return;
+      const it = editing.it;
+      editing = null;
+      typer.hidden = true;
+      /* rubbed out completely, the words go, rather than leave an empty box */
+      if (!String(it.text).trim()){
+        items = items.filter(x => x !== it);
+        if (picked === it) pick(null);
+      }
+      changed();
+    }
+    typer.addEventListener("input", () => {
+      if (!editing) return;
+      const it = editing.it, was = frameOf(it).h;
+      it.text = typer.value;
+      /* A new line goes on underneath, as in a word processor. Words are
+         placed by their middle, so without this every new line pushed the
+         first one up as well, and a title near the top climbed off the poster. */
+      const grew = (frameOf(it).h - was) / 2, turn = (Number(it.rot) || 0) * Math.PI / 180;
+      it.x = Math.max(0, Math.min(POSTER_W, it.x - Math.sin(turn) * grew));
+      it.y = Math.max(0, Math.min(POSTER_H, it.y + Math.cos(turn) * grew));
+      placeTyper();
+      changed();
+    });
+    typer.addEventListener("blur", stopTyping);
+    typer.addEventListener("keydown", (e) => {
+      if (e.key === "Escape"){ e.preventDefault(); typer.blur(); }
+    });
+    window.addEventListener("resize", placeTyper);
 
     /* --- moving and resizing on the poster --- */
     function at(e){
@@ -4086,17 +4212,19 @@
         remember();
         const was = frameOf(picked);
         was.size = picked.size; was.stretch = picked.stretch;
-        drag = { mode: handle, it: picked, start: was };
+        const under = handle === "rot" && window.boxKit.under(was, handleOpts());
+        drag = { mode: handle, it: picked, start: was, under: under };
         try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
         return;
       }
       let hit = null;
       for (let i = items.length - 1; i >= 0 && !hit; i--)
         if (window.boxKit.inside(frameOf(items[i]), p)) hit = items[i];
+      const again = !!hit && hit === picked;
       if (hit !== picked) pick(hit);
       if (hit){
         remember();
-        drag = { mode: "move", it: hit, from: p, x: hit.x, y: hit.y };
+        drag = { mode: "move", it: hit, from: p, x: hit.x, y: hit.y, again: again, moved: false };
         try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
       }
     });
@@ -4110,18 +4238,29 @@
       }
       const it = drag.it;
       if (drag.mode === "move"){
+        if (Math.hypot(p[0] - drag.from[0], p[1] - drag.from[1]) > 4 * unit()) drag.moved = true;
         it.x = Math.max(0, Math.min(POSTER_W, drag.x + p[0] - drag.from[0]));
         it.y = Math.max(0, Math.min(POSTER_H, drag.y + p[1] - drag.from[1]));
       } else {
         const least = it.kind === "text" ? 16 : it.kind === "photo" ? 30 : 24;
-        reshape(it, window.boxKit.drag(drag.start, drag.mode, p, { min: least, max: 2400 }), drag.start);
+        reshape(it, window.boxKit.drag(drag.start, drag.mode, p, { min: least, max: 2400, under: drag.under === true }), drag.start);
       }
       draw();
     });
-    const endDrag = () => { if (drag){ drag = null; changed(); } };
+    /* Tapping words that are already picked starts typing in them: the first
+       tap picks them up to move, the second is to change what they say. */
+    const endDrag = (e) => {
+      if (!drag) return;
+      const typeNow = e.type === "pointerup" && drag.mode === "move" && drag.again && !drag.moved &&
+                      drag.it.kind === "text";
+      const it = drag.it;
+      drag = null;
+      changed();
+      if (typeNow) startTyping(it, false);
+    };
     canvas.addEventListener("pointerup", endDrag);
     canvas.addEventListener("pointercancel", endDrag);
-    canvas.addEventListener("dblclick", () => { if (picked && picked.kind === "text" && wordsBox){ wordsBox.focus(); wordsBox.select(); } });
+    canvas.addEventListener("dblclick", () => { if (picked && picked.kind === "text" && !editing) startTyping(picked, true); });
     canvas.addEventListener("keydown", (e) => {
       if ((e.key === "Delete" || e.key === "Backspace") && picked){
         e.preventDefault();

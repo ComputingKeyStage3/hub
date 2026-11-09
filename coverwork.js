@@ -136,6 +136,7 @@
          cannot find. Otherwise it wants a real drawing, and an animation at
          least two frames with something in them. */
       case "pixels": {
+        if (b.viewOnly === true) return "";       // to watch, with nothing to do
         const list = v && Array.isArray(v.frames) ? v.frames : [];
         const drawn = list.filter(f => /[1-9a-f]/i.test(String(f || ""))).length;
         if (b.target){
@@ -186,7 +187,7 @@
      has nothing to finish, so only Understood ends it. */
   const WORK = ["quiz","short","table","blanks","order","mc","hotspot","label","question",
                 "storyboard","mindmap","board","notes","choice","group","poster","boss","pixels","boardgame","swipe","quest"];
-  const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo;
+  const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo && !(b.type === "pixels" && b.viewOnly === true);
   /* Everything right, so there is nothing left to decide and Finished can be
      pressed for them. A quiz waits for its score to be up, and a short answer
      or a table for Check: moving on any sooner would take the page away from

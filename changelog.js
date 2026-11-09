@@ -28,6 +28,9 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.8", text:"Posters: words are typed straight onto the poster and wrap before the edge, Outline makes hollow letters, the poster is taller, the turning dot works when it sits below a box, and Your poster should... is a box of its own beside the poster. Pixel studio: Play grows the animation over the grid and Stop shrinks it back, and an animation can be Watch only." },
+  { v:"17.7.3", text:"New Year 8 cover lesson, Pixel Animation: four stop-motion animations in Pixel studio, each harder than the last, then a Computing poster. Its cover notes are filled in on the new template." },
+  { v:"17.7.2", text:"Cover lessons now use the same Keep working on this task note in the bottom bar, fading after 8 seconds, with the tip by Continue. On a phone the tip no longer covers the note." },
   { v:"17.7.1", text:"Keep working on this task now shows in the middle of the bottom bar and fades after 8 seconds, with a tip by Continue asking students to complete the tasks on the page first. Storyboards and flip books fit the screen, so Play and the frames are always in view." },
   { v:"17.7", text:"Mind maps are redrawn: coloured branches joined by curved lines, a + on each side of the middle that adds a branch on that side, and Enter adds the next branch. Whiteboards and storyboards can now take pictures like the poster, and all three use one Add an image pop-up: paste a picture copied from the internet, or browse for one." },
   { v:"17.6.3", text:"In a lesson the page title and subtitle now sit in a box in the middle of the top bar, giving the tasks more room." },

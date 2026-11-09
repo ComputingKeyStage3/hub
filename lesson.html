@@ -93,7 +93,6 @@
   </div>
 </div>
 
-<p class="cover-left no-print" id="coverLeft" role="status" hidden></p>
 <div class="dock" id="dock">
   <button class="btn-ghost" id="backBtn">&larr; Back</button>
   <div class="mid">
@@ -273,10 +272,19 @@ function coverQuizStep(b, checked, solved){
 }
 /* Clear whatever Continue last pointed at. */
 function coverClearNote(){
+  const was = coverNoteOn;
   coverNoteOn = false;
   coverNoteFor = null;
-  $("coverLeft").hidden = true;
+  if (was) hideWaitModal();
   document.querySelectorAll(".cover-want").forEach(n => n.classList.remove("cover-want"));
+}
+/* The cover note is the same one an ordinary lesson gives in the bottom bar,
+   fading after eight seconds. It had a note of its own floating above the
+   bar that stayed until the work was done, so a cover lesson, where most
+   "not yet"s happen, was the one place the bottom bar note never showed. */
+function coverSay(words){
+  showWaitModal({ title: "Keep working on this task", text: words });
+  coverNoteOn = true;
 }
 /* Called by Continue. True when this page still wants something: it says what
    and takes them there, in place, with nothing to dismiss. */
@@ -285,10 +293,8 @@ function coverHolds(){
   const left = coverLeftOn(step);
   coverClearNote();
   if (!left.length) return false;
-  const note = $("coverLeft");
-  note.textContent = left.length + (left.length === 1 ? " task" : " tasks") + " left on this page. " + left[0].words;
-  note.hidden = false;
-  coverNoteOn = true;
+  coverSay(left.length + (left.length === 1 ? " task" : " tasks") + " left on this page. " + left[0].words);
+  flashNextTip(FIRST_TIP);
   const item = document.querySelector('[data-block-id="' + left[0].id + '"]');
   if (item){
     item.classList.add("cover-want");
@@ -360,10 +366,7 @@ function coverRow(child, last, opened){
       const words = window.coverWork.need(child, coverAsk);
       coverClearNote();
       if (words){
-        const note = $("coverLeft");
-        note.textContent = words;
-        note.hidden = false;
-        coverNoteOn = true;
+        coverSay(words);
         coverNoteFor = child;
         return;
       }
@@ -1565,6 +1568,18 @@ function paintTip(){
   $("nextTip").textContent = Date.now() < firstTipUntil ? FIRST_TIP
     : "Please wait " + left + " second" + (left === 1 ? "" : "s") + " before trying again...";
 }
+/* The same tip without the wait, for a cover lesson: Continue there is held
+   by work left on the page, not by the teacher, so there is nothing to count
+   down and pressing it again as soon as the work is done has to just work. */
+let flashTipTimer = null;
+function flashNextTip(words){
+  if (coolingDown()) return;
+  const tip = $("nextTip");
+  tip.textContent = words;
+  tip.hidden = false;
+  clearTimeout(flashTipTimer);
+  flashTipTimer = setTimeout(() => { if (!coolingDown()) tip.hidden = true; }, 3000);
+}
 $("nextBtn").addEventListener("mouseenter", () => { if (coolingDown()) $("nextTip").hidden = false; });
 $("nextBtn").addEventListener("mouseleave", () => { $("nextTip").hidden = true; });
 
@@ -2513,7 +2528,7 @@ function questionAnswered(it){
     case "table": return Array.isArray(v) && v.every(filled);
     case "label": return (b.spots || []).every((_, i) => !!(v && v.placed && v.placed[i]));
     case "hotspot": return !!(v && typeof v.x === "number");
-    case "pixels": return !!(v && Array.isArray(v.frames));
+    case "pixels": return b.viewOnly === true || !!(v && Array.isArray(v.frames));   // one to watch has nothing to answer
     case "exam": return filled(v && typeof v === "object" ? v.text : v);
     case "question": return filled(v);
     case "binary": case "binadd":
@@ -12872,7 +12887,7 @@ function lessonTaskAttempted(b, v){
   if (b.type === "table") return Array.isArray(v) && v.some(x => String(x == null ? "" : x).trim() !== "");
   if (b.type === "label") return !!(v && v.placed && Object.keys(v.placed).some(k => v.placed[k]));
   if (b.type === "hotspot") return !!(v && typeof v.x === "number");
-  if (b.type === "pixels") return !!(v && Array.isArray(v.frames));
+  if (b.type === "pixels") return b.viewOnly === true || !!(v && Array.isArray(v.frames));
   return true;
 }
 function lessonTaskScore(b, v){
@@ -13915,6 +13930,8 @@ function buildPdf(){
       return out;
     }
     if (b.type === "pixels"){
+      /* An animation to watch, not something they did. */
+      if (b.viewOnly === true) return out;
       out.push({ t: "text", face: "task", text: title || "Pixel studio" });
       const list = v && Array.isArray(v.frames) ? v.frames : [];
       if (!list.length){ out.push(answerBox("", "Nothing coloured in")); return out; }

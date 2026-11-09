@@ -38,7 +38,8 @@
   function want(opts){
     opts = opts || {};
     return { corners: opts.corners !== false, sides: opts.sides !== false, rotate: opts.rotate !== false,
-             gap: opts.gap == null ? 28 : opts.gap, top: opts.top };
+             gap: opts.gap == null ? 28 : opts.gap, top: opts.top,
+             under: typeof opts.under === "boolean" ? opts.under : null };
   }
 
   /* How far from the middle the turning dot is, down being positive. It
@@ -48,6 +49,10 @@
      be turned. */
   function stalk(bx, o){
     const up = -bx.h / 2 - o.gap;
+    /* Held where it was for the length of a drag: worked out afresh, the
+       dot would jump from below to above as the box came round, away from
+       the pointer turning it. */
+    if (o.under !== null) return o.under ? -up : up;
     if (o.top == null) return up;
     return out(bx, 0, up)[1] < o.top + 8 ? -up : up;
   }
@@ -100,6 +105,9 @@
     if (name === "rot"){
       /* pointing straight up is no turn at all */
       let deg = Math.atan2(p[1] - start.y, p[0] - start.x) / RAD + 90;
+      /* A dot below the box points down when the box is upright. Read as if
+         it were above, the first move turned the box upside down. */
+      if (opts.under) deg += 180;
       deg = ((deg % 360) + 540) % 360 - 180;
       /* Close to upright, a quarter turn or upside down, it settles there:
          nobody can hold a mouse at exactly 90 degrees. */
@@ -241,7 +249,7 @@
       frame.style.height = bx.h + "px";
       frame.style.transform = "rotate(" + (Number(bx.rot) || 0) + "deg)";
       if (o.rotate){
-        const under = stalk(bx, o) > 0;
+        const under = stalk(bx, press ? Object.assign({}, o, { under: press.under }) : o) > 0;
         frame.classList.toggle("bk-under", under);
         knobs.rot.style.top = under ? "calc(100% + " + o.gap + "px)" : -o.gap + "px";
       }
@@ -258,12 +266,13 @@
       e.preventDefault(); e.stopPropagation();
       try{ e.target.setPointerCapture(e.pointerId); }catch(err){}
       press = { name: n, start: opts.get(), el: e.target };
+      press.under = !!press.start && stalk(press.start, o) > 0;
       if (n === "rot") e.target.style.cursor = "grabbing";
     });
     frame.addEventListener("pointermove", (e) => {
       if (!press || !press.start) return;
       e.preventDefault();
-      opts.set(drag(press.start, press.name, here(e), opts), press.name);
+      opts.set(drag(press.start, press.name, here(e), Object.assign({}, opts, { under: press.under })), press.name);
       place();
     });
     const end = () => {
@@ -280,5 +289,8 @@
     return { place, frame, remove: () => frame.remove(), busy: () => !!press };
   }
 
-  window.boxKit = { points, hit, inside, drag, cursor, draw, drawEnds, hitEnds, overlay, out, inward };
+  /* Whether the turning dot is below the box rather than above it. Asked
+     when a press begins, and passed back as opts.under until it ends. */
+  const under = (bx, opts) => stalk(bx, want(opts)) > 0;
+  window.boxKit = { points, hit, inside, drag, cursor, draw, drawEnds, hitEnds, overlay, out, inward, under };
 })();
