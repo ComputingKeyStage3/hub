@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.8.1", text:"Cover lessons: a student who cannot sign in presses Forgot password? and, if their class has a cover lesson on today, just types their name to do it. The QR code has gone, Copy link stays for anyone without an account, and work done this way shows their username beside their name." },
   { v:"17.8", text:"Posters: words are typed straight onto the poster and wrap before the edge, Outline makes hollow letters, the poster is taller, the turning dot works when it sits below a box, and Your poster should... is a box of its own beside the poster. Pixel studio: Play grows the animation over the grid and Stop shrinks it back, and an animation can be Watch only." },
   { v:"17.7.3", text:"New Year 8 cover lesson, Pixel Animation: four stop-motion animations in Pixel studio, each harder than the last, then a Computing poster. Its cover notes are filled in on the new template." },
   { v:"17.7.2", text:"Cover lessons now use the same Keep working on this task note in the bottom bar, fading after 8 seconds, with the tip by Continue. On a phone the tip no longer covers the note." },

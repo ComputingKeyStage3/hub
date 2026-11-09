@@ -20,7 +20,6 @@
 <script src="menus.js"></script>
 <script src="dragline.js"></script>
 <script src="progressmath.js"></script>
-<script src="qrcode.js"></script>
 <script src="markbook.js"></script>
 <script src="resultsbook.js"></script>
 <script src="teacher.js"></script>
@@ -5214,26 +5213,15 @@ function offerHomeLearningLink(id){
 
 /* ---------- the sign-in backup for a cover lesson ----------
    For the student who cannot sign in, with a cover teacher in the room who
-   cannot reset a password. The server seals the class and the lesson into the
-   link, so nothing in it can be read or changed by hand, and access.html asks
-   for a name in place of a password. What comes back is kept apart from the
-   class's own work, and joins the class in View work. The picture is drawn on
-   this computer: a school
-   that blocks a QR website would otherwise lose the code when it is needed. */
-function qrPicture(text){
-  const code = window.qrcode(0, "M");
-  code.addData(text);
-  code.make();
-  const count = code.getModuleCount(), quiet = 4, size = count + quiet * 2;
-  let path = "";
-  for (let r = 0; r < count; r++) for (let c = 0; c < count; c++)
-    if (code.isDark(r, c)) path += "M" + (c + quiet) + " " + (r + quiet) + "h1v1h-1z";
-  const box = el("div","accessqr");
-  /* Always black on white, whatever the theme: a phone has to read it. */
-  box.innerHTML = '<svg viewBox="0 0 ' + size + ' ' + size + '" role="img" aria-label="QR code for this lesson" shape-rendering="crispEdges">' +
-    '<rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + path + '" fill="#000"/></svg>';
-  return box;
-}
+   cannot reset a password. In a class with a cover lesson on today, Forgot
+   password on the front page offers the lesson with just a name, so there is
+   nothing to hand out. The link here is for anyone that does not reach: a
+   student with no account yet, or one who cannot work out their username.
+   The server seals the class and the lesson into it, so nothing in it can be
+   read or changed by hand, and access.html asks for a name in place of a
+   password. What comes back either way is kept apart from the class's own
+   work, and joins the class in View work. There used to be a QR code as
+   well; Forgot password took its place. */
 let reopenCoverFor = "";
 /* Three things to do, a section each and nothing more: get the notes, show the
    code, see how the lesson goes. It was a page of reading once, and whoever is
@@ -5259,8 +5247,9 @@ async function coverDetails(id){
     const grid = el("div","covergrid");
     grid.appendChild(section("coverNotesCard", "Cover notes"));
     const scan = section("coverScanCard", "Sign-in backup", "coverscan");
-    scan.appendChild(el("p","hint", live ? "For students who cannot sign in."
-      : "Publish this lesson to get the code. Students cannot use it while it is a draft."));
+    scan.appendChild(el("p","hint", live
+      ? "A student who cannot sign in presses Forgot password? on the front page and types their name instead. For anyone without an account, copy the link and send it to them."
+      : "Publish this lesson first. Until then, students cannot open it without signing in."));
     /* Saying it needs publishing left a teacher looking for a code that was
        never going to appear, so the way to do it is here, and it comes back. */
     if (!live){
@@ -5289,7 +5278,6 @@ async function paintCoverCode(id, group){
     if (!card) return;
     const url = new URL("access.html", location.href);
     url.search = "?k=" + d.k;
-    card.appendChild(qrPicture(url.href));
     /* Only shown if the clipboard says no, for picking out by hand. */
     const link = el("pre","codeblock accesslink", url.href);
     link.hidden = true;

@@ -8800,9 +8800,7 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
 .topbar .guestname{ background:none; border:none; padding:0; font:inherit; cursor:pointer;
   max-width:40vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   text-decoration:underline; text-underline-offset:3px }
-/* Sign-in backup: the code, the link and what has come back. */
-.accessqr{ width:170px; max-width:70%; margin:0 auto 12px; background:#fff; line-height:0 }
-.accessqr svg{ display:block; width:100% }
+/* Sign-in backup: the link and what has come back. */
 .accesslink{ margin:12px 0 0; overflow-wrap:anywhere; white-space:pre-wrap; font-size:var(--text-xs); text-align:left }
 /* Nothing to write feedback into for somebody with no account. */
 .guestwork .workside{ display:none }

@@ -4168,7 +4168,7 @@ async function submitWork(){
     const r = guest
       ? await fetch(API + "/api/teacher/guest-save", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ k: guest.key, id: guest.id, name: guest.name, data: JSON.parse(payload) })
+          body: JSON.stringify({ k: guest.key, id: guest.id, name: guest.name, as: guest.as || "", data: JSON.parse(payload) })
         })
       : await fetch(API + "/api/submit", {
           method: "POST",

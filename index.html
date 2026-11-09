@@ -164,6 +164,23 @@
   </div>
 </div>
 
+<!-- Forgot password, in a class with a cover lesson on today. The teacher in
+     the room cannot approve a new password, so the lesson is offered with
+     only a name, and the reset is still there underneath for anyone who
+     would rather wait for it. -->
+<div class="modal-back no-print" id="coverModal" hidden>
+  <form class="modal" role="dialog" aria-modal="true" aria-labelledby="cvTitle" id="cvForm" autocomplete="off">
+    <h2 id="cvTitle" style="margin-top:0">No need to sign in today</h2>
+    <p class="modal-text">For this lesson, just type in your full name and complete the lesson without needing to sign in.</p>
+    <p class="modal-text"><b id="cvLesson"></b></p>
+    <div class="field"><label for="cvFirst">First name</label><input type="text" id="cvFirst" maxlength="40" autocomplete="off" autocapitalize="words"></div>
+    <div class="field"><label for="cvLast">Surname</label><input type="text" id="cvLast" maxlength="40" autocomplete="off" autocapitalize="words"></div>
+    <p class="err" id="cvErr" role="alert"></p>
+    <button class="btn-primary modal-cta" id="cvGo" type="submit">Open the lesson</button>
+    <button class="btn-ghost modal-stay" id="cvReset" type="button">Reset my password instead</button>
+  </form>
+</div>
+
 <div class="modal-back no-print" id="pwModal" hidden>
   <div class="modal" role="dialog" aria-modal="true">
     <h2 style="margin-top:0">Choose your password</h2>
@@ -934,8 +951,11 @@ document.addEventListener("keydown", (e) => {
 
 /* ---- forgot password ----
    Check the username, let them choose the new password there and then, and
-   hold it until their teacher approves it, no emails, no teacher typing. */
+   hold it until their teacher approves it, no emails, no teacher typing.
+   Unless their class has a cover lesson on: then the teacher in the room
+   cannot approve it, and they are offered the lesson with just their name. */
 let rsUser = "", rsTicket = "", rsPoll = null, rsDeadline = 0;
+let coverOn = null;
 
 on("forgotBtn", "click", async () => {
   const u = $("u").value.trim();
@@ -945,7 +965,7 @@ on("forgotBtn", "click", async () => {
   $("forgotBtn").textContent = "Checking…";
   try{
     const r = await fetch(API + "/api/login", { method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ action:"check-username", username: u }) });
+      body: JSON.stringify({ action:"forgot", username: u }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Could not check that.");
     if (!d.exists){
@@ -954,13 +974,66 @@ on("forgotBtn", "click", async () => {
       return;
     }
     rsUser = u;
-    $("rsWho").textContent = "Signing in as " + u + ". Choose a new password, then your teacher will approve it.";
-    $("rsStep1").hidden = false; $("rsStep2").hidden = true;
-    $("rsMsg").textContent = ""; $("rp1").value = ""; $("rp2").value = "";
-    $("resetModal").hidden = false;
-    $("rp1").focus();
+    if (d.cover && d.cover.k) openCover(d.cover);
+    else openReset();
   }catch(e){ $("loginErr").textContent = e.message; }
   finally{ $("forgotBtn").textContent = "Forgot password?"; }
+});
+function openReset(){
+  $("rsWho").textContent = "Signing in as " + rsUser + ". Choose a new password, then your teacher will approve it.";
+  $("rsStep1").hidden = false; $("rsStep2").hidden = true;
+  $("rsMsg").textContent = ""; $("rp1").value = ""; $("rp2").value = "";
+  $("resetModal").hidden = false;
+  $("rp1").focus();
+}
+
+/* The same as access.html does with a copied link, so the lesson cannot tell
+   the two apart: hub_guest holds the key, and lesson.html?guest=1 saves
+   through it. The same name with the same key is the same student coming
+   back to their work; a different name is the next child at this computer,
+   who starts afresh. */
+function savedGuest(){
+  try{ return JSON.parse(localStorage.getItem("hub_guest") || "null"); }catch(e){ return null; }
+}
+function newGuestId(){
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+function openCover(cover){
+  coverOn = cover;
+  $("cvLesson").textContent = cover.title || "";
+  $("cvLesson").parentElement.hidden = !cover.title;
+  const had = savedGuest();
+  const mine = had && had.key === cover.k && String(had.as || "").toLowerCase() === rsUser.toLowerCase();
+  $("cvFirst").value = mine ? (had.first || "") : "";
+  $("cvLast").value = mine ? (had.last || "") : "";
+  $("cvErr").textContent = "";
+  $("coverModal").hidden = false;
+  $("cvFirst").focus();
+}
+on("cvForm", "submit", (e) => {
+  e.preventDefault();
+  const first = $("cvFirst").value.trim(), last = $("cvLast").value.trim();
+  if (!first){ $("cvErr").textContent = "Type your first name."; $("cvFirst").focus(); return; }
+  if (!last){ $("cvErr").textContent = "Type your surname."; $("cvLast").focus(); return; }
+  const name = first + " " + last;
+  const had = savedGuest();
+  const same = had && had.key === coverOn.k && String(had.name).toLowerCase() === name.toLowerCase();
+  try{
+    localStorage.setItem("hub_guest", JSON.stringify({
+      key: coverOn.k, id: same ? had.id : newGuestId(), first: first, last: last, name: name,
+      group: coverOn.group, lesson: coverOn.lesson, as: rsUser }));
+  }catch(err){
+    $("cvErr").textContent = "This browser will not save your work. Try a different one, or ask your teacher.";
+    return;
+  }
+  location.href = "lesson.html?id=" + encodeURIComponent(coverOn.lesson) + "&guest=1";
+});
+on("cvReset", "click", () => { $("coverModal").hidden = true; openReset(); });
+on("coverModal", "mousedown", (e) => { if (e.target === $("coverModal")) $("coverModal").hidden = true; });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("coverModal").hidden){ $("coverModal").hidden = true; $("p").focus(); }
 });
 on("rsCancel", "click", () => { $("resetModal").hidden = true; });
 on("rsGiveUp", "click", stopReset);
