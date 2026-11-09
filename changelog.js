@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.6.2", text:"Copied Arbor instructions and links now paste into Arbor as a link students can click, and the instructions are shorter." },
   { v:"17.6.1", text:"Publishing while the class is in front of you now offers Publish now first. Home learning published now is due at the class's lesson next week and closes the day before it." },
   { v:"17.6", text:"New task: Quest, a run-and-jump game through worlds where guide robots ask questions, with four looks: islands, space, city and snow. Board games can have a coin bank, and a choice can send Continue to the option not yet tried. New cover lessons: Island Quest and Pixel Planets, and Survival Island is longer." },
   { v:"17.5", text:"Two new game tasks: Board game, where students roll a dice round an island answering quick questions for coins, and Swipe, where cards are sorted left or right with a streak. A new cover lesson, Survival Island, uses both for online safety." },

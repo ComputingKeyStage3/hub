@@ -5116,8 +5116,8 @@ function arborInstructions(id){
   const a = assignOf(id);
   const longDate = (day) => new Date(day + "T00:00:00")
     .toLocaleDateString("en-GB", { weekday:"long", day:"numeric", month:"long" });
-  const lines = ["Your Computing home learning is on the Computing Lesson Hub: " + titleOf(id), "",
-                 "1. Click this link:", homeLearningLink(id), "",
+  const lines = ["Your home learning is on the Computing Lesson Hub.", "",
+                 "1. Click this link:", homeLearningLink(id),
                  "2. Sign in with your username and password if it asks you to.",
                  "3. Your home learning will open. Answer every question, then press Finish."];
   const later = a && a.release_at && a.release_at > new Date().toISOString();
@@ -5125,6 +5125,32 @@ function arborInstructions(id){
   if (later) lines.push("It opens on " + longDate(localDay(a.release_at)) + " at " + hhmm(a.release_at) + ".");
   if (a && a.close_on) lines.push("Complete it by " + longDate(a.close_on) + ".");
   return lines.join("\n");
+}
+/* The same words as a web page, with the address made a real link. Arbor's
+   message box is a rich text editor: pasting plain text there leaves the
+   address as words nobody can click, and it only becomes a link when the
+   clipboard says so itself. A blank line starts a new paragraph rather than
+   becoming an empty one, which an editor's own paragraph spacing turns into
+   a double gap. */
+function asLinkedHtml(text){
+  const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const line = (s) => /^https?:\/\/\S+$/.test(s) ? '<a href="' + esc(s) + '">' + esc(s) + "</a>" : esc(s);
+  return text.split(/\n\s*\n/).map(block => "<p>" + block.split("\n").map(line).join("<br>") + "</p>").join("");
+}
+/* Plain text and the linked version together, so a plain box gets the words
+   and a rich one gets the link. A browser that cannot write both still gets
+   the words. */
+async function copyLinked(text){
+  if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write){
+    try{
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/plain": new Blob([text], { type:"text/plain" }),
+        "text/html": new Blob([asLinkedHtml(text)], { type:"text/html" })
+      })]);
+      return;
+    }catch(e){}
+  }
+  await navigator.clipboard.writeText(text);
 }
 function sharePopup(id, justPublished){
   const a = assignOf(id);
@@ -5141,6 +5167,15 @@ function sharePopup(id, justPublished){
     words.rows = 11;
     words.value = arborInstructions(id);
     words.setAttribute("aria-label", "What will be copied");
+    /* Ctrl+C here, where a school has switched the clipboard off for scripts,
+       carries the link as well. Only for the whole of it: a teacher copying
+       one line by hand wants that line. */
+    words.addEventListener("copy", (e) => {
+      if (words.selectionStart !== 0 || words.selectionEnd !== words.value.length || !e.clipboardData) return;
+      e.clipboardData.setData("text/plain", words.value);
+      e.clipboardData.setData("text/html", asLinkedHtml(words.value));
+      e.preventDefault();
+    });
     box.appendChild(words);
     const offers = [];
     const offer = (style, label, note, text) => {
@@ -5152,7 +5187,7 @@ function sharePopup(id, justPublished){
       b.addEventListener("click", async () => {
         offers.forEach(o => { o.head.textContent = o.label; });
         words.value = text;
-        try{ await navigator.clipboard.writeText(text); head.textContent = "Copied \u2713"; }
+        try{ await copyLinked(text); head.textContent = "Copied \u2713"; }
         catch(e){ words.focus(); words.select(); head.textContent = "Now press Ctrl+C"; }
       });
       offers.push({ head: head, label: label });
