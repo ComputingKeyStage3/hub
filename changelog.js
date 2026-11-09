@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.6.3", text:"In a lesson the page title and subtitle now sit in a box in the middle of the top bar, giving the tasks more room." },
   { v:"17.6.2", text:"Copied Arbor instructions and links now paste into Arbor as a link students can click, and the instructions are shorter." },
   { v:"17.6.1", text:"Publishing while the class is in front of you now offers Publish now first. Home learning published now is due at the class's lesson next week and closes the day before it." },
   { v:"17.6", text:"New task: Quest, a run-and-jump game through worlds where guide robots ask questions, with four looks: islands, space, city and snow. Board games can have a coin bank, and a choice can send Continue to the option not yet tried. New cover lessons: Island Quest and Pixel Planets, and Survival Island is longer." },

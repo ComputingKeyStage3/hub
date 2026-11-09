@@ -58,19 +58,28 @@
 </div>
 
 <div class="topbar">
-  <a class="home" id="homeLink" href="index.html"><img class="homelogo" src="images/logo.svg" alt="" width="20" height="20"><span>Home</span></a>
-  <span class="sep">/</span>
-  <div class="title" id="lessonTitle">Lesson</div>
-  <span class="savetime no-print" id="saveTime"></span>
-  <button class="btn-ghost iconbtn no-print" id="setBtn" title="Settings">&#9881;&#65038;</button>
-  <button class="btn-primary no-print" id="saveBtn">Save work</button>
+  <!-- The two ends are grouped and share the room equally, which is what
+       keeps the page's title in the middle of the window and not merely in
+       the middle of whatever space the ends happen to leave. -->
+  <div class="bar-end bar-start">
+    <a class="home" id="homeLink" href="index.html"><img class="homelogo" src="images/logo.svg" alt="" width="20" height="20"><span>Home</span></a>
+    <span class="sep">/</span>
+    <div class="title" id="lessonTitle">Lesson</div>
+  </div>
+  <!-- The page's title and subtitle sit in the bar rather than in a box of
+       their own under it, which gives the tasks that row back. -->
+  <div class="brief" id="brief">
+    <h2 id="briefTitle"></h2>
+    <p id="briefText"></p>
+  </div>
+  <div class="bar-end bar-finish">
+    <span class="savetime no-print" id="saveTime"></span>
+    <button class="btn-ghost iconbtn no-print" id="setBtn" title="Settings">&#9881;&#65038;</button>
+    <button class="btn-primary no-print" id="saveBtn">Save work</button>
+  </div>
 </div>
 
 <div class="tracker" id="tracker"></div>
-<div class="brief" id="brief">
-  <h2 id="briefTitle"></h2>
-  <p id="briefText"></p>
-</div>
 
 <div class="stage" id="stage">
   <p class="signin-hint no-print" id="signinHint" hidden data-online-only>Not signed in, work stays on this computer only. <a href="index.html">Sign in</a></p>
