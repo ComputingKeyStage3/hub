@@ -34,6 +34,7 @@
           practical: !!l.practical,
           homework: !!l.homework,
           cover: !!l.cover,
+          coverTopic: l.cover ? String(l.coverTopic || "") : "",
           /* A version of another lesson. Empty for an original, which is
              every lesson that was written before versions existed. */
           versionOf: l.versionOf || "",

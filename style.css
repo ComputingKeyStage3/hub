@@ -1519,6 +1519,31 @@ body.spectating.embedded{padding-top:0}
 .marklock-words span{font-size:var(--text-base); color:var(--muted)}
 .lp-acts{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
 .lp-acts button{padding:9px 14px}
+/* Where a cover lesson is filed, or its topic, under its title. */
+.lp-from{margin:0 0 8px; font-size:var(--text-sm); color:var(--muted); line-height:1.35}
+
+/* The cover hub: a unit's own cover lessons, then the year's and other
+   years', folded by topic. Up here with the cards, so the phone rules
+   further down still win. */
+.coverhead{display:flex; align-items:baseline; margin:22px 0 4px; font-size:var(--text-lg)}
+.topicfold{border:1.5px solid var(--line); border-radius:var(--rad-md); background:var(--panel);
+  margin:0 0 8px}
+.topicfold.on{border-color:var(--line-2)}
+.topichead{display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none;
+  border:0; padding:12px 14px; cursor:pointer; font:inherit; font-weight:700; color:var(--text)}
+.topichead:hover .topicname{color:var(--amber-dark)}
+.topicarrow{display:inline-block; color:var(--dim); transition:transform .15s ease}
+.topicfold.on .topicarrow{transform:rotate(90deg)}
+.topicname{flex:0 1 auto}
+.topicbody{padding:0 14px 14px}
+/* #hubList's own margin further down is an id, so it is matched here. */
+.topicbody .lessongrid, #hubList .topicbody .lessongrid{margin-top:0}
+.topicbody .ov-row:last-child{margin-bottom:0}
+.topiclist{display:flex; flex-direction:column; gap:6px; margin:6px 0 14px}
+.topicrow{display:flex; align-items:center; gap:12px; min-height:52px; padding:6px 12px; text-align:left;
+  border:1.5px solid var(--line); border-radius:var(--rad-md); background:var(--panel)}
+.topicrow .topicname{flex:1 1 auto; font-weight:700; min-width:0}
+.topicrow .pick-unit{white-space:nowrap}
 .modal.wide{max-width:1500px; text-align:left}
 .modal.wide .toolrow{justify-content:flex-start}
 .stutable .statechip{margin-left:8px}
@@ -4238,6 +4263,14 @@ html[data-build=compact] .buildbar .subtabs button{
 .kindcard-words b{font-size:var(--text-md); font-weight:800}
 .kindcard-words span{font-size:var(--text-sm); color:var(--muted); line-height:1.4}
 .modal.kindpop{max-width:700px}
+/* Import is a different way in, not a kind of lesson, so it is not drawn as
+   a card: a dashed strip under them, centred, with no description. */
+.kindimport{display:flex; align-items:center; justify-content:center; gap:10px; width:100%;
+  margin:12px 0 0; padding:10px 14px; border:1.5px dashed var(--line-2); border-radius:var(--rad-md);
+  background:transparent; font-family:var(--body); font-size:var(--text-md); font-weight:700;
+  color:var(--muted); cursor:pointer; transition:border-color .12s ease, color .12s ease}
+.kindimport:hover{border-color:var(--amber); color:var(--text)}
+.kindimport .kindcard-ico{width:30px; height:30px; background:none}
 @media (max-width:560px){ .kindgrid{grid-template-columns:1fr} }
 
 /* Lesson options: sections with a heading each, and settings as rows with a

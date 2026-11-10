@@ -356,8 +356,9 @@
      browser alone, which put them out of number order for that teacher and
      nobody else. */
   const baseLessonCards = lessonCards;
-  window.lessonCards = function(list, box){
+  window.lessonCards = function(list, box, opts){
     if (!on("richCards")) return baseLessonCards.apply(this, arguments);
+    opts = opts || {};
     box.innerHTML = "";
     if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build new”.")); return; }
     inOrder(list, (l) => titleOf(l.lesson_id));
@@ -376,6 +377,9 @@
       if (l.assessment) head.appendChild(el("span","statechip shut","Assessment"));
       if (l.cover) head.appendChild(el("span","statechip open","Cover"));
       card.appendChild(head);
+      /* The cover hub's line, the same as the plain cards (admin.html). */
+      if (opts.where) card.appendChild(el("p","lp-from", whereFrom(l, opts.where)));
+      else if (opts.topic) card.appendChild(el("p","lp-from", topicOf(l) || "No topic yet"));
 
       /* pages, tasks and when, filled in once the lesson has been read */
       const meta = el("p","rc-meta");
@@ -426,7 +430,8 @@
       acts.appendChild(give);
       acts.appendChild(edit);
       acts.appendChild(pv);
-      const more = overflowMenu([["Delete lesson", () => whichVersion(id, "Which one do you want to delete?",
+      const more = overflowMenu([["Download lesson JSON", () => downloadLessonJson(id)],
+                                 ["Delete lesson", () => whichVersion(id, "Which one do you want to delete?",
                                                                       (v) => deleteLesson(v))]]);
       more.classList.add("rc-more");
       more.addEventListener("click", (e) => e.stopPropagation());

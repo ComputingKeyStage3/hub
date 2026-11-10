@@ -13,6 +13,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="covertopics.js"></script>
 <script src="lessonorder.js"></script>
 <script src="lessoncompat.js"></script>
 <script src="shortmatch.js"></script>
@@ -125,6 +126,8 @@
     <!-- Only for GCSE and A Level, where the unit picker beside it is the
          point of the specification and this is the point inside it. -->
     <select id="lSub" title="Sub-point" hidden></select>
+    <!-- Only for a cover lesson: what it is about, for the cover shelves. -->
+    <select id="lTopic" title="Topic" hidden></select>
   </div>
   <div class="build-actions">
     <span class="savestate" id="saveState" aria-live="polite"></span>
@@ -596,7 +599,7 @@ window.addEventListener("scroll", placeHelp, true);
    original. A version is a whole lesson of its own, with its own id and its
    own students' work: the three fields beside it are only what the console
    shows to tell one apart from another. */
-let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false,
+let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false, coverTopic:"",
                versionOf:"", versionName:"", versionNote:"", versionCode:"",
                topics:{}, responses:{}, extensions:[], blocks:[] };
 
@@ -1040,6 +1043,9 @@ function compile(){
   if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
   if (lesson.cover) out.cover = true;
+  /* What a cover lesson is about, which the cover shelf of every unit groups
+     the other years' cover lessons by. Only a cover lesson has one. */
+  if (lesson.cover && lesson.coverTopic) out.coverTopic = lesson.coverTopic;
   /* The lesson's slides (author-slides.js), one deck kept whole. */
   const slides = window.compileSlides ? window.compileSlides(lesson) : null;
   if (slides) out.slides = slides;
@@ -3001,15 +3007,15 @@ function setMode(assess, practical){
    is ever locked. Cover is nothing locked as well, but each page has to be
    earned by having a go at it, because nobody in the room can check. */
 const KINDS = [
-  { id:"lesson",    name:"Lesson",               icon:"lessons",
+  { id:"lesson",    name:"Lesson",               icon:"lessons",  short:"Pages you teach through.",
     about:"Pages a class works through, opened one at a time as you teach." },
-  { id:"assess",    name:"Assessment",           icon:"work",
+  { id:"assess",    name:"Assessment",           icon:"work",     short:"A test that marks itself.",
     about:"Questions marked as they are answered, with a Strength, a Target and response tasks." },
-  { id:"practical", name:"Practical assessment", icon:"practice",
+  { id:"practical", name:"Practical assessment", icon:"practice", short:"Work you mark by hand.",
     about:"Built like a lesson, sat a page at a time, and marked by you." },
-  { id:"home",      name:"Home learning",        icon:"home",
+  { id:"home",      name:"Home learning",        icon:"home",     short:"Done at home, on one page.",
     about:"A lesson done at home. Every question is on one page, the way an assessment's are." },
-  { id:"cover",     name:"Cover lesson",         icon:"eye",
+  { id:"cover",     name:"Cover lesson",         icon:"eye",      short:"Runs without you.",
     about:"Runs without you. Students earn each page by having a go, and finish on a card they show the cover teacher." }
 ];
 function kindNow(){
@@ -3021,6 +3027,7 @@ function setKind(id){
   lesson.cover = id === "cover";
   setMode(id === "assess", id === "practical");
   paintBuildBar();
+  paintTopicPicker();
 }
 
 function setAssessTab(which){
@@ -4518,6 +4525,8 @@ function openLessonOptions(){
     w3.appendChild($("lYear"));
     w3.appendChild($("lUnit"));
     w3.appendChild($("lSub"));
+    w3.appendChild($("lTopic"));
+    paintTopicPicker();
     secWhere.appendChild(w3);
     box.appendChild(secWhere);
 
@@ -5172,8 +5181,39 @@ function paintSpecPickers(us, sub){
      either picker. */
   fileLessonUnder(strand, sub.value);
 }
+/* The topics a cover lesson can be given (covertopics.js). This lesson's own
+   is added in case it is a new one no saved lesson carries yet. */
+function topicChoices(){ return window.coverTopics.all(cat.lessons, [lesson.coverTopic], cat.removedTopics); }
+function paintTopicPicker(){
+  const ts = $("lTopic");
+  if (!ts) return;
+  ts.hidden = !lesson.cover;
+  if (!lesson.cover) return;
+  ts.innerHTML = "";
+  const t0 = document.createElement("option");
+  t0.value = ""; t0.textContent = "Topic…"; ts.appendChild(t0);
+  topicChoices().forEach(t => {
+    const o = document.createElement("option"); o.value = t; o.textContent = t;
+    ts.appendChild(o);
+  });
+  const tNew = document.createElement("option");
+  tNew.value = "__new"; tNew.textContent = "+ New topic"; ts.appendChild(tNew);
+  ts.value = lesson.coverTopic || "";
+}
+on("lTopic", "change", async () => {
+  const v = $("lTopic").value;
+  if (v === "__new"){
+    const name = (await askNew("New topic", "Name (e.g. Cyber Security)") || "").trim().slice(0, 40);
+    /* Typed again with different capitals, it is the one already there. */
+    if (name) lesson.coverTopic = window.coverTopics.spelt(name, cat.lessons);
+  } else {
+    lesson.coverTopic = v;
+  }
+  paintTopicPicker(); saveDraft();
+});
 function paintPickers(){
   const ys = $("lYear"), us = $("lUnit"), sub = $("lSub");
+  paintTopicPicker();
   /* Here rather than where the catalogue is read, because a unit made in
      this builder is added to the list afterwards and has to take its place. */
   if (window.lessonOrder) window.lessonOrder.sortUnits(cat.units);
@@ -7104,7 +7144,7 @@ function homePickers(){
      dropdowns that only repeat what Lesson options says. */
   const home = $("pickerHome");
   if (!home) return;
-  ["lYear", "lUnit", "lSub"].forEach(id => {
+  ["lYear", "lUnit", "lSub", "lTopic"].forEach(id => {
     const pick = $(id);
     if (pick && pick.parentNode !== home) home.appendChild(pick);
   });
@@ -7341,6 +7381,11 @@ function importPopup(opts){
     });
     box.appendChild(go);
     box.appendChild(msg);
+    if (opts.onCancel){
+      const no = el("button","btn-ghost modal-stay","Cancel");
+      no.addEventListener("click", opts.onCancel);
+      box.appendChild(no);
+    }
     scrollBody(box);
   });
 }
@@ -7436,8 +7481,10 @@ async function uploadCarriedPictures(data, msg){
 }
 
 /* ---------- a whole lesson ---------- */
-function importLessonFile(){
+/* back: where Cancel goes, for the new-lesson pop-up that opened it. */
+function importLessonFile(back){
   const start = () => importPopup({
+    onCancel: back,
     title: "Import a lesson",
     help: "A lesson file, the kind the JSON button writes. It opens here for you to "
         + "look at and then save, so nothing on the site changes until you press Save.",
@@ -7478,6 +7525,7 @@ function importLessonFile(){
       render(); schedulePreview();
       dirty = true;
       closeModal();
+      modeChosen = true;
       say("Lesson imported", "“" + (lesson.title || "Untitled lesson") + "” is open here"
           + (intoVersion ? " as the “" + (lesson.versionName || "Version") + "” version of “" + parentTitle() + "”." : ".")
           + saidDropped(check.dropped)
@@ -7737,6 +7785,7 @@ async function downloadForFolder(){
     (lesson.assessment || lesson.practical) ? { assessment: true } : {},
     lesson.homework ? { homework: true } : {},
     lesson.cover ? { cover: true } : {},
+    lesson.cover && lesson.coverTopic ? { coverTopic: lesson.coverTopic } : {},
     lesson.versionOf ? { versionOf: lesson.versionOf, versionName: lesson.versionName || "",
                          versionNote: lesson.versionNote || "", versionCode: lesson.versionCode || "" } : {},
     { code: code });
@@ -7929,6 +7978,7 @@ async function loadUnitsAndYears(){
       file.lessons.forEach(l => { if (l.year && years.indexOf(l.year) < 0) years.push(l.year); });
       cat = { years: years.map(name => ({ name })), units: file.units.filter(u => u.name),
               lessons: file.lessons.map(l => ({ lesson_id: l.id, title: l.title, unit: l.unit,
+                                                cover: !!l.cover, cover_topic: l.coverTopic || "",
                                                 version_of: l.versionOf || "" })) };
     }catch(e){ cat = { years: [], units: [], lessons: [] }; }
     paintPickers();
@@ -8066,6 +8116,7 @@ function fromCompiled(data, meta){
                 rubricShow: data.rubricShow === "grade" ? "grade" : "level",
                 homework: !!data.homework,
                 cover: !!data.cover,
+                coverTopic: data.cover ? String(data.coverTopic || "") : "",
                 /* The two sentences for everything wrong and everything right
                    were saved but never read back, so reopening an assessment
                    emptied both boxes and the next save threw them away. */
@@ -8323,7 +8374,7 @@ function paintKindChip(){
    Asked once, when a new piece of work is started, in both layouts. After
    that the kind is changed in Lesson options, where it sits with everything
    else that is about the lesson as a whole rather than one press away. */
-function kindCard(k, picked, onPick){
+function kindCard(k, picked, onPick, short){
   const b = el("button","kindcard" + (picked ? " on" : ""));
   b.type = "button";
   b.setAttribute("role", "radio");
@@ -8333,27 +8384,39 @@ function kindCard(k, picked, onPick){
   b.appendChild(ico);
   const words = el("span","kindcard-words");
   words.appendChild(el("b","", k.name));
-  words.appendChild(el("span","", k.about));
+  words.appendChild(el("span","", short ? k.short : k.about));
   b.appendChild(words);
   b.addEventListener("click", () => onPick(k));
   return b;
 }
+/* Nothing is picked to start with: a new lesson is a Lesson underneath, and
+   showing that as already chosen read as a choice made for you. Picking one
+   goes straight on to Lesson options, which holds everything else a new
+   lesson needs (title, year, unit, a cover lesson's topic). Import is another
+   way in rather than a kind, so it is drawn differently, and its Cancel
+   comes back here. */
 function modePicker(){
   openModal(box => {
     box.classList.add("kindpop");
     box.appendChild(el("h2","","What are you making?"));
-    box.appendChild(el("p","modal-text","You can change this later in Lesson options."));
     const list = el("div","kindgrid");
     list.setAttribute("role", "radiogroup");
-    KINDS.forEach(k => list.appendChild(kindCard(k, k.id === kindNow(), (pick) => {
+    KINDS.forEach(k => list.appendChild(kindCard(k, false, (pick) => {
       setKind(pick.id);
       modeChosen = true;
       closeModal();
-    })));
+      $("optionsBtn").click();
+    }, true)));
     box.appendChild(list);
+    const imp = el("button","kindimport");
+    imp.type = "button";
+    const ico = el("span","kindcard-ico");
+    ico.innerHTML = window.hubUI ? window.hubUI.icon("upload", 20) : "";
+    imp.appendChild(ico);
+    imp.appendChild(el("span","","Import a lesson"));
+    imp.addEventListener("click", () => importLessonFile(modePicker));
+    box.appendChild(imp);
   });
-  const first = document.querySelector(".kindgrid .kindcard.on") || document.querySelector(".kindgrid .kindcard");
-  if (first) first.focus();
 }
 on("modeChip", "click", () => $("optionsBtn").click());
 

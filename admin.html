@@ -13,6 +13,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="covertopics.js"></script>
 <script src="lessonorder.js"></script>
 <script src="shortmatch.js"></script>
 <script src="ordermarks.js"></script>
@@ -315,6 +316,7 @@ setTimeout(function(){
     </div>
     <div class="toolrow">
       <button class="btn-ghost iconbtn refresh" id="refUnitPage" title="Refresh">&#8635;</button>
+      <button class="btn-ghost" id="manageTopicsBtn" hidden>Manage topics</button>
       <button class="btn-primary" id="hubNewLesson3">+ Build new</button>
     </div>
     <div class="subtabs kindtabs" id="hubKinds" role="tablist" aria-label="Kind of lesson"></div>
@@ -2237,11 +2239,16 @@ function whichVersion(id, question, then){
 /* Giving a lesson to this class, asking first where there is a choice to be
    made. A lesson with no versions goes straight in: a pop-up offering one
    option is a press for nothing. */
-async function addLessonToClass(id, onDone){
+/* opts.borrow: a cover lesson from another unit or year group. It stays
+   filed where it is, for every class that has it there, and this class sees
+   it under this unit instead of it being moved here for everyone. */
+async function addLessonToClass(id, onDone, opts){
   const family = familyOf(id);
+  const borrow = !!(opts && opts.borrow);
   const go = async (chosen) => {
-    if ((catOf(chosen).unit || "") !== unit) await catPost({ op:"set-lesson", id: chosen, unit });
-    await catPost({ op:"assign", id: chosen, groups: [cls] });
+    if (!borrow && (catOf(chosen).unit || "") !== unit) await catPost({ op:"set-lesson", id: chosen, unit });
+    await catPost(borrow ? { op:"assign", id: chosen, groups: [cls], shownIn: unit }
+                         : { op:"assign", id: chosen, groups: [cls] });
     await loadCatalogue();
     onDone();
   };
@@ -2580,7 +2587,11 @@ function openHubUnit(u, kind){
 }
 
 /* the lesson cards, used for a unit and for search results */
-function lessonCards(list, box){
+/* opts.topic: a cover lesson's topic under its title, for a unit's own.
+   opts.where: the year group being looked at, for lessons from other units,
+   which say where they are filed instead (they are grouped by topic already). */
+function lessonCards(list, box, opts){
+  opts = opts || {};
   box.innerHTML = "";
   if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build new”.")); return; }
   const grid = el("div","lessongrid");
@@ -2596,6 +2607,8 @@ function lessonCards(list, box){
     if (alts.length) head.appendChild(el("span","statechip open",
       alts.length + " version" + (alts.length === 1 ? "" : "s")));
     card.appendChild(head);
+    if (opts.where) card.appendChild(el("p","lp-from", whereFrom(l, opts.where)));
+    else if (opts.topic) card.appendChild(el("p","lp-from", topicOf(l) || "No topic yet"));
     /* With no classes to publish to, what a teacher needs off this card is
        the address to paste into Teams, and the code that opens it if the
        link does not survive the journey. */
@@ -2630,10 +2643,12 @@ function lessonCards(list, box){
     const del = el("button","btn-ghost","Delete");
     del.addEventListener("click", deleteIt);
     acts.appendChild(give);
+    const download = ["Download lesson JSON", () => downloadLessonJson(l.lesson_id)];
     if (narrow()) acts.appendChild(overflowMenu([["Preview", previewIt],
                                                  ["Edit", () => editLesson(l.lesson_id)],
+                                                 download,
                                                  ["Delete", deleteIt]]));
-    else { acts.appendChild(pv); acts.appendChild(edit); acts.appendChild(del); }
+    else { acts.appendChild(pv); acts.appendChild(edit); acts.appendChild(del); acts.appendChild(overflowMenu([download])); }
     card.appendChild(acts);
     grid.appendChild(card);
   });
@@ -2692,14 +2707,212 @@ function kindShelf(list, bar, box, repaint){
     box.appendChild(el("p","hint","No " + kindWords() + " here yet, press “+ Build new”."));
     return;
   }
-  if (lessonKind === "cover") box.appendChild(el("p","hint",
-    "For the cover teacher: students sign in and open the lesson. They work down each page, pressing Understood or " +
-    "Finished to see the next task. They are finished when they reach the last screen, which shows how many pages they did."));
   const holder = el("div");
   box.appendChild(holder);
   lessonCards(shown, holder);
 }
-function paintHub(){ kindShelf(lessonsOfUnit(hubUnit), $("hubKinds"), $("hubList"), paintHub); }
+function paintHub(){
+  const list = lessonsOfUnit(hubUnit);
+  const coverHub = lessonKind === "cover" && coverHubYear(hubYear);
+  /* Renaming rewrites lessons in the database, so not without a server. */
+  showIf("manageTopicsBtn", coverHub && !OFFLINE);
+  if (coverHub){
+    paintKindTabs($("hubKinds"), list, paintHub);
+    paintCoverHub($("hubList"), hubYear, hubUnit);
+    return;
+  }
+  kindShelf(list, $("hubKinds"), $("hubList"), paintHub);
+}
+
+/* ---------- the cover hub ----------
+   A unit's Cover tab: its own cover lessons, then More cover lessons, every
+   other KS3 one from any unit or year group, grouped by topic.
+   Cover is set at short notice, and the lesson that suits the room is as
+   likely to be a Year 7 one as anything filed in this unit. GCSE and A
+   Level are left as they were, which is what coverHubYear() decides. */
+function coverHubYear(year){ return !!year && levelOf(year) === "KS3"; }
+const yearOfUnit = (name) => { const u = (cat.units || []).find(x => x.name === name); return u ? (u.year || "") : ""; };
+const yearOfLesson = (l) => l.year || yearOfUnit(l.unit || "");
+const topicOf = (l) => String(l.cover_topic || "").trim();
+/* Both shelves, originals only, as the hub lists: this unit's, then every
+   other cover lesson in a KS3 year group. */
+function coverShelves(year, unitName){
+  const covers = (cat.lessons || []).filter(l => l.cover && !l.version_of);
+  return {
+    here: covers.filter(l => (l.unit || "") === unitName),
+    more: covers.filter(l => (l.unit || "") !== unitName && coverHubYear(yearOfLesson(l)))
+  };
+}
+/* By topic, in the order the builder offers them, and those with none last. */
+function byTopic(list){
+  const order = topicList();
+  const groups = [];
+  list.forEach(l => {
+    const t = topicOf(l);
+    const name = t ? window.coverTopics.spelt(t, cat.lessons) : "";
+    let g = groups.find(x => x.name === name);
+    if (!g){ g = { name, lessons: [] }; groups.push(g); }
+    g.lessons.push(l);
+  });
+  const rank = (n) => n ? (order.indexOf(n) < 0 ? 999 : order.indexOf(n)) : 1000;
+  return groups.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
+}
+/* Open or shut, remembered while the page is open. A topic starts open where
+   this unit's own cover lessons use it, since that is the likeliest match. */
+const topicFoldOpen = {};
+function topicFolds(box, key, list, startOpen, drawRows){
+  byTopic(list).forEach(g => {
+    const id = key + "|" + g.name;
+    const open = id in topicFoldOpen ? topicFoldOpen[id] : startOpen.has(g.name);
+    const wrap = el("div","topicfold" + (open ? " on" : ""));
+    const head = el("button","topichead");
+    head.type = "button";
+    head.setAttribute("aria-expanded", open ? "true" : "false");
+    head.appendChild(el("span","topicarrow", "▸"));
+    head.appendChild(el("span","topicname", g.name || "No topic yet"));
+    head.appendChild(el("span","kindcount", String(g.lessons.length)));
+    const body = el("div","topicbody");
+    body.hidden = !open;
+    if (open) drawRows(g.lessons, body);
+    head.addEventListener("click", () => {
+      const now = body.hidden;
+      topicFoldOpen[id] = now;
+      body.hidden = !now;
+      wrap.classList.toggle("on", now);
+      head.setAttribute("aria-expanded", now ? "true" : "false");
+      if (now && !body.childNodes.length) drawRows(g.lessons, body);
+    });
+    wrap.appendChild(head); wrap.appendChild(body);
+    box.appendChild(wrap);
+  });
+}
+/* The two shelves, for the hub and for a class's Add existing alike. Only
+   how a lesson is drawn differs, which is what drawHere and drawRows are. */
+function coverSections(box, year, unitName, shelves, drawHere, drawRows){
+  const startOpen = new Set(shelves.here.map(l => topicOf(l) && window.coverTopics.spelt(topicOf(l), cat.lessons)));
+  const section = (title, n) => {
+    const h = el("h3","coverhead", title);
+    if (n) h.appendChild(el("span","kindcount", String(n)));
+    box.appendChild(h);
+  };
+  section("In " + (unitName || "this unit"), shelves.here.length);
+  if (shelves.here.length) drawHere(shelves.here, box);
+  else box.appendChild(el("p","hint","None yet."));
+  if (shelves.more.length){
+    section("More cover lessons", shelves.more.length);
+    topicFolds(box, "more", shelves.more, startOpen, drawRows);
+  }
+}
+/* Where a lesson from another unit lives, said on its card: the year as
+   well when it is another year group's. */
+function whereFrom(l, year){
+  const y = yearOfLesson(l);
+  return (y && y !== year ? y + " · " : "") + (l.unit || "Not in a unit");
+}
+function paintCoverHub(box, year, unitName){
+  box.innerHTML = "";
+  coverSections(box, year, unitName, coverShelves(year, unitName),
+    (list, into) => { const h = el("div"); into.appendChild(h); lessonCards(list, h, { topic: true }); },
+    (list, into) => lessonCards(list, into, { where: year }));
+}
+
+on("manageTopicsBtn", "click", () => manageTopics(() => paintHub()));
+/* Renaming a topic is rewriting every cover lesson that carries it, which is
+   also how a typo is mended: rename it to the one it should have been.
+   Deleting moves its lessons to Other. Other is left alone, being where
+   they go. */
+const topicList = () => window.coverTopics.all(cat.lessons, [], cat.removedTopics);
+const isStarting = (t) => window.coverTopics.DEFAULTS.some(d => window.coverTopics.same(d, t));
+const isOther = (t) => window.coverTopics.same(t, window.coverTopics.OTHER);
+function manageTopics(after){
+  const used = (cat.lessons || []).filter(l => l.cover && topicOf(l));
+  const count = (t) => used.filter(l => window.coverTopics.same(topicOf(l), t)).length;
+  openModal(box => {
+    modalTitle(box, "Manage topics");
+    const list = el("div","topiclist");
+    box.appendChild(list);
+    topicList().forEach(t => {
+      const row = el("div","topicrow");
+      row.appendChild(el("span","topicname", t));
+      row.appendChild(el("span","pick-unit", countWord(count(t), "lesson", "lessons")));
+      /* Renaming one no lesson uses would rename nothing: the new name only
+         exists once a lesson carries it. */
+      if (count(t) && !isOther(t)){
+        const ren = el("button","btn-ghost iconbtn","✎");
+        ren.title = "Rename " + t;
+        ren.addEventListener("click", () => renameTopic(t, after));
+        row.appendChild(ren);
+      }
+      if (!isOther(t)){
+        const del = el("button","btn-ghost iconbtn","🗑");
+        del.title = "Delete " + t;
+        del.addEventListener("click", () => deleteTopic(t, count(t), after));
+        row.appendChild(del);
+      }
+      list.appendChild(row);
+    });
+    const done = el("button","btn-ghost modal-stay","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+    scrollBody(box);
+  });
+}
+function renameTopic(from, after){
+  openModal(box => {
+    modalTitle(box, "Rename " + from);
+    const w = el("div","bfield");
+    const inp = el("input");
+    inp.value = from;
+    inp.maxLength = 40;
+    w.appendChild(inp);
+    box.appendChild(w);
+    const msg = el("p","hint","");
+    box.appendChild(msg);
+    const go = el("button","btn-primary modal-cta","Rename");
+    go.addEventListener("click", async () => {
+      const typed = inp.value.trim();
+      if (!typed){ msg.textContent = "Give it a name."; return; }
+      /* Typed as another topic already there, the two become one. */
+      const to = topicList().find(t => !window.coverTopics.same(t, from) && window.coverTopics.same(t, typed)) || typed;
+      if (to === from){ manageTopics(after); return; }
+      msg.textContent = "Renaming…";
+      go.disabled = true;
+      try{
+        await catPost({ op:"rename-cover-topic", from, to, starting: isStarting(from) });
+        manageTopics(after);
+        after();
+      }catch(e){ msg.textContent = e.message; go.disabled = false; }
+    });
+    box.appendChild(go);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", () => manageTopics(after));
+    box.appendChild(no);
+    setTimeout(() => { try{ inp.focus(); inp.select(); }catch(e){} }, 30);
+  });
+}
+function deleteTopic(topic, n, after){
+  openModal(box => {
+    modalTitle(box, "Delete " + topic + "?");
+    if (n) box.appendChild(el("p","modal-text",
+      "Its " + countWord(n, "cover lesson moves", "cover lessons move") + " to Other."));
+    const msg = el("p","hint","");
+    box.appendChild(msg);
+    const go = el("button","btn-primary modal-cta","Delete");
+    go.addEventListener("click", async () => {
+      msg.textContent = "Deleting…";
+      go.disabled = true;
+      try{
+        await catPost({ op:"delete-cover-topic", from: topic, starting: isStarting(topic) });
+        manageTopics(after);
+        after();
+      }catch(e){ msg.textContent = e.message; go.disabled = false; }
+    });
+    box.appendChild(go);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", () => manageTopics(after));
+    box.appendChild(no);
+  });
+}
 
 /* ---------- the link to hand a class (no server) ----------
    Lessons reach students through Teams or Impero rather than a lesson list,
@@ -3582,7 +3795,19 @@ async function unitProgressFor(unitName, group, force){
    screen. */
 function classLessonsFor(group){
   const g = String(group || "").toLowerCase();
-  return (cat.lessons || []).filter(l => assigns.some(a => a.lesson_id === l.lesson_id && a.group_name.toLowerCase() === g));
+  const out = [];
+  (cat.lessons || []).forEach(l => {
+    const a = assigns.find(x => x.lesson_id === l.lesson_id && x.group_name.toLowerCase() === g);
+    if (a) out.push(asShownTo(l, a));
+  });
+  return out;
+}
+/* A cover lesson borrowed from another unit or year stays filed there for
+   everyone else, and this class sees it under the unit it was added to:
+   its tiles, its tabs, its progress. A copy, so the catalogue keeps the
+   unit it is really filed in. */
+function asShownTo(l, a){
+  return a && a.shown_in && a.shown_in !== l.unit ? Object.assign({}, l, { unit: a.shown_in, filedIn: l.unit || "" }) : l;
 }
 async function loadUnitProgress(force){
   $("progressWait").hidden = false;
@@ -4347,6 +4572,7 @@ async function fetchCatalogue(){
       lessons: file.lessons.map(l => ({ lesson_id: l.id, unit: l.unit, year: l.year,
                                         code: l.code, position: 0, published: 1,
                                         title: l.title, cover: !!l.cover,
+                                        cover_topic: l.coverTopic || "",
                                         assessment: !!l.assessment, practical: !!l.practical,
                                         homework: !!l.homework,
                                         version_of: l.versionOf || "",
@@ -4400,10 +4626,7 @@ async function catPost(payload){
 }
 
 /* Only the units this class actually has lessons in. */
-function classLessons(){
-  return (cat.lessons || []).filter(l =>
-    assigns.some(a => a.lesson_id === l.lesson_id && a.group_name.toLowerCase() === cls.toLowerCase()));
-}
+function classLessons(){ return classLessonsFor(cls); }
 function paintClassUnits(){
   const g = $("unitGrid"); g.innerHTML = "";
   const mine = classLessons();
@@ -4461,7 +4684,7 @@ function partsOfUnit(){
   return names.sort(byPartName);
 }
 function classLessonsIn(name){
-  return (cat.lessons || []).filter(l => (l.unit || "") === name && assignOf(l.lesson_id));
+  return classLessons().filter(l => (l.unit || "") === name);
 }
 /* The number in the wording is read as a number, so 2.2.10 comes after
    2.2.9 rather than after 2.2.1. */
@@ -4503,7 +4726,7 @@ async function showLessonInClass(group, id){
   try{
     nameClass(group);
     await loadCatalogue();
-    const l = (cat.lessons || []).find(x => x.lesson_id === id) || {};
+    const l = classLessonsFor(group).find(x => x.lesson_id === id) || catOf(id);
     flashLesson = id; flashUntil = 0;
     /* opened on the shelf it is on, or there would be no card to pick out */
     openUnit(l.unit || "", kindOf(l));
@@ -4621,6 +4844,32 @@ on("addLessonBtn", "click", () => {
 
     /* A lesson "belongs" to this unit if its own file says so, that is what
        the builder writes, even before it has been filed here. */
+    /* Not yet with this class, under any version, and matching the search. */
+    const notHere = (id) => !catOf(id).version_of && !assignOf(id) && !familyOf(id).some(v => assignOf(v.lesson_id));
+    const matches = (id) => { const t = term.trim().toLowerCase(); return !t || titleOf(id).toLowerCase().includes(t); };
+    /* Cover goes through the cover hub on a KS3 unit: this unit's, then the
+       other KS3 cover lessons by topic, so there is no unit toggle. */
+    const year = yearOfUnit(unit) || yearOfClass();
+    const coverHere = coverHubYear(year);
+    function coverOffer(){
+      const sh = coverShelves(year, unit);
+      const keep = (list) => list.filter(l => notHere(l.lesson_id) && matches(l.lesson_id));
+      return { here: keep(sh.here), more: keep(sh.more) };
+    }
+    function coverRow(l, into, borrow){
+      const row = el("button","ov-row");
+      const words = el("span","pick-lesson");
+      words.appendChild(el("span","t", titleOf(l.lesson_id)));
+      words.appendChild(el("span","pick-unit", borrow ? whereFrom(l, year) : (topicOf(l) || "No topic yet")));
+      row.appendChild(words);
+      row.appendChild(el("span","edit","Add →"));
+      row.addEventListener("click", () => {
+        closeModal();
+        addLessonToClass(l.lesson_id, () => { lessonKind = "cover"; openPart(""); }, { borrow })
+          .catch(e => say("Could not add that", e.message));
+      });
+      into.appendChild(row);
+    }
     function paint(){
       holder.innerHTML = "";
       const t = term.trim().toLowerCase();
@@ -4637,7 +4886,22 @@ on("addLessonBtn", "click", () => {
         if (showAll) return true;
         return (l.unit || "") === unit;                                // suggested by the lesson itself
       });
-      drawKindTabs(kinds, offered.map(l => catOf(l.id)), kind, (k) => { kind = k; paint(); });
+      const cover = coverHere ? coverOffer() : null;
+      const tabList = offered.map(l => catOf(l.id));
+      if (cover) tabList.splice(0, tabList.length, ...tabList.filter(l => kindOf(l) !== "cover"),
+                                ...cover.here, ...cover.more);
+      drawKindTabs(kinds, tabList, kind, (k) => { kind = k; paint(); });
+      toggle.hidden = !!cover && kind === "cover";
+      if (cover && kind === "cover"){
+        if (!cover.here.length && !cover.more.length){
+          holder.appendChild(el("p","modal-text", t ? "No cover lessons match." : "No cover lessons to add."));
+          return;
+        }
+        coverSections(holder, year, unit, cover,
+          (list, into) => inOrder(list, l => titleOf(l.lesson_id)).forEach(l => coverRow(l, into, false)),
+          (list, into) => inOrder(list, l => titleOf(l.lesson_id)).forEach(l => coverRow(l, into, true)));
+        return;
+      }
       const rows = offered.filter(l => kindOf(catOf(l.id)) === kind);
       inOrder(rows);
       longWord.textContent = showAll ? "Only lessons for this unit" : "Show every lesson";
@@ -4735,6 +4999,7 @@ function paintLessonGrid(){
     else if (a && a.close_on && live)
       card.appendChild(el("p","lp-note", (closed ? "Closed " : "Closes ") + niceDate(a.close_on) + " at " + CLOSES_AT));
     card.appendChild(head);
+    if (l.filedIn != null) card.appendChild(el("p","lp-from", "From " + whereFrom(catOf(l.lesson_id), yearOfUnit(unit))));
     /* Which version this class is on, and the way to change it. Only where
        there is more than one: a line reading "Version Original" on every card
        in a hub that has no versions in it is noise on 27 classes' worth of
@@ -4786,6 +5051,7 @@ function paintLessonGrid(){
     if (!cover && (live || !homework)) acts.appendChild(man);
     /* View work is its own button, unless the screen is too narrow for four */
     const extras = [["Edit in the builder", () => editLesson(l.lesson_id)],
+                    ["Download lesson JSON", () => downloadLessonJson(l.lesson_id)],
                     ["Remove from " + cls, () => removeFromClass(l)]];
     if (family.length > 1) extras.unshift(["Choose the version", () => pickVersionFor(l.lesson_id)]);
     /* A practical's own button goes to the marking, so its mark book is here.
@@ -4808,6 +5074,18 @@ function paintLessonGrid(){
    parts are a screen of their own now, so the list is only ever one of them
    and a heading over it would repeat the heading above it. */
 
+/* The lesson's file, saved straight to the teacher's computer: the same
+   JSON the builder's Import a lesson takes back in. */
+async function downloadLessonJson(id){
+  try{
+    const data = await fetchLesson(id);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type:"application/json" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = id + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }catch(e){ say("Could not download it", e.message); }
+}
 async function fetchLesson(id){
   /* The lessons folder is offline mode's. With a server the database is the
      only source, so a leftover file never stands in for what was published. */
@@ -5288,7 +5566,7 @@ function yearOfClass(){
   return first ? first.year : "";
 }
 function unitHasLessonFor(name){
-  return (cat.lessons || []).some(l => l.unit === name && assignOf(l.lesson_id));
+  return classLessons().some(l => l.unit === name);
 }
 /* giving a class every lesson in a unit is what "adding" it means */
 /* The original of each lesson, never a version: a class starts on the

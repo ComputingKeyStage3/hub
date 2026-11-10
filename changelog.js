@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.9", text:"Cover hub: a unit's Cover tab shows its own cover lessons, then More cover lessons from every KS3 year grouped by topic. Cover lessons get a Topic, Manage topics renames or deletes topics, and a class can add any cover lesson without moving it. New lessons start on a shorter choice with Import a lesson, and the three dots on a lesson download its JSON." },
   { v:"17.8.4", text:"Cover details has gone from cover lesson cards, along with cover notes in Lesson options and the Word template. A cover lesson card has Publish, View work and the menu." },
   { v:"17.8.3", text:"Cover lessons: the eye on every task in the builder chooses whether the next task waits for this one or shows with it, so a Pixel studio drawing and its quiz can sit together with no Understood between them. A short answer with the eye set no longer opens what is below it until Check answer is pressed." },
   { v:"17.8.2", text:"Cover details is just the cover notes and the lesson. The Sign-in backup section and its link page have gone, because Forgot password on the front page now does their job. Links copied before this no longer work." },
