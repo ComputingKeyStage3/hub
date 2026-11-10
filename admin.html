@@ -2587,9 +2587,8 @@ function openHubUnit(u, kind){
 }
 
 /* the lesson cards, used for a unit and for search results */
-/* opts.topic: a cover lesson's topic under its title, for a unit's own.
-   opts.where: the year group being looked at, for lessons from other units,
-   which say where they are filed instead (they are grouped by topic already). */
+/* opts.where: the year group being looked at, for cover lessons from other
+   units, which say on the card where they are filed. */
 function lessonCards(list, box, opts){
   opts = opts || {};
   box.innerHTML = "";
@@ -2608,7 +2607,6 @@ function lessonCards(list, box, opts){
       alts.length + " version" + (alts.length === 1 ? "" : "s")));
     card.appendChild(head);
     if (opts.where) card.appendChild(el("p","lp-from", whereFrom(l, opts.where)));
-    else if (opts.topic) card.appendChild(el("p","lp-from", topicOf(l) || "No topic yet"));
     /* With no classes to publish to, what a teacher needs off this card is
        the address to paste into Teams, and the code that opens it if the
        link does not survive the journey. */
@@ -2714,7 +2712,7 @@ function kindShelf(list, bar, box, repaint){
 function paintHub(){
   const list = lessonsOfUnit(hubUnit);
   const coverHub = lessonKind === "cover" && coverHubYear(hubYear);
-  /* Renaming rewrites lessons in the database, so not without a server. */
+  /* Topics are kept in the database, so not without a server. */
   showIf("manageTopicsBtn", coverHub && !OFFLINE);
   if (coverHub){
     paintKindTabs($("hubKinds"), list, paintHub);
@@ -2725,45 +2723,56 @@ function paintHub(){
 }
 
 /* ---------- the cover hub ----------
-   A unit's Cover tab: its own cover lessons, then More cover lessons, every
-   other KS3 one from any unit or year group, grouped by topic.
-   Cover is set at short notice, and the lesson that suits the room is as
-   likely to be a Year 7 one as anything filed in this unit. GCSE and A
-   Level are left as they were, which is what coverHubYear() decides. */
+   A unit's Cover tab: its own cover lessons, then the other cover lessons in
+   the unit's topic, then More cover lessons, every other KS3 one grouped by
+   topic and folded shut. Cover is set at short notice, and the lesson that
+   suits the room is as likely to be a Year 7 one as anything filed in this
+   unit. GCSE and A Level are left as they were, which is what coverHubYear()
+   decides.
+
+   A topic belongs to units, not lessons (Manage topics), so a cover lesson's
+   topic is the topic of the unit it is filed in. */
 function coverHubYear(year){ return !!year && levelOf(year) === "KS3"; }
-const yearOfUnit = (name) => { const u = (cat.units || []).find(x => x.name === name); return u ? (u.year || "") : ""; };
+const unitNamed = (name) => (cat.units || []).find(x => x.name === name);
+const yearOfUnit = (name) => { const u = unitNamed(name); return u ? (u.year || "") : ""; };
 const yearOfLesson = (l) => l.year || yearOfUnit(l.unit || "");
-const topicOf = (l) => String(l.cover_topic || "").trim();
-/* Both shelves, originals only, as the hub lists: this unit's, then every
-   other cover lesson in a KS3 year group. */
+const topicOfUnit = (name) => { const u = unitNamed(name); return u ? String(u.topic || "").trim() : ""; };
+const topicOf = (l) => topicOfUnit(l.unit || "");
+const topicList = () => window.coverTopics.all(cat.coverTopics, cat.units);
+const isOther = (t) => window.coverTopics.same(t, window.coverTopics.OTHER);
+/* The shelves, originals only, as the hub lists: this unit's, the rest of
+   its topic's, and every other cover lesson in a KS3 year group. */
 function coverShelves(year, unitName){
   const covers = (cat.lessons || []).filter(l => l.cover && !l.version_of);
+  const topic = topicOfUnit(unitName);
+  const elsewhere = covers.filter(l => (l.unit || "") !== unitName && coverHubYear(yearOfLesson(l)));
+  const inTopic = (l) => !!topic && window.coverTopics.same(topicOf(l), topic);
   return {
+    topic,
     here: covers.filter(l => (l.unit || "") === unitName),
-    more: covers.filter(l => (l.unit || "") !== unitName && coverHubYear(yearOfLesson(l)))
+    topicMates: elsewhere.filter(inTopic),
+    more: elsewhere.filter(l => !inTopic(l))
   };
 }
-/* By topic, in the order the builder offers them, and those with none last. */
+/* By topic, in the list's order, and units with no topic last. */
 function byTopic(list){
-  const order = topicList();
+  const order = topicList().map(t => t.toLowerCase());
   const groups = [];
   list.forEach(l => {
     const t = topicOf(l);
-    const name = t ? window.coverTopics.spelt(t, cat.lessons) : "";
-    let g = groups.find(x => x.name === name);
-    if (!g){ g = { name, lessons: [] }; groups.push(g); }
+    let g = groups.find(x => window.coverTopics.same(x.name, t));
+    if (!g){ g = { name: t, lessons: [] }; groups.push(g); }
     g.lessons.push(l);
   });
-  const rank = (n) => n ? (order.indexOf(n) < 0 ? 999 : order.indexOf(n)) : 1000;
+  const rank = (n) => n ? (order.indexOf(n.toLowerCase()) < 0 ? 999 : order.indexOf(n.toLowerCase())) : 1000;
   return groups.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
 }
-/* Open or shut, remembered while the page is open. A topic starts open where
-   this unit's own cover lessons use it, since that is the likeliest match. */
+/* Shut to begin with, and remembered while the page is open once opened. */
 const topicFoldOpen = {};
-function topicFolds(box, key, list, startOpen, drawRows){
+function topicFolds(box, key, list, drawRows){
   byTopic(list).forEach(g => {
-    const id = key + "|" + g.name;
-    const open = id in topicFoldOpen ? topicFoldOpen[id] : startOpen.has(g.name);
+    const id = key + "|" + g.name.toLowerCase();
+    const open = !!topicFoldOpen[id];
     const wrap = el("div","topicfold" + (open ? " on" : ""));
     const head = el("button","topichead");
     head.type = "button";
@@ -2786,21 +2795,26 @@ function topicFolds(box, key, list, startOpen, drawRows){
     box.appendChild(wrap);
   });
 }
-/* The two shelves, for the hub and for a class's Add existing alike. Only
-   how a lesson is drawn differs, which is what drawHere and drawRows are. */
+/* The shelves, for the hub and for a class's Add existing alike. Only how a
+   lesson is drawn differs: drawHere for this unit's, drawRows for the rest. */
 function coverSections(box, year, unitName, shelves, drawHere, drawRows){
-  const startOpen = new Set(shelves.here.map(l => topicOf(l) && window.coverTopics.spelt(topicOf(l), cat.lessons)));
   const section = (title, n) => {
     const h = el("h3","coverhead", title);
     if (n) h.appendChild(el("span","kindcount", String(n)));
     box.appendChild(h);
+    return h;
   };
   section("In " + (unitName || "this unit"), shelves.here.length);
   if (shelves.here.length) drawHere(shelves.here, box);
   else box.appendChild(el("p","hint","None yet."));
+  if (shelves.topic){
+    section(shelves.topic, shelves.topicMates.length);
+    if (shelves.topicMates.length) drawRows(shelves.topicMates, box);
+    else box.appendChild(el("p","hint","No other cover lessons in this topic yet."));
+  }
   if (shelves.more.length){
     section("More cover lessons", shelves.more.length);
-    topicFolds(box, "more", shelves.more, startOpen, drawRows);
+    topicFolds(box, "more", shelves.more, drawRows);
   }
 }
 /* Where a lesson from another unit lives, said on its card: the year as
@@ -2812,89 +2826,147 @@ function whereFrom(l, year){
 function paintCoverHub(box, year, unitName){
   box.innerHTML = "";
   coverSections(box, year, unitName, coverShelves(year, unitName),
-    (list, into) => { const h = el("div"); into.appendChild(h); lessonCards(list, h, { topic: true }); },
-    (list, into) => lessonCards(list, into, { where: year }));
+    (list, into) => { const h = el("div"); into.appendChild(h); lessonCards(list, h); },
+    (list, into) => { const h = el("div"); into.appendChild(h); lessonCards(list, h, { where: year }); });
 }
 
+/* ---------- Manage topics ----------
+   Each topic with the units in it. A unit is in one topic at most, so adding
+   it to another moves it. Renaming to a topic already there merges the two,
+   which is how a typo is mended. Deleting moves its units to Other, which is
+   left alone, being where they go.
+
+   Every change sends the list as it stands, which the server writes in the
+   first time, while it is still the starting topics. */
 on("manageTopicsBtn", "click", () => manageTopics(() => paintHub()));
-/* Renaming a topic is rewriting every cover lesson that carries it, which is
-   also how a typo is mended: rename it to the one it should have been.
-   Deleting moves its lessons to Other. Other is left alone, being where
-   they go. */
-const topicList = () => window.coverTopics.all(cat.lessons, [], cat.removedTopics);
-const isStarting = (t) => window.coverTopics.DEFAULTS.some(d => window.coverTopics.same(d, t));
-const isOther = (t) => window.coverTopics.same(t, window.coverTopics.OTHER);
+const topicSeed = () => topicList().filter(t => !isOther(t));
+const unitsInTopic = (t) => (cat.units || []).filter(u => window.coverTopics.same(u.topic, t));
+/* KS3 units only: the hub has no topics for GCSE and A Level. */
+const ks3Units = () => (cat.units || []).filter(u => coverHubYear(u.year || ""));
 function manageTopics(after){
-  const used = (cat.lessons || []).filter(l => l.cover && topicOf(l));
-  const count = (t) => used.filter(l => window.coverTopics.same(topicOf(l), t)).length;
   openModal(box => {
     modalTitle(box, "Manage topics");
     const list = el("div","topiclist");
     box.appendChild(list);
-    topicList().forEach(t => {
-      const row = el("div","topicrow");
-      row.appendChild(el("span","topicname", t));
-      row.appendChild(el("span","pick-unit", countWord(count(t), "lesson", "lessons")));
-      /* Renaming one no lesson uses would rename nothing: the new name only
-         exists once a lesson carries it. */
-      if (count(t) && !isOther(t)){
-        const ren = el("button","btn-ghost iconbtn","✎");
-        ren.title = "Rename " + t;
-        ren.addEventListener("click", () => renameTopic(t, after));
-        row.appendChild(ren);
-      }
-      if (!isOther(t)){
-        const del = el("button","btn-ghost iconbtn","🗑");
-        del.title = "Delete " + t;
-        del.addEventListener("click", () => deleteTopic(t, count(t), after));
-        row.appendChild(del);
-      }
-      list.appendChild(row);
-    });
+    const msg = el("p","hint","");
+    box.appendChild(msg);
+    /* Changes go to the server and the list is drawn again in place, so the
+       pop-up stays where it was scrolled to. */
+    const change = async (payload) => {
+      msg.textContent = "";
+      try{ await catPost(Object.assign({ seed: topicSeed() }, payload)); paint(); after(); }
+      catch(e){ msg.textContent = e.message; paint(); }
+    };
+    function paint(){
+      list.innerHTML = "";
+      topicList().forEach(t => {
+        const block = el("div","topicblock");
+        const row = el("div","topicrow");
+        row.appendChild(el("span","topicname", t));
+        if (!isOther(t)){
+          const ren = el("button","btn-ghost iconbtn","✎");
+          ren.title = "Rename " + t;
+          ren.addEventListener("click", () => renameTopic(t, after));
+          row.appendChild(ren);
+          const del = el("button","btn-ghost iconbtn","🗑");
+          del.title = "Delete " + t;
+          del.addEventListener("click", () => deleteTopic(t, unitsInTopic(t).length, after));
+          row.appendChild(del);
+        }
+        block.appendChild(row);
+        const units = el("div","topicunits");
+        unitsInTopic(t).forEach(u => {
+          const chip = el("span","topicunit", u.name);
+          const x = el("button","topicunit-x","✕");
+          x.type = "button";
+          x.title = "Take " + u.name + " out of " + t;
+          x.addEventListener("click", () => change({ op:"set-unit-topic", unit: u.name, topic: "" }));
+          chip.appendChild(x);
+          units.appendChild(chip);
+        });
+        /* The units not already here, by year group. One in another topic
+           says which, because choosing it moves it. */
+        const pick = el("select","topicadd");
+        pick.setAttribute("aria-label", "Add a unit to " + t);
+        const first = el("option","", "+ Add a unit");
+        first.value = "";
+        pick.appendChild(first);
+        const byYear = new Map();
+        ks3Units().filter(u => !window.coverTopics.same(u.topic, t)).forEach(u => {
+          if (!byYear.has(u.year)) byYear.set(u.year, []);
+          byYear.get(u.year).push(u);
+        });
+        byYear.forEach((us, y) => {
+          const g = document.createElement("optgroup");
+          g.label = y;
+          us.forEach(u => {
+            const o = el("option","", u.name + (u.topic ? " (in " + u.topic + ")" : ""));
+            o.value = u.name;
+            g.appendChild(o);
+          });
+          pick.appendChild(g);
+        });
+        pick.addEventListener("change", () => {
+          if (pick.value) change({ op:"set-unit-topic", unit: pick.value, topic: t });
+        });
+        units.appendChild(pick);
+        block.appendChild(units);
+        list.appendChild(block);
+      });
+    }
+    paint();
+    const add = el("button","btn-ghost topicnew","+ New topic");
+    add.addEventListener("click", () => askName("New topic", "").then(async (name) => {
+      if (!name){ manageTopics(after); return; }
+      try{ await catPost({ op:"add-cover-topic", name, seed: topicSeed() }); }
+      catch(e){ say("Could not add it", e.message); return; }
+      manageTopics(after);
+    }));
+    box.appendChild(add);
     const done = el("button","btn-ghost modal-stay","Done");
     done.addEventListener("click", closeModal);
     box.appendChild(done);
     scrollBody(box);
   });
 }
-function renameTopic(from, after){
-  openModal(box => {
-    modalTitle(box, "Rename " + from);
-    const w = el("div","bfield");
-    const inp = el("input");
-    inp.value = from;
-    inp.maxLength = 40;
-    w.appendChild(inp);
-    box.appendChild(w);
-    const msg = el("p","hint","");
-    box.appendChild(msg);
-    const go = el("button","btn-primary modal-cta","Rename");
-    go.addEventListener("click", async () => {
-      const typed = inp.value.trim();
-      if (!typed){ msg.textContent = "Give it a name."; return; }
-      /* Typed as another topic already there, the two become one. */
-      const to = topicList().find(t => !window.coverTopics.same(t, from) && window.coverTopics.same(t, typed)) || typed;
-      if (to === from){ manageTopics(after); return; }
-      msg.textContent = "Renaming…";
-      go.disabled = true;
-      try{
-        await catPost({ op:"rename-cover-topic", from, to, starting: isStarting(from) });
-        manageTopics(after);
-        after();
-      }catch(e){ msg.textContent = e.message; go.disabled = false; }
+/* A name typed in a pop-up of its own. Resolves to the name, or "" if it
+   was cancelled. */
+function askName(title, start){
+  return new Promise(resolve => {
+    openModal(box => {
+      modalTitle(box, title);
+      const w = el("div","bfield");
+      const inp = el("input");
+      inp.value = start;
+      inp.maxLength = 40;
+      w.appendChild(inp);
+      box.appendChild(w);
+      const go = el("button","btn-primary modal-cta","Save");
+      const take = () => { const v = inp.value.trim(); if (v) resolve(v); };
+      go.addEventListener("click", take);
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") take(); });
+      box.appendChild(go);
+      const no = el("button","btn-ghost modal-stay","Cancel");
+      no.addEventListener("click", () => resolve(""));
+      box.appendChild(no);
+      setTimeout(() => { try{ inp.focus(); inp.select(); }catch(e){} }, 30);
     });
-    box.appendChild(go);
-    const no = el("button","btn-ghost modal-stay","Cancel");
-    no.addEventListener("click", () => manageTopics(after));
-    box.appendChild(no);
-    setTimeout(() => { try{ inp.focus(); inp.select(); }catch(e){} }, 30);
+  });
+}
+function renameTopic(from, after){
+  askName("Rename " + from, from).then(async (typed) => {
+    if (typed && typed !== from){
+      try{ await catPost({ op:"rename-cover-topic", from, to: typed, seed: topicSeed() }); after(); }
+      catch(e){ say("Could not rename it", e.message); return; }
+    }
+    manageTopics(after);
   });
 }
 function deleteTopic(topic, n, after){
   openModal(box => {
     modalTitle(box, "Delete " + topic + "?");
     if (n) box.appendChild(el("p","modal-text",
-      "Its " + countWord(n, "cover lesson moves", "cover lessons move") + " to Other."));
+      "Its " + countWord(n, "unit moves", "units move") + " to Other."));
     const msg = el("p","hint","");
     box.appendChild(msg);
     const go = el("button","btn-primary modal-cta","Delete");
@@ -2902,7 +2974,7 @@ function deleteTopic(topic, n, after){
       msg.textContent = "Deleting…";
       go.disabled = true;
       try{
-        await catPost({ op:"delete-cover-topic", from: topic, starting: isStarting(topic) });
+        await catPost({ op:"delete-cover-topic", from: topic, seed: topicSeed() });
         manageTopics(after);
         after();
       }catch(e){ msg.textContent = e.message; go.disabled = false; }
@@ -4572,7 +4644,6 @@ async function fetchCatalogue(){
       lessons: file.lessons.map(l => ({ lesson_id: l.id, unit: l.unit, year: l.year,
                                         code: l.code, position: 0, published: 1,
                                         title: l.title, cover: !!l.cover,
-                                        cover_topic: l.coverTopic || "",
                                         assessment: !!l.assessment, practical: !!l.practical,
                                         homework: !!l.homework,
                                         version_of: l.versionOf || "",
@@ -4854,13 +4925,13 @@ on("addLessonBtn", "click", () => {
     function coverOffer(){
       const sh = coverShelves(year, unit);
       const keep = (list) => list.filter(l => notHere(l.lesson_id) && matches(l.lesson_id));
-      return { here: keep(sh.here), more: keep(sh.more) };
+      return { topic: sh.topic, here: keep(sh.here), topicMates: keep(sh.topicMates), more: keep(sh.more) };
     }
     function coverRow(l, into, borrow){
       const row = el("button","ov-row");
       const words = el("span","pick-lesson");
       words.appendChild(el("span","t", titleOf(l.lesson_id)));
-      words.appendChild(el("span","pick-unit", borrow ? whereFrom(l, year) : (topicOf(l) || "No topic yet")));
+      if (borrow) words.appendChild(el("span","pick-unit", whereFrom(l, year)));
       row.appendChild(words);
       row.appendChild(el("span","edit","Add →"));
       row.addEventListener("click", () => {
@@ -4889,11 +4960,11 @@ on("addLessonBtn", "click", () => {
       const cover = coverHere ? coverOffer() : null;
       const tabList = offered.map(l => catOf(l.id));
       if (cover) tabList.splice(0, tabList.length, ...tabList.filter(l => kindOf(l) !== "cover"),
-                                ...cover.here, ...cover.more);
+                                ...cover.here, ...cover.topicMates, ...cover.more);
       drawKindTabs(kinds, tabList, kind, (k) => { kind = k; paint(); });
       toggle.hidden = !!cover && kind === "cover";
       if (cover && kind === "cover"){
-        if (!cover.here.length && !cover.more.length){
+        if (!cover.here.length && !cover.topicMates.length && !cover.more.length){
           holder.appendChild(el("p","modal-text", t ? "No cover lessons match." : "No cover lessons to add."));
           return;
         }

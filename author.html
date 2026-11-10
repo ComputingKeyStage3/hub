@@ -13,7 +13,6 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
-<script src="covertopics.js"></script>
 <script src="lessonorder.js"></script>
 <script src="lessoncompat.js"></script>
 <script src="shortmatch.js"></script>
@@ -126,8 +125,6 @@
     <!-- Only for GCSE and A Level, where the unit picker beside it is the
          point of the specification and this is the point inside it. -->
     <select id="lSub" title="Sub-point" hidden></select>
-    <!-- Only for a cover lesson: what it is about, for the cover shelves. -->
-    <select id="lTopic" title="Topic" hidden></select>
   </div>
   <div class="build-actions">
     <span class="savestate" id="saveState" aria-live="polite"></span>
@@ -599,7 +596,7 @@ window.addEventListener("scroll", placeHelp, true);
    original. A version is a whole lesson of its own, with its own id and its
    own students' work: the three fields beside it are only what the console
    shows to tell one apart from another. */
-let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false, coverTopic:"",
+let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false,
                versionOf:"", versionName:"", versionNote:"", versionCode:"",
                topics:{}, responses:{}, extensions:[], blocks:[] };
 
@@ -1043,9 +1040,6 @@ function compile(){
   if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
   if (lesson.cover) out.cover = true;
-  /* What a cover lesson is about, which the cover shelf of every unit groups
-     the other years' cover lessons by. Only a cover lesson has one. */
-  if (lesson.cover && lesson.coverTopic) out.coverTopic = lesson.coverTopic;
   /* The lesson's slides (author-slides.js), one deck kept whole. */
   const slides = window.compileSlides ? window.compileSlides(lesson) : null;
   if (slides) out.slides = slides;
@@ -3027,7 +3021,6 @@ function setKind(id){
   lesson.cover = id === "cover";
   setMode(id === "assess", id === "practical");
   paintBuildBar();
-  paintTopicPicker();
 }
 
 function setAssessTab(which){
@@ -4525,8 +4518,6 @@ function openLessonOptions(){
     w3.appendChild($("lYear"));
     w3.appendChild($("lUnit"));
     w3.appendChild($("lSub"));
-    w3.appendChild($("lTopic"));
-    paintTopicPicker();
     secWhere.appendChild(w3);
     box.appendChild(secWhere);
 
@@ -5181,39 +5172,8 @@ function paintSpecPickers(us, sub){
      either picker. */
   fileLessonUnder(strand, sub.value);
 }
-/* The topics a cover lesson can be given (covertopics.js). This lesson's own
-   is added in case it is a new one no saved lesson carries yet. */
-function topicChoices(){ return window.coverTopics.all(cat.lessons, [lesson.coverTopic], cat.removedTopics); }
-function paintTopicPicker(){
-  const ts = $("lTopic");
-  if (!ts) return;
-  ts.hidden = !lesson.cover;
-  if (!lesson.cover) return;
-  ts.innerHTML = "";
-  const t0 = document.createElement("option");
-  t0.value = ""; t0.textContent = "Topic…"; ts.appendChild(t0);
-  topicChoices().forEach(t => {
-    const o = document.createElement("option"); o.value = t; o.textContent = t;
-    ts.appendChild(o);
-  });
-  const tNew = document.createElement("option");
-  tNew.value = "__new"; tNew.textContent = "+ New topic"; ts.appendChild(tNew);
-  ts.value = lesson.coverTopic || "";
-}
-on("lTopic", "change", async () => {
-  const v = $("lTopic").value;
-  if (v === "__new"){
-    const name = (await askNew("New topic", "Name (e.g. Cyber Security)") || "").trim().slice(0, 40);
-    /* Typed again with different capitals, it is the one already there. */
-    if (name) lesson.coverTopic = window.coverTopics.spelt(name, cat.lessons);
-  } else {
-    lesson.coverTopic = v;
-  }
-  paintTopicPicker(); saveDraft();
-});
 function paintPickers(){
   const ys = $("lYear"), us = $("lUnit"), sub = $("lSub");
-  paintTopicPicker();
   /* Here rather than where the catalogue is read, because a unit made in
      this builder is added to the list afterwards and has to take its place. */
   if (window.lessonOrder) window.lessonOrder.sortUnits(cat.units);
@@ -7144,7 +7104,7 @@ function homePickers(){
      dropdowns that only repeat what Lesson options says. */
   const home = $("pickerHome");
   if (!home) return;
-  ["lYear", "lUnit", "lSub", "lTopic"].forEach(id => {
+  ["lYear", "lUnit", "lSub"].forEach(id => {
     const pick = $(id);
     if (pick && pick.parentNode !== home) home.appendChild(pick);
   });
@@ -7785,7 +7745,6 @@ async function downloadForFolder(){
     (lesson.assessment || lesson.practical) ? { assessment: true } : {},
     lesson.homework ? { homework: true } : {},
     lesson.cover ? { cover: true } : {},
-    lesson.cover && lesson.coverTopic ? { coverTopic: lesson.coverTopic } : {},
     lesson.versionOf ? { versionOf: lesson.versionOf, versionName: lesson.versionName || "",
                          versionNote: lesson.versionNote || "", versionCode: lesson.versionCode || "" } : {},
     { code: code });
@@ -7978,7 +7937,7 @@ async function loadUnitsAndYears(){
       file.lessons.forEach(l => { if (l.year && years.indexOf(l.year) < 0) years.push(l.year); });
       cat = { years: years.map(name => ({ name })), units: file.units.filter(u => u.name),
               lessons: file.lessons.map(l => ({ lesson_id: l.id, title: l.title, unit: l.unit,
-                                                cover: !!l.cover, cover_topic: l.coverTopic || "",
+                                                cover: !!l.cover,
                                                 version_of: l.versionOf || "" })) };
     }catch(e){ cat = { years: [], units: [], lessons: [] }; }
     paintPickers();
@@ -8116,7 +8075,6 @@ function fromCompiled(data, meta){
                 rubricShow: data.rubricShow === "grade" ? "grade" : "level",
                 homework: !!data.homework,
                 cover: !!data.cover,
-                coverTopic: data.cover ? String(data.coverTopic || "") : "",
                 /* The two sentences for everything wrong and everything right
                    were saved but never read back, so reopening an assessment
                    emptied both boxes and the next save threw them away. */

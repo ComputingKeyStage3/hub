@@ -379,7 +379,6 @@
       card.appendChild(head);
       /* The cover hub's line, the same as the plain cards (admin.html). */
       if (opts.where) card.appendChild(el("p","lp-from", whereFrom(l, opts.where)));
-      else if (opts.topic) card.appendChild(el("p","lp-from", topicOf(l) || "No topic yet"));
 
       /* pages, tasks and when, filled in once the lesson has been read */
       const meta = el("p","rc-meta");

@@ -1539,11 +1539,24 @@ body.spectating.embedded{padding-top:0}
 /* #hubList's own margin further down is an id, so it is matched here. */
 .topicbody .lessongrid, #hubList .topicbody .lessongrid{margin-top:0}
 .topicbody .ov-row:last-child{margin-bottom:0}
-.topiclist{display:flex; flex-direction:column; gap:6px; margin:6px 0 14px}
-.topicrow{display:flex; align-items:center; gap:12px; min-height:52px; padding:6px 12px; text-align:left;
-  border:1.5px solid var(--line); border-radius:var(--rad-md); background:var(--panel)}
+/* Manage topics: each topic a block, its name and buttons on one line and
+   its units as chips underneath, with the picker that adds another. */
+.topiclist{display:flex; flex-direction:column; gap:8px; margin:6px 0 10px}
+.topicblock{border:1.5px solid var(--line); border-radius:var(--rad-md); background:var(--panel);
+  padding:8px 12px 10px; text-align:left}
+.topicrow{display:flex; align-items:center; gap:8px; min-height:40px}
 .topicrow .topicname{flex:1 1 auto; font-weight:700; min-width:0}
-.topicrow .pick-unit{white-space:nowrap}
+.topicunits{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:4px}
+.topicunit{display:inline-flex; align-items:center; gap:4px; padding:4px 4px 4px 10px; border-radius:999px;
+  background:var(--panel-2); border:1px solid var(--line); font-size:var(--text-sm); font-weight:600; max-width:100%}
+.topicunit-x{border:0; background:none; cursor:pointer; color:var(--muted); font-size:var(--text-sm);
+  width:24px; height:24px; border-radius:50%; display:grid; place-items:center; padding:0}
+.topicunit-x:hover{background:var(--line); color:var(--text)}
+/* A set width: left to itself a select is as wide as its longest option,
+   "8.2 Digital Graphics (in Graphics & Animation)", while closed it only
+   ever says "+ Add a unit". The open list still shows the whole names. */
+.topicadd{width:9.5em; max-width:100%; padding:5px 8px; font-size:var(--text-sm); border-radius:999px}
+.topicnew{align-self:flex-start; margin:0 0 6px}
 .modal.wide{max-width:1500px; text-align:left}
 .modal.wide .toolrow{justify-content:flex-start}
 .stutable .statechip{margin-left:8px}
