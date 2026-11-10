@@ -2723,12 +2723,13 @@ function paintHub(){
 }
 
 /* ---------- the cover hub ----------
-   A unit's Cover tab: its own cover lessons, then the other cover lessons in
-   the unit's topic, then More cover lessons, every other KS3 one grouped by
-   topic and folded shut. Cover is set at short notice, and the lesson that
-   suits the room is as likely to be a Year 7 one as anything filed in this
-   unit. GCSE and A Level are left as they were, which is what coverHubYear()
-   decides.
+   A unit's Cover tab: every cover lesson in the unit's topic, this unit's
+   and other units' together under the topic's name, then Other topics,
+   folded shut, holding a fold for each other topic that has a cover lesson
+   in it. Cover is set at short notice, and the lesson that suits the room is
+   as likely to be a Year 7 one as anything filed in this unit. Only KS3
+   year groups are in it, and GCSE and A Level units keep the plain shelf,
+   which is what coverHubYear() decides.
 
    A topic belongs to units, not lessons (Manage topics), so a cover lesson's
    topic is the topic of the unit it is filed in. */
@@ -2740,18 +2741,17 @@ const topicOfUnit = (name) => { const u = unitNamed(name); return u ? String(u.t
 const topicOf = (l) => topicOfUnit(l.unit || "");
 const topicList = () => window.coverTopics.all(cat.coverTopics, cat.units);
 const isOther = (t) => window.coverTopics.same(t, window.coverTopics.OTHER);
-/* The shelves, originals only, as the hub lists: this unit's, the rest of
-   its topic's, and every other cover lesson in a KS3 year group. */
+/* Originals only, as the hub lists. A unit with no topic yet has its own
+   cover lessons on top in its topic's place, so they are never out of sight. */
 function coverShelves(year, unitName){
   const covers = (cat.lessons || []).filter(l => l.cover && !l.version_of);
   const topic = topicOfUnit(unitName);
-  const elsewhere = covers.filter(l => (l.unit || "") !== unitName && coverHubYear(yearOfLesson(l)));
-  const inTopic = (l) => !!topic && window.coverTopics.same(topicOf(l), topic);
+  const mine = (l) => (l.unit || "") === unitName;
+  const inTopic = (l) => topic ? window.coverTopics.same(topicOf(l), topic) && coverHubYear(yearOfLesson(l)) : mine(l);
   return {
     topic,
-    here: covers.filter(l => (l.unit || "") === unitName),
-    topicMates: elsewhere.filter(inTopic),
-    more: elsewhere.filter(l => !inTopic(l))
+    inTopic: covers.filter(inTopic),
+    others: covers.filter(l => !inTopic(l) && !mine(l) && coverHubYear(yearOfLesson(l)))
   };
 }
 /* By topic, in the list's order, and units with no topic last. */
@@ -2767,66 +2767,74 @@ function byTopic(list){
   const rank = (n) => n ? (order.indexOf(n.toLowerCase()) < 0 ? 999 : order.indexOf(n.toLowerCase())) : 1000;
   return groups.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
 }
-/* Shut to begin with, and remembered while the page is open once opened. */
-const topicFoldOpen = {};
-function topicFolds(box, key, list, drawRows){
-  byTopic(list).forEach(g => {
-    const id = key + "|" + g.name.toLowerCase();
-    const open = !!topicFoldOpen[id];
-    const wrap = el("div","topicfold" + (open ? " on" : ""));
-    const head = el("button","topichead");
-    head.type = "button";
-    head.setAttribute("aria-expanded", open ? "true" : "false");
-    head.appendChild(el("span","topicarrow", "▸"));
-    head.appendChild(el("span","topicname", g.name || "No topic yet"));
-    head.appendChild(el("span","kindcount", String(g.lessons.length)));
-    const body = el("div","topicbody");
-    body.hidden = !open;
-    if (open) drawRows(g.lessons, body);
-    head.addEventListener("click", () => {
-      const now = body.hidden;
-      topicFoldOpen[id] = now;
-      body.hidden = !now;
-      wrap.classList.toggle("on", now);
-      head.setAttribute("aria-expanded", now ? "true" : "false");
-      if (now && !body.childNodes.length) drawRows(g.lessons, body);
+/* One fold: a heading button and a body drawn the first time it opens.
+   Returns a way to shut it from outside, for the topics that shut each
+   other. */
+function fold(box, cls, name, n, open, drawBody, onToggle){
+  const wrap = el("div", cls + (open ? " on" : ""));
+  const head = el("button","topichead");
+  head.type = "button";
+  head.setAttribute("aria-expanded", open ? "true" : "false");
+  head.appendChild(el("span","topicarrow", "▸"));
+  head.appendChild(el("span","topicname", name));
+  head.appendChild(el("span","kindcount", String(n)));
+  const body = el("div","topicbody");
+  body.hidden = !open;
+  if (open) drawBody(body);
+  const set = (now) => {
+    body.hidden = !now;
+    wrap.classList.toggle("on", now);
+    head.setAttribute("aria-expanded", now ? "true" : "false");
+    if (now && !body.childNodes.length) drawBody(body);
+  };
+  head.addEventListener("click", () => { const now = body.hidden; set(now); onToggle(now); });
+  wrap.appendChild(head); wrap.appendChild(body);
+  box.appendChild(wrap);
+  return { shut: () => set(false) };
+}
+/* Shut to begin with. Kept while the same unit is on screen, so a repaint
+   after Manage topics leaves them as they were, and shut again for another
+   unit or a fresh pop-up. topic is null when none is open: "" is a real key,
+   the units with no topic. */
+const coverFolds = { others: false, topic: null, unit: null };
+function shutCoverFolds(unitName){
+  coverFolds.others = false; coverFolds.topic = null; coverFolds.unit = unitName;
+}
+function otherTopics(box, list, drawRows){
+  fold(box, "topicfold otherfold", "Other topics", list.length, coverFolds.others, (outer) => {
+    const groups = byTopic(list);
+    const shutters = [];
+    groups.forEach((g, i) => {
+      const key = g.name.toLowerCase();
+      shutters.push(fold(outer, "topicfold", g.name || "No topic yet", g.lessons.length,
+        coverFolds.topic === key, (body) => drawRows(g.lessons, body), (now) => {
+          /* One topic open at a time: opening this shuts whichever was. */
+          if (now) shutters.forEach((s, j) => { if (j !== i) s.shut(); });
+          coverFolds.topic = now ? key : null;
+        }));
     });
-    wrap.appendChild(head); wrap.appendChild(body);
-    box.appendChild(wrap);
-  });
+  }, (now) => { coverFolds.others = now; });
 }
 /* The shelves, for the hub and for a class's Add existing alike. Only how a
-   lesson is drawn differs: drawHere for this unit's, drawRows for the rest. */
-function coverSections(box, year, unitName, shelves, drawHere, drawRows){
-  const section = (title, n) => {
-    const h = el("h3","coverhead", title);
-    if (n) h.appendChild(el("span","kindcount", String(n)));
-    box.appendChild(h);
-    return h;
-  };
-  section("In " + (unitName || "this unit"), shelves.here.length);
-  if (shelves.here.length) drawHere(shelves.here, box);
+   lesson is drawn differs, which is drawRows. */
+function coverSections(box, year, unitName, shelves, drawRows){
+  const h = el("h3","coverhead", shelves.topic || ("In " + (unitName || "this unit")));
+  if (shelves.inTopic.length) h.appendChild(el("span","kindcount", String(shelves.inTopic.length)));
+  box.appendChild(h);
+  if (shelves.inTopic.length) drawRows(shelves.inTopic, box);
   else box.appendChild(el("p","hint","None yet."));
-  if (shelves.topic){
-    section(shelves.topic, shelves.topicMates.length);
-    if (shelves.topicMates.length) drawRows(shelves.topicMates, box);
-    else box.appendChild(el("p","hint","No other cover lessons in this topic yet."));
-  }
-  if (shelves.more.length){
-    section("More cover lessons", shelves.more.length);
-    topicFolds(box, "more", shelves.more, drawRows);
-  }
+  if (shelves.others.length) otherTopics(box, shelves.others, drawRows);
 }
-/* Where a lesson from another unit lives, said on its card: the year as
-   well when it is another year group's. */
+/* Where a cover lesson is filed, said on its card: the year as well when it
+   is another year group's. */
 function whereFrom(l, year){
   const y = yearOfLesson(l);
   return (y && y !== year ? y + " · " : "") + (l.unit || "Not in a unit");
 }
 function paintCoverHub(box, year, unitName){
+  if (coverFolds.unit !== unitName) shutCoverFolds(unitName);
   box.innerHTML = "";
   coverSections(box, year, unitName, coverShelves(year, unitName),
-    (list, into) => { const h = el("div"); into.appendChild(h); lessonCards(list, h); },
     (list, into) => { const h = el("div"); into.appendChild(h); lessonCards(list, h, { where: year }); });
 }
 
@@ -4918,16 +4926,20 @@ on("addLessonBtn", "click", () => {
     /* Not yet with this class, under any version, and matching the search. */
     const notHere = (id) => !catOf(id).version_of && !assignOf(id) && !familyOf(id).some(v => assignOf(v.lesson_id));
     const matches = (id) => { const t = term.trim().toLowerCase(); return !t || titleOf(id).toLowerCase().includes(t); };
-    /* Cover goes through the cover hub on a KS3 unit: this unit's, then the
-       other KS3 cover lessons by topic, so there is no unit toggle. */
+    /* Cover goes through the cover hub on a KS3 unit: the unit's topic,
+       then the other topics, so there is no unit toggle. */
     const year = yearOfUnit(unit) || yearOfClass();
     const coverHere = coverHubYear(year);
+    shutCoverFolds(null);
     function coverOffer(){
       const sh = coverShelves(year, unit);
       const keep = (list) => list.filter(l => notHere(l.lesson_id) && matches(l.lesson_id));
-      return { topic: sh.topic, here: keep(sh.here), topicMates: keep(sh.topicMates), more: keep(sh.more) };
+      return { topic: sh.topic, inTopic: keep(sh.inTopic), others: keep(sh.others) };
     }
-    function coverRow(l, into, borrow){
+    /* One filed in another unit is borrowed: it stays filed there, and this
+       class sees it under this unit. */
+    function coverRow(l, into){
+      const borrow = (l.unit || "") !== unit;
       const row = el("button","ov-row");
       const words = el("span","pick-lesson");
       words.appendChild(el("span","t", titleOf(l.lesson_id)));
@@ -4960,17 +4972,16 @@ on("addLessonBtn", "click", () => {
       const cover = coverHere ? coverOffer() : null;
       const tabList = offered.map(l => catOf(l.id));
       if (cover) tabList.splice(0, tabList.length, ...tabList.filter(l => kindOf(l) !== "cover"),
-                                ...cover.here, ...cover.topicMates, ...cover.more);
+                                ...cover.inTopic, ...cover.others);
       drawKindTabs(kinds, tabList, kind, (k) => { kind = k; paint(); });
       toggle.hidden = !!cover && kind === "cover";
       if (cover && kind === "cover"){
-        if (!cover.here.length && !cover.topicMates.length && !cover.more.length){
+        if (!cover.inTopic.length && !cover.others.length){
           holder.appendChild(el("p","modal-text", t ? "No cover lessons match." : "No cover lessons to add."));
           return;
         }
         coverSections(holder, year, unit, cover,
-          (list, into) => inOrder(list, l => titleOf(l.lesson_id)).forEach(l => coverRow(l, into, false)),
-          (list, into) => inOrder(list, l => titleOf(l.lesson_id)).forEach(l => coverRow(l, into, true)));
+          (list, into) => inOrder(list, l => titleOf(l.lesson_id)).forEach(l => coverRow(l, into)));
         return;
       }
       const rows = offered.filter(l => kindOf(catOf(l.id)) === kind);

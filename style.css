@@ -1538,6 +1538,9 @@ body.spectating.embedded{padding-top:0}
 .topicbody{padding:0 14px 14px}
 /* #hubList's own margin further down is an id, so it is matched here. */
 .topicbody .lessongrid, #hubList .topicbody .lessongrid{margin-top:0}
+/* Other topics holds a fold per topic, so it sits apart from the cards above. */
+.otherfold{margin-top:22px}
+.otherfold > .topichead .topicname{font-size:var(--text-lg)}
 .topicbody .ov-row:last-child{margin-bottom:0}
 /* Manage topics: each topic a block, its name and buttons on one line and
    its units as chips underneath, with the picker that adds another. */
