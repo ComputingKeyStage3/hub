@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.9.4", text:"Preview shows a home learning lesson on the pretend student's Home Learning tab, and opens there, rather than under Lessons." },
   { v:"17.9.3", text:"Forgot password from a home learning link no longer waits for a teacher to approve it. It asks the student to see or email their teacher before their next lesson to have it reset." },
   { v:"17.9.2", text:"Cover tab: every cover lesson in the unit's topic is shown together under the topic's name, whichever unit it is from. Other topics is one folded area with a fold for each topic that has cover lessons, and opening one shuts the last." },
   { v:"17.9.1", text:"Cover topics belong to units now: in Manage topics each topic lists its units, with + Add a unit and + New topic. A unit's Cover tab shows its topic's cover lessons from other units under the topic's name, and More cover lessons starts folded. The Topic picker has gone from the builder." },

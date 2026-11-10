@@ -163,6 +163,11 @@ function catalogueFor(role){
   row.practical = !!(l.assessment && l.practical);
   /* a rubric practical, saved as practice or as the graded rubric merged into it */
   row.practice = !!(row.practical && (l.practiceAssessment || l.marking === "rubric"));
+  /* Home learning, the way catalog.js decides it for a student: out of the
+     lesson itself, and never an assessment. Left off, the home page filed
+     every home learning lesson under Lessons, and the Home Learning tab of
+     the preview was always empty. */
+  row.homework = isHomeLearning(l);
   const out = { units: [unitRow], years: [yearRow], lessons: [row] };
   if (role === "teacher"){
     out.assignments = [{ lesson_id: lessonId, group_name: STUDENT.group, published: 1, release_at: "", close_on: "" }];
@@ -170,6 +175,7 @@ function catalogueFor(role){
   }
   return out;
 }
+function isHomeLearning(l){ return !!(l && l.homework && !l.assessment); }
 function workRow(id){ return work.get(id) || null; }
 function route(role, method, path, q, b){
   const id = q.get("lesson") || "";
@@ -283,8 +289,11 @@ function route(role, method, path, q, b){
 /* ---------------- the frames ----------------
    Made the first time their tab is opened, and kept after that, so moving
    between tabs does not lose a student's place or a half written Strength. */
+/* Home learning has its own tab on the home page, so the Home view opens on
+   it, where the lesson is, rather than on Lessons, which would look empty. */
 const START = {
-  home:   () => "index.html",
+  home:   () => { let l = {}; try{ l = JSON.parse(lessonText); }catch(e){}
+                  return isHomeLearning(l) ? "index.html?tab=homework" : "index.html"; },
   lesson: () => "lesson.html?id=" + encodeURIComponent(lessonId),
   mark:   () => "work.html?lesson=" + encodeURIComponent(lessonId) + "&group=" + encodeURIComponent(STUDENT.group)
 };
