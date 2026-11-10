@@ -953,7 +953,8 @@ document.addEventListener("keydown", (e) => {
    Check the username, let them choose the new password there and then, and
    hold it until their teacher approves it, no emails, no teacher typing.
    Unless their class has a cover lesson on: then the teacher in the room
-   cannot approve it, and they are offered the lesson with just their name. */
+   cannot approve it, and they are offered the lesson with just their name.
+   And not from a home learning link, where there is no teacher at all. */
 let rsUser = "", rsTicket = "", rsPoll = null, rsDeadline = 0;
 let coverOn = null;
 
@@ -974,6 +975,17 @@ on("forgotBtn", "click", async () => {
       return;
     }
     rsUser = u;
+    /* Here from a home learning link, so most likely at home. A reset waits
+       for a teacher to approve it within five minutes, and there is no
+       teacher to do that, so it would only run out. Nor is a cover lesson
+       today anything to do with it. The username is still checked first, so
+       a typo is caught before they are sent to their teacher about it. */
+    if (wantedLesson){
+      say("Ask your teacher to reset your password",
+          "Your teacher cannot approve a new password from here. See or email your teacher before your next lesson, " +
+          "and ask them to reset your password for the Lesson Hub.");
+      return;
+    }
     if (d.cover && d.cover.k) openCover(d.cover);
     else openReset();
   }catch(e){ $("loginErr").textContent = e.message; }
