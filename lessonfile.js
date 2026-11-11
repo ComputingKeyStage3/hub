@@ -34,6 +34,7 @@
           practical: !!l.practical,
           homework: !!l.homework,
           cover: !!l.cover,
+          coverUnits: l.cover && Array.isArray(l.coverUnits) ? l.coverUnits.map(String) : [],
           /* A version of another lesson. Empty for an original, which is
              every lesson that was written before versions existed. */
           versionOf: l.versionOf || "",

@@ -362,6 +362,7 @@
     box.innerHTML = "";
     if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build new”.")); return; }
     inOrder(list, (l) => titleOf(l.lesson_id));
+    suggestedFirst(list, opts.suggest);
     const grid = el("div","lessongrid richgrid");
     list.forEach(l => {
       const id = l.lesson_id;
@@ -376,9 +377,10 @@
       if (alts.length) head.appendChild(el("span","statechip open", alts.length + " version" + (alts.length === 1 ? "" : "s")));
       if (l.assessment) head.appendChild(el("span","statechip shut","Assessment"));
       if (l.cover) head.appendChild(el("span","statechip open","Cover"));
+      if (opts.suggest && opts.suggest(l)) head.appendChild(suggestedPill());
       card.appendChild(head);
       /* The cover hub's line, the same as the plain cards (admin.html). */
-      if (opts.where) card.appendChild(el("p","lp-from", whereFrom(l, opts.where)));
+      if (opts.where) card.appendChild(unitsLine("p", "lp-from", l, opts.where));
 
       /* pages, tasks and when, filled in once the lesson has been read */
       const meta = el("p","rc-meta");

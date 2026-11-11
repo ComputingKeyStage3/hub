@@ -596,7 +596,7 @@ window.addEventListener("scroll", placeHelp, true);
    original. A version is a whole lesson of its own, with its own id and its
    own students' work: the three fields beside it are only what the console
    shows to tell one apart from another. */
-let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false,
+let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false, coverUnits:[],
                versionOf:"", versionName:"", versionNote:"", versionCode:"",
                topics:{}, responses:{}, extensions:[], blocks:[] };
 
@@ -1040,6 +1040,11 @@ function compile(){
   if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
   if (lesson.cover) out.cover = true;
+  /* The other units a cover lesson suits, beside the one it is filed in. The
+     console's cover hub suggests it in each of them and puts it in each of
+     their topics. Only a cover lesson has them. */
+  const alsoFor = lesson.cover ? coverUnitsKept() : [];
+  if (alsoFor.length) out.coverUnits = alsoFor;
   /* The lesson's slides (author-slides.js), one deck kept whole. */
   const slides = window.compileSlides ? window.compileSlides(lesson) : null;
   if (slides) out.slides = slides;
@@ -4519,6 +4524,13 @@ function openLessonOptions(){
     w3.appendChild($("lUnit"));
     w3.appendChild($("lSub"));
     secWhere.appendChild(w3);
+    /* A cover lesson can suit more units than the one it is filed in. */
+    const alsoBox = el("div","bfield coverunits");
+    secWhere.appendChild(alsoBox);
+    const paintAlso = () => paintCoverUnits(alsoBox);
+    /* The unit picker's own handler runs first, and "+ New unit" waits on a
+       pop-up, so this looks again once it has had its turn. */
+    w3.addEventListener("change", () => setTimeout(paintAlso, 0));
     box.appendChild(secWhere);
 
     /* ---- how it behaves ---- */
@@ -4568,8 +4580,8 @@ function openLessonOptions(){
     secVer.appendChild(ver);
     box.appendChild(secVer);
 
-    const repaint = () => { paintKinds(); paintHow(); };
-    paintKinds(); paintHow();
+    const repaint = () => { paintKinds(); paintHow(); paintAlso(); };
+    paintKinds(); paintHow(); paintAlso();
 
     const go = el("button","btn-primary modal-cta","Done");
     go.addEventListener("click", closeModal);
@@ -5068,6 +5080,61 @@ let cat = { units: [], years: [], points: [] };
    and exam questions out of the way until then. */
 /* What the year group now chosen is working towards, or "" for KS3 and for
    a lesson with no year group picked yet. */
+/* ---- the other units a cover lesson suits ----
+   Picked from every KS3 unit, any year group, since cover is about what
+   suits the room rather than where a lesson was written. The unit it is
+   filed in is always its first and is never repeated here. */
+function coverUnitsKept(){
+  const seen = new Set([lesson.unit || ""]);
+  return (lesson.coverUnits || []).filter(u => u && !seen.has(u) && seen.add(u));
+}
+function ks3UnitsForCover(){
+  const levelOf = (y) => { const x = (cat.years || []).find(v => v.name === y); return x ? String(x.level || "KS3") : "KS3"; };
+  return (cat.units || []).filter(u => u.name && u.year && levelOf(u.year) === "KS3");
+}
+function paintCoverUnits(box){
+  box.innerHTML = "";
+  box.hidden = !lesson.cover;
+  if (!lesson.cover) return;
+  box.appendChild(el("label","","Also suitable for"));
+  const row = el("div","coverunits-row");
+  const kept = coverUnitsKept();
+  kept.forEach(name => {
+    const chip = el("span","topicunit", name);
+    const x = el("button","topicunit-x","✕");
+    x.type = "button";
+    x.title = "Take " + name + " off";
+    x.addEventListener("click", () => {
+      lesson.coverUnits = coverUnitsKept().filter(u => u !== name);
+      saveDraft(); paintCoverUnits(box);
+    });
+    chip.appendChild(x);
+    row.appendChild(chip);
+  });
+  const pick = el("select","topicadd");
+  pick.setAttribute("aria-label", "Add a unit it suits");
+  const first = document.createElement("option");
+  first.value = ""; first.textContent = "+ Add a unit";
+  pick.appendChild(first);
+  const byYear = new Map();
+  ks3UnitsForCover().filter(u => u.name !== lesson.unit && kept.indexOf(u.name) < 0).forEach(u => {
+    if (!byYear.has(u.year)) byYear.set(u.year, []);
+    byYear.get(u.year).push(u);
+  });
+  byYear.forEach((us, y) => {
+    const g = document.createElement("optgroup");
+    g.label = y;
+    us.forEach(u => { const o = document.createElement("option"); o.value = u.name; o.textContent = u.name; g.appendChild(o); });
+    pick.appendChild(g);
+  });
+  pick.addEventListener("change", () => {
+    if (!pick.value) return;
+    lesson.coverUnits = coverUnitsKept().concat([pick.value]);
+    saveDraft(); paintCoverUnits(box);
+  });
+  row.appendChild(pick);
+  box.appendChild(row);
+}
 function specLevel(){
   const y = (cat.years || []).find(x => x.name === lesson.year);
   const level = y ? String(y.level || "KS3") : "";
@@ -7745,6 +7812,7 @@ async function downloadForFolder(){
     (lesson.assessment || lesson.practical) ? { assessment: true } : {},
     lesson.homework ? { homework: true } : {},
     lesson.cover ? { cover: true } : {},
+    lesson.cover && coverUnitsKept().length ? { coverUnits: coverUnitsKept() } : {},
     lesson.versionOf ? { versionOf: lesson.versionOf, versionName: lesson.versionName || "",
                          versionNote: lesson.versionNote || "", versionCode: lesson.versionCode || "" } : {},
     { code: code });
@@ -7937,7 +8005,7 @@ async function loadUnitsAndYears(){
       file.lessons.forEach(l => { if (l.year && years.indexOf(l.year) < 0) years.push(l.year); });
       cat = { years: years.map(name => ({ name })), units: file.units.filter(u => u.name),
               lessons: file.lessons.map(l => ({ lesson_id: l.id, title: l.title, unit: l.unit,
-                                                cover: !!l.cover,
+                                                cover: !!l.cover, cover_units: l.coverUnits || [],
                                                 version_of: l.versionOf || "" })) };
     }catch(e){ cat = { years: [], units: [], lessons: [] }; }
     paintPickers();
@@ -8075,6 +8143,7 @@ function fromCompiled(data, meta){
                 rubricShow: data.rubricShow === "grade" ? "grade" : "level",
                 homework: !!data.homework,
                 cover: !!data.cover,
+                coverUnits: data.cover && Array.isArray(data.coverUnits) ? data.coverUnits.map(String) : [],
                 /* The two sentences for everything wrong and everything right
                    were saved but never read back, so reopening an assessment
                    emptied both boxes and the next save threw them away. */

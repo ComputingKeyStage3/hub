@@ -2587,8 +2587,9 @@ function openHubUnit(u, kind){
 }
 
 /* the lesson cards, used for a unit and for search results */
-/* opts.where: the year group being looked at, for cover lessons from other
-   units, which say on the card where they are filed. */
+/* opts.where: the year group being looked at, for the cover hub, whose cards
+   say which units they suit. opts.suggest: which of them suit the unit on
+   screen, put first with a Suggested pill. */
 function lessonCards(list, box, opts){
   opts = opts || {};
   box.innerHTML = "";
@@ -2597,6 +2598,7 @@ function lessonCards(list, box, opts){
   /* Sorted here rather than by each caller, so the hub, a point's lessons
      and a search all come out in the same order. */
   inOrder(list, (l) => titleOf(l.lesson_id));
+  suggestedFirst(list, opts.suggest);
   list.forEach(l => {
     const card = el("div","lessonpill");
     card.dataset.lesson = l.lesson_id;
@@ -2605,8 +2607,9 @@ function lessonCards(list, box, opts){
     const alts = versionsOf(l.lesson_id);
     if (alts.length) head.appendChild(el("span","statechip open",
       alts.length + " version" + (alts.length === 1 ? "" : "s")));
+    if (opts.suggest && opts.suggest(l)) head.appendChild(suggestedPill());
     card.appendChild(head);
-    if (opts.where) card.appendChild(el("p","lp-from", whereFrom(l, opts.where)));
+    if (opts.where) card.appendChild(unitsLine("p", "lp-from", l, opts.where));
     /* With no classes to publish to, what a teacher needs off this card is
        the address to paste into Teams, and the code that opens it if the
        link does not survive the journey. */
@@ -2731,14 +2734,28 @@ function paintHub(){
    year groups are in it, and GCSE and A Level units keep the plain shelf,
    which is what coverHubYear() decides.
 
-   A topic belongs to units, not lessons (Manage topics), so a cover lesson's
-   topic is the topic of the unit it is filed in. */
+   A topic belongs to units, not lessons (Manage topics). A cover lesson is
+   filed in one unit and can suit others too (the builder's Also suitable
+   for, coverUnits), and it is in the topic of every one of them. One that
+   suits the unit on screen is Suggested and comes first. */
 function coverHubYear(year){ return !!year && levelOf(year) === "KS3"; }
 const unitNamed = (name) => (cat.units || []).find(x => x.name === name);
 const yearOfUnit = (name) => { const u = unitNamed(name); return u ? (u.year || "") : ""; };
 const yearOfLesson = (l) => l.year || yearOfUnit(l.unit || "");
 const topicOfUnit = (name) => { const u = unitNamed(name); return u ? String(u.topic || "").trim() : ""; };
-const topicOf = (l) => topicOfUnit(l.unit || "");
+/* Every unit a cover lesson suits, the one it is filed in first. */
+const unitsOf = (l) => {
+  const out = [];
+  [l.unit || ""].concat(l.cover_units || []).forEach(u => { if (u && out.indexOf(u) < 0) out.push(u); });
+  return out;
+};
+/* Its topics, one per topic however many of its units share it. */
+const topicsOf = (l) => {
+  const out = [];
+  unitsOf(l).forEach(u => { const t = topicOfUnit(u); if (t && !out.some(x => window.coverTopics.same(x, t))) out.push(t); });
+  return out;
+};
+const suitsUnit = (l, unitName) => unitsOf(l).indexOf(unitName) >= 0;
 const topicList = () => window.coverTopics.all(cat.coverTopics, cat.units);
 const isOther = (t) => window.coverTopics.same(t, window.coverTopics.OTHER);
 /* Originals only, as the hub lists. A unit with no topic yet has its own
@@ -2746,23 +2763,28 @@ const isOther = (t) => window.coverTopics.same(t, window.coverTopics.OTHER);
 function coverShelves(year, unitName){
   const covers = (cat.lessons || []).filter(l => l.cover && !l.version_of);
   const topic = topicOfUnit(unitName);
-  const mine = (l) => (l.unit || "") === unitName;
-  const inTopic = (l) => topic ? window.coverTopics.same(topicOf(l), topic) && coverHubYear(yearOfLesson(l)) : mine(l);
+  const mine = (l) => suitsUnit(l, unitName);
+  const inTopic = (l) => topic
+    ? topicsOf(l).some(t => window.coverTopics.same(t, topic)) && coverHubYear(yearOfLesson(l))
+    : mine(l);
   return {
     topic,
     inTopic: covers.filter(inTopic),
     others: covers.filter(l => !inTopic(l) && !mine(l) && coverHubYear(yearOfLesson(l)))
   };
 }
-/* By topic, in the list's order, and units with no topic last. */
+/* By topic, in the list's order, and units with no topic last. A lesson
+   suiting units in two topics is under both. */
 function byTopic(list){
   const order = topicList().map(t => t.toLowerCase());
   const groups = [];
   list.forEach(l => {
-    const t = topicOf(l);
-    let g = groups.find(x => window.coverTopics.same(x.name, t));
-    if (!g){ g = { name: t, lessons: [] }; groups.push(g); }
-    g.lessons.push(l);
+    const ts = topicsOf(l);
+    (ts.length ? ts : [""]).forEach(t => {
+      let g = groups.find(x => window.coverTopics.same(x.name, t));
+      if (!g){ g = { name: t, lessons: [] }; groups.push(g); }
+      g.lessons.push(l);
+    });
   });
   const rank = (n) => n ? (order.indexOf(n.toLowerCase()) < 0 ? 999 : order.indexOf(n.toLowerCase())) : 1000;
   return groups.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
@@ -2831,11 +2853,61 @@ function whereFrom(l, year){
   const y = yearOfLesson(l);
   return (y && y !== year ? y + " · " : "") + (l.unit || "Not in a unit");
 }
+/* The line under a cover lesson's title: where it is filed, and "+2 more"
+   when it suits other units too, which names all of them on hover or focus
+   in the site's own tooltip. */
+function unitsLine(tag, cls, l, year){
+  const line = el(tag, cls, whereFrom(l, year));
+  const all = unitsOf(l);
+  if (all.length > 1){
+    const more = el("span","units-more", "+" + (all.length - 1) + " more");
+    more.tabIndex = 0;
+    more.setAttribute("aria-label", "Suits " + all.join(", "));
+    hoverTip(more, all.join(", "));
+    line.appendChild(document.createTextNode(" "));
+    line.appendChild(more);
+  }
+  return line;
+}
+/* One tooltip for the console, the look of the one over Continue in a
+   lesson and over the results columns (resultsbook.js). It hangs from the
+   page, so a card or a pop-up that clips its contents cannot cut it off, and
+   it is kept inside the window with its arrow still on the words. */
+let consoleTip = null;
+function hoverTip(over, words){
+  const show = () => {
+    if (!consoleTip){ consoleTip = el("span","tip restip"); document.body.appendChild(consoleTip); }
+    consoleTip.textContent = words;
+    consoleTip.hidden = false;
+    const r = over.getBoundingClientRect(), w = consoleTip.offsetWidth;
+    const mid = r.left + r.width / 2;
+    const left = Math.max(16 + w / 2, Math.min(window.innerWidth - 16 - w / 2, mid));
+    consoleTip.style.left = left + "px";
+    consoleTip.style.top = (r.bottom + 10) + "px";
+    consoleTip.style.setProperty("--arrow", (mid - left + w / 2) + "px");
+  };
+  const hide = () => { if (consoleTip) consoleTip.hidden = true; };
+  over.addEventListener("mouseenter", show);
+  over.addEventListener("focus", show);
+  over.addEventListener("mouseleave", hide);
+  over.addEventListener("blur", hide);
+  /* a click goes on to whatever the line sits in (a card opens the builder) */
+  over.addEventListener("click", (e) => { e.stopPropagation(); show(); });
+}
+/* Suggested lessons first, keeping the order they were in otherwise. */
+function suggestedFirst(list, suggest){
+  if (!suggest) return list;
+  const yes = list.filter(l => suggest(l)), no = list.filter(l => !suggest(l));
+  list.splice(0, list.length, ...yes, ...no);
+  return list;
+}
+const suggestedPill = () => el("span","statechip suggested","Suggested");
 function paintCoverHub(box, year, unitName){
   if (coverFolds.unit !== unitName) shutCoverFolds(unitName);
   box.innerHTML = "";
   coverSections(box, year, unitName, coverShelves(year, unitName),
-    (list, into) => { const h = el("div"); into.appendChild(h); lessonCards(list, h, { where: year }); });
+    (list, into) => { const h = el("div"); into.appendChild(h);
+                      lessonCards(list, h, { where: year, suggest: (l) => suitsUnit(l, unitName) }); });
 }
 
 /* ---------- Manage topics ----------
@@ -4942,8 +5014,10 @@ on("addLessonBtn", "click", () => {
       const borrow = (l.unit || "") !== unit;
       const row = el("button","ov-row");
       const words = el("span","pick-lesson");
-      words.appendChild(el("span","t", titleOf(l.lesson_id)));
-      if (borrow) words.appendChild(el("span","pick-unit", whereFrom(l, year)));
+      const t = el("span","t", titleOf(l.lesson_id));
+      if (suitsUnit(l, unit)) t.appendChild(suggestedPill());
+      words.appendChild(t);
+      words.appendChild(unitsLine("span", "pick-unit", l, year));
       row.appendChild(words);
       row.appendChild(el("span","edit","Add →"));
       row.addEventListener("click", () => {
@@ -4981,7 +5055,8 @@ on("addLessonBtn", "click", () => {
           return;
         }
         coverSections(holder, year, unit, cover,
-          (list, into) => inOrder(list, l => titleOf(l.lesson_id)).forEach(l => coverRow(l, into)));
+          (list, into) => suggestedFirst(inOrder(list, l => titleOf(l.lesson_id)), (l) => suitsUnit(l, unit))
+                            .forEach(l => coverRow(l, into)));
         return;
       }
       const rows = offered.filter(l => kindOf(catOf(l.id)) === kind);

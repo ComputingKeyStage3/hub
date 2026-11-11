@@ -1521,6 +1521,17 @@ body.spectating.embedded{padding-top:0}
 .lp-acts button{padding:9px 14px}
 /* Where a cover lesson is filed, or its topic, under its title. */
 .lp-from{margin:0 0 8px; font-size:var(--text-sm); color:var(--muted); line-height:1.35}
+/* "+2 more" after the unit: the rest are in its tooltip. */
+.units-more{font-weight:700; color:var(--text); white-space:nowrap; cursor:help;
+  border-bottom:1px dotted var(--dim); border-radius:2px}
+.units-more:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+/* A cover lesson that suits the unit on screen. */
+.statechip.suggested{background:color-mix(in srgb, var(--mint) 16%, var(--panel)); color:var(--mint);
+  border-color:color-mix(in srgb, var(--mint) 45%, transparent);
+  text-transform:uppercase; letter-spacing:.06em; font-weight:800; cursor:default}
+.ov-row .t .statechip.suggested{margin-left:8px; vertical-align:middle}
+/* The builder's Also suitable for, under the unit picker. */
+.coverunits-row{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
 
 /* The cover hub: a unit's own cover lessons, then the year's and other
    years', folded by topic. Up here with the cards, so the phone rules

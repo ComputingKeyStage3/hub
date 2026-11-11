@@ -217,16 +217,20 @@
   }
   /* A day's list with each double made one entry, from the first period's
      start to the second one's end. */
+  /* split: the split period in it and which lunch, "Late P4" or "Early P4",
+     kept from whichever part it is, since in P3 into P4 it is the second. */
   function withDoubles(list){
     const out = [];
+    const splitOf = (x) => x.period.late ? (x.late ? "Late " : "Early ") + (x.period.name || "") : "";
     list.forEach(x => {
       const last = out[out.length - 1];
       if (last && doubled(last, x)){
         last.end = x.end;
         last.parts.push(x.period);
+        if (!last.split) last.split = splitOf(x);
         return;
       }
-      out.push(Object.assign({}, x, { parts: [x.period] }));
+      out.push(Object.assign({}, x, { parts: [x.period], split: splitOf(x) }));
     });
     return out;
   }
@@ -1220,7 +1224,7 @@
       if (state === "next") title.appendChild(el("span","home-chip next", a !== null ? "In " + until(a - mins) : "Next"));
       t.appendChild(title);
       const sub = [(x.start && x.end) ? x.start + "–" + x.end : "",
-                   x.parts.length > 1 ? "Double" : "", x.late ? "Late lunch" : ""].filter(Boolean).join("  ·  ");
+                   x.parts.length > 1 ? "Double" : "", (x.split || "").trim()].filter(Boolean).join("  ·  ");
       if (sub) t.appendChild(el("span","", sub));
       r.appendChild(t);
       if (x.slot.cls) r.appendChild(btn("View class", "btn-ghost bmini2", () => openClass(x.slot.cls)));

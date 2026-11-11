@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.9.5", text:"Cover lessons: Also suitable for in Lesson options gives a cover lesson more units. In the Cover tab the ones for this unit come first marked Suggested, and +2 more beside the unit names the rest on hover. Home shows Late P4 or Early P4 instead of Late lunch." },
   { v:"17.9.4", text:"Preview shows a home learning lesson on the pretend student's Home Learning tab, and opens there, rather than under Lessons." },
   { v:"17.9.3", text:"Forgot password from a home learning link no longer waits for a teacher to approve it. It asks the student to see or email their teacher before their next lesson to have it reset." },
   { v:"17.9.2", text:"Cover tab: every cover lesson in the unit's topic is shown together under the topic's name, whichever unit it is from. Other topics is one folded area with a fold for each topic that has cover lessons, and opening one shuts the last." },
