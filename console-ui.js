@@ -380,7 +380,7 @@
       if (opts.suggest && opts.suggest(l)) head.appendChild(suggestedPill());
       card.appendChild(head);
       /* The cover hub's line, the same as the plain cards (admin.html). */
-      if (opts.where) card.appendChild(unitsLine("p", "lp-from", l, opts.where));
+      if (opts.where) card.appendChild(unitsLine("p", "lp-from", l, opts.where, opts.here));
 
       /* pages, tasks and when, filled in once the lesson has been read */
       const meta = el("p","rc-meta");

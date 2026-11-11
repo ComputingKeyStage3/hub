@@ -2588,8 +2588,9 @@ function openHubUnit(u, kind){
 
 /* the lesson cards, used for a unit and for search results */
 /* opts.where: the year group being looked at, for the cover hub, whose cards
-   say which units they suit. opts.suggest: which of them suit the unit on
-   screen, put first with a Suggested pill. */
+   say which units they suit. opts.here: the unit on screen, named first on a
+   card that suits it. opts.suggest: which of them suit it, put first with a
+   Suggested pill. */
 function lessonCards(list, box, opts){
   opts = opts || {};
   box.innerHTML = "";
@@ -2609,7 +2610,7 @@ function lessonCards(list, box, opts){
       alts.length + " version" + (alts.length === 1 ? "" : "s")));
     if (opts.suggest && opts.suggest(l)) head.appendChild(suggestedPill());
     card.appendChild(head);
-    if (opts.where) card.appendChild(unitsLine("p", "lp-from", l, opts.where));
+    if (opts.where) card.appendChild(unitsLine("p", "lp-from", l, opts.where, opts.here));
     /* With no classes to publish to, what a teacher needs off this card is
        the address to paste into Teams, and the code that opens it if the
        link does not survive the journey. */
@@ -2853,17 +2854,22 @@ function whereFrom(l, year){
   const y = yearOfLesson(l);
   return (y && y !== year ? y + " · " : "") + (l.unit || "Not in a unit");
 }
-/* The line under a cover lesson's title: where it is filed, and "+2 more"
-   when it suits other units too, which names all of them on hover or focus
-   in the site's own tooltip. */
-function unitsLine(tag, cls, l, year){
-  const line = el(tag, cls, whereFrom(l, year));
+/* The line under a cover lesson's title: one unit, and "+2 more" when it
+   suits others too, which names those others on hover or focus in the site's
+   own tooltip. The one unit is the one on screen (here) when the lesson suits
+   it, so a Suggested card says why it is suggested, and otherwise the unit it
+   is filed in. The tooltip never repeats the unit already on the line. */
+function unitsLine(tag, cls, l, year, here){
   const all = unitsOf(l);
-  if (all.length > 1){
-    const more = el("span","units-more", "+" + (all.length - 1) + " more");
+  const shown = here && all.indexOf(here) >= 0 ? here : (l.unit || "");
+  const shownYear = shown === (l.unit || "") ? yearOfLesson(l) : yearOfUnit(shown);
+  const line = el(tag, cls, (shownYear && shownYear !== year ? shownYear + " · " : "") + (shown || "Not in a unit"));
+  const rest = all.filter(u => u !== shown);
+  if (rest.length){
+    const more = el("span","units-more", "+" + rest.length + " more");
     more.tabIndex = 0;
-    more.setAttribute("aria-label", "Suits " + all.join(", "));
-    hoverTip(more, all.join(", "));
+    more.setAttribute("aria-label", "Also suits " + rest.join(", "));
+    hoverTip(more, rest.join(", "));
     line.appendChild(document.createTextNode(" "));
     line.appendChild(more);
   }
@@ -2907,7 +2913,7 @@ function paintCoverHub(box, year, unitName){
   box.innerHTML = "";
   coverSections(box, year, unitName, coverShelves(year, unitName),
     (list, into) => { const h = el("div"); into.appendChild(h);
-                      lessonCards(list, h, { where: year, suggest: (l) => suitsUnit(l, unitName) }); });
+                      lessonCards(list, h, { where: year, here: unitName, suggest: (l) => suitsUnit(l, unitName) }); });
 }
 
 /* ---------- Manage topics ----------
@@ -5017,7 +5023,7 @@ on("addLessonBtn", "click", () => {
       const t = el("span","t", titleOf(l.lesson_id));
       if (suitsUnit(l, unit)) t.appendChild(suggestedPill());
       words.appendChild(t);
-      words.appendChild(unitsLine("span", "pick-unit", l, year));
+      words.appendChild(unitsLine("span", "pick-unit", l, year, unit));
       row.appendChild(words);
       row.appendChild(el("span","edit","Add →"));
       row.addEventListener("click", () => {
