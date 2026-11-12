@@ -13,6 +13,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="coverwork.js"></script>
 <script src="lessonorder.js"></script>
 <script src="lessoncompat.js"></script>
 <script src="shortmatch.js"></script>
@@ -1222,6 +1223,9 @@ function compileOne(b, id, target){
        waiting for Understood. Only the off ones are written down, so every
        cover lesson made before this keeps one task at a time. */
     if (x && b && b.coverHold === false) x.coverHold = false;
+    /* And whether two wrong tries are enough to carry on. Written either
+       way once chosen, because left alone it depends on the kind of task. */
+    if (x && b && (b.coverTries === true || b.coverTries === false)) x.coverTries = b.coverTries;
     target.push(x);
   };
   if (b.type === "page"){
@@ -2541,10 +2545,46 @@ function askCoverHold(b, arr){
         list.appendChild(row);
       });
     box.appendChild(list);
+    /* A task with its own Check, or the boss, also asks what two wrong tries
+       do. Left alone a short answer and a table give the answer to type in,
+       and the rest let them carry on (coverwork.js, carriesOn). */
+    if (coverTriesMatter(b)){
+      box.appendChild(el("h3","gatepick-head","After two wrong tries"));
+      const typed = b.type === "short" || b.type === "table";
+      const carry = window.coverWork.carriesOn(b);
+      const tries = el("div","modepick");
+      [[true, "Let them carry on",
+        typed ? "The answer is shown and they can move on." : "Two different wrong answers are enough to move on."],
+       [false, "They have to get it right",
+        typed ? "The answer is shown and they type it in."
+              : b.type === "boss" ? "They keep battling until they win." : "They keep trying until it is right."]]
+        .forEach(choice => {
+          const row = el("button","modepick-item gatepick" + (choice[0] === carry ? " on" : ""));
+          row.type = "button";
+          row.setAttribute("aria-pressed", choice[0] === carry ? "true" : "false");
+          row.appendChild(el("b","", choice[1]));
+          row.appendChild(el("span","", choice[2]));
+          row.addEventListener("click", () => {
+            b.coverTries = choice[0];
+            saveDraft(); render(); schedulePreview();
+            askCoverHold(b, arr);
+          });
+          tries.appendChild(row);
+        });
+      box.appendChild(tries);
+      scrollBody(box);
+    }
     const done = el("button","btn-primary modal-cta","Done");
     done.addEventListener("click", closeModal);
     box.appendChild(done);
   });
+}
+/* The tasks where two wrong tries mean anything in a cover lesson: a short
+   answer, a table, labels, a spot on a picture, a picture to copy and the
+   boss. Asked by kind rather than whether answers are set yet, so the choice
+   is there while the task is still being written. */
+function coverTriesMatter(b){
+  return !!b && (["short","table","label","hotspot","boss"].indexOf(b.type) >= 0 || (b.type === "pixels" && !!b.target));
 }
 /* The pass mark, as a percentage or a number of questions. This used to sit
    under every quiz, set to 70% whether anyone wanted one or not. */
@@ -8189,6 +8229,7 @@ function fromCompiled(data, meta){
     if (made && b && b.confused) made.confused = b.confused;
     if (made && b && ["attempted","partial","full"].includes(b.gate)) made.gate = b.gate;
     if (made && b && b.coverHold === false) made.coverHold = false;
+    if (made && b && (b.coverTries === true || b.coverTries === false)) made.coverTries = b.coverTries;
     /* A checklist line saved with no kind (switched over from Teacher before
        that was put right) is repaired as it opens, so the lesson is fixed by
        opening it and saving it again. */

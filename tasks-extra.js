@@ -2418,7 +2418,7 @@
       note.textContent = got + " of " + spots.length + " in the right place.";
       /* After right is set: what was checked is compared with what is saved. */
       if (ctx.pressed) ctx.pressed();
-      if (ctx.tried && !right && ctx.tried(JSON.stringify(placed)) >= 2)
+      if (ctx.tried && !right && ctx.tried(JSON.stringify(placed)) >= 2 && (!ctx.carryOn || ctx.carryOn()))
         note.textContent += " You can carry on.";
       ctx.changed();
     });
@@ -2555,7 +2555,7 @@
         said.dataset.verdict = right ? "yes" : "no";
         said.textContent = right ? "That is the right spot." : "Not quite. Have another go.";
         if (ctx.pressed) ctx.pressed();
-        if (ctx.tried && !right && ctx.tried(JSON.stringify(at)) >= 2)
+        if (ctx.tried && !right && ctx.tried(JSON.stringify(at)) >= 2 && (!ctx.carryOn || ctx.carryOn()))
           said.textContent = "Not quite. You can carry on.";
         ctx.changed();
       });
@@ -3377,7 +3377,9 @@
            different in the boxes brings the answers out. */
         if (ctx.tried && right < markable.length &&
             ctx.tried(boxes.map(x => x.input.value.trim().toLowerCase()).join("|")) >= 2)
-          fb.textContent = "Here are the answers: " + markable.map(x => x.cell.t).join(", ") + ". Type them in and press Check the table.";
+          fb.textContent = "Here are the answers: " + markable.map(x => x.cell.t).join(", ") + ". " +
+            (ctx.carryOn && ctx.carryOn() ? "You can carry on, or type them in and press Check the table."
+                                          : "Type them in and press Check the table.");
         ctx.changed();
       });
       row.appendChild(btn);
@@ -4514,7 +4516,9 @@
           endCard("You beat " + name + "!", "Your best: " + bestHearts + (bestHearts === 1 ? " heart" : " hearts") + " left.", "Fight again");
         }
       },
-      done: () => won || tries >= 2
+      /* Two lost fights are enough, unless a cover lesson's teacher wants
+         it won (ctx.carryOn). */
+      done: () => won || (tries >= 2 && (!ctx.carryOn || ctx.carryOn()))
     };
   };
 

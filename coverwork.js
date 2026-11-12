@@ -5,9 +5,11 @@
    on a question with nobody to ask is worse than a wrong answer. Most of this
    asks "did they try?". A task with a Check button of its own is the exception:
    that button stands in for Finished, and the task has to end up right. It
-   still cannot strand anybody. A short answer and a table give the answer
-   after two wrong tries, to type in. A label or a spot on a picture cannot be
-   typed, so two wrong tries is enough there.
+   still cannot strand anybody. After two different wrong tries a short
+   answer and a table give the answer, to type in. A label or a spot on a
+   picture cannot be typed, so two wrong tries is enough there. The teacher
+   can change either way round per task with the eye in the builder
+   (carriesOn below).
 
    Only the tasks listed in need() can hold a page. Anything else (code, a
    Scratch project, a file, a video) depends on something that might not load
@@ -81,6 +83,17 @@
     return false;
   }
 
+  /* Whether two different wrong tries are enough to carry on. coverTries is
+     only written when the teacher has chosen with the eye: true carries on,
+     false means it has to end up right. Left alone it is what it always was.
+     A short answer and a table give the answer instead, so they still have
+     to type it in; anything that cannot be typed lets them carry on. */
+  function carriesOn(b){
+    if (!b) return false;
+    if (b.coverTries === true || b.coverTries === false) return b.coverTries;
+    return !(b.type === "short" || b.type === "table");
+  }
+
   /* What is still needed from one task, in words a student can act on, or ""
      if nothing is. ctx gives what only the lesson page knows:
        read(id)     what the task holds now
@@ -106,8 +119,7 @@
            and say it was right before they asked. */
         const checked = !ctx.checked || ctx.checked(b.id);
         if (sc && sc.got >= sc.max && checked) return "";
-        const untypable = b.type === "label" || b.type === "hotspot";
-        if (untypable && ctx.tries(b.id) >= 2) return "";
+        if (carriesOn(b) && ctx.tries(b.id) >= 2) return "";
         return b.type === "table" ? "Fill in the table and press Check the table."
              : b.type === "label" ? "Label the picture and press Check my labels."
              : b.type === "hotspot" ? "Click on the picture and press Check my answer."
@@ -128,9 +140,9 @@
         return v && Array.isArray(v.strokes) && v.strokes.length ? "" : "Draw on the whiteboard.";
       case "poster":
         return v && typeof v.img === "string" && v.img ? "" : "Make your poster.";
-      /* Beaten, or two real goes at it: losing twice must not strand anyone. */
+      /* Beaten, or two real goes at it unless the teacher wants it beaten. */
       case "boss":
-        return v && (v.won || Number(v.tries) >= 2) ? "" : "Battle the boss.";
+        return v && (v.won || (carriesOn(b) && Number(v.tries) >= 2)) ? "" : "Battle the boss.";
       /* A picture to copy is right once checked, or two real goes at it, the
          same as a spot on a picture: nobody is held behind a square they
          cannot find. Otherwise it wants a real drawing, and an animation at
@@ -143,7 +155,7 @@
           const sc = ctx.score(b, v);
           const checked = !ctx.checked || ctx.checked(b.id);
           if (sc && sc.got >= sc.max && checked) return "";
-          if (ctx.tries(b.id) >= 2) return "";
+          if (carriesOn(b) && ctx.tries(b.id) >= 2) return "";
           return "Colour in the grid and press Check my picture.";
         }
         if (b.frames === true && drawn < 2) return "Draw at least two frames.";
@@ -268,5 +280,5 @@
              confused: Object.keys(c.confused || {}).length };
   }
 
-  window.coverWork = { need, left, junk, quizzes, facts, isWork, allRight, selfCheck, holdsNext };
+  window.coverWork = { need, left, junk, quizzes, facts, isWork, allRight, selfCheck, holdsNext, carriesOn };
 })();

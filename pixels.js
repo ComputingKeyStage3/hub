@@ -267,7 +267,7 @@
           said.textContent = right ? "Every square is right. Well done!"
             : n + " of " + N + " squares are right. The wrong ones have a red border.";
           if (ctx.pressed) ctx.pressed();
-          if (ctx.tried && !right && ctx.tried(pixelString(frames[0])) >= 2)
+          if (ctx.tried && !right && ctx.tried(pixelString(frames[0])) >= 2 && (!ctx.carryOn || ctx.carryOn()))
             said.textContent += " You can carry on, or keep fixing it.";
           draw();
           ctx.changed && ctx.changed();

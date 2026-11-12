@@ -4330,6 +4330,8 @@ html[data-build=compact] .buildbar .subtabs button{
 .gatepick span{font-size:var(--text-base); font-weight:500; color:var(--muted); line-height:1.4}
 .gatepick.on{border-color:var(--amber); background:color-mix(in srgb, var(--amber) 8%, transparent)}
 .gatepick.on b{color:var(--amber)}
+/* The cover eye's second question, under the first one's choices. */
+.gatepick-head{margin:18px 0 6px; font-size:var(--text-lg); text-align:left}
 .gatepass{margin-top:14px}
 .gatepass .stepper{align-items:center}
 .gateunit{font-weight:700; color:var(--muted); margin-left:4px}

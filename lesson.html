@@ -186,7 +186,8 @@ let restoredData = null;       // last saved data we restored (responses re-appl
    counts as a go. This is the one kind of lesson where Continue looks at the
    work, and it is allowed to because nothing here can leave a child stuck:
    most wrong answers count, and where a task has to end up right the answer
-   is given after two wrong tries.
+   is given after two wrong tries. The teacher can turn that either way per
+   task (coverWork.carriesOn): carry on after two tries, or get it right.
 
    A page opens one task at a time. Understood under something to read, or
    Finished under something to do, shows the next one once that task has had
@@ -8744,6 +8745,8 @@ function wrapExtra(b, build, eyebrow){
      table or a picture must not offer its own Check button there. */
   const made = build(b, { changed: markDirty,
                           tried: coverOn() ? (value) => coverTried(b.id, value) : null,
+                          /* whether two wrong tries are enough to carry on */
+                          carryOn: coverOn() ? () => window.coverWork.carriesOn(b) : null,
                           pressed: coverOn() ? () => { coverData().checked[b.id] = JSON.stringify(coverAsk.read(b.id)); } : null,
                           assessment: marksAtEnd() });
   fields[b.id] = { get: made.get, set: made.set };
@@ -10861,7 +10864,9 @@ function rShort(b){
         /* Nobody in the room can help, so a Cover lesson gives the answer
            after two wrong tries rather than leave them on it for good. */
         if (coverOn() && coverTried(b.id, ans.value.trim().toLowerCase()) >= 2)
-          fb.appendChild(el("span","", "The answer is " + window.shortAnswer.accepted(b)[0] + ". Type it in and press Check answer."));
+          fb.appendChild(el("span","", "The answer is " + window.shortAnswer.accepted(b)[0] + ". " +
+            (window.coverWork.carriesOn(b) ? "You can carry on, or type it in and press Check answer."
+                                           : "Type it in and press Check answer.")));
         else fb.appendChild(el("span","", "Check your spelling and try again."));
       }
       markDirty();
