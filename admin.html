@@ -2244,7 +2244,9 @@ function whichVersion(id, question, then){
    it under this unit instead of it being moved here for everyone. */
 async function addLessonToClass(id, onDone, opts){
   const family = familyOf(id);
-  const borrow = !!(opts && opts.borrow);
+  /* A cover lesson keeps the unit it is filed in whatever unit a class finds
+     it under, so one from another unit is always borrowed, never moved. */
+  const borrow = !!(opts && opts.borrow) || (!!catOf(id).cover && (catOf(id).unit || "") !== unit);
   const go = async (chosen) => {
     if (!borrow && (catOf(chosen).unit || "") !== unit) await catPost({ op:"set-lesson", id: chosen, unit });
     await catPost(borrow ? { op:"assign", id: chosen, groups: [cls], shownIn: unit }
@@ -3554,6 +3556,63 @@ on("deleteHubUnitBtn", "click", () => {
   });
 });
 
+/* The units a class already has, by what it has been given, each under the
+   unit that class sees it under. */
+function unitsOfClass(group){
+  const out = [];
+  classLessonsFor(group).forEach(l => { const u = l.unit || ""; if (u && out.indexOf(u) < 0) out.push(u); });
+  return out;
+}
+/* Where a cover lesson goes in each class it is given to, so giving one out
+   never makes a new unit appear in a class. The one unit of the lesson's
+   (filed or also suitable for) that the class already has is chosen without
+   asking. With none, or more than one, the teacher is asked, offered the
+   units that class already has, or the lesson's own when it has none at
+   all. Resolves to { class: unit }, or null if they cancel. */
+function coverPlaces(lesson, groups){
+  const order = (cat.units || []).map(u => u.name);
+  const byOrder = (a, b) => (order.indexOf(a) - order.indexOf(b)) || a.localeCompare(b);
+  const mine = unitsOf(lesson);
+  const places = {}, ask = [];
+  groups.forEach(g => {
+    const have = unitsOfClass(g);
+    const fits = mine.filter(u => have.indexOf(u) >= 0);
+    if (fits.length === 1) places[g] = fits[0];
+    else ask.push({ group: g, options: (fits.length ? fits : have.length ? have : mine).slice().sort(byOrder),
+                    suits: fits.length ? fits : [] });
+  });
+  if (!ask.length) return Promise.resolve(places);
+  return new Promise(resolve => {
+    openModal(box => {
+      modalTitle(box, "Which unit should it go in?");
+      box.appendChild(el("p","modal-text", ask.length === 1
+        ? "Pick the unit " + ask[0].group + " will find “" + titleOf(lesson.lesson_id) + "” under."
+        : "Pick the unit each class will find “" + titleOf(lesson.lesson_id) + "” under."));
+      const picks = {};
+      ask.forEach(a => {
+        const w = el("div","bfield");
+        w.appendChild(el("label","", a.group));
+        const sel = el("select");
+        a.options.forEach(u => {
+          const o = el("option","", u + (a.suits.indexOf(u) >= 0 ? " (suggested)" : ""));
+          o.value = u; sel.appendChild(o);
+        });
+        w.appendChild(sel); box.appendChild(w);
+        picks[a.group] = sel;
+      });
+      const go = el("button","btn-primary modal-cta","Give it out");
+      go.addEventListener("click", () => {
+        Object.keys(picks).forEach(g => { places[g] = picks[g].value; });
+        resolve(places);
+      });
+      box.appendChild(go);
+      const no = el("button","btn-ghost modal-stay","Back");
+      no.addEventListener("click", () => resolve(null));
+      box.appendChild(no);
+      scrollBody(box);
+    });
+  });
+}
 function distribute(id){
   openModal(box => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
@@ -3597,12 +3656,28 @@ function distribute(id){
         const move = chosen.filter(n => picks[n].other);
         const add = chosen.filter(n => !picks[n].other);
         const drop = Object.keys(picks).filter(n => !picks[n].cb.checked && picks[n].already);
-        if (add.length) await catPost({ op:"assign", id: id, groups: add });
+        /* A cover lesson goes into a unit each class already has (coverPlaces),
+           and is never refiled: the unit is the class's view of it. */
+        const lesson = catOf(id);
+        if (lesson.cover && add.length){
+          const places = await coverPlaces(lesson, add);
+          if (!places){ distribute(id); return; }        // they backed out: nothing saved
+          for (const n of add){
+            const u = places[n];
+            await catPost(u && u !== (lesson.unit || "") ? { op:"assign", id: id, groups: [n], shownIn: u }
+                                                         : { op:"assign", id: id, groups: [n] });
+          }
+        }
+        else if (add.length) await catPost({ op:"assign", id: id, groups: add });
         for (const n of move) await catPost({ op:"switch-version", from: picks[n].other, to: id, group: n });
         for (const n of drop) await catPost({ op:"unassign", id: id, group: n });
         await loadCatalogue();
         closeModal(); paintHub();
-      }catch(e){ msg.textContent = e.message; }
+      }catch(e){
+        /* the unit question may have taken this pop-up's place */
+        if (document.body.contains(msg)) msg.textContent = e.message;
+        else { closeModal(); say("Could not give it out", e.message); }
+      }
     });
     box.appendChild(go); box.appendChild(msg);
   });

@@ -239,7 +239,8 @@
   window.removeFromClass = function(l){
     const id = l.lesson_id;
     const mine = assigns.find(a => a.lesson_id === id && a.group_name.toLowerCase() === cls.toLowerCase());
-    const was = mine ? { published: !!mine.published, release: mine.release_at || "", close: mine.close_on || "" } : null;
+    const was = mine ? { published: !!mine.published, release: mine.release_at || "", close: mine.close_on || "",
+                         shownIn: mine.shown_in || "" } : null;
     const others = assigns.filter(a => a.lesson_id === id && a.group_name.toLowerCase() !== cls.toLowerCase());
     const group = cls;
     openModal(box => {
@@ -257,7 +258,9 @@
           closeModal(); paintLessonGrid();
           UI.toast("Removed from " + group, { action:"Undo", onAction: async () => {
             try{
-              await catPost({ op:"assign", id: id, groups: [group] });
+              /* back under the unit it was under, not the one it is filed in */
+              await catPost(was && was.shownIn ? { op:"assign", id: id, groups: [group], shownIn: was.shownIn }
+                                               : { op:"assign", id: id, groups: [group] });
               if (was && was.published)
                 await catPost({ op:"class-publish", id: id, group: group, published: true,
                                 releaseAt: was.release, closeOn: was.close, openEnded: !was.close });

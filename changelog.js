@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.9.8", text:"Giving a cover lesson to classes puts it in a unit each class already has, and asks which when there is no clear one, so no new unit appears. A cover lesson always stays filed in its own unit." },
   { v:"17.9.7", text:"Cover tab: a suggested cover lesson names the unit you are looking at first, and +2 more lists only its other units." },
   { v:"17.9.6", text:"Cover lessons: the eye on a short answer, table, labelling, click the spot, pixel picture or boss battle now also asks what two wrong tries do: let them carry on, or they have to get it right." },
   { v:"17.9.5", text:"Cover lessons: Also suitable for in Lesson options gives a cover lesson more units. In the Cover tab the ones for this unit come first marked Suggested, and +2 more beside the unit names the rest on hover. Home shows Late P4 or Early P4 instead of Late lunch." },
