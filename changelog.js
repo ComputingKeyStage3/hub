@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"17.9.9", text:"A cover lesson always shows in the unit chosen in the builder. One that had been moved to another unit by adding it to a class is back in its own unit, on its card and when it is given out." },
   { v:"17.9.8", text:"Giving a cover lesson to classes puts it in a unit each class already has, and asks which when there is no clear one, so no new unit appears. A cover lesson always stays filed in its own unit." },
   { v:"17.9.7", text:"Cover tab: a suggested cover lesson names the unit you are looking at first, and +2 more lists only its other units." },
   { v:"17.9.6", text:"Cover lessons: the eye on a short answer, table, labelling, click the spot, pixel picture or boss battle now also asks what two wrong tries do: let them carry on, or they have to get it right." },
