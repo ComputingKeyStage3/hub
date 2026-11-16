@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.0.2", text:"Console: cards no longer come in twice, a class opens by growing out of its tile, and tabs slide their highlight across. A class's Units, Students and Progress tabs now change only the pane underneath: the heading, the trail at the top and Back stay as they are." },
   { v:"18.0.1", text:"Buttons no longer flash blank when the pointer first goes over them. In the console, signing in rises into place and fades away as the console opens, the side menu's highlight slides to the screen you pick, cards and classes come in one after another, and menus unroll." },
   { v:"18.0", text:"Things move again on school computers. Save buttons show they are working and draw a tick when done, pop-ups and menus fade in, right and wrong answers react, and loading lists pulse. Settings has a new Reduce animation switch for anyone who needs the movement off." },
   { v:"17.9.9", text:"A cover lesson always shows in the unit chosen in the builder. One that had been moved to another unit by adding it to a class is back in its own unit, on its card and when it is given out." },

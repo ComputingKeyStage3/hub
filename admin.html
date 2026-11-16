@@ -656,12 +656,14 @@ function paintCrumbs(){
   if (v === "pwView") return crumbs([{ name:"Passwords" }]);
   if (v === "keepView") return crumbs([{ name:"Backups" }]);
   if (v === "classView") return crumbs([home, { name: cls }]);
-  if (v === "studentsView") return crumbs([home, { name: cls, go: toClass }, { name:"Students" }]);
+  /* A class's tabs are the class: the tab bar says which pane is open, so
+     the crumb does not say it again, and does not change as tabs do. */
+  if (v === "studentsView") return crumbs([home, { name: cls }]);
   if (v === "studentView") return crumbs([home, { name: cls, go: toClass },
                                           { name:"Students", go: () => { show("studentsView"); loadStudents(); } },
                                           { name: (window.studentProfile && window.studentProfile.name()) || "Student" }]);
-  if (v === "coverView") return crumbs([home, { name: cls, go: toClass }, { name:"Specification coverage" }]);
-  if (v === "progressView") return crumbs([home, { name: cls, go: toClass }, { name:"Progress" }]);
+  if (v === "coverView") return crumbs([home, { name: cls }]);
+  if (v === "progressView") return crumbs([home, { name: cls }]);
   if (v === "partsView") return crumbs([home, { name: cls, go: toClass }, { name: unit || "Not in a unit" }]);
   /* One crumb longer when the unit was divided, so the trail says which part
      of 2.2 this is and leads back to the rest of them. A KS3 unit has no
@@ -690,6 +692,20 @@ function show(view, quiet){
   const entry = view === "keyView" || view === "whoView";
   const before = VIEWS.find(v => { const e = $(v); return e && !e.hidden; });
   const fromEntry = before === "keyView" || before === "whoView";
+  /* A class's tabs (Units, Students, Progress, Specification coverage) are
+     four screens, but to a teacher they are one class with a pane that
+     changes. Moving between them keeps the heading and the tabs exactly
+     where they were, slides only what is under the tabs across, adds no
+     crumb and no step for Back. Spelled out here rather than read from
+     CLASS_TABS, which is declared further down and may not exist yet the
+     first time this runs. */
+  const TAB_VIEWS = ["classView", "studentsView", "progressView", "coverView"];
+  const tabMove = before !== view && TAB_VIEWS.includes(before) && TAB_VIEWS.includes(view);
+  const tabDir = tabMove ? Math.sign(TAB_VIEWS.indexOf(view) - TAB_VIEWS.indexOf(before)) : 0;
+  /* Measured now, before it is hidden: a screen opened from a class or unit
+     tile grows out of where that tile was. */
+  const tile = window.hubMotion ? window.hubMotion.pressedTile() : null;
+  const tileBox = tile ? tile.getBoundingClientRect() : null;
   /* The sign-in card fades away over the console as it opens, rather than
      vanishing; taken before it is hidden, while there is still something to
      copy. */
@@ -700,8 +716,9 @@ function show(view, quiet){
      another. Not behind the sign-in, which has its own card arriving over
      the top. Coming in from the sign-in, Home is already on screen behind
      it, so only its cards move. */
-  if (!entry && before !== view && window.hubMotion){
-    if (!fromEntry) window.hubMotion.arrive($(view), 4);
+  if (!entry && before !== view && window.hubMotion && !tabMove){
+    if (tileBox && $(view)) window.hubMotion.zoomFrom({ isConnected: true, getBoundingClientRect: () => tileBox }, $(view));
+    else if (!fromEntry) window.hubMotion.arrive($(view), 4);
     window.hubMotion.settle($(view));
   }
   document.body.classList.toggle("entry-open", entry);
@@ -713,6 +730,17 @@ function show(view, quiet){
   clearInterval(relTimer);
   hideLoader();
   paintClassTabs();
+  /* Only now is the tab bar in the new screen, so only now is it known
+     what lies under it. */
+  if (tabMove && window.hubMotion){
+    const bar = $("classTabs");
+    const under = [];
+    for (let n = bar && bar.nextElementSibling; n; n = n.nextElementSibling) under.push(n);
+    /* this tab's own buttons, beside the shared title, belong to its pane */
+    const acts = $(view).querySelector(":scope > .viewhead > .vh-actions");
+    if (acts) under.push(acts);
+    window.hubMotion.slideAcross(under, tabDir);
+  }
   /* The bar comes out with whatever it sits above, in the same frame. Showing
      it the moment the first answer came back, while the page underneath was
      still waiting on the second and third, is what made the console arrive in
@@ -734,7 +762,16 @@ function show(view, quiet){
           stu: (window.studentProfile && window.studentProfile.username()) || "" }));
     }catch(e){}
   }
-  if (!quiet && !goingBack && view !== "keyView"){
+  /* The tabs of one class are one place to Back: the step is rewritten
+     rather than added, so Back leaves the class instead of walking back
+     through every tab looked at. */
+  if (tabMove && !quiet && !goingBack){
+    try{
+      history.replaceState(Object.assign({}, history.state || {}, { view: view, cls: cls, unit: unit, subunit: subunit }),
+                           "", location.pathname + location.search);
+    }catch(e){}
+  }
+  else if (!quiet && !goingBack && view !== "keyView"){
     try{
       const state = { view: view, cls: cls, unit: unit, subunit: subunit, hubYear: hubYear, hubUnit: hubUnit,
                       hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint,
@@ -3849,7 +3886,32 @@ function paintClassTabs(){
   bar.hidden = !tab;
   if (!tab) return;
   const screen = $(view);
-  const head = screen.querySelector(":scope > .viewhead") || screen.querySelector(":scope > h2, :scope > .classhead");
+  /* The class's own heading (← All classes, its name and the pencil) goes
+     with the tabs into whichever tab is open, the way the tab bar does, and
+     that screen's own way back and title are put away. Each tab used to
+     have its own: "← 8A" over "Students", so changing tab changed the top of
+     the page as well as the pane, and read as going somewhere else. The
+     refresh button stays each screen's own, since it refreshes that pane. */
+  /* By the time this runs the console has wrapped each screen's title in a
+     .viewhead (title, then that screen's own buttons), so it is the title
+     inside that which travels; each tab keeps its own buttons, which slide
+     in with its pane. */
+  const homeHead = $("classView").querySelector(":scope > .viewhead");
+  if (!paintClassTabs.title && homeHead) paintClassTabs.title = homeHead.querySelector(":scope > .vh-title");
+  const back = $("backClasses"), title = paintClassTabs.title;
+  if (back && title){
+    if (view === "classView"){
+      if (back.parentElement !== screen) screen.insertBefore(back, screen.firstChild);
+      if (homeHead && title.parentElement !== homeHead) homeHead.insertBefore(title, homeHead.firstChild);
+    } else {
+      const ownBack = screen.querySelector(":scope > .crumb:not(#backClasses)");
+      const ownHead = screen.querySelector(":scope > .viewhead");
+      const ownTitle = ownHead && Array.from(ownHead.children).find(c => c.classList.contains("vh-title") && c !== title);
+      if (ownBack){ ownBack.hidden = true; ownBack.before(back); }
+      if (ownTitle){ ownTitle.hidden = true; ownTitle.before(title); }
+    }
+  }
+  const head = screen.querySelector(":scope > .viewhead") || screen.querySelector(":scope > h2:not([hidden]), :scope > .classhead");
   if (head) head.after(bar);
   Array.from(bar.children).forEach(b => {
     b.classList.toggle("on", b.id === tab);

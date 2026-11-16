@@ -259,6 +259,7 @@
      back meanwhile (mo-gliding) so there are never two. */
   function glide(from, to, holder, cls){
     if (!can(to) || !from || from === to || !holder) return;
+    holder.querySelectorAll(":scope > .mo-pill").forEach(p => p.remove());
     const a = from.getBoundingClientRect(), b = to.getBoundingClientRect(), h = holder.getBoundingClientRect();
     if (!a.height || !b.height) return;
     const pill = document.createElement("span");
@@ -285,11 +286,37 @@
   const CARDS = ".lessonCard, .classtile, .lessonpill, .richcard, .ov-row, .who-row, .taskrow, " +
                 ".unit-lesson-row, .coverrow, .topicrow, .specrow, .pace-row, .summary-row, .changerow, .mbstat";
   const topCards = (list) => list.filter(el => !(el.parentElement && el.parentElement.closest(CARDS)));
+  /* A card is known by what it says, not by the element. Most screens draw
+     their cards at once from what is already held and then draw them all
+     again a moment later as brand new elements, so remembering elements let
+     every class tile come in twice, 7ms apart. A card saying the same as one
+     already on its way in is a redraw: its animation is carried over to the
+     new element at the point it had reached, so each card arrives once,
+     whichever element it ends up being. */
+  const cardKey = (el) => (el.className || "") + "|" + (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120);
   function settle(view, watchMs){
     if (!view || off()) return;
-    stagger(topCards(Array.from(view.querySelectorAll(CARDS))));
+    const going = new Map();       // card key -> its animation
+    function bring(list){
+      const fresh = [];
+      topCards(list).forEach(el => {
+        const k = cardKey(el), was = going.get(k);
+        if (!was){ fresh.push(el); return; }
+        if (was.effect && was.effect.target === el) return;
+        if (was.playState === "finished") return;
+        const timing = was.effect.getTiming();
+        const a = play(el, was.effect.getKeyframes(), timing);
+        if (a){ a.currentTime = was.currentTime; going.set(k, a); }
+      });
+      stagger(fresh);
+      fresh.forEach(el => {
+        const mine = el.getAnimations ? el.getAnimations().filter(a => !(window.CSSTransition && a instanceof CSSTransition) &&
+                                                                       !(window.CSSAnimation && a instanceof CSSAnimation)) : [];
+        if (mine.length) going.set(cardKey(el), mine[mine.length - 1]);
+      });
+    }
+    bring(Array.from(view.querySelectorAll(CARDS)));
     if (!window.MutationObserver) return;
-    const seen = new WeakSet();
     const mo = new MutationObserver(list => {
       const fresh = [];
       list.forEach(m => m.addedNodes.forEach(n => {
@@ -297,11 +324,73 @@
         if (n.matches(CARDS)) fresh.push(n);
         n.querySelectorAll(CARDS).forEach(x => fresh.push(x));
       }));
-      const now = topCards(fresh.filter(x => !seen.has(x) && (seen.add(x), true)));
-      if (now.length) stagger(now);
+      if (fresh.length) bring(fresh);
     });
     mo.observe(view, { childList: true, subtree: true });
     setTimeout(() => mo.disconnect(), watchMs || 1500);
   }
-  window.hubMotion = { off, busy, tick, nudge, pop, arrive, reveal, breathe, stagger, glide, settle, leave: fadeOut };
+  /* The pane under a row of tabs, changing: it comes in from the side of
+     the tab that was picked, a short way, so the tabs read as one strip of
+     panes lying side by side. 24px, not the width of the screen. */
+  function slideAcross(els, dir){
+    if (off()) return;
+    const x = (dir || 1) * 24;
+    Array.from(els || []).forEach(el => play(el,
+      [{ opacity: 0, transform: "translateX(" + x + "px)" }, { opacity: 1, transform: "none" }],
+      { duration: 240, easing: EASE_OUT }));
+  }
+  /* Opening something from its tile: the new screen grows out of the tile
+     that was pressed, so it reads as going into that class rather than as
+     the page being swapped. It starts at the tile's place and at most about
+     half size, which keeps the movement short; a tile is far smaller than
+     the screen, and growing from its true size was a long sweep. The fade
+     covers the words being scaled for the moment it takes. */
+  function zoomFrom(tile, view){
+    if (!can(view) || !tile || !tile.isConnected) return arrive(view, 4);
+    const t = tile.getBoundingClientRect(), v = view.getBoundingClientRect();
+    if (!t.width || !v.width) return arrive(view, 4);
+    const s = Math.max(.55, Math.min(.9, t.width / v.width));
+    const dx = (t.left + t.width / 2) - (v.left + v.width / 2);
+    const dy = (t.top + t.height / 2) - (v.top + Math.min(v.height, innerHeight - v.top) / 2);
+    return play(view, [
+      { transform: "translate(" + dx + "px," + dy + "px) scale(" + s + ")", opacity: 0 },
+      { opacity: 1, offset: .55 },
+      { transform: "none", opacity: 1 }
+    ], { duration: 340, easing: EASE_OUT, fill: "backwards" });
+  }
+  /* Every tab strip on the site (.subtabs) has its highlight glide from the
+     old tab to the new one. The page's own handler decides which tab is on,
+     often after moving the strip or redrawing it, so the tab that was on is
+     noted as the press starts and compared once the handler has run. */
+  document.addEventListener("click", (e) => {
+    const btn = e.target && e.target.closest && e.target.closest(".subtabs > button");
+    if (!btn || off()) return;
+    const strip = btn.parentElement;
+    const was = strip.querySelector(":scope > button.on");
+    if (!was || was === btn) return;
+    const from = was.getBoundingClientRect();
+    /* A timer, not a promise: a promise queued here runs as soon as this
+       listener returns, which is before the tab's own handler. */
+    setTimeout(() => {
+      if (!btn.classList.contains("on") || !btn.isConnected) return;
+      const holder = btn.parentElement;
+      /* The old tab's place as it was, in case the strip was redrawn and
+         the old button is gone. */
+      const ghost = { getBoundingClientRect: () => from };
+      glide(was.isConnected && was.parentElement === holder ? was : ghost, btn, holder);
+    }, 0);
+  }, true);
+  /* The tile pressed last, and when, so show() can tell a screen opened
+     from a tile from one reached any other way. */
+  let lastTile = null, lastTileAt = 0;
+  document.addEventListener("click", (e) => {
+    const t = e.target && e.target.closest && e.target.closest(".classtile");
+    if (t){ lastTile = t; lastTileAt = Date.now(); }
+  }, true);
+  function pressedTile(){
+    const t = Date.now() - lastTileAt < 800 && lastTile && lastTile.isConnected ? lastTile : null;
+    lastTile = null; lastTileAt = 0;          // one press opens one screen
+    return t;
+  }
+  window.hubMotion = { off, busy, tick, nudge, pop, arrive, reveal, breathe, stagger, glide, settle, slideAcross, zoomFrom, pressedTile, leave: fadeOut };
 })();
