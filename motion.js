@@ -341,22 +341,28 @@
   }
   /* Opening something from its tile: the new screen grows out of the tile
      that was pressed, so it reads as going into that class rather than as
-     the page being swapped. It starts at the tile's place and at most about
-     half size, which keeps the movement short; a tile is far smaller than
-     the screen, and growing from its true size was a long sweep. The fade
-     covers the words being scaled for the moment it takes. */
+     the page being swapped. */
   function zoomFrom(tile, view){
     if (!can(view) || !tile || !tile.isConnected) return arrive(view, 4);
     const t = tile.getBoundingClientRect(), v = view.getBoundingClientRect();
     if (!t.width || !v.width) return arrive(view, 4);
-    const s = Math.max(.55, Math.min(.9, t.width / v.width));
-    const dx = (t.left + t.width / 2) - (v.left + v.width / 2);
-    const dy = (t.top + t.height / 2) - (v.top + Math.min(v.height, innerHeight - v.top) / 2);
+    /* The screen itself does not travel. Moving it from the tile's place
+       (with a scale) swept the whole page sideways for a tile at the edge
+       of the grid, which threw people off. Instead the screen is already
+       where it will be, and a window the shape of the tile opens out to the
+       edges of it, so the eye stays on the tile and the class grows from
+       it. Only a 2% settle around the tile's centre, nothing sideways. */
+    const px = (n) => Math.max(0, n) + "px";
+    const top = t.top - v.top, left = t.left - v.left;
+    const right = v.right - t.right, bottom = v.bottom - t.bottom;
+    const r = tile.radius || "12px";
+    const ox = (left + t.width / 2) + "px", oy = (top + t.height / 2) + "px";
     return play(view, [
-      { transform: "translate(" + dx + "px," + dy + "px) scale(" + s + ")", opacity: 0 },
-      { opacity: 1, offset: .55 },
-      { transform: "none", opacity: 1 }
-    ], { duration: 340, easing: EASE_OUT, fill: "backwards" });
+      { clipPath: "inset(" + px(top) + " " + px(right) + " " + px(bottom) + " " + px(left) + " round " + r + ")",
+        transform: "scale(.98)", transformOrigin: ox + " " + oy, opacity: .4 },
+      { opacity: 1, offset: .35 },
+      { clipPath: "inset(0px 0px 0px 0px round 0px)", transform: "none", transformOrigin: ox + " " + oy, opacity: 1 }
+    ], { duration: 420, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
   }
   /* Every tab strip on the site (.subtabs) has its highlight glide from the
      old tab to the new one. The page's own handler decides which tab is on,

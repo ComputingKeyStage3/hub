@@ -706,6 +706,7 @@ function show(view, quiet){
      tile grows out of where that tile was. */
   const tile = window.hubMotion ? window.hubMotion.pressedTile() : null;
   const tileBox = tile ? tile.getBoundingClientRect() : null;
+  const tileRadius = tile ? getComputedStyle(tile).borderRadius : "";
   /* The sign-in card fades away over the console as it opens, rather than
      vanishing; taken before it is hidden, while there is still something to
      copy. */
@@ -717,7 +718,7 @@ function show(view, quiet){
      the top. Coming in from the sign-in, Home is already on screen behind
      it, so only its cards move. */
   if (!entry && before !== view && window.hubMotion && !tabMove){
-    if (tileBox && $(view)) window.hubMotion.zoomFrom({ isConnected: true, getBoundingClientRect: () => tileBox }, $(view));
+    if (tileBox && $(view)) window.hubMotion.zoomFrom({ isConnected: true, radius: tileRadius, getBoundingClientRect: () => tileBox }, $(view));
     else if (!fromEntry) window.hubMotion.arrive($(view), 4);
     window.hubMotion.settle($(view));
   }
