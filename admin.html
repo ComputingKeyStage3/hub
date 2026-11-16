@@ -9,6 +9,8 @@
 <title>Computing Lesson Hub</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="look.css">
+<link rel="stylesheet" href="motion.css">
+<script src="motion.js"></script>
 <script src="icons.js"></script>
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
@@ -686,7 +688,12 @@ function show(view, quiet){
   /* Signing in and choosing who is teaching are pop-ups over Home, so Home
      stays up behind them, dimmed, blurred and out of reach until they go. */
   const entry = view === "keyView" || view === "whoView";
+  const before = VIEWS.find(v => { const e = $(v); return e && !e.hidden; });
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view && !(entry && v === "homeView"); });
+  /* One screen of the console looks a lot like the next, so it fades in
+     rather than simply being there. Not behind the sign-in, which has its
+     own pop-up arriving over the top. */
+  if (!entry && before !== view && window.hubMotion) window.hubMotion.arrive($(view), 4);
   document.body.classList.toggle("entry-open", entry);
   ["topbar","crumbBar","homeView","rail"].forEach(id => {
     const e = $(id);
@@ -2252,9 +2259,14 @@ async function addLessonToClass(id, onDone){
       "Every class gets the original unless you choose otherwise. You can change this later from the lesson."));
     const msg = el("p","hint","");
     versionChoice(box, family, "", async (chosen) => {
-      msg.textContent = "Adding…";
-      try{ await go(chosen); closeModal(); }
-      catch(e){ msg.textContent = e.message; }
+      /* versionChoice hands back only which one was picked, so the button
+         that was pressed is the one that has the focus. */
+      const pressed = document.activeElement && document.activeElement.closest &&
+                      document.activeElement.closest("button");
+      const b = hubMotion.busy(pressed && box.contains(pressed) ? pressed : null, "Adding");
+      msg.textContent = "";
+      try{ await go(chosen); await b.done("Added"); closeModal(); }
+      catch(e){ b.fail(); msg.textContent = e.message; }
     });
     box.appendChild(msg);
     const no = el("button","btn-ghost modal-stay","Cancel");
@@ -2678,7 +2690,7 @@ function shareLink(id){
        so it is obvious which thing it copies. */
     const copy = el("button","btn-ghost","Copy the link");
     copy.addEventListener("click", async () => {
-      try{ await navigator.clipboard.writeText(url); copy.textContent = "Copied ✓"; }
+      try{ await navigator.clipboard.writeText(url); copy.textContent = "Copied ✓"; hubMotion.pop(copy); }
       catch(e){ copy.textContent = "Select it above and press Ctrl+C"; }
     });
     box.appendChild(copy);
@@ -3046,13 +3058,15 @@ function renamePoint(p, redraw){
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Save");
     go.addEventListener("click", async () => {
-      msg.textContent = "Saving…";
+      const b = hubMotion.busy(go, "Saving");
+      msg.textContent = "";
       try{
         await catPost({ op:"rename-point", id: p.id, code: code.value.trim(), title: title.value.trim() });
         await loadCatalogue(true);
+        await b.done("Saved");
         closeModal();
         openSpec();
-      }catch(e){ msg.textContent = e.message; }
+      }catch(e){ b.fail(); msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(msg);
   });
@@ -3180,7 +3194,10 @@ function distribute(id){
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Save");
     go.addEventListener("click", async () => {
-      msg.textContent = "Saving…";
+      /* The button says it is working, rather than a line of small text
+         under it, and cannot be pressed a second time meanwhile. */
+      const b = hubMotion.busy(go, "Saving");
+      msg.textContent = "";
       try{
         const chosen = Object.keys(picks).filter(n => picks[n].cb.checked && !picks[n].already);
         const move = chosen.filter(n => picks[n].other);
@@ -3190,8 +3207,9 @@ function distribute(id){
         for (const n of move) await catPost({ op:"switch-version", from: picks[n].other, to: id, group: n });
         for (const n of drop) await catPost({ op:"unassign", id: id, group: n });
         await loadCatalogue();
+        await b.done("Saved");
         closeModal(); paintHub();
-      }catch(e){ msg.textContent = e.message; }
+      }catch(e){ b.fail(); msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(msg);
   });
@@ -3255,8 +3273,9 @@ function deleteLesson(id, then){
         const go = el("button","btn-primary modal-cta","Delete for ever");
         go.style.background = "var(--red)";
         go.addEventListener("click", async () => {
-          if (inp.value.trim().toUpperCase() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; return; }
-          msg.textContent = "Deleting…";
+          if (inp.value.trim().toUpperCase() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; hubMotion.nudge(inp); return; }
+          const b = hubMotion.busy(go, "Deleting");
+          msg.textContent = "";
           try{
             const r = await fetch(API + "/api/teacher/delete-lesson", { method:"POST", headers: HJ(), body: JSON.stringify({ id }) });
             if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
@@ -3265,9 +3284,10 @@ function deleteLesson(id, then){
                it. Without this the hub redraws from the old list and the
                lesson that has just been deleted is still sitting there. */
             await loadCatalogue(true);
+            await b.done("Deleted");
             closeModal();
             if (then) then(); else paintHub();
-          }catch(e){ msg.textContent = e.message; }
+          }catch(e){ b.fail(); msg.textContent = e.message; }
         });
         const no = el("button","btn-ghost modal-stay","Keep it");
         no.addEventListener("click", closeModal);
@@ -3812,19 +3832,26 @@ on("renameBtn", "click", () => {
       const to = i.value.trim() || cls;
       const codes = getCodes();
       if (!codes.length){ msg.textContent = "Choose who teaches this class."; return; }
+      msg.textContent = "";
       if (to === cls){
-        msg.textContent = "Saving\u2026";
-        await saveClassTeachers(cls, codes);
-        await loadTeachers();
-        closeModal(); return;
+        const b = hubMotion.busy(go, "Saving");
+        try{
+          await saveClassTeachers(cls, codes);
+          await loadTeachers();
+          await b.done("Saved");
+          closeModal();
+        }catch(e){ b.fail(); msg.textContent = e.message; }
+        return;
       }
-      msg.textContent = "Renaming\u2026";
+      const b = hubMotion.busy(go, "Renaming");
       try{
         const r = await fetch(API + "/api/teacher/rename-group", { method:"POST", headers: HJ(), body: JSON.stringify({ from: cls, to }) });
         if (!r.ok) throw new Error((await r.json()).error || "Rename failed.");
         cls = to; await saveClassTeachers(to, codes); await loadTeachers();
-        await refreshGroups(); openClass(cls); closeModal();
-      }catch(e){ msg.textContent = e.message; }
+        await refreshGroups();
+        await b.done("Saved");
+        openClass(cls); closeModal();
+      }catch(e){ b.fail(); msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(msg);
   });
@@ -3962,7 +3989,8 @@ function editStudent(st){
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Save changes");
     go.addEventListener("click", async () => {
-      msg.textContent = "Saving\u2026";
+      const b = hubMotion.busy(go, "Saving");
+      msg.textContent = "";
       const payload = { username: st.username };
       if (d.value.trim() && d.value.trim() !== st.display_name) payload.display = d.value.trim();
       if (u.value.trim() && u.value.trim() !== st.username) payload.newUsername = u.value.trim();
@@ -3971,8 +3999,9 @@ function editStudent(st){
         const r = await fetch(API + "/api/teacher/update-student", { method:"POST", headers: HJ(), body: JSON.stringify(payload) });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "Could not save.");
+        await b.done("Saved");
         closeModal(); loadStudents();
-      }catch(e){ msg.textContent = e.message; }
+      }catch(e){ b.fail(); msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(msg);
   });
@@ -4038,12 +4067,14 @@ function confirmDelete(st){
     const no = el("button","btn-ghost modal-stay","Cancel");
     no.addEventListener("click", closeModal);
     go.addEventListener("click", async () => {
-      msg.textContent = "Deleting\u2026";
+      const b = hubMotion.busy(go, "Deleting");
+      msg.textContent = "";
       try{
         const r = await fetch(API + "/api/teacher/delete-student", { method:"POST", headers: HJ(), body: JSON.stringify({ username: st.username }) });
         if (!r.ok) throw new Error((await r.json()).error || "Could not delete.");
+        await b.done("Deleted");
         closeModal(); loadStudents(); refreshGroups();
-      }catch(e){ msg.textContent = e.message; }
+      }catch(e){ b.fail(); msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(no); box.appendChild(msg);
   });
@@ -4734,12 +4765,14 @@ function removeFromClass(l){
     const msg = el("p","hint","");
     const yes = el("button","btn-primary modal-cta","Remove from " + cls);
     yes.addEventListener("click", async () => {
-      msg.textContent = "Removing\u2026";
+      const b = hubMotion.busy(yes, "Removing");
+      msg.textContent = "";
       try{
         await catPost({ op:"unassign", id: id, group: cls });
         await loadCatalogue();
+        await b.done("Removed");
         closeModal(); paintLessonGrid();
-      }catch(e){ msg.textContent = e.message; }
+      }catch(e){ b.fail(); msg.textContent = e.message; }
     });
     const no = el("button","btn-ghost modal-stay","Keep it");
     no.addEventListener("click", closeModal);

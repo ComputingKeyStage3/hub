@@ -90,6 +90,11 @@
       try{ localStorage.setItem("hub_prefs", JSON.stringify(p)); }catch(e){}
     }
     if (p.font) document.documentElement.dataset.font = p.font; else delete document.documentElement.dataset.font;
+    /* The site's own switch for movement. Windows' Animation effects cannot
+       be it: the school has that off on every machine, so the site runs its
+       small movements regardless (motion.css, motion.js), and this is how
+       somebody who needs them gone turns them off. */
+    if (p.motion === "less") document.documentElement.dataset.motion = "less"; else delete document.documentElement.dataset.motion;
     applyTint(p);
     /* editors on the page follow along */
     try{ window.dispatchEvent(new Event("hubprefs")); }catch(e){}
@@ -136,6 +141,9 @@
       '<div class="set-group"><span class="set-label">Font</span>' +
       '<button class="btn-ghost set-look" type="button" id="setDys" role="switch" style="width:100%; font-family:\'Lexend\',sans-serif"></button>' +
       '<p class="subnote" style="margin:8px 0 0">Lexend, a font with wider letters and more space between them, which many people with dyslexia find easier to read.</p></div>' +
+      '<div class="set-group"><span class="set-label">Movement</span>' +
+      '<button class="btn-ghost set-look" type="button" id="setMotion" role="switch" style="width:100%"></button>' +
+      '<p class="subnote" style="margin:8px 0 0">Stops buttons, pop-ups and menus moving. Turn this on if movement on the screen makes you feel unwell or is hard to follow.</p></div>' +
       /* The one layout choice left from trying the new console out: the
          side menu, or the console the way it was. Only on the teacher's
          pages, and only once ui.js is there. */
@@ -169,6 +177,13 @@
         dy.setAttribute("aria-checked", dysNow ? "true" : "false");
         dy.classList.toggle("on", dysNow);
       }
+      const mo = back.querySelector("#setMotion");
+      if (mo){
+        const less = p.motion === "less";
+        mo.textContent = "Reduce animation: " + (less ? "on" : "off");
+        mo.setAttribute("aria-checked", less ? "true" : "false");
+        mo.classList.toggle("on", less);
+      }
       const ov = back.querySelector("#setOldView");
       if (ov) ov.textContent = window.hubUI.oldView() ? "Switch to new view" : "Switch to old view";
       /* the lesson page may have changed it since this was last opened */
@@ -199,6 +214,10 @@
     const dysBtn = back.querySelector("#setDys");
     if (dysBtn) dysBtn.addEventListener("click", () => {
       const p = prefs(); p.font = p.font === "lexend" ? "" : "lexend"; save(p); paint();
+    });
+    const motionBtn = back.querySelector("#setMotion");
+    if (motionBtn) motionBtn.addEventListener("click", () => {
+      const p = prefs(); if (p.motion === "less") delete p.motion; else p.motion = "less"; save(p); paint();
     });
     /* Saved as they type. Only the name changes: the work already on this
        machine is theirs, so correcting a spelling must not throw it away.
@@ -243,16 +262,18 @@
       const next = back.querySelector("#pwNew").value, again = back.querySelector("#pwNew2").value;
       if (next.length < 12 || next.length > 25){ msg.textContent = "Your password must be 12 to 25 characters."; return; }
       if (next !== again){ msg.textContent = "The two new passwords don't match."; return; }
-      msg.textContent = "Saving\u2026";
+      const busy = window.hubMotion ? window.hubMotion.busy(back.querySelector("#pwGo"), "Saving") : null;
+      msg.textContent = "";
       try{
         const r = await fetch(API + "/api/login", { method:"POST",
           headers:{ "Content-Type":"application/json", Authorization: "Bearer " + localStorage.getItem("hub_token") },
           body: JSON.stringify({ action:"set-password", newPassword: next }) });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || "Could not change it.");
+        if (busy) await busy.done("Changed");
         msg.textContent = "Password changed \u2713";
         back.querySelector("#pwNew").value = back.querySelector("#pwNew2").value = "";
-      }catch(e){ msg.textContent = e.message; }
+      }catch(e){ if (busy) busy.fail(); msg.textContent = e.message; }
     });
     back.querySelector("#setDone").addEventListener("click", () => { back.hidden = true; });
     back.addEventListener("mousedown", (e) => { if (e.target === back) back.hidden = true; });

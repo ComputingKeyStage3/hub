@@ -311,7 +311,13 @@
       savedNote("Could not save to the server just now. It is kept in this browser and will be sent the next time the timetable opens.");
     }
   }
-  function savedNote(words){ const s = $("ttSaved"); if (s) s.textContent = words; }
+  /* The note fades to its new words, so "Saved" arriving can be seen. */
+  function savedNote(words){
+    const s = $("ttSaved");
+    if (!s || s.textContent === words) return;
+    s.textContent = words;
+    if (window.hubMotion) window.hubMotion.arrive(s, 0);
+  }
 
   /* ================= the editor ================= */
   let editWeek = "A";

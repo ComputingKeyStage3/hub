@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"16.5", text:"Things move again on school computers. Save buttons show they are working and draw a tick when done, pop-ups and menus fade in, right and wrong answers react, and loading lists pulse. Settings has a new Reduce animation switch for anyone who needs the movement off." },
   { v:"16.4.1", text:"Cover lessons: a task to do now says Finished rather than Understood, and it presses itself when everything in the task is right. A task with its own Check button has no Finished: students keep going until it is right, and a short answer or a table gives the answer to type in after two wrong tries." },
   { v:"16.4", text:"Cover lessons: a new kind of lesson that runs without you. Students earn each page by having a go at it, with the answer given after two wrong tries. Each task opens the next with Understood, and I am confused gives a second explanation written in the builder. The last screen says how many pages they did, their test score and their minutes working. Mark work shows pages done, first try scores, minutes working and who rushed. They sit in a folded section under a unit's lessons." },
   { v:"16.3.1", text:"Storyboard can be a flip book: pictures only, played round and round at 2, 6 or 12 frames a second. A lesson can use one to show an animation moving, with its keyframes marked." },

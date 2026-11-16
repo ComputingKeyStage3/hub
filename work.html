@@ -9,6 +9,8 @@
 <title>Viewing student work</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="look.css">
+<link rel="stylesheet" href="motion.css">
+<script src="motion.js"></script>
 <script src="icons.js"></script>
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
@@ -1442,6 +1444,7 @@ function showStudent(i, step){
   stashDraft();
   /* stay on the same page when moving to the next student */
   if (step === undefined) step = lastStep;
+  const another = idx !== i;
   idx = i;
   paintPicker();
   const st = roster[i];
@@ -1471,6 +1474,12 @@ function showStudent(i, step){
      on without saving it again, until something is changed. */
   paintFb(draft ? "idle" : savedFeedback(row) ? "saved" : "idle");
   if (draft) $("fbMsg").textContent = "Not saved yet. This is where you left it.";
+  /* Save and next swaps the whole screen at once, and the next student's
+     work can look a lot like the last one's. A fade says it has changed. */
+  if (another){
+    hubMotion.arrive($("workPane").querySelector(".workframe"), 0);
+    hubMotion.arrive($("workSide"), 4);
+  }
   paintBehind();
   if (held){
     /* the spare said these as it opened, before it was anyone's on screen */
@@ -2577,12 +2586,28 @@ function fbLocked(){ return PRACTICE && !openProg; }
 /* The Save button says where it is up to itself, the way a student's does,
    rather than leaving a line of text underneath to be read. It stays saying
    Saved until part of the feedback is changed. */
+/* While it saves, the button shows the moving dots in place of its words
+   (hubMotion.busy), and a save that lands draws its tick. Only a save that
+   was seen happening draws one: a student opened with their feedback already
+   saved just says so. */
+let fbBusy = null;
 function paintFb(state){
   const btn = $("saveFb");
   if (!btn) return;
-  if (state === "saving"){ btn.textContent = "Saving…"; btn.disabled = true; btn.dataset.saved = "no"; }
-  else if (state === "saved"){ btn.textContent = "✓ Saved"; btn.disabled = fbLocked(); btn.dataset.saved = "yes"; }
-  else { btn.textContent = "Save"; btn.disabled = fbLocked(); btn.dataset.saved = "no"; }
+  btn.classList.remove("mo-done");
+  if (state === "saving"){
+    if (!fbBusy) fbBusy = hubMotion.busy(btn, "Saving");
+    btn.disabled = true; btn.dataset.saved = "no";
+  } else {
+    const was = fbBusy;
+    fbBusy = null;
+    if (was) was.reset();
+    if (state === "saved"){
+      if (was) hubMotion.tick(btn, "Saved"); else btn.textContent = "✓ Saved";
+      btn.disabled = fbLocked(); btn.dataset.saved = "yes";
+    }
+    else { btn.textContent = "Save"; btn.disabled = fbLocked(); btn.dataset.saved = "no"; }
+  }
   /* Pressed twice while the first save is still going, it would skip a
      student whose feedback nobody had looked at. */
   /* Practice is never marked, so it never says so. */

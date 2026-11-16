@@ -174,13 +174,20 @@ function words(slide){
 function swapInto(holder, next, dir){
   const old = holder.firstElementChild;
   holder.appendChild(next);
-  if (!old || !dir || matchMedia("(prefers-reduced-motion: reduce)").matches){ if (old) old.remove(); return; }
+  /* Settings > Reduce animation: the slide simply changes. With only
+     Windows' Animation effects off, which is every machine in the school,
+     it crosses over without moving sideways (sl-fade, in motion.css), so a
+     class can still see that it has changed. */
+  const less = document.documentElement.dataset.motion === "less";
+  if (!old || !dir || less){ if (old) old.remove(); return; }
+  const fade = matchMedia("(prefers-reduced-motion: reduce)").matches;
   holder.classList.add("sl-moving");
   old.classList.add("sl-out", "sl-glide", dir > 0 ? "sl-fwd" : "sl-back");
   next.classList.add("sl-in", "sl-glide", dir > 0 ? "sl-fwd" : "sl-back");
+  if (fade){ old.classList.add("sl-fade"); next.classList.add("sl-fade"); }
   setTimeout(() => {
     old.remove();
-    next.classList.remove("sl-in", "sl-glide", "sl-fwd", "sl-back");
+    next.classList.remove("sl-in", "sl-glide", "sl-fwd", "sl-back", "sl-fade");
     holder.classList.remove("sl-moving");
   }, 300);
 }

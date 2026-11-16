@@ -9,6 +9,8 @@
 <title>Lesson builder · Computing KS3</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="look.css">
+<link rel="stylesheet" href="motion.css">
+<script src="motion.js"></script>
 <script src="icons.js"></script>
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
@@ -1704,6 +1706,16 @@ function isShut(b){
   if (b.type === "page") return viewAll && b.collapsed === true;
   return viewAll || b.folded === true;
 }
+/* render() draws every card again, so a card that has just been opened is
+   found again by its block afterwards and everything under its top line
+   grows into place. Only if it did open: folding one away is left instant,
+   because what matters then is the list closing up under the pointer. */
+function revealOpened(b){
+  if (!window.hubMotion || isShut(b)) return;
+  const c = [...document.querySelectorAll(".bcard")].find(x => x.__block === b);
+  if (!c) return;
+  [...c.children].filter(x => !x.classList.contains("bhead")).forEach(x => window.hubMotion.reveal(x));
+}
 /* One task open at a time on a page. The preview beside it already shows the
    whole page, so there is nothing to compare against by keeping two open. */
 function toggleShut(b, arr){
@@ -2535,6 +2547,7 @@ function card(b, i, arr){
       e.stopPropagation();
       toggleShut(b, arr);
       saveDraft(); render();
+      revealOpened(b);
     });
     head.appendChild(fold);
   }
@@ -2559,6 +2572,7 @@ function card(b, i, arr){
       if (e.target.closest("button") || e.target.closest(".bgrip")) return;
       toggleShut(b, arr);
       saveDraft(); render();
+      revealOpened(b);
     });
   }
   /* Something a student would get stuck on, marked on the line itself. */
@@ -4696,9 +4710,10 @@ function versionPopup(editing){
         await saveToSite();
         return;
       }
-      msg.textContent = "Making it…";
-      try{ await makeVersion(name, note, code); closeModal(); }
-      catch(e){ msg.textContent = e.message; }
+      const b = hubMotion.busy(go, "Making it");
+      msg.textContent = "";
+      try{ await makeVersion(name, note, code); await b.done("Made"); closeModal(); }
+      catch(e){ b.fail(); msg.textContent = e.message; }
     });
     box.appendChild(go);
     const no = el("button","btn-ghost modal-stay","Cancel");
@@ -6251,9 +6266,10 @@ async function bankGroupEdit(g){
       if (!specLevel()){ msg.textContent = "Pick a GCSE or A Level year group first."; return; }
       row.title = name.value.trim();
       row.task = note.value.trim();
-      msg.textContent = "Saving\u2026";
-      try{ await bankGroupSave(row); closeModal(); }
-      catch(e){ msg.textContent = e.message; }
+      const b = hubMotion.busy(go, "Saving");
+      msg.textContent = "";
+      try{ await bankGroupSave(row); await b.done("Saved"); closeModal(); }
+      catch(e){ b.fail(); msg.textContent = e.message; }
     });
     box.appendChild(go); box.appendChild(msg);
     const no = el("button","btn-ghost modal-stay","Cancel");
@@ -6906,11 +6922,14 @@ on("copyBtn", "click", () => {
       const was = lesson.title, wasId = lesson.savedAs, wasCode = lesson.code;
       lesson.title = name; lesson.savedAs = null;
       lesson.code = "";                      // a copy is a new lesson and needs its own code
-      msg.textContent = "Saving\u2026";
+      const b = hubMotion.busy(go, "Saving");
+      msg.textContent = "";
       try{
         await saveToSite();
+        await b.done("Saved");
         closeModal(); showTitle();
       }catch(e){
+        b.fail();
         lesson.title = was; lesson.savedAs = wasId; lesson.code = wasCode;
         msg.textContent = e.message;
       }
@@ -7012,7 +7031,7 @@ on("jsonBtn", "click", () => {
     box.appendChild(save);
     const copy = el("button","btn-primary modal-cta","Copy to clipboard");
     copy.addEventListener("click", async () => {
-      try{ await navigator.clipboard.writeText(JSON.stringify(compile(), null, 2)); copy.textContent = "Copied \u2713"; }
+      try{ await navigator.clipboard.writeText(JSON.stringify(compile(), null, 2)); copy.textContent = "Copied \u2713"; hubMotion.pop(copy); }
       catch(e){ copy.textContent = "Select it and press Ctrl+C"; }
     });
     box.appendChild(copy);
@@ -7612,7 +7631,7 @@ async function downloadForFolder(){
       box.appendChild(snippet);
       const copy = el("button","btn-ghost","Copy that");
       copy.addEventListener("click", async () => {
-        try{ await navigator.clipboard.writeText(snippet.textContent); copy.textContent = "Copied ✓"; }
+        try{ await navigator.clipboard.writeText(snippet.textContent); copy.textContent = "Copied ✓"; hubMotion.pop(copy); }
         catch(e){ copy.textContent = "Select it and press Ctrl+C"; }
       });
       box.appendChild(copy);
@@ -7662,7 +7681,9 @@ async function saveToSite(){
   }
   if (!signedIn()){ askForKey(saveToSite, "Sign in to save this lesson to the site."); return; }
   const btn = $("saveSite");
-  btn.disabled = true; btn.textContent = "Saving\u2026";
+  /* The button says it is saving and then draws a tick, rather than its
+     words changing, and it cannot be pressed again until it is done. */
+  const busy = hubMotion.busy(btn, "Saving");
   try{
     const r = await fetch(API + "/api/teacher/save-lesson", {
       method:"POST",
@@ -7673,11 +7694,12 @@ async function saveToSite(){
                              data: Object.assign(compile(), { savedAt: new Date().toISOString() }) })
     });
     const d = await r.json().catch(() => ({}));
-    if (authFailed(r.status, saveToSite)){ btn.disabled = false; btn.textContent = "Save to the site"; return; }
+    if (authFailed(r.status, saveToSite)){ busy.reset(); return; }
     if (!r.ok) throw new Error(d.error || "Could not save it.");
     lesson.savedAs = d.id;
     dirty = false;                       // saved, and nothing changed since
     builderSaved();
+    await busy.done("Saved");
     if (lesson.versionOf){
       say("Saved as a version", "It is under \u201C" + parentTitle() + "\u201D in the lesson hub, behind the "
           + "Versions button. Give it to a class from your teacher console.");
@@ -7687,8 +7709,7 @@ async function saveToSite(){
             ? "Students in classes that already have this lesson will see the new version straight away."
             : "It's in your teacher console under " + lesson.unit + ". Press Publish there when a class should see it.");
     }
-  }catch(e){ say("Could not save", e.message); }
-  finally{ btn.disabled = false; btn.textContent = "Save to the site"; }
+  }catch(e){ busy.fail(); say("Could not save", e.message); }
 }
 on("saveSite", "click", () => {
   /* On a narrow screen Save is a button in the corner rather than a wide
@@ -7733,13 +7754,15 @@ on("delLesson", "click", () => {
         const go = el("button","btn-primary modal-cta","Delete for ever");
         go.style.background = "var(--red)";
         go.addEventListener("click", async () => {
-          if (inp.value.trim().toUpperCase() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; return; }
-          msg.textContent = "Deleting\u2026";
+          if (inp.value.trim().toUpperCase() !== "DELETE"){ msg.textContent = "Type DELETE to confirm."; hubMotion.nudge(inp); return; }
+          const b = hubMotion.busy(go, "Deleting");
+          msg.textContent = "";
           try{
             const r = await fetch(API + "/api/teacher/delete-lesson", { method:"POST",
               headers: window.teacherAuth.json(),
               body: JSON.stringify({ id }) });
             if (!r.ok) throw new Error((await r.json()).error || "Could not delete it.");
+            await b.done("Deleted");
             closeModal();
             lesson = { title:"", intro:"", unit:"", assessment:false, topics:{}, blocks:[] };
             previewReset = true;
@@ -7750,7 +7773,7 @@ on("delLesson", "click", () => {
             say("Deleted", version
               ? "The “" + version + "” version has gone. “" + parent + "” is still there."
               : "The lesson has been removed from the site.");
-          }catch(e){ msg.textContent = e.message; }
+          }catch(e){ b.fail(); msg.textContent = e.message; }
         });
         const no = el("button","btn-ghost modal-stay","Keep it");
         no.addEventListener("click", closeModal);

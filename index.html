@@ -9,6 +9,8 @@
 <title>Computing Lesson Hub</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="look.css">
+<link rel="stylesheet" href="motion.css">
+<script src="motion.js"></script>
 <script src="icons.js"></script>
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
@@ -418,8 +420,9 @@ async function signIn(){
   const btn = $("loginBtn");
   const label = btn.textContent;
   signingIn = true;
-  btn.disabled = true;
-  btn.textContent = passOpen ? "Signing in…" : "Checking…";
+  /* The dots in the button say it is working; the words under it are kept
+     for what went wrong. */
+  const busy = hubMotion.busy(btn, passOpen ? "Signing in" : "Checking");
   try{
     const r = await fetch(API + "/api/login", {
       method:"POST", headers:{ "Content-Type":"application/json" },
@@ -428,6 +431,7 @@ async function signIn(){
     const d = await r.json();
     /* Turned away without a password: they have one, so ask for it. */
     if (!r.ok && !passOpen && r.status !== 503 && r.status < 500){
+      busy.reset();
       btn.disabled = false; signingIn = false;
       openPassword(true);
       return;
@@ -448,8 +452,10 @@ async function signIn(){
     if (d.mustSet) forcePassword(d.name);
     else loadLessons();
   }catch(e){
+    busy.fail();
     $("loginErr").textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message;
   }finally{
+    busy.reset();
     signingIn = false;
     btn.disabled = false;
     if (btn.textContent === "Checking…" || btn.textContent === "Signing in…") btn.textContent = passOpen ? "Sign in" : label;
@@ -931,18 +937,21 @@ on("rsGo", "click", async () => {
   const a = $("rp1").value, b = $("rp2").value;
   if (a.length < 12 || a.length > 25){ $("rsMsg").textContent = "It must be 12 to 25 characters long."; return; }
   if (a !== b){ $("rsMsg").textContent = "The two boxes don't match."; return; }
-  $("rsMsg").textContent = "Sending to your teacher…";
+  const busy = hubMotion.busy($("rsGo"), "Sending to your teacher");
+  $("rsMsg").textContent = "";
   try{
     const r = await fetch(API + "/api/login", { method:"POST", headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ action:"reset-request", username: rsUser, newPassword: a }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Could not send it.");
     rsTicket = d.ticket;
+    busy.reset();
     $("rsStep1").hidden = true; $("rsStep2").hidden = false;
+    hubMotion.arrive($("rsStep2"));
     rsDeadline = Date.now() + 5*60*1000;
     tickCountdown();
     rsPoll = setInterval(pollReset, 5000);
-  }catch(e){ $("rsMsg").textContent = e.message; }
+  }catch(e){ busy.fail(); $("rsMsg").textContent = e.message; }
 });
 function tickCountdown(){
   const left = Math.max(0, Math.ceil((rsDeadline - Date.now())/1000));

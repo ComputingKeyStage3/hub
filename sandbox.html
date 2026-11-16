@@ -9,6 +9,8 @@
 <title>Sandbox &middot; Computing Lesson Hub</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="look.css">
+<link rel="stylesheet" href="motion.css">
+<script src="motion.js"></script>
 <script src="icons.js"></script>
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
@@ -220,8 +222,15 @@ function paintSave(){
     return;
   }
   const waiting = store.waiting();
+  const wasSaving = btn.dataset.state === "saving" || btn.dataset.state === "stuck";
   btn.dataset.state = waiting ? (store.stuck() ? "stuck" : "saving") : "saved";
-  btn.textContent = waiting
+  btn.classList.remove("mo-done");
+  /* No moving dots here: a program is waiting to be saved for most of the
+     time somebody is typing, and dots bouncing beside the code all the
+     while would be a distraction. The tick that draws itself when it does
+     save is the moment worth showing. */
+  if (!waiting && wasSaving) hubMotion.tick(btn, "Saved");
+  else btn.textContent = waiting
     ? (store.stuck() ? "Not saved yet, still trying" : "Saving…")
     : "Saved ✓";
   btn.disabled = !waiting;

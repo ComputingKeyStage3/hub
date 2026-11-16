@@ -527,6 +527,7 @@
       mbSel = { table: t, a: [mbFirstRow(t), 0], b: [t.rows.length - 1, t.rows[0].cells.length - 1] };
       mbPaintSel();
       copyAll.textContent = (await mbCopyOut()) ? "Copied" : "Press Ctrl+C";
+      if (window.hubMotion) window.hubMotion.pop(copyAll);
       setTimeout(() => { copyAll.textContent = "Copy all"; }, 1600);
     });
     const excel = el("button","btn-ghost bmini2","Save for Excel");

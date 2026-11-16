@@ -158,8 +158,8 @@
         const yes = el("button","btn-primary piclib-del","Delete for good");
         yes.type = "button";
         yes.addEventListener("click", async () => {
-          yes.disabled = no.disabled = true;
-          yes.textContent = "Deleting…";
+          no.disabled = true;
+          const busy = window.hubMotion.busy(yes, "Deleting");
           try{
             const ids = [...ticked].filter(id => pics.some(p => p.id === id && !usedBy(p)));
             const r = await fetch(API() + "/api/teacher/images", { method:"POST", headers: window.teacherAuth.json(),
@@ -173,8 +173,9 @@
             (d.kept || []).forEach(k => { const p = pics.find(x => x.id === k.id); if (p) p.uses = k.uses; });
             toast(gone.size + " picture" + (gone.size === 1 ? "" : "s") + " deleted" +
                   ((d.kept || []).length ? ". " + d.kept.length + " kept, because a lesson uses them now" : ""));
+            await busy.done("Deleted", 350);
             paint();
-          }catch(e){ err = e.message; paint(); }
+          }catch(e){ busy.reset(); err = e.message; paint(); }
         });
         foot.appendChild(no);
         foot.appendChild(yes);

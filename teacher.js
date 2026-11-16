@@ -193,10 +193,12 @@ function form(box, opts){
   async function attempt(){
     const k = kIn.value.trim();
     if (!k){ msg.textContent = "Type the teacher key first."; kIn.focus(); return; }
-    go.disabled = true;
-    msg.textContent = "Checking…";
+    const busy = window.hubMotion ? window.hubMotion.busy(go, "Checking") : null;
+    if (!busy) go.disabled = true;
+    msg.textContent = "";
     try{
       await signIn(k, cIn.value.trim());
+      if (busy) await busy.done("Signed in", 300);
       msg.textContent = "";
       if (opts.close) opts.close();
       if (opts.then) opts.then();
@@ -204,6 +206,7 @@ function form(box, opts){
       if (e.needCode){ cw.hidden = false; cIn.focus(); }
       msg.textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
       cIn.value = "";
+      if (busy) busy.fail();
       go.disabled = false;
     }
   }

@@ -1,0 +1,100 @@
+/* =====================================================================
+   motion.css: movement that runs at school.
+
+   style.css stops every animation and transition when the browser reports
+   prefers-reduced-motion, and every machine in the school does, because
+   Windows Animation effects is off across the estate. So a hover never
+   faded, a pop-up never arrived, and the grey placeholders and the help
+   chat's typing dots stood still and read as empty.
+
+   Everything in this file is let through anyway, with !important and a
+   class or two of specificity, which is what beats the blanket `*` rule.
+   It is kept to what that Windows setting is not there to spare anyone:
+   colour fading, opacity, a few pixels, a slight scale, and indicators
+   that something is still busy. Nothing sweeps across the screen, spins
+   or runs on by itself for more than a moment, apart from the busy ones.
+
+   Every rule starts html:not([data-motion=less]), which is Settings >
+   Reduce animation. A student who needs the movement gone switches that
+   and all of this goes with it. Loaded after style.css and look.css.
+   ===================================================================== */
+
+/* ---------- buttons react to the pointer ----------
+   Colour and border only fade; the press is a 3% squeeze for a tenth of a
+   second, which is the whole of the feedback that a click landed. */
+html:not([data-motion=less]) :is(.btn-primary, .btn-ghost, .iconbtn, .swatch, .chip, .pagechip, .modechip){
+  transition:background-color .15s ease, border-color .15s ease, color .15s ease,
+             box-shadow .15s ease, filter .15s ease, transform .1s ease, opacity .15s ease !important;
+}
+html:not([data-motion=less]) :is(.btn-primary, .btn-ghost, .iconbtn):active:not(:disabled){
+  transform:scale(.97) !important;
+}
+
+/* ---------- a busy button (hubMotion.busy) ----------
+   The dots are moved by motion.js, not by CSS, so nothing here has to get
+   past the blanket rule for them. */
+.mo-busy{position:relative; cursor:progress}
+.mo-busy:disabled{opacity:1}
+.mo-busy.mo-dotted .mo-word{visibility:hidden}
+.mo-dots{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:5px; pointer-events:none}
+.mo-dots i{width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.45}
+.mo-done{display:inline-flex; align-items:center; justify-content:center; gap:6px}
+.mo-tick{width:1.15em; height:1.15em; flex:none}
+
+/* ---------- pop-ups arrive ----------
+   They leave through motion.js, which fades a copy of them out. */
+@keyframes moBackIn{from{opacity:0}}
+@keyframes moBoxIn{from{opacity:0; transform:scale(.97) translateY(6px)}}
+html:not([data-motion=less]) .modal-back:not([hidden]):not(.mo-ghost){animation:moBackIn .16s ease-out !important}
+html:not([data-motion=less]) .modal-back:not([hidden]):not(.mo-ghost) > .modal{animation:moBoxIn .22s cubic-bezier(.16,1,.3,1) !important}
+html:not([data-motion=less]) body.console .entry-pop:not([hidden]){animation:moBackIn .2s ease-out !important}
+
+/* ---------- menus drop into place ---------- */
+@keyframes moMenuIn{from{opacity:0; transform:translateY(-4px)}}
+html:not([data-motion=less]) .menu:not([hidden]){animation:moMenuIn .15s cubic-bezier(.16,1,.3,1) !important}
+
+/* ---------- toasts come and go ---------- */
+html:not([data-motion=less]) .toast{animation:toastIn .18s ease-out !important}
+html:not([data-motion=less]) .toast.going{transition:opacity .2s, transform .2s !important}
+
+/* ---------- the console's side menu on a narrow screen ----------
+   The one slide on the site: it shows where the menu came from and where
+   it goes back to, and it is 264px, not the width of the screen. */
+@media (max-width:900px){
+  html:not([data-motion=less]) body.has-rail .rail{
+    transition:transform .24s cubic-bezier(.16,1,.3,1), visibility 0s linear .24s !important}
+  html:not([data-motion=less]) body.has-rail.rail-open .rail{
+    transition:transform .24s cubic-bezier(.16,1,.3,1) !important}
+  html:not([data-motion=less]) body.has-rail.rail-open .rail-scrim{animation:moBackIn .2s ease-out !important}
+}
+
+/* ---------- opening an answer ---------- */
+@keyframes moOpenIn{from{opacity:0; transform:translateY(-4px)}}
+html:not([data-motion=less]) details[open] > :not(summary){animation:moOpenIn .2s cubic-bezier(.16,1,.3,1) !important}
+
+/* ---------- things that say "still busy" ----------
+   Stopped at school until now, so they looked like lists that had come back
+   empty and a helper that was not answering: the same fault the waiting
+   dots had, and the same answer. */
+html:not([data-motion=less]) .skel-bar{animation:skelPulse 1.4s ease-in-out infinite !important}
+html:not([data-motion=less]) .hp-typing span{animation:hpDot 1.1s ease-in-out infinite !important}
+html:not([data-motion=less]) .hp-typing span:nth-child(2){animation-delay:.15s !important}
+html:not([data-motion=less]) .hp-typing span:nth-child(3){animation-delay:.3s !important}
+html:not([data-motion=less]) .online-pill .odot{animation:opulse 1.3s ease-in-out infinite !important}
+
+/* ---------- being taken to something ----------
+   Each of these is the only thing saying which task, line or result was
+   just jumped to. jump-found keeps the outline style.css gives it instead,
+   for anyone with Reduce animation on. */
+html:not([data-motion=less]) :is(.pg-item, .pg-pair, .extension).justopened{animation:taskflash 1.4s ease-out !important}
+html:not([data-motion=less]) .assess-questions > .pg-item.justopened{animation:qcardflash 1.6s ease-out !important}
+html:not([data-motion=less]) .ide-hl .hl-line.flash{animation:ideFlash 1.6s ease-out !important}
+html:not([data-motion=less]) .jump-found{animation:jumpfound 2.2s ease-out !important; outline:none !important}
+
+/* ---------- slides changing ----------
+   With Windows effects off, slides.js marks the change sl-fade and they
+   cross over without moving sideways. */
+@keyframes moSlideIn{from{opacity:0}}
+@keyframes moSlideOut{to{opacity:0}}
+html:not([data-motion=less]) .sl-glide.sl-fade.sl-in{animation:moSlideIn .22s ease both !important}
+html:not([data-motion=less]) .sl-glide.sl-fade.sl-out{animation:moSlideOut .22s ease both !important}

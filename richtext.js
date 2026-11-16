@@ -1498,6 +1498,9 @@
             mark.className = "rt-uploading";
             mark.contentEditable = "false";
             mark.textContent = "Uploading the picture…";
+            /* It breathes while the picture goes up, so it reads as busy
+               rather than as words somebody typed. */
+            if (window.hubMotion) window.hubMotion.breathe(mark);
             const at = save();
             if (at){ at.deleteContents(); at.insertNode(mark); }
             else box.appendChild(mark);

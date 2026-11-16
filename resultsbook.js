@@ -1171,6 +1171,7 @@
       const t = holder.querySelector(".mbtable");
       if (!t) return;
       copyAll.textContent = (await window.markbook.copyTable(t)) ? "Copied" : "Press Ctrl+C";
+      if (window.hubMotion) window.hubMotion.pop(copyAll);
       setTimeout(() => { copyAll.textContent = "Copy all"; }, 1600);
     });
     const excel = el("button", "btn-ghost bmini2", "Save for Excel");
@@ -1258,6 +1259,7 @@
     copyMea.addEventListener("click", async () => {
       const ok = await window.markbook.sheet.copyRange(table, [1, vsAt], [rows.length, vsAt]);
       copyMea.textContent = ok ? "Copied" : "Press Ctrl+C";
+      if (window.hubMotion) window.hubMotion.pop(copyMea);
       setTimeout(() => { copyMea.textContent = "Copy vs MEA"; }, 1600);
     });
     tools.insertBefore(copyMea, copyAll);

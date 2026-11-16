@@ -250,10 +250,12 @@
       const msg = el("p","hint","");
       const yes = el("button","btn-primary modal-cta","Remove from " + cls);
       yes.addEventListener("click", async () => {
-        msg.textContent = "Removing…";
+        const b = hubMotion.busy(yes, "Removing");
+        msg.textContent = "";
         try{
           await catPost({ op:"unassign", id: id, group: group });
           await loadCatalogue();
+          await b.done("Removed");
           closeModal(); paintLessonGrid();
           UI.toast("Removed from " + group, { action:"Undo", onAction: async () => {
             try{
@@ -266,7 +268,7 @@
               UI.toast("Back with " + group);
             }catch(e){ UI.toast("Could not put it back: " + e.message, { kind:"error" }); }
           } });
-        }catch(e){ msg.textContent = e.message; }
+        }catch(e){ b.fail(); msg.textContent = e.message; }
       });
       const no = el("button","btn-ghost modal-stay","Keep it");
       no.addEventListener("click", closeModal);

@@ -9,6 +9,8 @@
 <title>Lesson</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="look.css">
+<link rel="stylesheet" href="motion.css">
+<script src="motion.js"></script>
 <script src="icons.js"></script>
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="pyhub.js"></script>
@@ -1213,6 +1215,7 @@ async function shareWorkLink(onState){
       await navigator.clipboard.writeText(link);
       note.dataset.state = "done"; note.textContent = "Copied \u2713";
       copy.textContent = "Copy it again";
+      hubMotion.arrive(note, 4); hubMotion.pop(copy);
     }catch(e){
       field.focus(); field.select();
       note.dataset.state = ""; note.textContent = "Press Ctrl and C to copy it.";
@@ -4256,22 +4259,27 @@ async function manualSave(){
       }, 2500);
     };
     if (linkPossible()){
-      btn.textContent = "Making the link…";
+      const busy = hubMotion.busy(btn, "Making the link");
       shareWorkLink().then(ok => {
-        if (ok) settle("Copied ✓", "flash-ok");
-        else settle("Could not make a link", "flash-bad");
+        busy.reset();
+        if (ok){ settle("Copied ✓", "flash-ok"); hubMotion.pop(btn); }
+        else { settle("Could not make a link", "flash-bad"); hubMotion.nudge(btn); }
       });
       return;
     }
-    btn.textContent = "Making the PDF…";
+    const busy = hubMotion.busy(btn, "Making the PDF");
     setTimeout(async () => {
       try{
         if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
         buildPdf().save(fileName());
+        busy.reset();
         settle("Saved a PDF ✓", "flash-ok");
+        hubMotion.pop(btn);
       }catch(e){
         console.error("PDF save failed:", e);
+        busy.reset();
         settle("Could not save", "flash-bad");
+        hubMotion.nudge(btn);
       }
     }, 30);
     return;
@@ -4291,6 +4299,7 @@ async function manualSave(){
   btn.textContent = state === "offline" ? "Sign in to save"
                   : state === "locked" ? "Locked for marking" : "Try again";
   btn.classList.add("flash-bad");
+  hubMotion.nudge(btn);
   flashTimer = setTimeout(() => {
     btn.classList.remove("flash-bad");
     paintSaveButtons(unsavedTyping ? "idle" : "saved");
@@ -11829,13 +11838,15 @@ function markEditor(res){
       return;
     }
     if (!who){ msg.textContent = "Could not tell which student this is."; return; }
-    msg.textContent = "Saving\u2026";
+    const busy = hubMotion.busy(save, "Saving");
+    msg.textContent = "";
     try{
       const reply = await teacherPost("set-mark", { username: who.username, lesson: lessonId,
         overrides: overrides, score: sum(), outOf: outOf });
       if (!reply.ok) throw new Error((await reply.json()).error || "Could not save.");
+      await busy.done("Saved");
       msg.textContent = "Saved.";
-    }catch(e){ msg.textContent = e.message; }
+    }catch(e){ busy.fail(); msg.textContent = e.message; }
   });
   card.appendChild(save); card.appendChild(msg);
   return card;
@@ -12037,6 +12048,9 @@ async function showPdfView(){
    asking meant no student there ever saw it. It falls once, for under
    three seconds, at the moment they finish. */
 function confetti(){
+  /* Settings > Reduce animation is somebody saying movement is a problem
+     for them, and three seconds of falling paper is the most of it there is. */
+  if (window.hubMotion && window.hubMotion.off()) return;
   try{
     const c = document.createElement("canvas");
     if (!c.getContext) return;
@@ -12178,8 +12192,22 @@ function paintOneSave(entry, state){
   /* The one in the top bar takes its wording from the width of the screen,
      so it is asked each time rather than remembered once. */
   const resting = typeof entry.label === "function" ? entry.label() : entry.label;
-  if (state === "saving"){ btn.textContent = "Saving\u2026"; btn.disabled = true; btn.dataset.saved = "no"; }
-  else if (state === "saved"){ btn.textContent = "\u2713 Saved"; btn.disabled = false; btn.dataset.saved = "yes"; }
+  btn.classList.remove("mo-done");
+  /* Saving shows the moving dots in the button rather than changing its
+     words (hubMotion.busy), and a save that was seen happening ends in a
+     tick that draws itself. A lesson opened already saved just says so. */
+  if (state === "saving"){
+    if (!entry.busy) entry.busy = hubMotion.busy(btn, "Saving");
+    btn.disabled = true; btn.dataset.saved = "no";
+    return;
+  }
+  const was = entry.busy;
+  entry.busy = null;
+  if (was) was.reset();
+  if (state === "saved"){
+    if (was) hubMotion.tick(btn, "Saved"); else btn.textContent = "\u2713 Saved";
+    btn.disabled = false; btn.dataset.saved = "yes";
+  }
   else { btn.textContent = resting; btn.disabled = false; btn.dataset.saved = "no"; }
 }
 /* When the work last reached the teacher. It stays on screen after they
@@ -12205,14 +12233,16 @@ function pdfButton(statusEl, primary){
   const btn = el("button", (primary ? "btn-primary" : "btn-ghost") + " done-save", "Save my work as a PDF");
   btn.addEventListener("click", () => {
     /* built here and downloaded, no print dialogue to get lost in */
-    btn.textContent = "Making the PDF\u2026";
+    const busy = hubMotion.busy(btn, "Making the PDF");
     setTimeout(async () => {
       try{
         if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
         buildPdf().save(fileName());
-        btn.textContent = "\u2713 Saved as a PDF";
+        busy.reset();
+        hubMotion.tick(btn, "Saved as a PDF");
         if (statusEl) statusEl.textContent = "Saved as " + fileName() + ", hand that in.";
       }catch(e){
+        busy.fail();
         btn.textContent = "Save my work as a PDF";
         if (statusEl) statusEl.textContent = e.message;
       }
@@ -12229,9 +12259,11 @@ function saveButton(statusEl){
     if (linkPossible()){
       const btn = el("button","btn-primary done-save","Copy my work link");
       btn.addEventListener("click", () => {
-        btn.textContent = "Making the link\u2026";
+        const busy = hubMotion.busy(btn, "Making the link");
         shareWorkLink().then(ok => {
-          btn.textContent = ok ? "\u2713 Link copied" : "Copy my work link";
+          busy.reset();
+          if (ok) hubMotion.tick(btn, "Link copied");
+          else { btn.textContent = "Copy my work link"; hubMotion.nudge(btn); }
           if (statusEl && !ok) statusEl.textContent = "That link could not be made. Save a PDF instead.";
         });
       });
