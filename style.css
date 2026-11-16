@@ -8495,6 +8495,12 @@ body.console .page button.refresh{display:none}
 .crumb-refresh:hover{color:var(--amber-dark)}
 /* a finger needs the full 44px; square, or the button rule for touch makes it a lozenge */
 @media (pointer:coarse){ .crumb-refresh{width:44px; height:44px} }
+/* Back and Forward, before it. They replace each screen's own back line
+   ("← All classes"), which is kept on the page for the code that names it
+   but not shown, so the screen starts at its heading. */
+.crumb-nav{margin-right:0; font-size:var(--text-md); font-weight:700}
+.crumb-nav:disabled{opacity:.35; cursor:default}
+body.console .page button.crumb{display:none}
 
 /* ---------- Pictures in the builder (author-pictures.js) ----------
    A grid of every uploaded picture: the picture, its size, and where it

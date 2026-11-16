@@ -339,31 +339,6 @@
       [{ opacity: 0, transform: "translateX(" + x + "px)" }, { opacity: 1, transform: "none" }],
       { duration: 240, easing: EASE_OUT }));
   }
-  /* Opening something from its tile: the new screen grows out of the tile
-     that was pressed, so it reads as going into that class rather than as
-     the page being swapped. */
-  function zoomFrom(tile, view){
-    if (!can(view) || !tile || !tile.isConnected) return arrive(view, 4);
-    const t = tile.getBoundingClientRect(), v = view.getBoundingClientRect();
-    if (!t.width || !v.width) return arrive(view, 4);
-    /* The screen itself does not travel. Moving it from the tile's place
-       (with a scale) swept the whole page sideways for a tile at the edge
-       of the grid, which threw people off. Instead the screen is already
-       where it will be, and a window the shape of the tile opens out to the
-       edges of it, so the eye stays on the tile and the class grows from
-       it. Only a 2% settle around the tile's centre, nothing sideways. */
-    const px = (n) => Math.max(0, n) + "px";
-    const top = t.top - v.top, left = t.left - v.left;
-    const right = v.right - t.right, bottom = v.bottom - t.bottom;
-    const r = tile.radius || "12px";
-    const ox = (left + t.width / 2) + "px", oy = (top + t.height / 2) + "px";
-    return play(view, [
-      { clipPath: "inset(" + px(top) + " " + px(right) + " " + px(bottom) + " " + px(left) + " round " + r + ")",
-        transform: "scale(.98)", transformOrigin: ox + " " + oy, opacity: .4 },
-      { opacity: 1, offset: .35 },
-      { clipPath: "inset(0px 0px 0px 0px round 0px)", transform: "none", transformOrigin: ox + " " + oy, opacity: 1 }
-    ], { duration: 420, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
-  }
   /* Every tab strip on the site (.subtabs) has its highlight glide from the
      old tab to the new one. The page's own handler decides which tab is on,
      often after moving the strip or redrawing it, so the tab that was on is
@@ -386,17 +361,5 @@
       glide(was.isConnected && was.parentElement === holder ? was : ghost, btn, holder);
     }, 0);
   }, true);
-  /* The tile pressed last, and when, so show() can tell a screen opened
-     from a tile from one reached any other way. */
-  let lastTile = null, lastTileAt = 0;
-  document.addEventListener("click", (e) => {
-    const t = e.target && e.target.closest && e.target.closest(".classtile");
-    if (t){ lastTile = t; lastTileAt = Date.now(); }
-  }, true);
-  function pressedTile(){
-    const t = Date.now() - lastTileAt < 800 && lastTile && lastTile.isConnected ? lastTile : null;
-    lastTile = null; lastTileAt = 0;          // one press opens one screen
-    return t;
-  }
-  window.hubMotion = { off, busy, tick, nudge, pop, arrive, reveal, breathe, stagger, glide, settle, slideAcross, zoomFrom, pressedTile, leave: fadeOut };
+  window.hubMotion = { off, busy, tick, nudge, pop, arrive, reveal, breathe, stagger, glide, settle, slideAcross, leave: fadeOut };
 })();

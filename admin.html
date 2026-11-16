@@ -594,6 +594,20 @@ function crumbs(trail){
   /* Refresh is always here, at the start of the trail, on every screen, so
      it is in the same place wherever a teacher is: a screen with nothing to
      fetch still has one, and it draws the screen again. */
+  /* Back and Forward sit before it, and are the console's only way back:
+     each screen's own "← All classes" line has gone, which gave every
+     screen its top row back. They are the browser's own history, which
+     the console already keeps a step in for every screen it opens. */
+  [["back", "Back", "←"], ["forward", "Forward", "→"]].forEach(([dir, name, arrow]) => {
+    const b = el("button","btn-ghost iconbtn crumb-refresh crumb-nav", arrow);
+    b.type = "button";
+    b.id = "nav" + name;
+    b.title = name;
+    b.setAttribute("aria-label", name);
+    b.addEventListener("click", () => navStep(dir));
+    bar.appendChild(b);
+  });
+  paintNavButtons();
   const ref = el("button","btn-ghost iconbtn crumb-refresh","");
   ref.type = "button";
   ref.title = "Refresh";
@@ -611,6 +625,24 @@ function crumbs(trail){
       bar.appendChild(el("span","crumb-here", step.name));
     }
   });
+}
+/* Where the browser knows (the Navigation API), a step with nowhere to go
+   is shown as unavailable; elsewhere both are always pressable and a step
+   with nowhere to go simply does nothing. */
+function paintNavButtons(){
+  const nav = window.navigation;
+  if (!nav || !("canGoBack" in nav)) return;
+  const back = $("navBack"), fwd = $("navForward");
+  if (back) back.disabled = !nav.canGoBack;
+  if (fwd) fwd.disabled = !nav.canGoForward;
+}
+/* A closed pop-up leaves its history entry ahead of the screen, with no
+   screen of its own in it, so Forward would land on nothing and look broken.
+   Forward steps over such entries until it reaches a screen. */
+let goingForward = 0;
+function navStep(dir){
+  if (dir === "back") history.back();
+  else { goingForward = Date.now(); history.forward(); }
 }
 /* What the Refresh in the trail does: the screen's own refresh where it has
    one, which knows what to fetch again, and otherwise the screen drawn again
@@ -702,11 +734,6 @@ function show(view, quiet){
   const TAB_VIEWS = ["classView", "studentsView", "progressView", "coverView"];
   const tabMove = before !== view && TAB_VIEWS.includes(before) && TAB_VIEWS.includes(view);
   const tabDir = tabMove ? Math.sign(TAB_VIEWS.indexOf(view) - TAB_VIEWS.indexOf(before)) : 0;
-  /* Measured now, before it is hidden: a screen opened from a class or unit
-     tile grows out of where that tile was. */
-  const tile = window.hubMotion ? window.hubMotion.pressedTile() : null;
-  const tileBox = tile ? tile.getBoundingClientRect() : null;
-  const tileRadius = tile ? getComputedStyle(tile).borderRadius : "";
   /* The sign-in card fades away over the console as it opens, rather than
      vanishing; taken before it is hidden, while there is still something to
      copy. */
@@ -718,8 +745,10 @@ function show(view, quiet){
      the top. Coming in from the sign-in, Home is already on screen behind
      it, so only its cards move. */
   if (!entry && before !== view && window.hubMotion && !tabMove){
-    if (tileBox && $(view)) window.hubMotion.zoomFrom({ isConnected: true, radius: tileRadius, getBoundingClientRect: () => tileBox }, $(view));
-    else if (!fromEntry) window.hubMotion.arrive($(view), 4);
+    /* A class opens the same way as every other screen. Growing it out of
+       its tile was tried four ways (moving the screen, a window opening, the
+       card resized, the card scaled) and every one was too jarring. */
+    if (!fromEntry) window.hubMotion.arrive($(view), 4);
     window.hubMotion.settle($(view));
   }
   document.body.classList.toggle("entry-open", entry);
@@ -812,7 +841,12 @@ try{
       closeModal(true);
       return;
     }
-    if (!st || !st.view) return;
+    setTimeout(paintNavButtons, 0);
+    if (!st || !st.view){
+      if (st && st.modal && Date.now() - goingForward < 1500){ goingForward = Date.now(); history.forward(); }
+      return;
+    }
+    goingForward = 0;
     goingBack = true;
     try{
       cls = st.cls || cls; unit = st.unit || ""; subunit = st.subunit || "";
@@ -922,7 +956,11 @@ function closeModal(fromBack){
   /* Whatever was open has gone, so a refresh should not bring a lesson's
      Manage back up. */
   if (wasOpen) forgetManaging();
-  if (wasOpen && !fromBack && modalDepth > 0){
+  /* Only the popstate handler passes true. Most buttons hand closeModal
+     straight to addEventListener, so it is given the click event, which
+     read as "came from Back": the pop-up's history step stayed behind, and
+     the next Back (the browser's or the console's own) did nothing. */
+  if (wasOpen && fromBack !== true && modalDepth > 0){
     modalDepth--;
     try{
       if (history.state && history.state.modal){
