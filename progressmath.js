@@ -8,7 +8,8 @@
   const TASK_LABEL = { quiz:"Quiz", mc:"Multiple choice", order:"Put in order",
                        blanks:"Fill the gaps", short:"Short answer",
                        ide:"Coding task", web:"Coding task", scratch:"Coding task", image:"Photoshop task",
-                       table:"Table", label:"Label a picture", hotspot:"Click the right spot" };
+                       table:"Table", label:"Label a picture", hotspot:"Click the right spot",
+                       exam:"Exam question", pixels:"Pixel studio" };
   function plainText(html){ return String(html || "").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(); }
   function normAns(x){ return String(x || "").toLowerCase().trim().replace(/\s+/g," ").replace(/[.,!?;:'"]+$/g,""); }
 
@@ -46,12 +47,28 @@
      window.hotspotHit in tasks-extra.js, which this page does not load. */
   function hotspotScore(b, v){
     if (!v || typeof v.x !== "number" || typeof v.y !== "number") return { got: 0, max: 1 };
-    if (b.shape === "rect")
-      return { got: Math.abs(v.x - Number(b.x || 0)) <= Number(b.w || 0) / 2 &&
-                    Math.abs(v.y - Number(b.y || 0)) <= Number(b.h || 0) / 2 ? 1 : 0, max: 1 };
     const ratio = Number(b.ratio) > 0 ? Number(b.ratio) : 1;
+    const a = (Number(b.rot) || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
     const dx = v.x - Number(b.x || 0), dy = (v.y - Number(b.y || 0)) * ratio;
-    return { got: Math.sqrt(dx * dx + dy * dy) <= Number(b.r || 0) ? 1 : 0, max: 1 };
+    const lx = dx * c + dy * sn, ly = -dx * sn + dy * c;
+    let inside;
+    if (b.shape === "rect")
+      inside = Math.abs(lx) <= Number(b.w || 0) / 2 + 1e-9 && Math.abs(ly) <= Number(b.h || 0) / 2 * ratio + 1e-9;
+    else {
+      const rx = Number(b.r || 0), ry = Number(b.ry) > 0 ? Number(b.ry) : rx;
+      inside = !!rx && !!ry && (lx / rx) * (lx / rx) + (ly / ry) * (ly / ry) <= 1 + 1e-9;
+    }
+    return { got: inside ? 1 : 0, max: 1 };
+  }
+  /* A picture to copy in Pixel studio: one mark for every square the same.
+     The same rule as window.pixelMatch in pixels.js, which this page
+     does not load, so the two must be kept alike. */
+  function pixelsScore(b, v){
+    const w = Math.max(2, Math.min(32, parseInt(b.w, 10) || 8)), h = Math.max(2, Math.min(32, parseInt(b.h, 10) || 8));
+    const want = String(b.target || ""), mine = String(v && Array.isArray(v.frames) ? v.frames[0] || "" : "");
+    const at = (str, i) => { const n = parseInt(str[i], 16); return isNaN(n) ? 0 : n; };
+    for (let i = 0; i < w * h; i++) if (at(want, i) !== at(mine, i)) return { got: 0, max: 1 };
+    return { got: 1, max: 1 };
   }
   /* The tasks a practical's ticks are counted from: Python and web tasks,
      and a Screenshot task set to take a Photoshop or Blender file. Scratch is left out
@@ -73,6 +90,7 @@
     /* nothing to mark against, so not a task with a score */
     if (b.type === "table" && !tableScore(b, null).max) return null;
     if (b.type === "label" && !labelScore(b, null).max) return null;
+    if (b.type === "pixels" && !b.target) return null;
     return { id: b.id, type: b.type, label: label,
              title: plainText(b.prompt || b.title) || label, block: b };
   }
@@ -94,6 +112,9 @@
           return;
         }
         if (b.type === "page" || b.type === "group"){ walk(b.blocks, title, ext); return; }
+        /* An exam question counts here only in home learning, which marks one on
+           its summary: a lesson's are read by Specification coverage instead. */
+        if (b.type === "exam" && !(lessonJson && lessonJson.homework)) return;
         const t = taskInfo(b);
         if (t){ t.pageIndex = pageIndex; t.pageTitle = title; t.extension = ext; out.push(t); }
       });
@@ -129,9 +150,21 @@
     }
     if (b.type === "short")
       return { got: (window.shortAnswer && window.shortAnswer.mark(b, v).ok) ? 1 : 0, max: 1 };
+    if (b.type === "exam"){
+      let max = Math.max(0, parseInt(b.marks, 10) || 0);
+      const said = (v && typeof v === "object") ? String(v.text || "") : String(v || "");
+      if (b.answer === "short"){
+        if (!max) max = 1;
+        return { got: (window.shortAnswer && window.shortAnswer.mark(b, said).ok) ? max : 0, max: max };
+      }
+      const scheme = (Array.isArray(b.scheme) ? b.scheme : []).filter(p => p && p.text);
+      if (!max) max = scheme.reduce((t, p) => t + Math.max(1, parseInt(p.marks, 10) || 1), 0);
+      return { got: (v && v.marks !== undefined && v.marks !== null) ? Math.max(0, Math.min(max, Number(v.marks) || 0)) : 0, max: max };
+    }
     if (b.type === "table") return tableScore(b, v);
     if (b.type === "label") return labelScore(b, v);
     if (b.type === "hotspot") return hotspotScore(b, v);
+    if (b.type === "pixels") return pixelsScore(b, v);
     /* a checklist: every line counts once, whether a run ticked it or a
        teacher did, the same as the checklist's own "done of counted" score */
     let got = 0;
@@ -363,6 +396,14 @@
      whether somebody was in the lesson being marked. */
   const NOT_WORK = { text:1, picture:1, video:1, link:1, embed:1, frame:1 };
   const HOLDS = { page:1, group:1, extension:1, choice:1 };
+  /* Whether a lesson asks a student to do anything at all, or is only there
+     to be read. hasWork can never say yes about one that is. */
+  function asksForWork(lessonJson){
+    const any = (blocks) => (blocks || []).some(b => !!b &&
+      (HOLDS[b.type] ? any(b.blocks) || (b.options || []).some(o => any(o.blocks))
+                     : !NOT_WORK[b.type] && !!b.id));
+    return any(lessonJson && lessonJson.blocks);
+  }
   function hasWork(lessonJson, data){
     if (!data || typeof data !== "object") return false;
     let found = false;
@@ -475,7 +516,7 @@
   }
 
   window.progressMath = { TASK_LABEL, plainText, normAns, taskInfo,
-                          quantifiableTasks, scoreTask, checkDone, hasChecklist, attempted, withMarkingTicks, withTeacherEdits,
+                          quantifiableTasks, scoreTask, checkDone, hasChecklist, attempted, asksForWork, withMarkingTicks, withTeacherEdits,
                           pagesLock, defaultLocks, fetchLockedPages, markRoster,
                           levelChain, levelName, levelReached, levelLadder, rubricLevels,
                           rubricRun, showsGrades, rubricEntry, gradeRange, checklistOnly, checklistTicks,

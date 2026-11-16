@@ -21,10 +21,14 @@
 <script src="coverwork.js"></script>
 <script src="ordermarks.js"></script>
 <script src="voice.js"></script>
+<script src="boxkit.js"></script>
 <script src="richtext.js"></script>
 <script src="pyedit.js"></script>
 <script src="teacher.js"></script>
 <script src="tasks-extra.js"></script>
+<script src="pixels.js"></script>
+<script src="games.js"></script>
+<script src="quest.js"></script>
 <script src="psd.js"></script>
 <script src="blend.js"></script>
 <script src="blendview.js"></script>
@@ -56,19 +60,28 @@
 </div>
 
 <div class="topbar">
-  <a class="home" id="homeLink" href="index.html"><img class="homelogo" src="images/logo.svg" alt="" width="20" height="20"><span>Home</span></a>
-  <span class="sep">/</span>
-  <div class="title" id="lessonTitle">Lesson</div>
-  <span class="savetime no-print" id="saveTime"></span>
-  <button class="btn-ghost iconbtn no-print" id="setBtn" title="Settings">&#9881;&#65038;</button>
-  <button class="btn-primary no-print" id="saveBtn">Save work</button>
+  <!-- The two ends are grouped and share the room equally, which is what
+       keeps the page's title in the middle of the window and not merely in
+       the middle of whatever space the ends happen to leave. -->
+  <div class="bar-end bar-start">
+    <a class="home" id="homeLink" href="index.html"><img class="homelogo" src="images/logo.svg" alt="" width="20" height="20"><span>Home</span></a>
+    <span class="sep">/</span>
+    <div class="title" id="lessonTitle">Lesson</div>
+  </div>
+  <!-- The page's title and subtitle sit in the bar rather than in a box of
+       their own under it, which gives the tasks that row back. -->
+  <div class="brief" id="brief">
+    <h2 id="briefTitle"></h2>
+    <p id="briefText"></p>
+  </div>
+  <div class="bar-end bar-finish">
+    <span class="savetime no-print" id="saveTime"></span>
+    <button class="btn-ghost iconbtn no-print" id="setBtn" title="Settings">&#9881;&#65038;</button>
+    <button class="btn-primary no-print" id="saveBtn">Save work</button>
+  </div>
 </div>
 
 <div class="tracker" id="tracker"></div>
-<div class="brief" id="brief">
-  <h2 id="briefTitle"></h2>
-  <p id="briefText"></p>
-</div>
 
 <div class="stage" id="stage">
   <p class="signin-hint no-print" id="signinHint" hidden data-online-only>Not signed in, work stays on this computer only. <a href="index.html">Sign in</a></p>
@@ -82,10 +95,15 @@
   </div>
 </div>
 
-<p class="cover-left no-print" id="coverLeft" role="status" hidden></p>
 <div class="dock" id="dock">
   <button class="btn-ghost" id="backBtn">&larr; Back</button>
-  <div class="mid"><button class="btn-ghost dock-rubric" id="rubricBtn" hidden>Show rubric</button></div>
+  <div class="mid">
+    <div class="wait-note" id="waitNote" role="status" aria-live="polite" hidden>
+      <b class="wait-title" id="waitTitle">Keep working on this task</b>
+      <span class="wait-text" id="waitText">Your teacher will let you know when to move on.</span>
+    </div>
+    <button class="btn-ghost dock-rubric" id="rubricBtn" hidden>Show rubric</button>
+  </div>
   <span id="bypassDot" role="button" tabindex="-1" aria-label="Teacher options">&#183;</span>
   <span class="btn-wrap" id="btnWrap">
     <button class="btn-primary btn-continue" id="nextBtn">Continue &rarr;</button>
@@ -93,14 +111,6 @@
   </span>
 </div>
 
-<div class="modal-back no-print" id="waitModal" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="waitTitle">
-    <p class="modal-eyebrow">Not yet</p>
-    <h2 id="waitTitle">Keep working on this task</h2>
-    <p class="modal-text" id="waitText">Your teacher will let you know when to move on.</p>
-    <button class="btn-primary modal-cta" id="waitOk">OK</button>
-  </div>
-</div>
 
 
 <script>
@@ -137,7 +147,17 @@ let inspectList = null, inspectIdx = 0, keepStep = null, inspectUser = "";
 const INSPECT_KEY = qs.get("box") === "next" ? "hub_inspect_next" : "hub_inspect";
 let teacherTools = false;   // a teacher is looking at this work
 const lessonId = qs.get("id") || "demo";
-const WORK_KEY = "hub_work_" + lessonId;
+/* A student with no sign-in, here through Forgot password on a cover lesson.
+   The front page took their name and left it in this browser. Their own key for
+   the work, because an iPad passed along a row is several children on one
+   lesson, and each of them starting on the last one's answers would be worse
+   than having nothing at all. */
+let guest = null;
+if (qs.get("guest") !== null && !spectate){
+  try{ guest = JSON.parse(localStorage.getItem("hub_guest") || "null"); }catch(e){ guest = null; }
+  if (!guest || guest.lesson !== lessonId || !guest.key){ guest = null; location.replace("index.html"); }
+}
+const WORK_KEY = "hub_work_" + lessonId + (guest ? "_" + guest.id : "");
 
 const fields = {};   // id -> { get, set }
 const steps  = [];   // { section, check(), brief:{eyebrow,title,text} }
@@ -168,7 +188,8 @@ let restoredData = null;       // last saved data we restored (responses re-appl
    counts as a go. This is the one kind of lesson where Continue looks at the
    work, and it is allowed to because nothing here can leave a child stuck:
    most wrong answers count, and where a task has to end up right the answer
-   is given after two wrong tries.
+   is given after two wrong tries. The teacher can turn that either way per
+   task (coverWork.carriesOn): carry on after two tries, or get it right.
 
    A page opens one task at a time. Understood under something to read, or
    Finished under something to do, shows the next one once that task has had
@@ -254,10 +275,19 @@ function coverQuizStep(b, checked, solved){
 }
 /* Clear whatever Continue last pointed at. */
 function coverClearNote(){
+  const was = coverNoteOn;
   coverNoteOn = false;
   coverNoteFor = null;
-  $("coverLeft").hidden = true;
+  if (was) hideWaitModal();
   document.querySelectorAll(".cover-want").forEach(n => n.classList.remove("cover-want"));
+}
+/* The cover note is the same one an ordinary lesson gives in the bottom bar,
+   fading after eight seconds. It had a note of its own floating above the
+   bar that stayed until the work was done, so a cover lesson, where most
+   "not yet"s happen, was the one place the bottom bar note never showed. */
+function coverSay(words){
+  showWaitModal({ title: "Keep working on this task", text: words });
+  coverNoteOn = true;
 }
 /* Called by Continue. True when this page still wants something: it says what
    and takes them there, in place, with nothing to dismiss. */
@@ -266,10 +296,8 @@ function coverHolds(){
   const left = coverLeftOn(step);
   coverClearNote();
   if (!left.length) return false;
-  const note = $("coverLeft");
-  note.textContent = left.length + (left.length === 1 ? " task" : " tasks") + " left on this page. " + left[0].words;
-  note.hidden = false;
-  coverNoteOn = true;
+  coverSay(left.length + (left.length === 1 ? " task" : " tasks") + " left on this page. " + left[0].words);
+  flashNextTip(FIRST_TIP);
   const item = document.querySelector('[data-block-id="' + left[0].id + '"]');
   if (item){
     item.classList.add("cover-want");
@@ -320,9 +348,10 @@ function coverOnShow(){
 }
 /* What keeps the rest of a page back in a Cover lesson. rPage already knows how
    to hide everything under a task that is holding, so this only answers it.
-   The last task has no Understood, so it opens the extension by being done. */
+   The last task has no Understood, so it opens the extension by being done.
+   A task the teacher set to show the next one with it holds nothing back. */
 function coverHold(child, last){
-  return { on: () => true,
+  return { on: () => window.coverWork.holdsNext(child),
            passed: () => last ? !window.coverWork.need(child, coverAsk) : !!coverData().ok[child.id],
            words: () => "", watch: () => {} };
 }
@@ -333,7 +362,9 @@ function coverRow(child, last, opened){
   const row = el("div","cover-row");
   const buttons = el("div","cover-btns");
   row.appendChild(buttons);
-  if (!last){
+  /* The next task is already on screen when this one does not hold it, so
+     there is nothing for Understood or Finished to open. */
+  if (!last && window.coverWork.holdsNext(child)){
     const ok = el("button","btn-primary cover-ok", window.coverWork.isWork(child) ? "Finished" : "Understood");
     ok.type = "button";
     ok.dataset.task = child.id;
@@ -341,10 +372,7 @@ function coverRow(child, last, opened){
       const words = window.coverWork.need(child, coverAsk);
       coverClearNote();
       if (words){
-        const note = $("coverLeft");
-        note.textContent = words;
-        note.hidden = false;
-        coverNoteOn = true;
+        coverSay(words);
         coverNoteFor = child;
         return;
       }
@@ -421,13 +449,70 @@ let relManaged = false;
    can read their work and see their mark; nothing they hand in is accepted,
    which the server enforces, so the page stops them before they try. */
 let markingLocked = false;
-if (!localStorage.getItem("hub_token") && location.search.indexOf("builder=") < 0
+if (!localStorage.getItem("hub_token") && !guest && location.search.indexOf("builder=") < 0
     && location.search.indexOf("preview=") < 0 && location.search.indexOf("view=") < 0) {
   document.addEventListener("DOMContentLoaded", () => {
     const h = (typeof builderParam !== "undefined" && builderParam !== null) ? null : document.getElementById("signinHint");
     if (h) h.hidden = false;
   });
 }
+/* Where Home would be, their name: there is no home to go back to without a
+   sign-in, and a name typed wrong on an iPad has to be put right from here, or
+   the teacher is left with work from nobody they can find. */
+function paintGuestName(){
+  const home = document.getElementById("homeLink");
+  if (!guest || !home) return;
+  let btn = document.getElementById("guestName");
+  if (!btn){
+    btn = document.createElement("button");
+    btn.id = "guestName";
+    btn.type = "button";
+    btn.className = "home guestname";
+    btn.title = "Change your name";
+    btn.addEventListener("click", askGuestName);
+    home.parentNode.insertBefore(btn, home);
+    home.hidden = true;
+  }
+  btn.textContent = guest.name;
+}
+paintGuestName();
+function askGuestName(){
+  const back = el("div","modal-back no-print");
+  const box = el("div","modal narrow");
+  const x = el("button","btn-ghost iconbtn modal-x","\u2715");
+  x.addEventListener("click", () => back.remove());
+  box.appendChild(x);
+  box.appendChild(el("h2","","Your name"));
+  const boxFor = (label, value) => {
+    const row = el("div","bfield");
+    row.appendChild(el("label","", label));
+    const input = el("input");
+    input.type = "text"; input.maxLength = 40; input.value = value; input.autocomplete = "off";
+    row.appendChild(input);
+    box.appendChild(row);
+    return input;
+  };
+  const first = boxFor("First name", guest.first || "");
+  const last = boxFor("Surname", guest.last || "");
+  const msg = el("p","hint","");
+  box.appendChild(msg);
+  const go = el("button","btn-primary modal-cta","Save my name");
+  go.addEventListener("click", () => {
+    const f = first.value.trim(), l = last.value.trim();
+    if (!f || !l){ msg.textContent = "Type your first name and your surname."; return; }
+    guest = Object.assign({}, guest, { first: f, last: l, name: f + " " + l });
+    try{ localStorage.setItem("hub_guest", JSON.stringify(guest)); }catch(e){}
+    paintGuestName();
+    back.remove();
+    /* Already with the teacher under the old name, so it goes again. */
+    if (lastSubmittedPayload){ lastSubmittedPayload = ""; submitWork(); }
+  });
+  box.appendChild(go);
+  back.appendChild(box);
+  document.body.appendChild(back);
+  setTimeout(() => first.focus(), 30);
+}
+
 /* Puts everything except the cross and the closing buttons into a part that
    scrolls on its own, so a long pop-up can be read on a small screen without
    its buttons sliding off the bottom. */
@@ -613,10 +698,10 @@ function marksButton(res, review){
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", () => back.remove());
     popup.appendChild(x);
-    popup.appendChild(el("h2","","Your assessment"));
+    popup.appendChild(el("h2","", homeworkView() ? "Your work" : "Your assessment"));
     const got = res.perQ.reduce((n, q) => n + q.pts, 0);
     const outOf = res.perQ.reduce((n, q) => n + q.max, 0);
-    popup.appendChild(el("p","modal-text", "You scored " + got + " out of " + outOf + "."));
+    if (outOf) popup.appendChild(el("p","modal-text", "You scored " + got + " out of " + outOf + "."));
     if (review) popup.appendChild(review);
     scrollBody(popup);
   back.appendChild(popup);
@@ -1121,7 +1206,7 @@ if (OFFLINE){
    screenshot or a whiteboard therefore keep the PDF instead, and there is
    a length check behind that in case some other task grows unexpectedly.
    ===================================================================== */
-const HEAVY_TASKS = ["image", "board", "storyboard", "scratch"];
+const HEAVY_TASKS = ["image", "board", "storyboard", "scratch", "poster"];
 
 /* Screenshots and whiteboards can sit inside a page, so this looks all the
    way down rather than only at the top level. */
@@ -1300,7 +1385,7 @@ const apiReady = !OFFLINE && API && API.indexOf("PASTE_") !== 0;
    missing file is normal rather than an error. */
 async function dbLesson(){
   if (!apiReady) throw new Error("missing");
-  const grp = localStorage.getItem("hub_group") || "";
+  const grp = guest ? guest.group : (localStorage.getItem("hub_group") || "");
   const where = API + "/api/catalog?lesson=" + encodeURIComponent(lessonId) +
                 (grp ? "&group=" + encodeURIComponent(grp) : "");
   const ask = (headers) => fetch(where, { headers: headers, cache:"no-store" });
@@ -1330,14 +1415,14 @@ async function dbLesson(){
   if (!d.lesson) throw new Error("missing");
   return { ok:true, json: async () => d.lesson };
 }
-const token = localStorage.getItem("hub_token") || "";
+const token = guest ? "" : (localStorage.getItem("hub_token") || "");
 /* A real student's own tab has no reason to say which class it is in the
    address, so this is normally read from what signing in cached. The
    teacher console's work pop-ups are a second student nobody signed in
    as, previewing a specific class's copy of the lesson, and have no such
    cache to read; &group= on the address is how they say which class the
    release settings should be looked up for. */
-const group = qs.get("group") || localStorage.getItem("hub_group") || "";
+const group = qs.get("group") || (guest && guest.group) || localStorage.getItem("hub_group") || "";
 const RELEASE_KEY = "hub_rel_" + lessonId;
 
 try{
@@ -1468,12 +1553,17 @@ function coolingDown(){ return Date.now() < cooldownUntil; }
    until somebody points at it. */
 function startCooldown(fromBar){
   cooldownUntil = Date.now() + COOLDOWN_SECONDS * 1000;
+  firstTipUntil = Date.now() + 3000;
   $("btnWrap").classList.add("cooling");
   paintTip();
   if (!fromBar) $("nextTip").hidden = false;   // the cursor is already on the button
   clearInterval(cooldownTimer);
   cooldownTimer = setInterval(paintTip, 250);
 }
+/* For the first moments after Continue is turned down, the tip says what to
+   do about it rather than how long to wait. */
+const FIRST_TIP = "Complete all the tasks on this page first.";
+let firstTipUntil = 0;
 function paintTip(){
   const left = Math.ceil((cooldownUntil - Date.now()) / 1000);
   if (left <= 0){
@@ -1482,19 +1572,53 @@ function paintTip(){
     $("nextTip").hidden = true;
     return;
   }
-  $("nextTip").textContent = "Please wait " + left + " second" + (left === 1 ? "" : "s") + " before trying again...";
+  $("nextTip").textContent = Date.now() < firstTipUntil ? FIRST_TIP
+    : "Please wait " + left + " second" + (left === 1 ? "" : "s") + " before trying again...";
+}
+/* The same tip without the wait, for a cover lesson: Continue there is held
+   by work left on the page, not by the teacher, so there is nothing to count
+   down and pressing it again as soon as the work is done has to just work. */
+let flashTipTimer = null;
+function flashNextTip(words){
+  if (coolingDown()) return;
+  const tip = $("nextTip");
+  tip.textContent = words;
+  tip.hidden = false;
+  clearTimeout(flashTipTimer);
+  flashTipTimer = setTimeout(() => { if (!coolingDown()) tip.hidden = true; }, 3000);
 }
 $("nextBtn").addEventListener("mouseenter", () => { if (coolingDown()) $("nextTip").hidden = false; });
 $("nextBtn").addEventListener("mouseleave", () => { $("nextTip").hidden = true; });
 
-/* ---------- "not yet" pop-up ---------- */
+/* ---------- "not yet" ----------
+   A note in the middle of the bar along the bottom, beside the Continue that
+   was just pressed, which fades away on its own after eight seconds. It used
+   to be a pop-up in the middle of the screen with an OK to press, which was
+   one more thing between a student and their work, covering the very task
+   it was telling them to get on with. Nothing here takes the focus. */
+const WAIT_SECONDS = 8;
+let waitTimer = null, waitFade = null;
 function showWaitModal(words){
   const w = words || {};
+  const note = $("waitNote");
   $("waitTitle").textContent = w.title || "Keep working on this task";
   $("waitText").textContent = w.text || "Your teacher will let you know when to move on.";
-  $("waitModal").hidden = false; $("waitOk").focus();
+  clearTimeout(waitTimer); clearTimeout(waitFade);
+  note.classList.remove("fading");
+  note.hidden = false;
+  /* pressed again while it shows: start it again, so it is seen to answer */
+  note.classList.remove("shown"); void note.offsetWidth; note.classList.add("shown");
+  waitTimer = setTimeout(() => {
+    note.classList.add("fading");
+    waitFade = setTimeout(hideWaitModal, 600);
+  }, WAIT_SECONDS * 1000);
 }
-function hideWaitModal(){ $("waitModal").hidden = true; }
+function hideWaitModal(){
+  clearTimeout(waitTimer); clearTimeout(waitFade);
+  const note = $("waitNote");
+  note.hidden = true;
+  note.classList.remove("fading", "shown");
+}
 
 /* ---------- load ---------- */
 
@@ -1664,7 +1788,7 @@ const handedOver = handedLesson();
     document.title = l.title;
     $("lessonTitle").textContent = l.title;
     l.blocks.forEach(renderBlock);
-    if (assessLayout()) arrangeAssessment();
+    if (assessLayout()){ if (homeworkView()) arrangeHomework(); else arrangeAssessment(); }
     buildTracker();
     startSlides(l);
     startDocs(l);
@@ -1763,8 +1887,7 @@ const handedOver = handedLesson();
              screen has to agree with it, which it can only do once this
              has actually been asked for. */
           if (pagesLock(lesson)) await fetchRelease();
-          if (lesson.assessment) renderAssessmentComplete(false);
-          else showLessonComplete(true);
+          showSummary();
           return;
         }
         bypassed = true;                    // nothing to run, nothing to tick
@@ -1846,7 +1969,7 @@ const handedOver = handedLesson();
       const target = stepParam !== null ? parseInt(stepParam, 10)
                    : (previewParam !== null && previewParam !== "" ? parseInt(previewParam, 10) : null);
       if (viewParam !== null && wasDone && target === null){
-        if (lesson.assessment) renderAssessmentComplete(false); else showLessonComplete(true);
+        showSummary();
       } else {
         showStep(Math.min(Math.max(target || 0, 0), steps.length - 1));
       }
@@ -1886,8 +2009,7 @@ const handedOver = handedLesson();
          marking, which the summary has to know before it is drawn. */
       await fetchRelease();
       hideLoader();
-      if (lesson.assessment){ renderAssessmentComplete(false); }
-      else { showLessonComplete(true); }
+      showSummary();
       return;
     }
     hideLoader("Checking your work\u2026");
@@ -2105,7 +2227,7 @@ async function loadSaved(){
     const raw = localStorage.getItem(WORK_KEY);
     if (raw) local = JSON.parse(raw);
   }catch(e){ /* unreadable cache: fall through to the server copy */ }
-  const handedInOnce = !!(lesson && (lesson.practical || lesson.assessment));
+  const handedInOnce = !!(lesson && (lesson.practical || lesson.assessment)) || homeworkView();
   const askServer = !local || (handedInOnce && !local.__done && token && apiReady);
   const putBack = (d) => {
     restoredData = d; wasDone = !!d.__done;
@@ -2201,8 +2323,47 @@ function rubricOnSummary(){
    pages and is left alone. */
 let assessPages = null;
 function assessLayout(){
-  return !!(lesson && lesson.assessment && !lesson.practical) &&
+  return !!(lesson && ((lesson.assessment && !lesson.practical) || homeworkView())) &&
     pdfParam === null && allParam === null;
+}
+/* Home learning is sat the way an assessment is: one page of numbered
+   questions with the bar beside them, and no bar of pages along the top. It
+   is still a lesson underneath. Its pages stay its steps, so its saved work
+   and a teacher's progress columns read as they always did. It is marked the
+   way a test is too: nothing on screen until Finish, then a mark and the
+   marked work, with no way back in unless a teacher's code opens it. A page a
+   student has to press through to reach the next
+   question was one more thing between them and finishing, at home, with
+   nobody there to ask. */
+function homeworkView(){
+  return !!(lesson && lesson.homework && !lesson.assessment && !lesson.practical);
+}
+/* Marked when it is handed in rather than on the page, so a task must not
+   offer its own Check button. */
+function marksAtEnd(){
+  return !!(lesson && lesson.assessment && !lesson.practical) || homeworkView();
+}
+/* The summary that belongs to this kind of work, for every way of reaching it. */
+function showSummary(){
+  if ((lesson && lesson.assessment) || homeworkView()) renderAssessmentComplete(false);
+  else showLessonComplete(true);
+}
+/* Everything in home learning a student was asked to do, in the order they saw
+   it, which a test does not need because its questions are not inside pages.
+   The same walk as quantifiableTasks in progressmath.js, extension tasks left
+   out, so the mark on the summary is the mark in the teacher's mark book. */
+function homeworkTasks(){
+  const out = [];
+  const walk = (blocks) => (blocks || []).forEach(b => {
+    if (!b || b.type === "extension" || b.type === "choice" || b.type === "helper") return;
+    if (b.type === "page" || b.type === "group"){
+      if (!(b.type === "page" && b.extension === true)) walk(b.blocks);
+      return;
+    }
+    if (!ASSESS_READING.includes(b.type) && fields[b.id]) out.push(b);
+  });
+  walk(lesson && lesson.blocks);
+  return out;
 }
 function briefOf(st, plain){
   const was = (plain && st.plainBrief) ? st.plainBrief : st.brief;
@@ -2271,7 +2432,56 @@ function arrangeAssessment(){
   screens.forEach(s => { s.el.hidden = true; $("blocks").appendChild(s.el); });
   assessPages = { screens, qAt, at: 0, items, onQuestions: false, shown: false,
                   nav: null, navBtn: null, pinnedUntil: 0 };
-
+  watchQuestionScroll();
+}
+/* Every page of a piece of home learning, one after another on one screen.
+   The pages' own sections are moved here whole rather than their tasks being
+   lifted out: the section is what holds a page's extension tasks and shows
+   them, and it has to stay itself for any of that to go on working. Each task
+   still gets its number and its card. */
+function arrangeHomework(){
+  /* Back to the list this came from, not the Lessons one it is not in. */
+  const way = $("homeLink");
+  if (way && !spectate) way.href = "index.html?tab=homework";
+  const questions = el("section","assess-page assess-questions");
+  const screen = { el: questions, kind: "questions", title: "Questions",
+                   text: "Answer every question, then press Finish at the bottom.", step: 0 };
+  const items = [];
+  let num = 0;
+  /* The name of a page only helps where there is another page to tell it from. */
+  const named = steps.length > 1;
+  steps.forEach((st, i) => {
+    const b = (lesson.blocks || []).find(x => x.id === st.qid);
+    if (!b) return;
+    st.section.hidden = false;
+    /* An older lesson can have tasks with no page round them. */
+    if (b.type !== "page"){
+      const reading = ASSESS_READING.includes(b.type);
+      const n = reading ? null : ++num;
+      const item = assessItem(st, b, n);
+      questions.appendChild(item);
+      if (!reading){ items.push({ step: i, block: b, num: n, item: item, built: st }); questionNo[b.id] = n; }
+      return;
+    }
+    if (named && b.title) st.section.insertBefore(tel("h2","assess-part", b.title), st.section.firstChild);
+    questions.appendChild(st.section);
+    (st.taskItems || []).forEach(entry => {
+      if (ASSESS_READING.includes(entry.type)) return;
+      const n = ++num;
+      entry.item.classList.add("aq-card");
+      entry.item.insertBefore(tel("p","aq-num","Question " + n), entry.item.firstChild);
+      items.push({ step: i, block: entry.block, num: n, item: entry.item, built: entry.built });
+      questionNo[entry.block.id] = n;     // the marked work numbers them the same
+    });
+  });
+  questions.appendChild(el("p","assess-end", "That was the last question. Check your answers, then press Finish."));
+  screen.el.hidden = true;
+  $("blocks").appendChild(screen.el);
+  assessPages = { screens: [screen], qAt: 0, at: 0, items, onQuestions: false, shown: false,
+                  nav: null, navBtn: null, pinnedUntil: 0, homework: true, now: null };
+  watchQuestionScroll();
+}
+function watchQuestionScroll(){
   /* Which question is in view, worked out as they scroll, once a frame. */
   let queued = false;
   $("stage").addEventListener("scroll", () => {
@@ -2325,14 +2535,30 @@ function questionAnswered(it){
     case "table": return Array.isArray(v) && v.every(filled);
     case "label": return (b.spots || []).every((_, i) => !!(v && v.placed && v.placed[i]));
     case "hotspot": return !!(v && typeof v.x === "number");
+    case "pixels": return b.viewOnly === true || !!(v && Array.isArray(v.frames));   // one to watch has nothing to answer
     case "exam": return filled(v && typeof v === "object" ? v.text : v);
+    case "question": return filled(v);
     case "binary": case "binadd":
       return !!(v && Array.isArray(v.answers) && v.answers.length && v.answers.every(filled));
     case "ide": case "web": return !!(v && v.ran);
   }
+  /* A written answer or a quiz has no check that can fail, so in home learning,
+     which can hold them, that would count them as answered before they were
+     touched. An assessment does not offer them. A quiz has to be answered all
+     the way through, or question 3 of 5 left empty would never be pointed out. */
+  if (assessPages && assessPages.homework){
+    if (b.type === "quiz") return !!(v && Array.isArray(v.checked) && v.checked.length && v.checked.every(Boolean));
+    return gateAttempted(b, v);
+  }
   try{ return it.built.check().ok; }catch(e){ return true; }
 }
 
+/* Whether this is the question in view. In an assessment every question is a
+   step of its own, so the step says. In home learning a step is a page with
+   several questions on it, so the question is kept by itself. */
+function questionInView(it){
+  return assessPages.homework ? assessPages.now === it : it.step === step;
+}
 /* The screen a step is on. */
 function screenOfStep(i){
   const A = assessPages;
@@ -2373,6 +2599,8 @@ function showAssessScreen(k, i){
 
   const last = k === A.screens.length - 1;
   $("backBtn").disabled = k === 0;
+  /* One screen has nothing to go back to. */
+  $("backBtn").hidden = !!A.homework;
   $("nextBtn").textContent = !last
     ? (A.screens[k + 1].kind === "questions" ? "Start →" : "Continue →")
     : workFrozen ? "STAR Feedback" : "Finish";
@@ -2381,6 +2609,7 @@ function showAssessScreen(k, i){
   stage.scrollTop = 0;
   if (A.onQuestions){
     const it = A.items.find(x => x.step === i) || A.items[0];
+    A.now = it || null;
     step = it ? it.step : sc.step;
     if (it && it !== A.items[0]) stage.scrollTop = questionTop(it);
   } else {
@@ -2406,6 +2635,7 @@ function goToQuestion(it, flash){
      never reach the top of the page, so the one pressed is held as the
      current one until the scroll has finished. */
   assessPages.pinnedUntil = Date.now() + 900;
+  assessPages.now = it;
   step = it.step;
   paintTracker();
   glideStage(questionTop(it));
@@ -2477,7 +2707,7 @@ function wheelTarget(dir){
   const pageStep = Math.max(120, Math.round(view * 0.8));
   /* Every card on the page, a piece of reading between questions as well,
      or the wheel would carry a student straight past it. */
-  const cards = Array.from(A.screens[A.qAt].el.children).filter(c => c.classList.contains("pg-item"));
+  const cards = Array.from(A.screens[A.qAt].el.querySelectorAll(":scope > .pg-item, :scope > .pagegroup > .pg-item"));
   const tops = cards.map(c => questionTop({ item: c }));
   /* the card whose top is at or above the top of the screen; a few pixels
      either way, because the last glide may have been rounded */
@@ -2574,7 +2804,7 @@ function noteQuestionInView(){
   A.items.forEach(it => { if (it.item.getBoundingClientRect().top <= line) cur = it; });
   /* At the very bottom the last question may never reach the line. */
   if (stage.scrollTop + stage.clientHeight >= stage.scrollHeight - 4) cur = A.items[A.items.length - 1];
-  if (cur.step !== step){ step = cur.step; paintTracker(); }
+  if (!questionInView(cur)){ A.now = cur; step = cur.step; paintTracker(); }
 }
 
 /* The question numbers. Not a bar along the top: that ran the width of the
@@ -2676,7 +2906,7 @@ function paintAssessTracker(){
   A.items.forEach(it => {
     const has = questionAnswered(it);
     if (has) answered++;
-    paintQuestionBox(it.piece, it, has, showing && it.step === step, "qseg");
+    paintQuestionBox(it.piece, it, has, showing && questionInView(it), "qseg");
   });
   const total = A.items.length;
   A.barCount.innerHTML = "";
@@ -2722,7 +2952,7 @@ function openQuestionSheet(){
     const has = questionAnswered(it);
     if (has) answered++;
     const b = questionBox(it, close);
-    paintQuestionBox(b, it, has, it.step === step);
+    paintQuestionBox(b, it, has, questionInView(it));
     grid.appendChild(b);
   });
   box.appendChild(tel("p","modal-text", answered + " of " + A.items.length + " answered. Press a number to go to that question."));
@@ -2755,7 +2985,11 @@ function assessRepaintSoon(){
    from it without a teacher. */
 function askToHandIn(){
   const missing = assessPages.items.filter(it => !questionAnswered(it));
-  if (!missing.length){ confirmHandIn(); return; }
+  /* Home learning says what is missing and stops there. Done alone at home,
+     one question is plenty, and it has none at all when nothing is missing. */
+  const home = !!assessPages.homework;
+  const handIn = home ? finishLesson : confirmHandIn;
+  if (!missing.length){ handIn(); return; }
   assessPages.flagMissing = true;
   paintTracker();
   const count = missing.length;
@@ -2768,7 +3002,7 @@ function askToHandIn(){
     text: phone ? "Press the button at the bottom and look for the questions marked red."
                 : "Look for the questions marked red on the side.",
     yes: { label: "Go back and complete the questions", act: () => goToQuestion(missing[0], true) },
-    no:  { label: "Submit my assessment anyway", act: confirmHandIn },
+    no:  { label: home ? "Submit my home learning anyway" : "Submit my assessment anyway", act: handIn },
     focus: "yes"
   });
 }
@@ -2864,8 +3098,7 @@ function buildTracker(){
     hideLockTip();
     /* The same two screens the lesson picks between when it opens straight on
        the summary, or an assessment would be handed the ordinary one. */
-    if (lesson && lesson.assessment) renderAssessmentComplete(false);
-    else showLessonComplete(true);            // a revisit: no confetti, nothing re-sent
+    showSummary();                            // a revisit: no confetti, nothing re-sent
   });
   t.appendChild(end);
 }
@@ -3062,6 +3295,21 @@ let askingToMoveOn = false;
    answer box, the checklist beside code, the quiz's own marking. A pop-up on
    top of that was one more thing to press past, and it taught a class that
    the way through a task is the button reading "move on anyway". */
+/* A choice on this page set to swap moves on to the option not yet tried
+   instead of the page changing. See swapOnContinue in rChoice. */
+function swapChoiceHere(){
+  const here = steps[step] && steps[step].qid;
+  const page = ((lesson && lesson.blocks) || []).find(b => b.id === here);
+  let moved = false;
+  const walk = (list) => (list || []).forEach(b => {
+    if (moved || !b) return;
+    if (b.type === "choice" && b.swap === true && fields[b.id] && fields[b.id].swapOnContinue)
+      moved = fields[b.id].swapOnContinue();
+    else if (b.type === "extension" || b.type === "group" || b.type === "page") walk(b.blocks);
+  });
+  walk(page ? (page.type === "page" ? page.blocks : [page]) : []);
+  return moved;
+}
 async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
   if (assessPages){
@@ -3092,6 +3340,7 @@ async function tryContinue(){
     return;
   }
   if (coverHolds()) return;
+  if (swapChoiceHere()) return;
   if (step === steps.length - 1){ await tryFinish(); return; }
 
   askingToMoveOn = true;
@@ -3147,7 +3396,7 @@ async function tryJumpAhead(i, seg){
     seg.classList.remove("checking");
     $("nextBtn").classList.remove("checking");
   }
-  if (isLocked(i)){ paintTracker(); showWaitModal(); startCooldown(true); return; }
+  if (isLocked(i)){ paintTracker(); showWaitModal(); startCooldown(true); showLockTip(seg, FIRST_TIP); return; }
   if (OFFLINE && !(await passGate(i))) return;
   const fresh = i > furthestStep;
   hideWaitModal(); showStep(i);
@@ -3535,6 +3784,18 @@ const TASK_ICON = {
   /* a target */
   hotspot:   { name:"Click the right spot",
                d:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 12h.01"/>' },
+  /* a grid with some squares filled */
+  /* a dice */
+  boardgame: { name:"Board game",
+               d:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/>' },
+  /* a flag on a hill */
+  quest:     { name:"Quest",
+               d:'<path d="M3 20c4-6 14-6 18 0"/><path d="M12 15V4l6 3-6 3"/>' },
+  /* a card leaning to one side */
+  swipe:     { name:"Swipe",
+               d:'<rect x="6" y="4" width="11" height="15" rx="2" transform="rotate(10 12 12)"/><path d="M3 20h5M16 20h5"/>' },
+  pixels:    { name:"Pixel studio",
+               d:'<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>' },
   /* a speech bubble with a question in it */
   helper:    { name:"Photoshop help",
                d:'<path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.2-.8.6-.8 1.1"/><path d="M12 14h.01"/>' },
@@ -3548,6 +3809,13 @@ const TASK_ICON = {
   storyboard:{ name:"Storyboard",
                d:'<rect x="2.5" y="7" width="5.6" height="10" rx="1"/><rect x="9.2" y="7" width="5.6" height="10" rx="1"/>' +
                  '<rect x="15.9" y="7" width="5.6" height="10" rx="1"/>' },
+  /* a sheet with a picture and a title on it */
+  poster:    { name:"Poster",
+               d:'<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><path d="M8 6.5h8"/>' +
+                 '<path d="M7.5 18l3.2-4 2.3 2.6 1.7-1.9 2.3 3.3z"/>' },
+  /* a crown, for the boss */
+  boss:      { name:"Boss battle",
+               d:'<path d="M3.5 18.5h17l1-11-5.5 4.5L12 5l-4 7-5.5-4.5z"/><path d="M3.5 21h17"/>' },
   /* a board on a stand */
   board:     { name:"Whiteboard",
                d:'<rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M12 17v3"/>' +
@@ -3595,6 +3863,8 @@ const taskIcon = (type) =>
    one task, or if there is only one task on the page: a bar with a single
    button on it describes nothing. */
 function railList(){
+  /* The bar of questions does this job on the one page. */
+  if (assessPages && assessPages.homework) return null;
   const st = steps[step];
   if (!st || typeof st.railItems !== "function") return null;
   const list = st.railItems();
@@ -3886,7 +4156,7 @@ let lastSubmittedPayload = "";
 let unsavedTyping = false;
 window.addEventListener("beforeunload", (e) => {
   if (spectate || OFFLINE || !restoreDone) return;
-  if (!token || !apiReady) return;
+  if ((!token && !guest) || !apiReady) return;
   if (!unsavedTyping) return;
   e.preventDefault();
   e.returnValue = "";
@@ -3896,16 +4166,22 @@ async function submitWork(){
   if (!restoreDone) return "offline";      // never send blanks over real work
   /* Writes to the database only when something actually changed since the
      last successful write, pressing Save work twice costs nothing. */
-  if (!token || !apiReady) return "offline";
+  if ((!token && !guest) || !apiReady) return "offline";
   const payload = JSON.stringify(snapshot());
   const mark = typedAt;             // what they had typed when this one left
   if (payload === lastSubmittedPayload){ unsavedTyping = false; return "done"; }
   try{
-    const r = await fetch(API + "/api/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-      body: JSON.stringify({ lesson: lessonId, data: JSON.parse(payload) })
-    });
+    /* With no sign-in the sealed link is what says which class this is for. */
+    const r = guest
+      ? await fetch(API + "/api/teacher/guest-save", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ k: guest.key, id: guest.id, name: guest.name, as: guest.as || "", data: JSON.parse(payload) })
+        })
+      : await fetch(API + "/api/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+          body: JSON.stringify({ lesson: lessonId, data: JSON.parse(payload) })
+        });
     /* 503 is the server saying the database is too busy to take this right
        now, after queueing as long as it can. That is not the same as not
        reaching it, and the child is told so, with a way to try again. */
@@ -4177,7 +4453,7 @@ async function rocketSave(send){
    looking round, or a lesson not yet read back from the server has nothing
    to send, and nothing to wait for. */
 function rocketWanted(){
-  return !OFFLINE && !spectate && !!token && apiReady && restoreDone;
+  return !OFFLINE && !spectate && (!!token || !!guest) && apiReady && restoreDone;
 }
 
 /* ---------- exam questions in an ordinary lesson ----------
@@ -4271,6 +4547,8 @@ async function manualSave(){
     setTimeout(async () => {
       try{
         if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
+        /* pictures on a whiteboard or storyboard load a moment after the work */
+        if (window.drawKit && window.drawKit.ready) await window.drawKit.ready();
         buildPdf().save(fileName());
         busy.reset();
         settle("Saved a PDF ✓", "flash-ok");
@@ -4332,13 +4610,13 @@ async function tryFinish(){
      would hand the work in again and, in an assessment, send its score again. */
   function backToFeedback(){
     returnAllSections();
-    if (lesson && lesson.assessment) renderAssessmentComplete(false);
-    else showLessonComplete(true);
+    showSummary();
   }
   async function finishLesson(){
     if (workFrozen){ backToFeedback(); return; }
     if (rocketUp) return;              // already on its way: a second press waits with it
   if (lesson && lesson.assessment){ assessmentFinish(); return; }
+  if (homeworkView()){ homeworkFinish(); return; }
   finished = true;
   tickWrittenCode();                 // before the save, so the ticks go with it
   save();
@@ -4353,9 +4631,19 @@ async function tryFinish(){
   showLessonComplete(false, true);   // they have just pressed Finish
 }
 
+/* Home learning goes straight to its mark, with no rocket. The rocket is there
+   for a room handing in at the same moment, and these arrive one at a time
+   across an evening. The summary sends the work and says how that went. */
+function homeworkFinish(){
+  if (!spectate){
+    finished = true;
+    tickWrittenCode();                 // before the save, so the ticks go with it
+    save();
+  }
+  renderAssessmentComplete(!spectate);
+}
+
 /* ---------- finish pop-up ---------- */
-$("waitOk").addEventListener("click", hideWaitModal);
-$("waitModal").addEventListener("mousedown", (e) => { if (e.target === $("waitModal")) hideWaitModal(); });
 
 document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ hideWaitModal(); } });
 
@@ -4728,7 +5016,9 @@ function buildBlock(b, i){
               keywords:rKeywordsTask, helper:rHelperTask,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
               exam:rExamTask, table:rTableTask, hotspot:rHotspotTask,
-              extension:rExtension, group:rGroup, choice:rChoice }[b.type];
+              extension:rExtension, group:rGroup, choice:rChoice,
+              poster:rPosterTask, boss:rBossTask, pixels:rPixelsTask,
+              boardgame:rBoardGameTask, swipe:rSwipeTask, quest:rQuestTask }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try {
     const made = R(b);
@@ -4772,6 +5062,13 @@ const FINISHABLE = ["quiz","mc","blanks","binary","binadd","label","caesar","pas
    right and then carried on past would otherwise hide the rest of the page
    in the middle of a sentence. */
 const GATE_LEVELS = ["attempted", "partial", "full"];
+/* The answer each short answer last had Check answer pressed on. The hold
+   below a short answer read the box as it was typed, so the next task opened
+   the moment the right word was in it, before the student had asked whether
+   it was right, and with Attempted at the first letter. A cover lesson keeps
+   its own record of this in __cover. */
+const shortChecked = {};
+const shortHasCheck = () => !(lesson && lesson.assessment) && !homeworkView();
 function taskGate(b){
   if (!b || !GATE_LEVELS.includes(b.gate)) return null;
   let opened = false;
@@ -4781,6 +5078,7 @@ function taskGate(b){
   };
   function reached(){
     const v = value();
+    if (b.type === "short" && shortHasCheck() && shortChecked[b.id] !== String(v == null ? "" : v)) return false;
     const sc = gateScore(b, v);
     if (b.gate === "attempted") return gateAttempted(b, v) || !!(sc && sc.got > 0);
     /* Nothing in it can be got right, so there is nothing to wait for. */
@@ -4844,9 +5142,12 @@ function gateWords(b){
   /* A checklist the builder hid cannot be pointed at, so a level behind
      one is asked for in the words any other task uses. */
   const code = isCodeTask(b) && b.checksHidden !== true;
+  const check = b.type === "short" && shortHasCheck();
   if (b.gate === "attempted")
     return b.type === "quiz" ? "Answer a question in the quiz above to open it."
-                             : "Have a go at the task above to open it.";
+         : check ? "Type an answer above and press Check answer to open it."
+                 : "Have a go at the task above to open it.";
+  if (check) return "Get the answer above right and press Check answer to open it.";
   if (b.gate === "partial"){
     if (code) return "Tick off at least one thing on the checklist above to open it.";
     if (b.type === "blanks") return "Get at least one gap above right to open it.";
@@ -5095,6 +5396,9 @@ function rPage(b){
     try{ return entry.built.check().ok; }catch(e){ return false; }
   });
   const scrollToNextTask = () => {
+    /* Every question is on the screen already and the student moves down
+       them at their own pace, as in an assessment. */
+    if (assessPages && assessPages.homework) return;
     items.forEach((entry, i) => {
       if (!FINISHABLE.includes(entry.type)) return;
       let ok = false;
@@ -5356,7 +5660,9 @@ function rPage(b){
        the setting existed. */
     /* A task taking the whole page covers where the bar would be. */
     railItems: (b.taskbar === false || fullTask) ? null : railItems,
-    fullTask: fullTask
+    fullTask: fullTask,
+    /* Home learning puts a number and a card on each of these. */
+    taskItems: items
   };
 }
 
@@ -5397,9 +5703,23 @@ function rChoice(b){
     s.appendChild(panel);
     opts.push({ btn, panel, kids });
   });
+  /* With swap on, Continue takes a student to the option they have not
+     tried rather than off the page, once each: a poster finished early is
+     followed by the Scratch game. "Not tried" is that option's tasks still
+     holding what they held when the page was built, before any saved work
+     was put back, so work from an earlier visit counts as tried. */
+  const swapNote = el("p","choice-swap");
+  swapNote.hidden = true;
+  s.insertBefore(swapNote, row.nextSibling);
+  const holding = (k) => JSON.stringify((b.options[k].blocks || []).map(c => {
+    try{ return fields[c.id] ? fields[c.id].get() : null; }catch(e){ return null; }
+  }));
+  const atStart = opts.map((_, k) => holding(k));
+  const seen = new Set();
   let picked = -1;
   function pick(k, chosenNow){
     picked = k;
+    seen.add(k);
     opts.forEach((o, i) => {
       o.btn.classList.toggle("on", i === k);
       o.panel.hidden = i !== k;
@@ -5418,7 +5738,20 @@ function rChoice(b){
     get: () => picked,
     /* Older work may have been saved before this task had any options, so a
        number that no longer points at one is treated as no choice at all. */
-    set: (v) => { const n = Number(v); if (n >= 0 && n < opts.length) pick(n); }
+    set: (v) => { const n = Number(v); if (n >= 0 && n < opts.length) pick(n); },
+    /* true if it moved them on to another option, so Continue stays put */
+    swapOnContinue: () => {
+      if (b.swap !== true || picked < 0) return false;
+      const k = opts.findIndex((_, i) => i !== picked && !seen.has(i) && holding(i) === atStart[i]);
+      if (k < 0) return false;
+      const from = (b.options[picked] && b.options[picked].label) || "that";
+      pick(k, true);
+      markDirty();
+      swapNote.textContent = "You have had a go at " + from + ". Now try " + ((b.options[k] && b.options[k].label) || "the other one") + "!";
+      swapNote.hidden = false;
+      s.scrollIntoView({ block: "start", behavior: "smooth" });
+      return true;
+    }
   };
   return { section:s,
            onShow: () => { if (picked >= 0) opts[picked].kids.forEach(k => { if (k.onShow) k.onShow(); }); },
@@ -7864,7 +8197,63 @@ function rScratch(b){
   warn.hidden = true;
   s.appendChild(warn);
   const box = el("div","scratch-box");
-  s.appendChild(box);
+  /* The editor and the instructions share one space, so the editor keeps its
+     full height and only one of them is ever in front. The instructions sit
+     over the editor rather than replacing it: the frame keeps loading behind
+     them, and taking it out of the page would start Scratch again from
+     nothing every time the tab was changed. */
+  const area = el("div","scratch-area");
+  area.appendChild(box);
+  s.appendChild(area);
+
+  /* ---------- Instructions and Scratch, as two tabs ----------
+     A student meets the instructions first, and the Scratch tab pulses until
+     it has been pressed once, so nobody is left reading with no idea where
+     the editor went. Having been once is saved with the work, so coming back
+     to the lesson opens straight on Scratch with nothing pulsing. A teacher
+     looking at work starts on Scratch: the project is what they came for. */
+  const howto = (b.instructions && stripTags(b.instructions)) ? b.instructions : "";
+  let seenScratch = false;
+  let showTab = () => {};
+  if (howto){
+    const tabs = el("div","scratch-tabs");
+    tabs.setAttribute("role", "tablist");
+    const howBtn = el("button","scratch-tab","Instructions");
+    const codeBtn = el("button","scratch-tab","Scratch");
+    [howBtn, codeBtn].forEach(t => { t.type = "button"; t.setAttribute("role", "tab"); tabs.appendChild(t); });
+    /* First in the bar and bigger than Download and Full screen: switching
+       between these two is what the bar is for. */
+    bar.insertBefore(tabs, named);
+    const panel = el("div","scratch-howto");
+    panel.setAttribute("role", "tabpanel");
+    const words = el("div","prose scratch-howto-text", howto);
+    scrollWideTables(words);
+    fillImageIds(words);
+    panel.appendChild(words);
+    const go = el("button","btn-primary scratch-howto-go","Go to Scratch");
+    go.type = "button";
+    panel.appendChild(go);
+    area.appendChild(panel);
+    showTab = (which) => {
+      const onHow = which === "howto";
+      panel.hidden = !onHow;
+      howBtn.classList.toggle("on", onHow);
+      codeBtn.classList.toggle("on", !onHow);
+      howBtn.setAttribute("aria-selected", String(onHow));
+      codeBtn.setAttribute("aria-selected", String(!onHow));
+      if (!onHow && !seenScratch){
+        seenScratch = true;
+        if (!spectate) markDirty();
+      }
+      codeBtn.classList.toggle("scratch-tab-pulse", !seenScratch);
+      if (onHow) panel.scrollTop = 0;
+    };
+    howBtn.addEventListener("click", () => showTab("howto"));
+    codeBtn.addEventListener("click", () => showTab("scratch"));
+    go.addEventListener("click", () => showTab("scratch"));
+    if (spectate){ seenScratch = true; showTab("scratch"); }
+    else showTab("howto");
+  }
 
   const starter = () => (b.project && typeof b.project === "object") ? b.project : null;
   /* What was put back from their saved work, then whatever last saved
@@ -8052,6 +8441,7 @@ function rScratch(b){
       const v = { runs: runs, changed: !!(changed && saved),
                   checks: checklist ? checkFlags(checklist) : undefined,
                   manual: checklist ? checklist.list.getManual() : undefined };
+      if (howto && seenScratch) v.seen = true;
       if (changed && saved){
         v.project = saved.project;
         v.own = saved.own || {};
@@ -8061,6 +8451,8 @@ function rScratch(b){
     },
     set: (v) => {
       if (!v || typeof v !== "object") return;
+      /* Been to the editor before: back on it, and nothing pulses. */
+      if (howto && v.seen === true && !seenScratch) showTab("scratch");
       runs = Number(v.runs) || 0;
       if (v.project && typeof v.project === "object"){
         saved = { project: v.project, own: (v.own && typeof v.own === "object") ? v.own : {},
@@ -8362,8 +8754,10 @@ function wrapExtra(b, build, eyebrow){
      table or a picture must not offer its own Check button there. */
   const made = build(b, { changed: markDirty,
                           tried: coverOn() ? (value) => coverTried(b.id, value) : null,
+                          /* whether two wrong tries are enough to carry on */
+                          carryOn: coverOn() ? () => window.coverWork.carriesOn(b) : null,
                           pressed: coverOn() ? () => { coverData().checked[b.id] = JSON.stringify(coverAsk.read(b.id)); } : null,
-                          assessment: !!(lesson && lesson.assessment && !lesson.practical) });
+                          assessment: marksAtEnd() });
   fields[b.id] = { get: made.get, set: made.set };
   return {
     section: made.section,
@@ -8378,13 +8772,26 @@ const rStoryboardTask = (b) => wrapExtra(b, window.rStoryboard, "Storyboard");
 const rKeywordsTask = (b) => wrapExtra(b, window.rKeywords, "Keywords");
 const rTableTask  = (b) => wrapExtra(b, window.rTable,    "Table");
 const rLabelTask   = (b) => wrapExtra(b, window.rLabel,   "Labelling");
+/* The poster shows its instructions in a box beside its own tools, so the
+   card above it carries only the heading: the same words twice would push
+   the poster down the screen. */
+const rPosterTask  = (b) => Object.assign(wrapExtra(b, window.rPoster, "Poster"),
+                                          { brief: { eyebrow: "Poster", title: b.title || "", text: "" } });
+const rBossTask    = (b) => wrapExtra(b, window.rBoss,    "Boss battle");
 const rHotspotTask = (b) => wrapExtra(b, window.rHotspot, "Click the right spot");
+const rPixelsTask  = (b) => wrapExtra(b, window.rPixels,  "Pixel studio");
+const rBoardGameTask = (b) => wrapExtra(b, window.rBoardGame, "Board game");
+const rSwipeTask   = (b) => wrapExtra(b, window.rSwipe,   "Swipe");
+const rQuestTask   = (b) => wrapExtra(b, window.rQuest,   "Quest");
 /* An exam question is nearly one of the four above, but it also reports what
    it scored, which wrapExtra has no room for: fields[] would drop result()
    and the coverage screen would have nothing to read. */
 function rExamTask(b){
+  /* A written one in home learning keeps its button: that button is the mark
+     scheme, and without it nothing can mark the answer at all. */
   const made = window.rExam(b, { changed: markDirty,
-                                 assessment: !!(lesson && lesson.assessment) });
+                                 assessment: !!(lesson && lesson.assessment) ||
+                                             (homeworkView() && b.answer === "short") });
   fields[b.id] = { get: made.get, set: made.set, result: made.result };
   return {
     section: made.section,
@@ -8481,8 +8888,33 @@ function rQuiz(b){
   const fb = el("div","feedback"); fb.hidden = true;
   const btn = el("button","btn-primary","Check answer");
   const scoreCard = el("div","quiz-score"); scoreCard.hidden = true;
-  s.appendChild(head); s.appendChild(qtext); s.appendChild(opts);
-  s.appendChild(fb); s.appendChild(btn); s.appendChild(scoreCard);
+  /* Home learning marks a quiz on Finish, so picking an answer is all there is
+     to do and the button only moves on. Nothing is shown right or wrong, and a
+     question can be gone back to and changed until it is handed in. */
+  const noCheck = homeworkView();
+  const prevBtn = el("button","btn-ghost quiz-prev","\u2190 Previous question");
+  prevBtn.type = "button";
+  prevBtn.hidden = true;
+  s.appendChild(head); s.appendChild(qtext);
+  if (noCheck){
+    const moves = el("div","row quiz-moves");
+    moves.appendChild(prevBtn); moves.appendChild(btn);
+    s.appendChild(opts); s.appendChild(fb); s.appendChild(moves);
+  } else {
+    /* The feedback and the button go in a column beside the options. Under
+       them, the feedback pushed the button down by its own height at the very
+       moment it was needed, and on a school laptop that put Next question
+       behind the bar at the bottom of the screen. The section is what the
+       stylesheet measures, so a quiz in a narrow place stacks as it would on
+       a phone, whatever the width of the screen. */
+    s.classList.add("quiz-room");
+    const play = el("div","quiz-play");
+    const side = el("div","quiz-side");
+    side.appendChild(fb); side.appendChild(btn);
+    play.appendChild(opts); play.appendChild(side);
+    s.appendChild(play);
+  }
+  s.appendChild(scoreCard);
 
   let qi = 0;
   let tell = null;                          // the page asks to be told when the score moves
@@ -8509,10 +8941,33 @@ function rQuiz(b){
     return Math.max(1, Math.ceil(n * (Math.min(100, parseInt(p.value, 10) || 0) / 100)));
   }
   const passed = () => got() >= needed();
+  /* What the answer on screen is worth, kept as it changes. */
+  function recordPick(){
+    const right = rightSet(qs[qi]);
+    checked[qi] = picked[qi].size > 0;
+    solved[qi] = picked[qi].size === right.size && [...picked[qi]].every(x => right.has(x));
+    finishedQuiz = n > 0 && checked.every(Boolean);
+  }
+
+  /* Scrolls the stage just far enough to show from the top of one thing to the
+     bottom of another. The stage is what scrolls, not the window, and it ends
+     at the bar along the bottom, so scrollIntoView can leave a button tucked
+     against that bar. Set directly because a smooth scroll is not reliable
+     here: goToTask has the story. */
+  function keepInView(top, bottom){
+    const stage = $("stage");
+    if (!stage || !stage.contains(s)) return;
+    const view = stage.getBoundingClientRect();
+    const below = bottom.getBoundingClientRect().bottom + 14 - view.bottom;
+    const above = view.top + 10 - top.getBoundingClientRect().top;
+    if (below > 0) stage.scrollTop += below;
+    else if (above > 0) stage.scrollTop -= above;
+  }
 
   function draw(){
     scoreCard.hidden = true;
     head.hidden = false; qtext.hidden = false; opts.hidden = false; btn.hidden = false;
+    btn.classList.remove("quiz-next");
     const q = qs[qi];
     if (!q){ head.textContent = ""; qtext.textContent = "No questions yet."; opts.innerHTML = ""; return; }
     head.textContent = "Question " + (qi + 1) + " of " + n + (multi(q) ? " · tick every right answer" : "");
@@ -8524,7 +8979,7 @@ function rQuiz(b){
       box.type = multi(q) ? "checkbox" : "radio";
       box.name = b.id + "-q" + qi;
       box.checked = picked[qi].has(j);
-      box.disabled = checked[qi];        // answered, so it stands as their answer
+      box.disabled = checked[qi] && !noCheck;   // answered, so it stands as their answer
       if (box.checked) lab.classList.add("chosen");
       box.addEventListener("change", () => {
         if (multi(q)){
@@ -8535,14 +8990,16 @@ function rQuiz(b){
           Array.from(opts.children).forEach((c, k) => c.classList.toggle("chosen", k === j));
         }
         fb.hidden = true;
+        if (noCheck) recordPick();
         markDirty();
       });
       lab.appendChild(box); lab.appendChild(el("span","", text));
       opts.appendChild(lab);
     });
     fb.hidden = true;
-    btn.textContent = "Check answer";
-    if (checked[qi]) reveal(solved[qi]);
+    btn.textContent = noCheck ? "Next question \u2192" : "Check answer";
+    if (noCheck){ btn.hidden = qi >= n - 1; prevBtn.hidden = qi === 0; }
+    else if (checked[qi]) reveal(solved[qi]);
     if (tell) tell();
   }
 
@@ -8562,8 +9019,9 @@ function rQuiz(b){
     fb.innerHTML = "";
     fb.appendChild(el("b","", ok ? "Correct" : "Not quite"));
     fb.appendChild(el("span","", ok ? (q.why || "")
-      : (q.hint || "The right answer is marked above.")));
+      : (q.hint || "The right answer is marked in green.")));
     btn.textContent = qi < n - 1 ? "Next question →" : "See how I did";
+    btn.classList.add("quiz-next");
     if (tell) tell();
   }
 
@@ -8590,17 +9048,20 @@ function rQuiz(b){
       draw(); markDirty(); refreshGate();
     });
     scoreCard.appendChild(again);
+    keepInView(scoreCard, scoreCard);
     if (tell) tell();
     /* Seeing the score saves nothing, so nothing else tells a Cover lesson. */
     if (coverOn()) coverRows.forEach(paint => paint());
   }
 
+  prevBtn.addEventListener("click", () => { if (qi > 0){ qi--; draw(); } });
   btn.addEventListener("click", () => {
     const q = qs[qi];
     if (!q) return;
+    if (noCheck){ if (qi < n - 1){ qi++; draw(); } return; }
     /* already answered: this press is the step onwards */
     if (checked[qi]){
-      if (qi < n - 1){ qi++; draw(); }
+      if (qi < n - 1){ qi++; draw(); keepInView(head, head); }
       else showScore();
       return;
     }
@@ -8609,7 +9070,8 @@ function rQuiz(b){
       fb.innerHTML = "";
       fb.appendChild(el("b","","Choose an answer"));
       fb.appendChild(el("span","", multi(q) ? "Tick every answer you think is right."
-                                            : "Pick one of the options above, then check it."));
+                                            : "Pick one of the options, then check it."));
+      keepInView(fb, btn);
       return;
     }
     const right = rightSet(q);
@@ -8617,6 +9079,7 @@ function rQuiz(b){
     checked[qi] = true;
     solved[qi] = ok;
     reveal(ok);
+    keepInView(fb, btn);
     if (coverOn()) coverQuizStep(b, checked, solved);
     markDirty();
   });
@@ -8638,13 +9101,13 @@ function rQuiz(b){
       finishedQuiz = !!v.done || (n > 0 && checked.every(Boolean));
       const firstUnanswered = checked.findIndex(x => !x);
       qi = firstUnanswered === -1 ? Math.max(0, n - 1) : firstUnanswered;
-      if (finishedQuiz) showScore(); else draw();
+      if (finishedQuiz && !noCheck) showScore(); else draw();
     }
   };
   draw();
 
   return { section:s,
-           check:() => (!n || !needed() || passed())
+           check:() => (noCheck || !n || !needed() || passed())
              ? { ok:true }
              : { ok:false, message:"Get " + needed() + " out of " + n + " right to carry on" },
            /* A teacher can ask for the rest of the page to stay shut until the
@@ -8655,7 +9118,7 @@ function rQuiz(b){
               page the moment the tally crossed the line put the rest of the
               work on screen while they were still on question three, which
               read as the quiz having ended early. */
-           hold: { on: () => !!(b.pass && b.pass.hold) && needed() > 0,
+           hold: { on: () => !noCheck && !!(b.pass && b.pass.hold) && needed() > 0,
                    passed: () => finishedQuiz && (!needed() || passed()),
                    words: () => "There is more on this page. Finish the quiz above and get " +
                                 needed() + " out of " + n + " right to open it.",
@@ -10372,7 +10835,7 @@ function rShort(b){
 
   /* In an assessment everything is marked at the end. In a lesson the student
      can check their own answer here and try again. */
-  const inLesson = !(lesson && lesson.assessment);
+  const inLesson = !(lesson && lesson.assessment) && !homeworkView();
   if (inLesson){
     const fb = el("div","feedback"); fb.hidden = true;
     const btn = el("button","btn-primary short-check","Check answer");
@@ -10383,6 +10846,7 @@ function rShort(b){
         return;
       }
       const r = window.shortAnswer.mark(b, ans.value);
+      shortChecked[b.id] = ans.value;
       if (coverOn()) coverData().checked[b.id] = JSON.stringify(coverAsk.read(b.id));
       fb.hidden = false;
       fb.dataset.verdict = r.ok ? "correct" : "incorrect";
@@ -10409,7 +10873,9 @@ function rShort(b){
         /* Nobody in the room can help, so a Cover lesson gives the answer
            after two wrong tries rather than leave them on it for good. */
         if (coverOn() && coverTried(b.id, ans.value.trim().toLowerCase()) >= 2)
-          fb.appendChild(el("span","", "The answer is " + window.shortAnswer.accepted(b)[0] + ". Type it in and press Check answer."));
+          fb.appendChild(el("span","", "The answer is " + window.shortAnswer.accepted(b)[0] + ". " +
+            (window.coverWork.carriesOn(b) ? "You can carry on, or type it in and press Check answer."
+                                           : "Type it in and press Check answer.")));
         else fb.appendChild(el("span","", "Check your spelling and try again."));
       }
       markDirty();
@@ -10420,7 +10886,10 @@ function rShort(b){
     s.appendChild(fb);
   }
 
-  fields[b.id] = { get:() => ans.value, set:(v) => { ans.value = v || ""; paintLength(); } };
+  /* An answer coming back from last time counts as checked, so a page that
+     was open when they left is open when they return, without pressing
+     Check answer again on something already marked. */
+  fields[b.id] = { get:() => ans.value, set:(v) => { ans.value = v || ""; shortChecked[b.id] = ans.value; paintLength(); } };
   return { section:s,
            check:() => !ans.value.trim() ? { ok:false, message:"Write an answer" }
                      : window.shortAnswer.tooLong(b, ans.value).over ? { ok:false, message:tooLong.textContent }
@@ -10470,22 +10939,47 @@ function labelMarks(b, v){
 function computeAssessment(){
   const perQ = [], byTopic = {};
   let score = 0, outOf = 0, n = 0;
-  lesson.blocks.forEach((b) => {
+  const home = homeworkView();
+  /* Home learning can hold work no machine can mark, a written answer say. It
+     adds nothing to the score but still belongs in View my work. */
+  const noMark = (b) => {
+    if (!home) return;
+    n++;
+    const v = fields[b.id] ? fields[b.id].get() : null;
+    const said = (Array.isArray(v) ? v : [v]).filter(x => typeof x === "string" && x.trim()).join("\n\n");
+    perQ.push({ id: b.id, n: questionNo[b.id] || n, type: "unmarked", pts: 0, max: 0, auto: 0,
+                title: stripTags(b.prompt || b.heading || b.title || b.task || "") || "Your work",
+                review: { yours: said } });
+  };
+  (home ? homeworkTasks() : lesson.blocks).forEach((b) => {
     /* A coding task is marked by its checklist: each line is worth whatever
        the teacher put against it. Without marks on the lines there is nothing
-       to add up, so it is left out of the score entirely. */
-    const codingMarks = isCodeTask(b)
+       to add up, so it is left out of the score entirely. Home learning goes
+       by the lesson's mark book, where every line of a checklist is a mark. */
+    const everyLine = home && Array.isArray(b.checks) && b.checks.length > 0;
+    const codingMarks = everyLine || (isCodeTask(b)
       && Array.isArray(b.checks)
-      && b.checks.some(c => (parseInt(c.marks, 10) || 0) > 0);
-    if (!codingMarks && !["mc","order","blanks","short","exam","table","label","hotspot"].includes(b.type)) return;
+      && b.checks.some(c => (parseInt(c.marks, 10) || 0) > 0));
+    const quizHere = home && b.type === "quiz" && (b.questions || []).length > 0;
+    if (!codingMarks && !quizHere && !["mc","order","blanks","short","exam","table","label","hotspot"].includes(b.type)
+        && !(b.type === "pixels" && b.target)){
+      noMark(b);
+      return;
+    }
     const v = fields[b.id] ? fields[b.id].get() : null;
     /* A table with no answers in it, or a picture with no labels, has
        nothing to mark, so it is left out the way an unmarked checklist is. */
-    if (b.type === "table" && !tableMarks(b, v).max) return;
-    if (b.type === "label" && !labelMarks(b, v).max) return;
+    if (b.type === "table" && !tableMarks(b, v).max){ noMark(b); return; }
+    if (b.type === "label" && !labelMarks(b, v).max){ noMark(b); return; }
     n++;
     let pts = 0, max = 0, review = {};
-    if (b.type === "mc"){
+    if (quizHere){
+      max = b.questions.length;
+      const right = (v && Array.isArray(v.solved)) ? v.solved : [];
+      pts = right.filter(Boolean).length;
+      review.picked = (v && Array.isArray(v.picked)) ? v.picked : [];
+      review.solved = right;
+    } else if (b.type === "mc"){
       max = 1;
       const chosen = (v === null || v === undefined) ? null : v;
       pts = chosen === b.answer ? 1 : 0;
@@ -10516,11 +11010,18 @@ function computeAssessment(){
       max = 1;
       pts = window.hotspotHit(b, v) ? 1 : 0;
       review = { clicked: !!(v && typeof v.x === "number") };
-    } else if (isCodeTask(b)){
+    } else if (b.type === "pixels"){
+      /* one mark for a picture that matches the one to copy, square for square */
+      const m = window.pixelMatch(b, v);
+      max = 1;
+      pts = m.max && m.got === m.max ? 1 : 0;
+      review = { got: m.got, of: m.max };
+    } else if (codingMarks){
       const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
+      const byHand = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
       review.items = (b.checks || []).map((c, i) => {
-        const worth = Math.max(0, parseInt(c.marks, 10) || 0);
-        const ok = !!flags[i];
+        const worth = everyLine ? 1 : Math.max(0, parseInt(c.marks, 10) || 0);
+        const ok = everyLine && c.manual ? byHand[i] === true : !!flags[i];
         max += worth;
         if (ok) pts += worth;
         return { given: c.label || ("Check " + (i + 1)), ok, expected: worth + (worth === 1 ? " mark" : " marks") };
@@ -10583,7 +11084,8 @@ function computeAssessment(){
 }
 
 /* What a question with no heading of its own is called in the review. */
-const REVIEW_NAME = { table:"Complete the table", label:"Label the picture", hotspot:"Click the right spot" };
+const REVIEW_NAME = { table:"Complete the table", label:"Label the picture", hotspot:"Click the right spot",
+                      pixels:"Copy the picture" };
 
 /* Best topic -> strength, worst topic -> target. Sentences live in the
    assessment JSON's "topics" bank, so each assessment owns its own wording. */
@@ -10890,8 +11392,9 @@ function enterMarkingLock(){
    each mark is a score to change (see markStepper). */
 function buildReview(res, marking){
   const rev = el("div","review");
+  const blocks = homeworkView() ? homeworkTasks() : lesson.blocks;
   res.perQ.forEach(q => {
-    const b = lesson.blocks.find(x => x.id === q.id) || {};
+    const b = blocks.find(x => x.id === q.id) || {};
     const v = fields[q.id] ? fields[q.id].get() : null;
     const row = el("div","resq");
     row.dataset.q = q.id;
@@ -10905,8 +11408,8 @@ function buildReview(res, marking){
     const changed = el("span","rev-changed");
     body.appendChild(changed);
     const paintMark = () => {
-      row.className = "resq " + (q.pts === q.max ? "right" : q.pts > 0 ? "part" : "wrong");
-      mark.textContent = q.pts === q.max ? "\u2713" : q.pts > 0 ? (q.pts + "/" + q.max) : "\u2717";
+      row.className = "resq " + (!q.max ? "unmarked" : q.pts === q.max ? "right" : q.pts > 0 ? "part" : "wrong");
+      mark.textContent = !q.max ? "" : q.pts === q.max ? "\u2713" : q.pts > 0 ? (q.pts + "/" + q.max) : "\u2717";
       const moved = q.auto !== undefined && q.pts !== q.auto;
       changed.hidden = !moved;
       changed.textContent = !moved ? ""
@@ -10917,6 +11420,42 @@ function buildReview(res, marking){
     /* computeResults left the program out of the title, so it is put back
        here as a box, the way the question showed it. */
     if (q.code) body.appendChild(el("div","ask-code", q.code));
+
+    /* Written work has no mark to show, so it is what they wrote and no more. */
+    if (q.type === "unmarked"){
+      if (q.review.yours){
+        body.appendChild(el("p","rev-label", "Answer given"));
+        body.appendChild(el("div","rev-quote rev-long", q.review.yours));
+      }
+      body.appendChild(el("span","why", "This one is not marked automatically. Your teacher can read it."));
+    }
+
+    /* A quiz in home learning, each of its questions the way a Multiple choice
+       one is drawn. */
+    if (q.type === "quiz"){
+      (b.questions || []).forEach((one, i) => {
+        const right = new Set(Array.isArray(one.answers) ? one.answers : [one.answer]);
+        const chose = new Set(q.review.picked[i] || []);
+        const part = el("div","rev-quizq");
+        const asked = el("p","rev-label", "");
+        asked.innerHTML = one.q || "";
+        part.appendChild(asked);
+        const opts = el("div","rev-opts");
+        (one.options || []).forEach((text, j) => {
+          let c = "rev-opt";
+          if (chose.has(j)) c += " picked " + (right.has(j) ? "good" : "bad");
+          if (right.has(j)) c += " answer";
+          const o = el("div", c);
+          o.appendChild(el("span","dot",""));
+          o.appendChild(el("span","", text));
+          if (right.has(j)) o.appendChild(el("span","tag","Correct"));
+          else if (chose.has(j)) o.appendChild(el("span","tag","Your answer"));
+          opts.appendChild(o);
+        });
+        part.appendChild(opts);
+        body.appendChild(part);
+      });
+    }
 
     if (q.type === "mc"){
       const opts = el("div","rev-opts");
@@ -10973,6 +11512,8 @@ function buildReview(res, marking){
     if (q.type === "table") body.appendChild(reviewTable(b, q));
     if (q.type === "label") body.appendChild(reviewLabels(b, q));
     if (q.type === "hotspot") body.appendChild(reviewHotspot(b, q, v));
+    if (q.type === "pixels")
+      body.appendChild(el("span","why", q.review.got + " of " + q.review.of + " squares the same as the picture to copy."));
 
     /* A one line answer, from a Short answer or an exam question set to one
        line: what they wrote, in the colour it was marked, and the right
@@ -11023,6 +11564,8 @@ function buildReview(res, marking){
        here, only the question's title and a cross. */
     if (q.type === "ide" || q.type === "web"){
       reviewCode(b, v).forEach(n => body.appendChild(n));
+    }
+    if (q.type === "ide" || q.type === "web" || (homeworkView() && Array.isArray(b.checks) && b.checks.length)){
       body.appendChild(el("p","rev-label", "Checklist"));
       body.appendChild(reviewItems(q.review.items || []));
     }
@@ -11044,16 +11587,22 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   if (!res){ res = computeAssessment(); }
   if (!st){ st = starOn() ? computeST(res.byTopic) : NO_STAR; }
   const pct = Math.round(100*res.score/Math.max(1,res.outOf));
-  const heading = resultHeading(pct);
+  const home = homeworkView();
+  /* Home learning of nothing but written answers has no mark to give, and
+     nought out of nought is not one. */
+  const heading = home && !res.outOf ? doneWords() : resultHeading(pct);
   const box = doneShell(heading);
 
   // hero + score, the tick appears whatever the score
   const hero = heroBits(heading, lesson.title);
-  hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
-  hero.appendChild(el("div","done-pct", pct + "%"));
+  if (res.outOf || !home){
+    hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
+    hero.appendChild(el("div","done-pct", pct + "%"));
+  }
+  if (home) homeworkHandIn(hero, justFinished);
   /* A way straight into the marked work, where the "result saved" line used
      to sit. It fades in last, once the cards have settled. */
-  const seeBtn = el("button","btn-primary done-save fadein","View my assessment");
+  const seeBtn = el("button","btn-primary done-save fadein", home ? "View my work" : "View my assessment");
   hero.appendChild(seeBtn);
 
   /* The hero and the two cards sit side by side, and the cards slide in
@@ -11162,11 +11711,35 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   }
 }
 
+/* Home learning hands itself in from its summary, there being no rocket to do
+   it first, and this line is what says it arrived. Offline nothing has gone
+   anywhere, so the way to hand it in is here instead, as on a lesson's. */
+function homeworkHandIn(hero, justFinished){
+  const status = el("p","handin");
+  hero.appendChild(status);
+  if (OFFLINE && !spectate){
+    hero.appendChild(saveButton(status));
+    if (linkPossible()) hero.appendChild(pdfButton(status, false));
+    return;
+  }
+  if (spectate) return;
+  if (justFinished){
+    submitWork().then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
+    return;
+  }
+  /* Opened again later. A copy that never reached the teacher is tried again,
+     and costs nothing if there is nothing new to send. */
+  if (!token) return;
+  paintStatus(status, "done");
+  paintSaveButtons("saved");
+}
+
 /* Whether this assessment gives STAR feedback. A teacher can switch it off
    on a standard assessment in Lesson options: it is then given a mark and
-   nothing more, with no Strength and Target and no response tasks. */
+   nothing more, with no Strength and Target and no response tasks. Home
+   learning has no topics to find a Strength and Target in. */
 function starOn(){
-  return !(lesson && lesson.assessment && !lesson.practical && lesson.star === false);
+  return !(lesson && lesson.assessment && !lesson.practical && lesson.star === false) && !homeworkView();
 }
 const NO_STAR = { strength: "", target: "", targetTopic: null };
 
@@ -11175,11 +11748,13 @@ const NO_STAR = { strength: "", target: "", targetTopic: null };
    tasks. */
 function markOnlySummary(o){
   const tn = teacherNote || {};
-  const teacherCard = feedbackCard({ comment: tn.comment });
+  /* Nothing writes a Strength and Target for home learning, so any here are a
+     teacher's own, from View work. */
+  const teacherCard = feedbackCard(homeworkView() ? tn : { comment: tn.comment });
   if (teacherCard) o.cards.appendChild(teacherCard);
   /* Nothing to put beside the mark, so it sits alone, as a practical does. */
   else { o.cards.remove(); o.layout.classList.add("alone"); }
-  if (teacherTools) o.box.appendChild(markEditor(o.res));
+  if (teacherTools && !homeworkView()) o.box.appendChild(markEditor(o.res));
   const review = marksButton(o.res, o.rev);
   o.seeBtn.addEventListener("click", () => review.open());
   const voice = voiceCard();
@@ -11422,11 +11997,7 @@ function reviewHotspot(b, q, v){
   const ring = el("div","hotspot-ring");
   ring.style.left = Number(b.x || 0) + "%";
   ring.style.top = Number(b.y || 0) + "%";
-  if (b.shape === "rect"){
-    ring.dataset.shape = "rect";
-    ring.style.width = Number(b.w || 0) + "%";
-    ring.style.height = Number(b.h || 0) + "%";
-  } else ring.style.width = (2 * Number(b.r || 0)) + "%";
+  window.hotspotRing(ring, b);
   holder.appendChild(ring);
   if (v && typeof v.x === "number"){
     const pin = el("div","hotspot-pin");
@@ -12029,6 +12600,8 @@ async function showPdfView(){
   document.body.appendChild(shell);
   try{
     if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
+    /* pictures on a whiteboard or storyboard load a moment after the work */
+    if (window.drawKit && window.drawKit.ready) await window.drawKit.ready();
     const doc = buildPdf();
     frame.src = doc.output("bloburl");
     dl.addEventListener("click", () => doc.save(fileName()));
@@ -12111,7 +12684,9 @@ function doneShell(title){
        practical once the teacher has marked it: what to do next is on the
        summary, and going back in only invites changing marked work. */
     const back = el("button","btn-ghost done-back", workFrozen ? "← View my original work" : "← Back to my work");
-    back.addEventListener("click", () => leaveSummary(Math.max(0, steps.length - 1)));
+    /* Only a teacher, for home learning. Back to the top of its one page, not
+       the last of its pages. */
+    back.addEventListener("click", () => leaveSummary(assessPages && assessPages.homework ? 0 : Math.max(0, steps.length - 1)));
     box.appendChild(back);
   }
   /* No title in the bar at the top: the summary says what it is in the big
@@ -12131,7 +12706,7 @@ function doneShell(title){
      to leave the teacher no dot at all. A marked practical has no way back
      to the pages where the dot used to be, and its response tasks have
      checklists a teacher may need to tick. */
-  const keepDot = !spectate && !!(lesson && (lesson.assessment || lesson.practical));
+  const keepDot = !spectate && !!(lesson && (lesson.assessment || lesson.practical || homeworkView()));
   dock.classList.toggle("keep-dot", keepDot);
   dock.classList.toggle("gone", !rubricOnSummary() && !keepDot);
   paintFrozenNote(true);
@@ -12237,6 +12812,8 @@ function pdfButton(statusEl, primary){
     setTimeout(async () => {
       try{
         if (!(await needPdf())) throw new Error("The PDF builder didn't load.");
+        /* pictures on a whiteboard or storyboard load a moment after the work */
+        if (window.drawKit && window.drawKit.ready) await window.drawKit.ready();
         buildPdf().save(fileName());
         busy.reset();
         hubMotion.tick(btn, "Saved as a PDF");
@@ -12330,7 +12907,8 @@ function paintStatus(elm, state){
 const ACH_LABEL = { quiz:"Quiz", mc:"Multiple choice", order:"Put in order",
                      blanks:"Fill the gaps", short:"Short answer",
                      ide:"Coding task", web:"Coding task",
-                     table:"Table", label:"Label a picture", hotspot:"Click the right spot" };
+                     table:"Table", label:"Label a picture", hotspot:"Click the right spot",
+                     pixels:"Pixel studio" };
 /* The words after the number, so "9 of 9" reads as what it actually is:
    ticked checklist points, not an unexplained score "on coding task". Kept
    apart from the number itself so pluralising the noun is one word here
@@ -12344,7 +12922,8 @@ const ACH_PHRASE = {
   "Coding task": (m) => " of " + m + " checklist point" + (m === 1 ? "" : "s") + " ticked off",
   "Table": (m) => " of " + m + " table box" + (m === 1 ? "" : "es") + " filled in correctly",
   "Label a picture": (m) => " of " + m + " label" + (m === 1 ? "" : "s") + " in the right place",
-  "Click the right spot": (m) => " of " + m + " spot" + (m === 1 ? "" : "s") + " clicked correctly"
+  "Click the right spot": (m) => " of " + m + " spot" + (m === 1 ? "" : "s") + " clicked correctly",
+  "Pixel studio": (m) => " of " + m + " picture" + (m === 1 ? "" : "s") + " copied exactly"
 };
 /* Whether a task has been touched at all, read off the same live value
    lessonTaskScore marks. A live quiz or "put in order" get() is always a
@@ -12363,6 +12942,7 @@ function lessonTaskAttempted(b, v){
   if (b.type === "table") return Array.isArray(v) && v.some(x => String(x == null ? "" : x).trim() !== "");
   if (b.type === "label") return !!(v && v.placed && Object.keys(v.placed).some(k => v.placed[k]));
   if (b.type === "hotspot") return !!(v && typeof v.x === "number");
+  if (b.type === "pixels") return b.viewOnly === true || !!(v && Array.isArray(v.frames));
   return true;
 }
 function lessonTaskScore(b, v){
@@ -12398,6 +12978,14 @@ function lessonTaskScore(b, v){
     return m.max ? { got: m.got, max: m.max } : null;
   }
   if (b.type === "hotspot") return { got: window.hotspotHit(b, v) ? 1 : 0, max: 1 };
+  /* a picture to copy is one mark for getting every square; one with nothing
+     to copy is somewhere to make something, with nothing to mark */
+  if (b.type === "pixels"){
+    if (!b.target) return null;
+    const m = window.pixelMatch(b, v);
+    return { got: m.got === m.max ? 1 : 0, max: 1 };
+  }
+  if (b.type === "boss") return { got: (v && v.won) ? 1 : 0, max: 1 };
   if ((isCodeTask(b) || isFileTask(b)) && Array.isArray(b.checks) && b.checks.length){
     const flags = (v && Array.isArray(v.checks)) ? v.checks : [];
     const manual = (v && v.manual && typeof v.manual === "object") ? v.manual : {};
@@ -12583,8 +13171,9 @@ function showLessonComplete(revisit, justFinished, sentAlready){
        out without going looking for one. */
     if (linkPossible()) hero.appendChild(pdfButton(status, false));
   }
-  /* Offline there is no home to go back to, only a code box. */
-  if (!spectate && !OFFLINE){
+  /* Offline there is no home to go back to, only a code box, and nor is there
+     for somebody who never signed in. */
+  if (!spectate && !OFFLINE && !guest){
     const back = el("a","done-back","\u2190 Back to Home"); back.href = "index.html";
     hero.appendChild(back);
   }
@@ -12634,7 +13223,7 @@ function showLessonComplete(revisit, justFinished, sentAlready){
     if (sentAlready){ paintStatus(status, sentAlready); paintSaveButtons(sentAlready === "done" ? "saved" : "idle"); }
     else submitWork().then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
   }
-  else if (revisit && token && !spectate){
+  else if (revisit && (token || guest) && !spectate){
     status.dataset.state = "done";
     status.textContent = "Saved earlier \u2713";
     paintSaveButtons("saved");
@@ -12801,8 +13390,12 @@ function boardImage(strokes){
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     const seen = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y;
                              if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
+    const kit = window.drawKit;
     strokes.forEach(st => {
-      if (st.kind === "text"){
+      if (kit && kit.has(st)){
+        const b = kit.box(st);
+        seen(b[0], b[1]); seen(b[2], b[3]);
+      } else if (st.kind === "text"){
         const w = String(st.text || "").length * (st.size || 20) * 0.55;
         seen(st.x, st.y - (st.size || 20)); seen(st.x + w, st.y + 6);
       } else if (Array.isArray(st.points)){
@@ -12821,6 +13414,8 @@ function boardImage(strokes){
     c.fillStyle = "#FFFFFF"; c.fillRect(0, 0, cv.width, cv.height);
     c.setTransform(scale, 0, 0, scale, -minX * scale, -minY * scale);
     strokes.forEach(st => {
+      /* shapes and the drawings dragged in, painted the way the board paints them */
+      if (kit && kit.paint(c, st)) return;
       if (st.kind === "text"){
         c.fillStyle = st.colour || "#1D1D1B";
         c.font = (st.size || 20) + "px 'Segoe UI', Arial, sans-serif";
@@ -13358,6 +13953,56 @@ function buildPdf(){
                  colour: !clicked ? PDF.RED : hit ? PDF.GREEN : PDF.RED });
       return out;
     }
+    if (b.type === "boardgame"){
+      out.push({ t: "text", face: "task", text: title || "Board game" });
+      const games = (v && Number(v.games)) || 0, asked = (v && Number(v.asked)) || 0;
+      out.push({ t: "text", face: "p",
+                 text: games ? "Reached the boat " + games + (games === 1 ? " time" : " times") + ", best " + ((v && v.best) || 0) + " coins"
+                     : asked ? "Started, not finished yet" : "Not started",
+                 colour: games ? PDF.GREEN : asked ? PDF.AMBER : PDF.RED });
+      if (asked) out.push({ t: "text", face: "small", text: v.right + " right out of " + asked + " questions answered" });
+      return out;
+    }
+    if (b.type === "quest"){
+      out.push({ t: "text", face: "task", text: title || "Quest" });
+      const levels = (v && Number(v.levels)) || 0, asked = (v && Number(v.asked)) || 0;
+      out.push({ t: "text", face: "p",
+                 text: levels ? "Finished " + levels + (levels === 1 ? " level" : " levels") + ", " + ((v && v.bank) || 0) + " coins banked"
+                     : asked ? "Started, no level finished yet" : "Not started",
+                 colour: levels ? PDF.GREEN : asked ? PDF.AMBER : PDF.RED });
+      if (asked) out.push({ t: "text", face: "small", text: v.right + " right out of " + asked + " questions answered" });
+      return out;
+    }
+    if (b.type === "swipe"){
+      out.push({ t: "text", face: "task", text: title || "Swipe" });
+      const rounds = (v && Number(v.rounds)) || 0, at = (v && Number(v.at)) || 0;
+      const total = (b.cards || []).length;
+      out.push({ t: "text", face: "p",
+                 text: rounds ? "Sorted all " + total + " cards " + rounds + (rounds === 1 ? " time" : " times") + ", best " + ((v && v.bestScore) || 0) + " right"
+                     : at ? "Sorted " + at + " of " + total + " cards" : "Not started",
+                 colour: rounds ? PDF.GREEN : at ? PDF.AMBER : PDF.RED });
+      if (v && v.bestStreak) out.push({ t: "text", face: "small", text: "Longest streak: " + v.bestStreak });
+      return out;
+    }
+    if (b.type === "pixels"){
+      /* An animation to watch, not something they did. */
+      if (b.viewOnly === true) return out;
+      out.push({ t: "text", face: "task", text: title || "Pixel studio" });
+      const list = v && Array.isArray(v.frames) ? v.frames : [];
+      if (!list.length){ out.push(answerBox("", "Nothing coloured in")); return out; }
+      if (b.target){
+        const m = window.pixelMatch(b, v);
+        out.push({ t: "text", face: "p", text: m.got + " of " + m.max + " squares the same as the picture to copy",
+                   colour: m.got === m.max ? PDF.GREEN : PDF.AMBER });
+      }
+      /* a row of small frames for an animation, one bigger picture otherwise */
+      const wide = W * (list.length > 1 ? 0.22 : 0.45);
+      list.slice(0, 12).forEach((f, i) => {
+        if (list.length > 1) out.push({ t: "text", face: "sub", text: "Frame " + (i + 1) });
+        out.push({ t: "img", data: window.pixelImage(b, f), fmt: "PNG", w: wide, h: wide * (Number(b.h) || 8) / (Number(b.w) || 8) });
+      });
+      return out;
+    }
     if (b.type === "label"){
       out.push({ t: "text", face: "task", text: title || "Labelling a picture" });
       const placed = (v && v.placed) ? v.placed : {};
@@ -13404,6 +14049,26 @@ function buildPdf(){
         if (secs > 0) out.push({ t: "text", face: "small",
           text: "Total: " + secs + " seconds, " + Math.round(secs * fps) + " frames" });
       }
+      return out;
+    }
+    if (b.type === "poster"){
+      out.push({ t: "text", face: "task", text: title || "Poster" });
+      const data = window.posterImage ? window.posterImage(v) : "";
+      if (!data){ out.push(answerBox("", "No poster made")); return out; }
+      /* Half the page across: a poster is tall, and full width would
+         run it over onto a second sheet. */
+      const w = W * 0.55;
+      out.push({ t: "img", data: data, fmt: "JPEG", w: w, h: w * 848 / 600 });
+      return out;
+    }
+    if (b.type === "boss"){
+      out.push({ t: "text", face: "task", text: title || ("Boss battle: " + (b.boss || "the boss")) });
+      const won = !!(v && v.won), tries = (v && Number(v.tries)) || 0;
+      out.push({ t: "text", face: "p",
+                 text: won ? "Beat " + (b.boss || "the boss") + " (best: " + ((v && v.bestHearts) || 0) + " hearts left)"
+                     : tries ? "Fought " + tries + (tries === 1 ? " time" : " times") + ", not beaten yet" : "Not started",
+                 colour: won ? PDF.GREEN : tries ? PDF.AMBER : PDF.RED });
+      if (v && v.asked) out.push({ t: "text", face: "small", text: v.right + " right out of " + v.asked + " answered" });
       return out;
     }
     if (b.type === "image" || b.type === "board"){

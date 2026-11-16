@@ -76,7 +76,7 @@
   const SECTION = {
     homeView:"home", hubView:"hub", hubUnitsView:"hub", hubCompView:"hub", hubPointView:"hub",
     hubPointLessonsView:"hub", hubLessonsView:"hub", classesView:"classes", classView:"classes",
-    studentsView:"classes", coverView:"classes", unitsView:"classes", partsView:"classes",
+    studentsView:"classes", coverView:"classes", partsView:"classes",
     lessonsView:"classes", progressView:"classes", timetableView:"classes", studentView:"classes", practiceView:"practice", resultsView:"results",
     pwView:"pw", keepView:"keep", keyView:"home", whoView:"home"
   };
@@ -239,7 +239,8 @@
   window.removeFromClass = function(l){
     const id = l.lesson_id;
     const mine = assigns.find(a => a.lesson_id === id && a.group_name.toLowerCase() === cls.toLowerCase());
-    const was = mine ? { published: !!mine.published, release: mine.release_at || "", close: mine.close_on || "" } : null;
+    const was = mine ? { published: !!mine.published, release: mine.release_at || "", close: mine.close_on || "",
+                         shownIn: mine.shown_in || "" } : null;
     const others = assigns.filter(a => a.lesson_id === id && a.group_name.toLowerCase() !== cls.toLowerCase());
     const group = cls;
     openModal(box => {
@@ -259,10 +260,12 @@
           closeModal(); paintLessonGrid();
           UI.toast("Removed from " + group, { action:"Undo", onAction: async () => {
             try{
-              await catPost({ op:"assign", id: id, groups: [group] });
+              /* back under the unit it was under, not the one it is filed in */
+              await catPost(was && was.shownIn ? { op:"assign", id: id, groups: [group], shownIn: was.shownIn }
+                                               : { op:"assign", id: id, groups: [group] });
               if (was && was.published)
                 await catPost({ op:"class-publish", id: id, group: group, published: true,
-                                releaseAt: was.release, closeOn: was.close });
+                                releaseAt: was.release, closeOn: was.close, openEnded: !was.close });
               await loadCatalogue();
               if (cls === group) paintLessonGrid();
               UI.toast("Back with " + group);
@@ -358,11 +361,13 @@
      browser alone, which put them out of number order for that teacher and
      nobody else. */
   const baseLessonCards = lessonCards;
-  window.lessonCards = function(list, box){
+  window.lessonCards = function(list, box, opts){
     if (!on("richCards")) return baseLessonCards.apply(this, arguments);
+    opts = opts || {};
     box.innerHTML = "";
-    if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build a new lesson”.")); return; }
+    if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build new”.")); return; }
     inOrder(list, (l) => titleOf(l.lesson_id));
+    suggestedFirst(list, opts.suggest);
     const grid = el("div","lessongrid richgrid");
     list.forEach(l => {
       const id = l.lesson_id;
@@ -377,7 +382,10 @@
       if (alts.length) head.appendChild(el("span","statechip open", alts.length + " version" + (alts.length === 1 ? "" : "s")));
       if (l.assessment) head.appendChild(el("span","statechip shut","Assessment"));
       if (l.cover) head.appendChild(el("span","statechip open","Cover"));
+      if (opts.suggest && opts.suggest(l)) head.appendChild(suggestedPill());
       card.appendChild(head);
+      /* The cover hub's line, the same as the plain cards (admin.html). */
+      if (opts.where) card.appendChild(unitsLine("p", "lp-from", l, opts.where, opts.here));
 
       /* pages, tasks and when, filled in once the lesson has been read */
       const meta = el("p","rc-meta");
@@ -428,7 +436,8 @@
       acts.appendChild(give);
       acts.appendChild(edit);
       acts.appendChild(pv);
-      const more = overflowMenu([["Delete lesson", () => whichVersion(id, "Which one do you want to delete?",
+      const more = overflowMenu([["Download lesson JSON", () => downloadLessonJson(id)],
+                                 ["Delete lesson", () => whichVersion(id, "Which one do you want to delete?",
                                                                       (v) => deleteLesson(v))]]);
       more.classList.add("rc-more");
       more.addEventListener("click", (e) => e.stopPropagation());

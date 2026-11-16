@@ -571,7 +571,7 @@
     x.addEventListener("click", shutDrawer);
     head.appendChild(x);
     side.appendChild(head);
-    side.appendChild(el("p", "resdrawer-note", "Worked out from everyone in the year group who has sat it, not only the classes picked. The grades in the markbook change as you change the marks."));
+    side.appendChild(el("p", "resdrawer-note", "Worked out from everyone in the year group who has sat it, not only the classes picked. The grades in the mark book change as you change the marks."));
     const graded = gradedLessons();
     if (graded.length > 1){
       const sel = el("select", "sel resselect");
@@ -1140,7 +1140,7 @@
     const graded = gradedLessons();
     const bar = el("div", "mbbar");
     const said = el("div", "resbook-head");
-    said.appendChild(el("h3", "resbook-title", "Markbook"));
+    said.appendChild(el("h3", "resbook-title", "Mark book"));
     const count = el("span", "resbook-count");
     said.appendChild(count);
     bar.appendChild(said);

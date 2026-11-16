@@ -48,6 +48,7 @@
     progress: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     coverage: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>',
     work:     '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 14l2 2 4-4"/>',
+    star:     '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/>',
     search:   '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
     plus:     '<path d="M12 5v14M5 12h14"/>',
     check:    '<path d="M5 12.5l4.5 4.5L19 7.5"/>',

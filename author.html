@@ -15,6 +15,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="coverwork.js"></script>
 <script src="lessonorder.js"></script>
 <script src="lessoncompat.js"></script>
 <script src="shortmatch.js"></script>
@@ -24,6 +25,8 @@
 <!-- for the wording a practical uses for a student who was not there, kept
      in one place with the marking screens that use it -->
 <script src="progressmath.js"></script>
+<script src="boxkit.js"></script>
+<script src="pixels.js"></script>
 <script src="richtext.js"></script>
 <script src="pyedit.js"></script>
 <script src="scratchhub.js"></script>
@@ -224,6 +227,7 @@
           <button class="pal" data-add="table"><b>Table</b><span>They fill in the blank cells</span></button>
           <button class="pal" data-add="label"><b>Label a picture</b><span>Drag words onto an image</span></button>
           <button class="pal" data-add="hotspot"><b>Click the right spot</b><span>They click a place on a picture</span></button>
+          <button class="pal" data-add="boss"><b>Boss battle</b><span>A quiz where right answers beat a boss</span></button>
         </div>
       </div>
       <div class="palgroup" data-group="media">
@@ -243,6 +247,11 @@
           <button class="pal" data-add="mindmap"><b>Mind map</b><span>A middle idea with branches</span></button>
           <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
           <button class="pal" data-add="storyboard"><b>Storyboard</b><span>Plan an animation, panel by panel</span></button>
+          <button class="pal" data-add="poster"><b>Poster</b><span>Make a poster in an easy photo editor</span></button>
+          <button class="pal" data-add="pixels"><b>Pixel studio</b><span>Colour a grid square by square, or animate it</span></button>
+          <button class="pal" data-add="boardgame"><b>Board game</b><span>Roll a dice round an island, answering questions</span></button>
+          <button class="pal" data-add="swipe"><b>Swipe</b><span>Sort cards left or right, with a streak</span></button>
+          <button class="pal" data-add="quest"><b>Quest</b><span>Run and jump through worlds, answering robots</span></button>
           <button class="pal" data-add="helper"><b>Photoshop help</b><span>A help chat they can ask</span></button>
         </div>
       </div>
@@ -590,7 +599,7 @@ window.addEventListener("scroll", placeHelp, true);
    original. A version is a whole lesson of its own, with its own id and its
    own students' work: the three fields beside it are only what the console
    shows to tell one apart from another. */
-let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false,
+let lesson = { title:"", intro:"", unit:"", subunit:"", year:"", point:"", assessment:false, practical:false, homework:false, cover:false, coverUnits:[],
                versionOf:"", versionName:"", versionNote:"", versionCode:"",
                topics:{}, responses:{}, extensions:[], blocks:[] };
 
@@ -648,6 +657,16 @@ const BLANK = {
                      task:"Type what you want to do in Photoshop, or what has gone wrong." }),
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
+  poster:   () => ({ type:"poster", title:"Make a poster", task:"", heading:"" }),
+  pixels:   () => ({ type:"pixels", title:"", task:"", w:8, h:8, depth:1 }),
+  boardgame:() => ({ type:"boardgame", title:"", task:"", squares:36,
+                     questions:[{ q:"", options:["True","False"], answers:[0], hint:"", why:"" }] }),
+  quest:    () => ({ type:"quest", title:"", task:"", theme:"islands", goal:30,
+                     worlds:[{ name:"", questions:[{ q:"", options:["",""], answers:[0], why:"" }] }] }),
+  swipe:    () => ({ type:"swipe", title:"", task:"", left:"No", right:"Yes",
+                     cards:[{ text:"", side:"right", why:"" }, { text:"", side:"left", why:"" }] }),
+  boss:     () => ({ type:"boss", title:"", boss:"The Quiz Goblin", look:"goblin", hits:8, hearts:3,
+                     questions:[{ q:"", options:["",""], answers:[0], hint:"", why:"" }] }),
   storyboard:() => ({ type:"storyboard", title:"", task:"", panels:6, names:[], timing:true, minSecs:0, maxSecs:0 }),
   keywords: () => ({ type:"keywords", title:"", task:"",
                      words:[{ word:"", hint:"" }, { word:"", hint:"" }] }),
@@ -742,7 +761,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boardgame:"Board game", swipe:"Swipe", quest:"Quest", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -946,7 +965,7 @@ function fitsQuestions(b){
 /* Drafts written by the older builder had one question per quiz. */
 function migrate(arr){
   (arr || []).forEach(b => {
-      if (b.type === "quiz" && b.questions){
+      if ((b.type === "quiz" || b.type === "boss" || b.type === "boardgame") && b.questions){
       b.questions.forEach(q => { if (!q.answers) q.answers = [q.answer === undefined ? 0 : q.answer]; });
     }
     if (b.type === "text" && b.body !== undefined && b.html === undefined){
@@ -1024,6 +1043,11 @@ function compile(){
   if (lesson.subunit) out.subunit = lesson.subunit;
   if (lesson.homework) out.homework = true;
   if (lesson.cover) out.cover = true;
+  /* The other units a cover lesson suits, beside the one it is filed in. The
+     console's cover hub suggests it in each of them and puts it in each of
+     their topics. Only a cover lesson has them. */
+  const alsoFor = lesson.cover ? coverUnitsKept() : [];
+  if (alsoFor.length) out.coverUnits = alsoFor;
   /* The lesson's slides (author-slides.js), one deck kept whole. */
   const slides = window.compileSlides ? window.compileSlides(lesson) : null;
   if (slides) out.slides = slides;
@@ -1197,6 +1221,13 @@ function compileOne(b, id, target){
        reopening the lesson would find every task back to None. */
     if (x && b && GATE_TYPES.includes(b.type) && ["attempted","partial","full"].includes(b.gate))
       x.gate = b.gate;
+    /* In a cover lesson, a task that shows the next one with it rather than
+       waiting for Understood. Only the off ones are written down, so every
+       cover lesson made before this keeps one task at a time. */
+    if (x && b && b.coverHold === false) x.coverHold = false;
+    /* And whether two wrong tries are enough to carry on. Written either
+       way once chosen, because left alone it depends on the kind of task. */
+    if (x && b && (b.coverTries === true || b.coverTries === false)) x.coverTries = b.coverTries;
     target.push(x);
   };
   if (b.type === "page"){
@@ -1228,7 +1259,7 @@ function compileOne(b, id, target){
     if (opts.length < 2) return;                     // nothing to choose between
     push({ type:"choice", id, title: b.title || "", task: b.task || "",
            prompt: b.prompt ? (window.cleanRichText ? window.cleanRichText(b.prompt) : b.prompt) : "",
-           options: opts });
+           options: opts, swap: b.swap === true ? true : undefined });
     return;
   }
   if (b.type === "extension"){
@@ -1372,6 +1403,8 @@ function compileOne(b, id, target){
       const blk = { type:"scratch", id };
       if (b.title) blk.title = b.title;
       if (b.task) blk.task = b.task;
+      if (b.instructions && (/<img/i.test(b.instructions) || String(b.instructions).replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim()))
+        blk.instructions = b.instructions;
       if (b.project && typeof b.project === "object"){
         blk.project = b.project;
         if (b.own && Object.keys(b.own).length) blk.own = b.own;
@@ -1415,6 +1448,73 @@ function compileOne(b, id, target){
     else if (b.type === "board")
       push(keepArrays({ type:"board", id, title: b.title || "", task: b.task || "",
         height: Number(b.height) || 420 }));
+    else if (b.type === "poster")
+      push(keepArrays({ type:"poster", id, title: b.title || "", task: b.task || "",
+        heading: b.heading || "" }));
+    else if (b.type === "pixels"){
+      /* Frames are strings of hex digits, one a square, cut or padded to the
+         grid, so a hand-written lesson with a short row still saves whole. */
+      const w = Math.max(2, Math.min(32, parseInt(b.w, 10) || 8)), h = Math.max(2, Math.min(32, parseInt(b.h, 10) || 8));
+      const frame = (f) => { const t = String(f || "").toLowerCase().replace(/[^0-9a-f]/g, "").slice(0, w * h); return t + "0".repeat(w * h - t.length); };
+      const animated = b.frames === true;
+      push(keepArrays({ type:"pixels", id, title: b.title || "", task: b.task || "",
+        w, h, depth: Math.max(1, Math.min(4, parseInt(b.depth, 10) || 1)),
+        depthChoice: b.depthChoice === true ? true : undefined,
+        target: b.target ? frame(b.target) : undefined,
+        clue: b.target && b.clue === "binary" ? "binary" : undefined,
+        frames: animated ? true : undefined,
+        maxFrames: animated ? Math.max(2, Math.min(24, parseInt(b.maxFrames, 10) || 8)) : undefined,
+        fps: animated ? Math.max(1, Math.min(24, parseInt(b.fps, 10) || 6)) : undefined,
+        viewOnly: animated && !b.target && b.viewOnly === true ? true : undefined,
+        start: Array.isArray(b.start) && b.start.length ? b.start.slice(0, animated ? 24 : 1).map(frame) : undefined,
+        binary: b.binary === false ? false : b.binary === "open" ? "open" : undefined,
+        topic: lesson.assessment ? b.topic : "" }));
+    }
+    else if (b.type === "boss")
+      push({ type:"boss", id, title: b.title || "", task: b.task || "",
+        boss: b.boss || "The Boss", look: ["goblin","dragon","robot","ghost"].includes(b.look) ? b.look : "goblin",
+        hits: Math.max(1, Math.min(30, parseInt(b.hits, 10) || 8)),
+        hearts: Math.max(1, Math.min(10, parseInt(b.hearts, 10) || 3)),
+        questions: (b.questions || []).map(q => {
+          const opts = (q.options || []);
+          const answers = (q.answers !== undefined ? q.answers : [q.answer || 0])
+            .map(Number).filter(x => !isNaN(x) && x >= 0 && x < opts.length);
+          return { q: q.q || "", options: opts.filter(x => x !== ""),
+                   answers: answers.length ? answers : [0], hint: q.hint || "", why: q.why || "" };
+        }).filter(q => q.q && q.options.length > 1) });
+    else if (b.type === "boardgame")
+      push({ type:"boardgame", id, title: b.title || "", task: b.task || "",
+        squares: Math.max(20, Math.min(48, parseInt(b.squares, 10) || 36)),
+        goal: parseInt(b.goal, 10) > 0 ? Math.min(500, parseInt(b.goal, 10)) : undefined,
+        /* the same shape as a quiz's questions, because the editor is the quiz's */
+        questions: (b.questions || []).map(q => {
+          const opts = (q.options || []);
+          const answers = (q.answers !== undefined ? q.answers : [q.answer || 0])
+            .map(Number).filter(x => !isNaN(x) && x >= 0 && x < opts.length);
+          return { q: q.q || "", options: opts.filter(x => x !== ""),
+                   answers: answers.length ? answers : [0], hint: q.hint || "", why: q.why || "" };
+        }).filter(q => q.q && q.options.length > 1) });
+    else if (b.type === "quest")
+      push({ type:"quest", id, title: b.title || "", task: b.task || "",
+        theme: ["islands","space","city","snow"].includes(b.theme) ? b.theme : "islands",
+        goal: parseInt(b.goal, 10) > 0 ? Math.min(500, parseInt(b.goal, 10)) : undefined,
+        hazard: String(b.hazard || "").trim() || undefined,
+        worlds: (b.worlds || []).map(w => ({
+          name: String((w && w.name) || "").trim(),
+          questions: ((w && w.questions) || []).map(q => {
+            const opts = (q.options || []).map(o => String(o == null ? "" : o));
+            const keep = opts.map((o, i) => i).filter(i => opts[i].trim() !== "");
+            const want = Number((q.answers || [0])[0]) || 0;
+            return { q: String(q.q || "").trim(), options: keep.map(i => opts[i]),
+                     answers: [Math.max(0, keep.indexOf(want))], why: String(q.why || "").trim() || undefined };
+          }).filter(q => q.q && q.options.length > 1)
+        })).filter(w => w.questions.length) });
+    else if (b.type === "swipe")
+      push({ type:"swipe", id, title: b.title || "", task: b.task || "",
+        left: String(b.left || "").trim() || "No", right: String(b.right || "").trim() || "Yes",
+        cards: (b.cards || []).filter(c => c && String(c.text || "").trim())
+          .map(c => keepArrays({ text: String(c.text).trim(), side: c.side === "left" ? "left" : "right",
+                                 why: String(c.why || "").trim() })) });
     else if (b.type === "storyboard")
       push(keepArrays({ type:"storyboard", id, title: b.title || "", task: b.task || "",
         panels: Math.max(2, Math.min(b.flip === true ? 24 : 12, Number(b.panels) || 6)),
@@ -1458,6 +1558,9 @@ function compileOne(b, id, target){
         x: pct(b.x, 50), y: pct(b.y, 50), r: Math.max(1, Math.min(50, Number(b.r) || 8)),
         w: rect ? Math.max(1, pct(b.w, 16)) : undefined,
         h: rect ? Math.max(1, pct(b.h, 16)) : undefined,
+        /* an oval's half-height, and how far either shape is turned */
+        ry: !rect && Number(b.ry) > 0 ? Math.max(1, Math.min(100, Math.round(Number(b.ry) * 10) / 10)) : undefined,
+        rot: Number(b.rot) ? Math.round(Number(b.rot) * 10) / 10 : undefined,
         ratio: Number(b.ratio) > 0 ? Math.round(Number(b.ratio) * 10000) / 10000 : undefined,
         topic: lesson.assessment ? b.topic : "" }));
     }
@@ -2363,15 +2466,18 @@ function gateChoices(b){
     ["attempted","Attempted","They have answered at least one question, right or wrong."],
     ["pass","Pass mark","They finish the quiz and get enough right. You choose how many below."]];
   const code = b.type === "ide" || b.type === "web" || b.type === "scratch";
+  const short = b.type === "short";
   const out = [none, ["attempted","Attempted", code
     ? "They have changed the code or run it, whether or not it works yet."
+    : short ? "They have typed an answer and pressed Check answer, right or wrong."
     : "They have had a go, right or wrong."]];
   if (code && !(Array.isArray(b.checks) && b.checks.some(c => String(c.label || "").trim()))) return out;
   if (code || b.type === "blanks")
     out.push(["partial","Partial", code ? "At least one line on the checklist is ticked."
                                         : "At least one gap is right."]);
   out.push(["full","Full", code ? "Every line on the checklist is ticked. Lines you tick by hand only count once you have ticked them."
-                              : b.type === "blanks" ? "Every gap is right." : "They get it right."]);
+                              : b.type === "blanks" ? "Every gap is right."
+                              : short ? "They get it right and press Check answer." : "They get it right."]);
   return out;
 }
 function setGate(b, level){
@@ -2414,6 +2520,83 @@ function askGate(b){
     done.addEventListener("click", closeModal);
     box.appendChild(done);
   });
+}
+/* The eye in a cover lesson. On, the task after this one stays hidden until
+   this is done and Understood or Finished is pressed, which is how every
+   cover lesson has always worked. Off, the next task shows with it and this
+   one has no Understood at all, which is how a drawing and the quiz about it
+   sit on screen together. Either way Continue still asks for this task to be
+   done, as lesson.html decides. */
+function askCoverHold(b, arr){
+  openModal(box => {
+    box.appendChild(el("h2","","When does the next task appear?"));
+    box.appendChild(el("p","modal-text",
+      "In a cover lesson a page opens one task at a time. To put the next task on screen " +
+      "beside this one, show it with this one. Students still have to do both before Continue moves them on."));
+    const rest = (arr || []).filter(x => x.type !== "extension");
+    if (rest[rest.length - 1] === b)
+      box.appendChild(el("p","modal-text", "This is the last task on the page, so there is no next task. " +
+        "This decides whether the extension tasks wait for it."));
+    const now = b.coverHold !== false;
+    const list = el("div","modepick");
+    [[true, "Wait for this task",
+      "The next task is hidden until this one is done and they press Understood or Finished."],
+     [false, "Show the next task with this one",
+      "The next task is there from the start, and this one has no Understood or Finished button."]]
+      .forEach(choice => {
+        const row = el("button","modepick-item gatepick" + (choice[0] === now ? " on" : ""));
+        row.type = "button";
+        row.setAttribute("aria-pressed", choice[0] === now ? "true" : "false");
+        row.appendChild(el("b","", choice[1]));
+        row.appendChild(el("span","", choice[2]));
+        row.addEventListener("click", () => {
+          if (choice[0]) delete b.coverHold; else b.coverHold = false;
+          saveDraft(); render(); schedulePreview();
+          askCoverHold(b, arr);
+        });
+        list.appendChild(row);
+      });
+    box.appendChild(list);
+    /* A task with its own Check, or the boss, also asks what two wrong tries
+       do. Left alone a short answer and a table give the answer to type in,
+       and the rest let them carry on (coverwork.js, carriesOn). */
+    if (coverTriesMatter(b)){
+      box.appendChild(el("h3","gatepick-head","After two wrong tries"));
+      const typed = b.type === "short" || b.type === "table";
+      const carry = window.coverWork.carriesOn(b);
+      const tries = el("div","modepick");
+      [[true, "Let them carry on",
+        typed ? "The answer is shown and they can move on." : "Two different wrong answers are enough to move on."],
+       [false, "They have to get it right",
+        typed ? "The answer is shown and they type it in."
+              : b.type === "boss" ? "They keep battling until they win." : "They keep trying until it is right."]]
+        .forEach(choice => {
+          const row = el("button","modepick-item gatepick" + (choice[0] === carry ? " on" : ""));
+          row.type = "button";
+          row.setAttribute("aria-pressed", choice[0] === carry ? "true" : "false");
+          row.appendChild(el("b","", choice[1]));
+          row.appendChild(el("span","", choice[2]));
+          row.addEventListener("click", () => {
+            b.coverTries = choice[0];
+            saveDraft(); render(); schedulePreview();
+            askCoverHold(b, arr);
+          });
+          tries.appendChild(row);
+        });
+      box.appendChild(tries);
+      scrollBody(box);
+    }
+    const done = el("button","btn-primary modal-cta","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+}
+/* The tasks where two wrong tries mean anything in a cover lesson: a short
+   answer, a table, labels, a spot on a picture, a picture to copy and the
+   boss. Asked by kind rather than whether answers are set yet, so the choice
+   is there while the task is still being written. */
+function coverTriesMatter(b){
+  return !!b && (["short","table","label","hotspot","boss"].indexOf(b.type) >= 0 || (b.type === "pixels" && !!b.target));
 }
 /* The pass mark, as a percentage or a number of questions. This used to sit
    under every quiz, set to 70% whether anyone wanted one or not. */
@@ -2603,7 +2786,22 @@ function card(b, i, arr){
      open one after another by exactly this, so it gets the button too. Lit
      up while a level is set, so a teacher can see which tasks are holding
      their page from the outline. */
-  if (onAPage && b !== bankRoot && GATE_TYPES.includes(b.type)
+  /* A cover lesson opens a page one task at a time whatever the task, and
+     the levels below mean nothing there, so its eye is on every task and
+     asks only whether the next task waits for this one. Extension tasks
+     already sit apart from the rest, so they have none. */
+  if (lesson.cover && onAPage && b !== bankRoot && b.type !== "extension"){
+    const waits = b.coverHold !== false;
+    const gb = el("button","btn-ghost bmini gatebtn" + (waits ? " on" : ""));
+    gb.type = "button";
+    gb.innerHTML = EYE_SHUT;
+    gb.title = waits ? "The next task waits until Understood or Finished is pressed on this one"
+                     : "The next task is shown with this one";
+    gb.setAttribute("aria-label", gb.title);
+    gb.addEventListener("click", (e) => { e.stopPropagation(); askCoverHold(b, arr); });
+    tools.appendChild(gb);
+  }
+  else if (onAPage && b !== bankRoot && GATE_TYPES.includes(b.type)
       && !(lesson.assessment && !lesson.practical)){
     const level = gateLevel(b);
     const gb = el("button","btn-ghost bmini gatebtn" + (level === "none" ? "" : " on"));
@@ -2862,15 +3060,15 @@ function setMode(assess, practical){
    is ever locked. Cover is nothing locked as well, but each page has to be
    earned by having a go at it, because nobody in the room can check. */
 const KINDS = [
-  { id:"lesson",    name:"Lesson",               icon:"lessons",
+  { id:"lesson",    name:"Lesson",               icon:"lessons",  short:"Pages you teach through.",
     about:"Pages a class works through, opened one at a time as you teach." },
-  { id:"assess",    name:"Assessment",           icon:"work",
+  { id:"assess",    name:"Assessment",           icon:"work",     short:"A test that marks itself.",
     about:"Questions marked as they are answered, with a Strength, a Target and response tasks." },
-  { id:"practical", name:"Practical assessment", icon:"practice",
+  { id:"practical", name:"Practical assessment", icon:"practice", short:"Work you mark by hand.",
     about:"Built like a lesson, sat a page at a time, and marked by you." },
-  { id:"home",      name:"Home learning",        icon:"home",
-    about:"A lesson done at home. Every page is open from the start." },
-  { id:"cover",     name:"Cover lesson",         icon:"eye",
+  { id:"home",      name:"Home learning",        icon:"home",     short:"Done at home, on one page.",
+    about:"A lesson done at home. Every question is on one page, the way an assessment's are." },
+  { id:"cover",     name:"Cover lesson",         icon:"eye",      short:"Runs without you.",
     about:"Runs without you. Students earn each page by having a go, and finish on a card they show the cover teacher." }
 ];
 function kindNow(){
@@ -2950,7 +3148,7 @@ function rubricPopup(){
     box.appendChild(el("h2","","Levels"));
     box.appendChild(el("p","modal-text",
       "Put the lowest level first. Students see them in this order, left to right, while they work. " +
-      "Give each one the grade range it stands for: the markbook shows it, and students see it only if you choose the grade range for them."));
+      "Give each one the grade range it stands for: the mark book shows it, and students see it only if you choose the grade range for them."));
     /* What students are told before the levels themselves, which is how this
        practical in particular is meant to be worked through. Left empty, the
        rubric opens with no line under its heading at all. */
@@ -3853,7 +4051,7 @@ function markingSetup(into){
     body.appendChild(el("p","bhelp",
       "Students sit this like any practical and hand it in at the end. " +
       "You give a Strength and a Target, filled in for you from their checklists, and they " +
-      "get the response tasks. Each level has a grade range, which you see in the markbook."));
+      "get the response tasks. Each level has a grade range, which you see in the mark book."));
     if (!lesson.rubric) lesson.rubric = [];
     const w = el("div","bfield");
     const n = lesson.rubric.filter(g => g.name).length;
@@ -3887,7 +4085,7 @@ function markingSetup(into){
       ? "The rubric shows each level's grade range instead of its name." +
         (missing ? " " + missing + (missing === 1 ? " level has" : " levels have") +
                    " no grade range yet, so students see " + (missing === 1 ? "its name" : "their names") + " instead." : "")
-      : "The rubric shows each level by name. Grade ranges stay in the markbook."));
+      : "The rubric shows each level by name. Grade ranges stay in the mark book."));
     body.appendChild(show);
   } else {
     const w = el("div","bfield");
@@ -4380,6 +4578,13 @@ function openLessonOptions(){
     w3.appendChild($("lUnit"));
     w3.appendChild($("lSub"));
     secWhere.appendChild(w3);
+    /* A cover lesson can suit more units than the one it is filed in. */
+    const alsoBox = el("div","bfield coverunits");
+    secWhere.appendChild(alsoBox);
+    const paintAlso = () => paintCoverUnits(alsoBox);
+    /* The unit picker's own handler runs first, and "+ New unit" waits on a
+       pop-up, so this looks again once it has had its turn. */
+    w3.addEventListener("change", () => setTimeout(paintAlso, 0));
     box.appendChild(secWhere);
 
     /* ---- how it behaves ---- */
@@ -4429,8 +4634,8 @@ function openLessonOptions(){
     secVer.appendChild(ver);
     box.appendChild(secVer);
 
-    const repaint = () => { paintKinds(); paintHow(); };
-    paintKinds(); paintHow();
+    const repaint = () => { paintKinds(); paintHow(); paintAlso(); };
+    paintKinds(); paintHow(); paintAlso();
 
     const go = el("button","btn-primary modal-cta","Done");
     go.addEventListener("click", closeModal);
@@ -4504,7 +4709,7 @@ function voiceField(){
       ["On: under the summary of their marks, each student is asked one of the ticked questions "
        + "about how the half term went, picked at random. It is optional, with a Skip button, and "
        + "their answer is saved the moment they pick it.",
-       "Their answers are in the Student Voice tab of the markbook, one question at a time."]);
+       "Their answers are in the Student Voice tab of the mark book, one question at a time."]);
     if (row) w.replaceChild(fresh, row); else w.insertBefore(fresh, list);
     row = fresh;
     list.hidden = !on();
@@ -4930,6 +5135,61 @@ let cat = { units: [], years: [], points: [] };
    and exam questions out of the way until then. */
 /* What the year group now chosen is working towards, or "" for KS3 and for
    a lesson with no year group picked yet. */
+/* ---- the other units a cover lesson suits ----
+   Picked from every KS3 unit, any year group, since cover is about what
+   suits the room rather than where a lesson was written. The unit it is
+   filed in is always its first and is never repeated here. */
+function coverUnitsKept(){
+  const seen = new Set([lesson.unit || ""]);
+  return (lesson.coverUnits || []).filter(u => u && !seen.has(u) && seen.add(u));
+}
+function ks3UnitsForCover(){
+  const levelOf = (y) => { const x = (cat.years || []).find(v => v.name === y); return x ? String(x.level || "KS3") : "KS3"; };
+  return (cat.units || []).filter(u => u.name && u.year && levelOf(u.year) === "KS3");
+}
+function paintCoverUnits(box){
+  box.innerHTML = "";
+  box.hidden = !lesson.cover;
+  if (!lesson.cover) return;
+  box.appendChild(el("label","","Also suitable for"));
+  const row = el("div","coverunits-row");
+  const kept = coverUnitsKept();
+  kept.forEach(name => {
+    const chip = el("span","topicunit", name);
+    const x = el("button","topicunit-x","✕");
+    x.type = "button";
+    x.title = "Take " + name + " off";
+    x.addEventListener("click", () => {
+      lesson.coverUnits = coverUnitsKept().filter(u => u !== name);
+      saveDraft(); paintCoverUnits(box);
+    });
+    chip.appendChild(x);
+    row.appendChild(chip);
+  });
+  const pick = el("select","topicadd");
+  pick.setAttribute("aria-label", "Add a unit it suits");
+  const first = document.createElement("option");
+  first.value = ""; first.textContent = "+ Add a unit";
+  pick.appendChild(first);
+  const byYear = new Map();
+  ks3UnitsForCover().filter(u => u.name !== lesson.unit && kept.indexOf(u.name) < 0).forEach(u => {
+    if (!byYear.has(u.year)) byYear.set(u.year, []);
+    byYear.get(u.year).push(u);
+  });
+  byYear.forEach((us, y) => {
+    const g = document.createElement("optgroup");
+    g.label = y;
+    us.forEach(u => { const o = document.createElement("option"); o.value = u.name; o.textContent = u.name; g.appendChild(o); });
+    pick.appendChild(g);
+  });
+  pick.addEventListener("change", () => {
+    if (!pick.value) return;
+    lesson.coverUnits = coverUnitsKept().concat([pick.value]);
+    saveDraft(); paintCoverUnits(box);
+  });
+  row.appendChild(pick);
+  box.appendChild(row);
+}
 function specLevel(){
   const y = (cat.years || []).find(x => x.name === lesson.year);
   const level = y ? String(y.level || "KS3") : "";
@@ -7207,6 +7467,11 @@ function importPopup(opts){
     });
     box.appendChild(go);
     box.appendChild(msg);
+    if (opts.onCancel){
+      const no = el("button","btn-ghost modal-stay","Cancel");
+      no.addEventListener("click", opts.onCancel);
+      box.appendChild(no);
+    }
     scrollBody(box);
   });
 }
@@ -7302,8 +7567,10 @@ async function uploadCarriedPictures(data, msg){
 }
 
 /* ---------- a whole lesson ---------- */
-function importLessonFile(){
+/* back: where Cancel goes, for the new-lesson pop-up that opened it. */
+function importLessonFile(back){
   const start = () => importPopup({
+    onCancel: back,
     title: "Import a lesson",
     help: "A lesson file, the kind the JSON button writes. It opens here for you to "
         + "look at and then save, so nothing on the site changes until you press Save.",
@@ -7344,6 +7611,7 @@ function importLessonFile(){
       render(); schedulePreview();
       dirty = true;
       closeModal();
+      modeChosen = true;
       say("Lesson imported", "“" + (lesson.title || "Untitled lesson") + "” is open here"
           + (intoVersion ? " as the “" + (lesson.versionName || "Version") + "” version of “" + parentTitle() + "”." : ".")
           + saidDropped(check.dropped)
@@ -7603,6 +7871,7 @@ async function downloadForFolder(){
     (lesson.assessment || lesson.practical) ? { assessment: true } : {},
     lesson.homework ? { homework: true } : {},
     lesson.cover ? { cover: true } : {},
+    lesson.cover && coverUnitsKept().length ? { coverUnits: coverUnitsKept() } : {},
     lesson.versionOf ? { versionOf: lesson.versionOf, versionName: lesson.versionName || "",
                          versionNote: lesson.versionNote || "", versionCode: lesson.versionCode || "" } : {},
     { code: code });
@@ -7799,6 +8068,7 @@ async function loadUnitsAndYears(){
       file.lessons.forEach(l => { if (l.year && years.indexOf(l.year) < 0) years.push(l.year); });
       cat = { years: years.map(name => ({ name })), units: file.units.filter(u => u.name),
               lessons: file.lessons.map(l => ({ lesson_id: l.id, title: l.title, unit: l.unit,
+                                                cover: !!l.cover, cover_units: l.coverUnits || [],
                                                 version_of: l.versionOf || "" })) };
     }catch(e){ cat = { years: [], units: [], lessons: [] }; }
     paintPickers();
@@ -7936,6 +8206,7 @@ function fromCompiled(data, meta){
                 rubricShow: data.rubricShow === "grade" ? "grade" : "level",
                 homework: !!data.homework,
                 cover: !!data.cover,
+                coverUnits: data.cover && Array.isArray(data.coverUnits) ? data.coverUnits.map(String) : [],
                 /* The two sentences for everything wrong and everything right
                    were saved but never read back, so reopening an assessment
                    emptied both boxes and the next save threw them away. */
@@ -7980,6 +8251,8 @@ function fromCompiled(data, meta){
     if (made && b && b.required === false) made.required = false;
     if (made && b && b.confused) made.confused = b.confused;
     if (made && b && ["attempted","partial","full"].includes(b.gate)) made.gate = b.gate;
+    if (made && b && b.coverHold === false) made.coverHold = false;
+    if (made && b && (b.coverTries === true || b.coverTries === false)) made.coverTries = b.coverTries;
     /* A checklist line saved with no kind (switched over from Teacher before
        that was put right) is repaired as it opens, so the lesson is fixed by
        opening it and saving it again. */
@@ -8006,7 +8279,7 @@ function fromCompiled(data, meta){
                                      task:b.task || "",
                                      blocks:(b.blocks || []).map(back) };
     if (b.type === "choice") return { type:"choice", title:b.title || "", task:b.task || "",
-                                      prompt:b.prompt || "",
+                                      prompt:b.prompt || "", swap:b.swap === true ? true : undefined,
                                       options:(b.options || []).map(o => ({
                                         label:o.label || "",
                                         blocks:(o.blocks || []).map(back) })) };
@@ -8192,7 +8465,7 @@ function paintKindChip(){
    Asked once, when a new piece of work is started, in both layouts. After
    that the kind is changed in Lesson options, where it sits with everything
    else that is about the lesson as a whole rather than one press away. */
-function kindCard(k, picked, onPick){
+function kindCard(k, picked, onPick, short){
   const b = el("button","kindcard" + (picked ? " on" : ""));
   b.type = "button";
   b.setAttribute("role", "radio");
@@ -8202,27 +8475,39 @@ function kindCard(k, picked, onPick){
   b.appendChild(ico);
   const words = el("span","kindcard-words");
   words.appendChild(el("b","", k.name));
-  words.appendChild(el("span","", k.about));
+  words.appendChild(el("span","", short ? k.short : k.about));
   b.appendChild(words);
   b.addEventListener("click", () => onPick(k));
   return b;
 }
+/* Nothing is picked to start with: a new lesson is a Lesson underneath, and
+   showing that as already chosen read as a choice made for you. Picking one
+   goes straight on to Lesson options, which holds everything else a new
+   lesson needs (title, year, unit, a cover lesson's topic). Import is another
+   way in rather than a kind, so it is drawn differently, and its Cancel
+   comes back here. */
 function modePicker(){
   openModal(box => {
     box.classList.add("kindpop");
     box.appendChild(el("h2","","What are you making?"));
-    box.appendChild(el("p","modal-text","You can change this later in Lesson options."));
     const list = el("div","kindgrid");
     list.setAttribute("role", "radiogroup");
-    KINDS.forEach(k => list.appendChild(kindCard(k, k.id === kindNow(), (pick) => {
+    KINDS.forEach(k => list.appendChild(kindCard(k, false, (pick) => {
       setKind(pick.id);
       modeChosen = true;
       closeModal();
-    })));
+      $("optionsBtn").click();
+    }, true)));
     box.appendChild(list);
+    const imp = el("button","kindimport");
+    imp.type = "button";
+    const ico = el("span","kindcard-ico");
+    ico.innerHTML = window.hubUI ? window.hubUI.icon("upload", 20) : "";
+    imp.appendChild(ico);
+    imp.appendChild(el("span","","Import a lesson"));
+    imp.addEventListener("click", () => importLessonFile(modePicker));
+    box.appendChild(imp);
   });
-  const first = document.querySelector(".kindgrid .kindcard.on") || document.querySelector(".kindgrid .kindcard");
-  if (first) first.focus();
 }
 on("modeChip", "click", () => $("optionsBtn").click());
 

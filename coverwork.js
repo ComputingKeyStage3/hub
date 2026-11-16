@@ -5,9 +5,11 @@
    on a question with nobody to ask is worse than a wrong answer. Most of this
    asks "did they try?". A task with a Check button of its own is the exception:
    that button stands in for Finished, and the task has to end up right. It
-   still cannot strand anybody. A short answer and a table give the answer
-   after two wrong tries, to type in. A label or a spot on a picture cannot be
-   typed, so two wrong tries is enough there.
+   still cannot strand anybody. After two different wrong tries a short
+   answer and a table give the answer, to type in. A label or a spot on a
+   picture cannot be typed, so two wrong tries is enough there. The teacher
+   can change either way round per task with the eye in the builder
+   (carriesOn below).
 
    Only the tasks listed in need() can hold a page. Anything else (code, a
    Scratch project, a file, a video) depends on something that might not load
@@ -70,6 +72,7 @@
   function selfCheck(b){
     if (!b) return false;
     if (b.type === "hotspot") return true;
+    if (b.type === "pixels") return !!b.target;
     if (b.type === "label") return Array.isArray(b.spots) && b.spots.length > 0;
     if (b.type === "short"){
       const list = window.shortAnswer ? window.shortAnswer.accepted(b) : b.answers;
@@ -78,6 +81,17 @@
     if (b.type === "table") return (b.rows || []).some(row => (row || []).some(cell =>
       cell && cell.fill && String(cell.t == null ? "" : cell.t).trim() !== ""));
     return false;
+  }
+
+  /* Whether two different wrong tries are enough to carry on. coverTries is
+     only written when the teacher has chosen with the eye: true carries on,
+     false means it has to end up right. Left alone it is what it always was.
+     A short answer and a table give the answer instead, so they still have
+     to type it in; anything that cannot be typed lets them carry on. */
+  function carriesOn(b){
+    if (!b) return false;
+    if (b.coverTries === true || b.coverTries === false) return b.coverTries;
+    return !(b.type === "short" || b.type === "table");
   }
 
   /* What is still needed from one task, in words a student can act on, or ""
@@ -105,8 +119,7 @@
            and say it was right before they asked. */
         const checked = !ctx.checked || ctx.checked(b.id);
         if (sc && sc.got >= sc.max && checked) return "";
-        const untypable = b.type === "label" || b.type === "hotspot";
-        if (untypable && ctx.tries(b.id) >= 2) return "";
+        if (carriesOn(b) && ctx.tries(b.id) >= 2) return "";
         return b.type === "table" ? "Fill in the table and press Check the table."
              : b.type === "label" ? "Label the picture and press Check my labels."
              : b.type === "hotspot" ? "Click on the picture and press Check my answer."
@@ -125,10 +138,56 @@
         return v && Array.isArray(v.nodes) && v.nodes.length >= 3 ? "" : "Add at least two branches to the mind map.";
       case "board":
         return v && Array.isArray(v.strokes) && v.strokes.length ? "" : "Draw on the whiteboard.";
+      case "poster":
+        return v && typeof v.img === "string" && v.img ? "" : "Make your poster.";
+      /* Beaten, or two real goes at it unless the teacher wants it beaten. */
+      case "boss":
+        return v && (v.won || (carriesOn(b) && Number(v.tries) >= 2)) ? "" : "Battle the boss.";
+      /* A picture to copy is right once checked, or two real goes at it, the
+         same as a spot on a picture: nobody is held behind a square they
+         cannot find. Otherwise it wants a real drawing, and an animation at
+         least two frames with something in them. */
+      case "pixels": {
+        if (b.viewOnly === true) return "";       // to watch, with nothing to do
+        const list = v && Array.isArray(v.frames) ? v.frames : [];
+        const drawn = list.filter(f => /[1-9a-f]/i.test(String(f || ""))).length;
+        if (b.target){
+          const sc = ctx.score(b, v);
+          const checked = !ctx.checked || ctx.checked(b.id);
+          if (sc && sc.got >= sc.max && checked) return "";
+          if (carriesOn(b) && ctx.tries(b.id) >= 2) return "";
+          return "Colour in the grid and press Check my picture.";
+        }
+        if (b.frames === true && drawn < 2) return "Draw at least two frames.";
+        const squares = list.reduce((t, f) => t + (String(f || "").match(/[1-9a-f]/gi) || []).length, 0);
+        return squares >= 6 ? "" : "Colour in some squares on the grid.";
+      }
+      /* Easy games for a class that needs one: once round the board or
+         through the pile, or a fair go at it, is enough. */
+      case "boardgame": {
+        /* the same rule as window.boardGameDone in games.js, which Mark
+           work does not load */
+        const goal = Math.max(0, Math.min(500, parseInt(b.goal, 10) || 0));
+        const n = (k) => Math.max(0, parseInt(v && v[k], 10) || 0);
+        if (goal) return n("bank") >= goal || n("asked") >= goal ? "" : "Keep playing to fill your coin bank.";
+        return n("games") > 0 || n("asked") >= 10 ? "" : "Play until you reach the boat.";
+      }
+      case "quest": {
+        /* the same rule as window.questDone in quest.js */
+        const goal = Math.max(0, Math.min(500, parseInt(b.goal, 10) || 0));
+        const n = (k) => Math.max(0, parseInt(v && v[k], 10) || 0);
+        const worlds = Array.isArray(b.worlds) && b.worlds.length ? b.worlds.length : 1;
+        if (goal) return n("bank") >= goal || n("asked") >= Math.max(10, Math.ceil(goal / 12)) ? "" : "Keep exploring to fill your coin bank.";
+        return n("levels") >= worlds || n("asked") >= 10 ? "" : "Play through every world.";
+      }
+      case "swipe": {
+        const n = (b.cards || []).length;
+        return v && (Number(v.rounds) > 0 || Number(v.at) >= Math.min(10, n)) ? "" : "Sort the cards.";
+      }
       case "notes":
         return String(v == null ? "" : v).replace(/<[^>]*>/g, "").trim() ? "" : "Write your notes.";
       case "choice": {
-        if (typeof v !== "number" || v < 0) return "Choose your challenge.";
+        if (typeof v !== "number" || v < 0) return "Make your choice.";
         const picked = (b.options || [])[v];
         return listNeed(picked ? picked.blocks : [], ctx);
       }
@@ -139,8 +198,8 @@
   /* Whether a task is something to do rather than something to read. Reading
      has nothing to finish, so only Understood ends it. */
   const WORK = ["quiz","short","table","blanks","order","mc","hotspot","label","question",
-                "storyboard","mindmap","board","notes","choice","group"];
-  const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo;
+                "storyboard","mindmap","board","notes","choice","group","poster","boss","pixels","boardgame","swipe","quest"];
+  const isWork = (b) => !!b && WORK.indexOf(b.type) >= 0 && !b.demo && !(b.type === "pixels" && b.viewOnly === true);
   /* Everything right, so there is nothing left to decide and Finished can be
      pressed for them. A quiz waits for its score to be up, and a short answer
      or a table for Check: moving on any sooner would take the page away from
@@ -164,18 +223,26 @@
     }
     return "";
   }
+  /* Whether a task keeps the next one out of sight until its button is
+     pressed. On unless the teacher turned it off with the eye in the builder,
+     which they do to put two tasks side by side, a Pixel studio drawing and
+     the quiz about it, say. Turned off, the next task is already showing, so
+     the task has no Understood or Finished to press. */
+  const holdsNext = (b) => !!b && b.coverHold !== false;
+
   /* Every task on a page still wanting something, top level only: a task
      inside a choice or a group is scrolled to through the thing around it.
      Extension tasks are never in the way. Each task but the last also wants
      its button pressed, Understood or Finished, ctx.ok saying which have
-     been: the last has nothing under it to open, so it has no such button. */
+     been: the last has nothing under it to open, so it has no such button,
+     and neither has a task whose next one is shown with it. */
   function left(page, ctx){
     const kids = (page && page.type === "page" ? (page.blocks || []) : (page ? [page] : []))
       .filter(b => b.type !== "extension");
     const out = [];
     kids.forEach((b, i) => {
       const words = need(b, ctx) ||
-        (ctx.ok && i < kids.length - 1 && !ctx.ok(b.id)
+        (ctx.ok && i < kids.length - 1 && holdsNext(b) && !ctx.ok(b.id)
           ? (selfCheck(b) ? "Just a moment."
              : isWork(b) ? "Press Finished when you are done." : "Press Understood when you are ready.") : "");
       if (words) out.push({ id: b.id, words: words });
@@ -213,5 +280,5 @@
              confused: Object.keys(c.confused || {}).length };
   }
 
-  window.coverWork = { need, left, junk, quizzes, facts, isWork, allRight, selfCheck };
+  window.coverWork = { need, left, junk, quizzes, facts, isWork, allRight, selfCheck, holdsNext, carriesOn };
 })();

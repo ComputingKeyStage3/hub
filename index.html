@@ -65,9 +65,10 @@
   </section>
 
   <div class="tabs" id="tabs" hidden>
-    <button class="on" id="tabLessons">Lessons</button>
-    <button id="tabResults">Assessments &amp; STAR Feedback</button>
-    <button id="tabPractice">Practice</button>
+    <button class="on" id="tabLessons"><span data-icon="lessons" data-size="18"></span><span>Lessons</span></button>
+    <button id="tabResults"><span data-icon="star" data-size="18"></span><span>Assessments</span></button>
+    <button id="tabHome"><span data-icon="home" data-size="18"></span><span>Home Learning</span></button>
+    <button id="tabPractice"><span data-icon="practice" data-size="18"></span><span>Practice</span></button>
     <button class="btn-ghost iconbtn refresh" id="refTab" title="Check for anything new">&#8635;</button>
   </div>
   <div id="view-lessons" hidden>
@@ -165,6 +166,23 @@
   </div>
 </div>
 
+<!-- Forgot password, in a class with a cover lesson on today. The teacher in
+     the room cannot approve a new password, so the lesson is offered with
+     only a name, and the reset is still there underneath for anyone who
+     would rather wait for it. -->
+<div class="modal-back no-print" id="coverModal" hidden>
+  <form class="modal" role="dialog" aria-modal="true" aria-labelledby="cvTitle" id="cvForm" autocomplete="off">
+    <h2 id="cvTitle" style="margin-top:0">No need to sign in today</h2>
+    <p class="modal-text">For this lesson, just type in your full name and complete the lesson without needing to sign in.</p>
+    <p class="modal-text"><b id="cvLesson"></b></p>
+    <div class="field"><label for="cvFirst">First name</label><input type="text" id="cvFirst" maxlength="40" autocomplete="off" autocapitalize="words"></div>
+    <div class="field"><label for="cvLast">Surname</label><input type="text" id="cvLast" maxlength="40" autocomplete="off" autocapitalize="words"></div>
+    <p class="err" id="cvErr" role="alert"></p>
+    <button class="btn-primary modal-cta" id="cvGo" type="submit">Open the lesson</button>
+    <button class="btn-ghost modal-stay" id="cvReset" type="button">Reset my password instead</button>
+  </form>
+</div>
+
 <div class="modal-back no-print" id="pwModal" hidden>
   <div class="modal" role="dialog" aria-modal="true">
     <h2 style="margin-top:0">Choose your password</h2>
@@ -218,8 +236,36 @@ let openTab = "lessons";
 /* The sandbox sends a student back here with ?tab=practice on the address, so
    they land on the list they came from rather than on their lessons. */
 try{
-  if (new URLSearchParams(location.search).get("tab") === "practice") openTab = "practice";
+  const wantedTab = new URLSearchParams(location.search).get("tab");
+  if (wantedTab === "practice" || wantedTab === "homework") openTab = wantedTab;
 }catch(e){}
+
+/* A home learning link from a teacher: index.html?open=<lesson>. It comes here
+   rather than to the lesson so that a student who is not signed in is asked
+   to, and goes on to the lesson as soon as they are. A session that has run
+   out counts as not signed in: the lesson would open, but nothing done in it
+   could be saved. Up here so that a student who is signed in leaves before
+   the home page is drawn, and for the same reason as openTab above. */
+let wantedLesson = "";
+try{ wantedLesson = new URLSearchParams(location.search).get("open") || ""; }catch(e){}
+function openWantedLesson(){
+  if (!wantedLesson) return false;
+  location.replace("lesson.html?id=" + encodeURIComponent(wantedLesson));
+  return true;
+}
+function sessionLasting(){
+  const token = localStorage.getItem("hub_token");
+  if (!token || !localStorage.getItem("hub_name")) return false;
+  try{
+    const inside = token.slice(0, token.lastIndexOf(".")).replace(/-/g, "+").replace(/_/g, "/");
+    const exp = JSON.parse(atob(inside)).exp;
+    return !exp || Date.now() < exp;
+  }catch(e){ return true; }       // not one we can read: the server will say
+}
+if (wantedLesson){
+  if (OFFLINE || sessionLasting()) openWantedLesson();   // offline there is nothing to sign in to
+  else ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
+}
 
 /* Nothing about lessons is shown until a student has signed in.
    One view at a time, rather than every view unhidden at once: they were all
@@ -342,7 +388,7 @@ function renderAuth(){
     if (help) help.hidden = false;
     $("loginCard").hidden = false;
     resetSignIn();
-    $("headline").textContent = "Sign in";
+    $("headline").textContent = wantedLesson ? "Sign in to open your home learning" : "Sign in";
     signedInView(false);
   }
 }
@@ -450,7 +496,7 @@ async function signIn(){
     localStorage.setItem("hub_group", d.group || "");
     renderAuth();
     if (d.mustSet) forcePassword(d.name);
-    else loadLessons();
+    else if (!openWantedLesson()) loadLessons();
   }catch(e){
     busy.fail();
     $("loginErr").textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message;
@@ -607,9 +653,13 @@ function paintLessons(byId){
   const cat = (catalogue && catalogue.lessons) || [];
   // published, not locked for this class, and known in the lesson files
   /* the server already filtered by class. Assessments of every kind are
-     opened from Assessments & STAR Feedback, where their marks and feedback
+     opened from Assessments, where their marks and feedback
      come back, and not from here. */
   let visible = cat.filter(c => byId[c.lesson_id] && !lockedLessons.has(c.lesson_id) && !c.assessment);
+  /* Lessons and Home Learning are one list, drawn twice: the same Active and
+     Past, the same units, and only what is in it differs. */
+  const homeTab = openTab === "homework";
+  visible = visible.filter(c => !!c.homework === homeTab);
   /* A lesson is in the past once its closing date has gone by, or once the
      student has finished it. Closed lessons can still be opened and edited.
      Half finished work does not hold one back: the date closes it either way. */
@@ -624,7 +674,10 @@ function paintLessons(byId){
   visible = visible.filter(c => showing === "done" ? isPast(c) : !isPast(c));
 
   if (!visible.length){
-    box.innerHTML = '<p class="hint">' + (showing === "done"
+    box.innerHTML = '<p class="hint">' + (homeTab
+      ? (showing === "done" ? "Nothing here yet. Home learning moves here once you finish it, or once it closes."
+                            : "You have no home learning to do right now.")
+      : showing === "done"
       ? "Nothing here yet, lessons move here once they close, or once you finish them."
       : (cat.length ? "No lessons are open right now. Your teacher will publish them when you need them."
                     : "No lessons have been published yet.")) + '</p>';
@@ -772,8 +825,11 @@ on("refTab", "click", async () => {
   }catch(e){}
   btn.disabled = false;
 });
-on("tabLessons", "click", () => switchTab("lessons"));
+/* The list is drawn again here and not in switchTab, which also runs as the page
+   starts, before the lesson list's own variables exist. */
+on("tabLessons", "click", () => { switchTab("lessons"); loadLessons(); });
 on("tabResults", "click", () => switchTab("results"));
+on("tabHome", "click", () => { switchTab("homework"); loadLessons(); });
 on("tabPractice", "click", () => switchTab("practice"));
 let resultsLoaded = false;
 
@@ -799,8 +855,10 @@ function switchTab(which){
   openTab = which;
   $("tabLessons").classList.toggle("on", which === "lessons");
   $("tabResults").classList.toggle("on", which === "results");
+  $("tabHome").classList.toggle("on", which === "homework");
   $("tabPractice").classList.toggle("on", which === "practice");
-  $("view-lessons").hidden = which !== "lessons";
+  const listing = which === "lessons" || which === "homework";
+  $("view-lessons").hidden = !listing;
   $("view-results").hidden = which !== "results";
   $("view-practice").hidden = which !== "practice";
   /* Nothing on the Practice tab comes from the server, so there is nothing
@@ -873,7 +931,7 @@ on("npGo", "click", async () => {
     if (!r.ok) throw new Error(d.error || "Could not save it.");
     $("pwModal").hidden = true;
     $("np1").value = $("np2").value = "";
-    loadLessons();
+    if (!openWantedLesson()) loadLessons();
   }catch(e){ $("npMsg").textContent = e.message; }
 });
 
@@ -899,8 +957,12 @@ document.addEventListener("keydown", (e) => {
 
 /* ---- forgot password ----
    Check the username, let them choose the new password there and then, and
-   hold it until their teacher approves it, no emails, no teacher typing. */
+   hold it until their teacher approves it, no emails, no teacher typing.
+   Unless their class has a cover lesson on: then the teacher in the room
+   cannot approve it, and they are offered the lesson with just their name.
+   And not from a home learning link, where there is no teacher at all. */
 let rsUser = "", rsTicket = "", rsPoll = null, rsDeadline = 0;
+let coverOn = null;
 
 on("forgotBtn", "click", async () => {
   const u = $("u").value.trim();
@@ -910,7 +972,7 @@ on("forgotBtn", "click", async () => {
   $("forgotBtn").textContent = "Checking…";
   try{
     const r = await fetch(API + "/api/login", { method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ action:"check-username", username: u }) });
+      body: JSON.stringify({ action:"forgot", username: u }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Could not check that.");
     if (!d.exists){
@@ -919,13 +981,75 @@ on("forgotBtn", "click", async () => {
       return;
     }
     rsUser = u;
-    $("rsWho").textContent = "Signing in as " + u + ". Choose a new password, then your teacher will approve it.";
-    $("rsStep1").hidden = false; $("rsStep2").hidden = true;
-    $("rsMsg").textContent = ""; $("rp1").value = ""; $("rp2").value = "";
-    $("resetModal").hidden = false;
-    $("rp1").focus();
+    /* Here from a home learning link, so most likely at home. A reset waits
+       for a teacher to approve it within five minutes, and there is no
+       teacher to do that, so it would only run out. Nor is a cover lesson
+       today anything to do with it. The username is still checked first, so
+       a typo is caught before they are sent to their teacher about it. */
+    if (wantedLesson){
+      say("Ask your teacher to reset your password",
+          "Your teacher cannot approve a new password from here. See or email your teacher before your next lesson, " +
+          "and ask them to reset your password for the Lesson Hub.");
+      return;
+    }
+    if (d.cover && d.cover.k) openCover(d.cover);
+    else openReset();
   }catch(e){ $("loginErr").textContent = e.message; }
   finally{ $("forgotBtn").textContent = "Forgot password?"; }
+});
+function openReset(){
+  $("rsWho").textContent = "Signing in as " + rsUser + ". Choose a new password, then your teacher will approve it.";
+  $("rsStep1").hidden = false; $("rsStep2").hidden = true;
+  $("rsMsg").textContent = ""; $("rp1").value = ""; $("rp2").value = "";
+  $("resetModal").hidden = false;
+  $("rp1").focus();
+}
+
+/* hub_guest holds the key, and lesson.html?guest=1 saves through it. The same name with the same key is the same student coming
+   back to their work; a different name is the next child at this computer,
+   who starts afresh. */
+function savedGuest(){
+  try{ return JSON.parse(localStorage.getItem("hub_guest") || "null"); }catch(e){ return null; }
+}
+function newGuestId(){
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+function openCover(cover){
+  coverOn = cover;
+  $("cvLesson").textContent = cover.title || "";
+  $("cvLesson").parentElement.hidden = !cover.title;
+  const had = savedGuest();
+  const mine = had && had.key === cover.k && String(had.as || "").toLowerCase() === rsUser.toLowerCase();
+  $("cvFirst").value = mine ? (had.first || "") : "";
+  $("cvLast").value = mine ? (had.last || "") : "";
+  $("cvErr").textContent = "";
+  $("coverModal").hidden = false;
+  $("cvFirst").focus();
+}
+on("cvForm", "submit", (e) => {
+  e.preventDefault();
+  const first = $("cvFirst").value.trim(), last = $("cvLast").value.trim();
+  if (!first){ $("cvErr").textContent = "Type your first name."; $("cvFirst").focus(); return; }
+  if (!last){ $("cvErr").textContent = "Type your surname."; $("cvLast").focus(); return; }
+  const name = first + " " + last;
+  const had = savedGuest();
+  const same = had && had.key === coverOn.k && String(had.name).toLowerCase() === name.toLowerCase();
+  try{
+    localStorage.setItem("hub_guest", JSON.stringify({
+      key: coverOn.k, id: same ? had.id : newGuestId(), first: first, last: last, name: name,
+      group: coverOn.group, lesson: coverOn.lesson, as: rsUser }));
+  }catch(err){
+    $("cvErr").textContent = "This browser will not save your work. Try a different one, or ask your teacher.";
+    return;
+  }
+  location.href = "lesson.html?id=" + encodeURIComponent(coverOn.lesson) + "&guest=1";
+});
+on("cvReset", "click", () => { $("coverModal").hidden = true; openReset(); });
+on("coverModal", "mousedown", (e) => { if (e.target === $("coverModal")) $("coverModal").hidden = true; });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("coverModal").hidden){ $("coverModal").hidden = true; $("p").focus(); }
 });
 on("rsCancel", "click", () => { $("resetModal").hidden = true; });
 on("rsGiveUp", "click", stopReset);

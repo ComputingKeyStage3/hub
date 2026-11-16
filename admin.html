@@ -15,6 +15,7 @@
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
 <script src="lessonfile.js"></script>
+<script src="covertopics.js"></script>
 <script src="lessonorder.js"></script>
 <script src="shortmatch.js"></script>
 <script src="ordermarks.js"></script>
@@ -235,7 +236,7 @@ setTimeout(function(){
     <h2 style="margin:14px 0 4px">Lessons</h2>
     <div class="toolrow">
       <button class="btn-ghost" id="hubNewYear">+ New year group</button>
-      <button class="btn-primary" id="hubNewLesson">+ Build a new lesson</button>
+      <button class="btn-primary" id="hubNewLesson">+ Build new</button>
     </div>
     <div class="classgrid" id="hubYears"></div>
     <div id="hubSearchResults"></div>
@@ -254,7 +255,7 @@ setTimeout(function(){
       <button class="btn-ghost" id="hubNewUnit">+ New unit</button>
       <button class="btn-ghost" id="specBtn" hidden>Specification</button>
       <button class="btn-ghost" id="yearVoiceBtn" hidden title="What this year group said in Student Voice">Student Voice</button>
-      <button class="btn-primary" id="hubNewLesson2">+ Build a new lesson</button>
+      <button class="btn-primary" id="hubNewLesson2">+ Build new</button>
     </div>
     <div class="classgrid" id="hubUnits"></div>
     <div id="unitSearchResults"></div>
@@ -302,8 +303,9 @@ setTimeout(function(){
     </div>
     <div class="toolrow">
       <button class="btn-ghost iconbtn refresh" id="refPoint" title="Refresh">&#8635;</button>
-      <button class="btn-primary" id="hubNewLesson4">+ Build a new lesson</button>
+      <button class="btn-primary" id="hubNewLesson4">+ Build new</button>
     </div>
+    <div class="subtabs kindtabs" id="pointKinds" role="tablist" aria-label="Kind of lesson"></div>
     <div id="hubPointList"></div>
   </div>
 
@@ -316,8 +318,10 @@ setTimeout(function(){
     </div>
     <div class="toolrow">
       <button class="btn-ghost iconbtn refresh" id="refUnitPage" title="Refresh">&#8635;</button>
-      <button class="btn-primary" id="hubNewLesson3">+ Build a new lesson</button>
+      <button class="btn-ghost" id="manageTopicsBtn" hidden>Manage topics</button>
+      <button class="btn-primary" id="hubNewLesson3">+ Build new</button>
     </div>
+    <div class="subtabs kindtabs" id="hubKinds" role="tablist" aria-label="Kind of lesson"></div>
     <div id="hubList"></div>
   </div>
 
@@ -343,16 +347,25 @@ setTimeout(function(){
   <!-- ============ one class ============ -->
   <div id="classView" hidden>
     <button class="crumb" id="backClasses">&larr; All classes</button>
+    <button class="btn-ghost iconbtn refresh" id="refUnits" title="Refresh">&#8635;</button>
     <div class="classhead">
       <h2 id="clsName"></h2>
       <button class="btn-ghost iconbtn" id="renameBtn" title="Rename class">&#9998;</button>
     </div>
-    <div class="bigcards">
-      <button class="classtile" id="openLessons"><b><span data-icon="lessons" data-size="22"></span> Units &amp; lessons</b><span>Publish, lock, watch progress, view work</span></button>
-      <button class="classtile" id="openStudents"><b><span data-icon="classes" data-size="22"></span> Students</b><span>Add, edit and reset logins</span></button>
-      <button class="classtile" id="openProgress"><b><span data-icon="progress" data-size="22"></span> Progress</b><span>How a unit is going, lesson by lesson</span></button>
-      <button class="classtile" id="openCover" hidden><b><span data-icon="coverage" data-size="22"></span> Specification coverage</b><span>How the class is doing, point by point</span></button>
+    <div class="toolrow">
+      <button class="btn-primary" id="addUnitBtn">+ Add an existing unit</button>
+      <button class="btn-ghost" id="newUnitBtn2">+ New unit</button>
     </div>
+    <!-- One bar for a class's four screens, not one per screen: paintClassTabs
+         moves it under the heading of whichever of them is up, so these ids
+         stay unique and the search box can press them from anywhere. -->
+    <div class="subtabs classtabs" id="classTabs" role="tablist" aria-label="This class">
+      <button id="openLessons" type="button" role="tab">Units</button>
+      <button id="openStudents" type="button" role="tab">Students</button>
+      <button id="openProgress" type="button" role="tab">Progress</button>
+      <button id="openCover" type="button" role="tab" hidden>Specification coverage</button>
+    </div>
+    <div class="classgrid" id="unitGrid"></div>
   </div>
 
   <!-- ============ specification coverage ============ -->
@@ -461,23 +474,12 @@ setTimeout(function(){
     <div id="pwList"></div>
   </div>
 
-  <div id="unitsView" hidden>
-    <button class="crumb" id="backClass2">&larr; <span class="bk"></span></button>
-    <button class="btn-ghost iconbtn refresh" id="refUnits" title="Refresh">&#8635;</button>
-    <h2 style="margin:14px 0 4px">Units</h2>
-    <div class="toolrow">
-      <button class="btn-primary" id="addUnitBtn">+ Add an existing unit</button>
-      <button class="btn-ghost" id="newUnitBtn2">+ New unit</button>
-    </div>
-    <div class="classgrid" id="unitGrid"></div>
-  </div>
-
   <!-- A GCSE or A Level unit is one point of the specification, so a class's
        lessons are divided the way the hub divides them: 2.2, then 2.2.1, then
        the lessons. A KS3 unit has no sub-points and this screen is stepped
        over entirely, so nothing about a KS3 class changes. -->
   <div id="partsView" hidden>
-    <button class="crumb" id="backUnits2">&larr; Units</button>
+    <button class="crumb" id="backUnits2">&larr; <span class="bk"></span></button>
     <div class="classhead">
       <h2 id="partsUnitName"></h2>
     </div>
@@ -492,16 +494,17 @@ setTimeout(function(){
   </div>
 
   <div id="lessonsView" hidden>
-    <button class="crumb" id="backUnits">&larr; <span class="bkpart">Units</span></button>
+    <button class="crumb" id="backUnits">&larr; <span class="bkpart"></span></button>
     <button class="btn-ghost iconbtn refresh" id="refLessons" title="Refresh">&#8635;</button>
     <div class="classhead">
       <h2 id="unitName"></h2>
 
     </div>
     <div class="toolrow">
-      <button class="btn-primary" id="addLessonBtn">+ Add an existing lesson</button>
-      <button class="btn-ghost" id="newLessonBtn">+ Build a new lesson</button>
+      <button class="btn-primary" id="addLessonBtn">+ Add existing</button>
+      <button class="btn-ghost" id="newLessonBtn">+ Build new</button>
     </div>
+    <div class="subtabs kindtabs" id="classKinds" role="tablist" aria-label="Kind of lesson"></div>
     <!-- The grids themselves are made inside this, one per sub-point of the
          unit, so a heading can sit between them. -->
     <div id="lessonGrid"></div>
@@ -622,7 +625,6 @@ function refreshHere(){
 const toHome    = () => { show("homeView"); };
 const toClasses = () => { refreshGroups(); show("classesView"); paintCrumbs(); };
 const toClass   = () => openClass(cls);
-const toUnits   = () => { show("unitsView"); paintClassUnits(); };
 const toHub     = () => { show("hubView"); paintYears(); };
 const toHubYear = () => openYear(hubYear);
 function paintCrumbs(){
@@ -660,13 +662,11 @@ function paintCrumbs(){
                                           { name: (window.studentProfile && window.studentProfile.name()) || "Student" }]);
   if (v === "coverView") return crumbs([home, { name: cls, go: toClass }, { name:"Specification coverage" }]);
   if (v === "progressView") return crumbs([home, { name: cls, go: toClass }, { name:"Progress" }]);
-  if (v === "unitsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units" }]);
-  if (v === "partsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units", go: toUnits },
-                                        { name: unit || "Not in a unit" }]);
+  if (v === "partsView") return crumbs([home, { name: cls, go: toClass }, { name: unit || "Not in a unit" }]);
   /* One crumb longer when the unit was divided, so the trail says which part
      of 2.2 this is and leads back to the rest of them. A KS3 unit has no
      parts screen to go back to, so it keeps the trail it always had. */
-  if (v === "lessonsView") return crumbs([home, { name: cls, go: toClass }, { name:"Units", go: toUnits }]
+  if (v === "lessonsView") return crumbs([home, { name: cls, go: toClass }]
       .concat(partsOfUnit().length
         ? [{ name: unit || "Not in a unit", go: () => openUnit(unit) },
            { name: subunit || "All of " + unitCode() }]
@@ -682,7 +682,7 @@ function crumbName(id){
 }
 
 /* ---------- view switching ---------- */
-const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","unitsView","partsView","lessonsView","keepView","pwView","practiceView","progressView","timetableView","studentView","resultsView"];
+const VIEWS = ["keyView","whoView","homeView","hubView","hubUnitsView","hubCompView","hubPointView","hubPointLessonsView","hubLessonsView","classesView","classView","studentsView","coverView","partsView","lessonsView","keepView","pwView","practiceView","progressView","timetableView","studentView","resultsView"];
 let goingBack = false;          // set while the browser's Back is driving
 function show(view, quiet){
   /* Signing in and choosing who is teaching are pop-ups over Home, so Home
@@ -702,6 +702,7 @@ function show(view, quiet){
   });
   clearInterval(relTimer);
   hideLoader();
+  paintClassTabs();
   /* The bar comes out with whatever it sits above, in the same frame. Showing
      it the moment the first answer came back, while the page underneath was
      still waiting on the second and third, is what made the console arrive in
@@ -719,7 +720,7 @@ function show(view, quiet){
     try{
       sessionStorage.setItem("hub_spot", JSON.stringify(
         { view: view, cls: cls, unit: unit, subunit: subunit, hubYear: hubYear, hubUnit: hubUnit,
-          hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint,
+          hubComp: hubComp, hubStrand: hubStrand, hubPoint: hubPoint, kind: lessonKind,
           stu: (window.studentProfile && window.studentProfile.username()) || "" }));
     }catch(e){}
   }
@@ -769,6 +770,9 @@ try{
       cls = st.cls || cls; unit = st.unit || ""; subunit = st.subunit || "";
       hubYear = st.hubYear || ""; hubUnit = st.hubUnit || "";
       hubComp = st.hubComp || 0; hubStrand = st.hubStrand || ""; hubPoint = st.hubPoint || "";
+      /* A tab left open across the update can still have this in its history,
+         and showing a screen that has gone would blank the page. */
+      if (st.view === "unitsView") st.view = "classView";
       show(st.view, true);
       if (st.view === "classesView") paintClasses();
       else if (st.view === "hubView") paintYears();
@@ -777,13 +781,12 @@ try{
       else if (st.view === "hubPointView"){ if (hubStrand) paintPoints(); else paintStrands(); }
       else if (st.view === "hubPointLessonsView") paintPointLessons();
       else if (st.view === "hubLessonsView") paintHub();
-      else if (st.view === "unitsView") paintClassUnits();
       else if (st.view === "partsView"){ namePartsUnit(); paintParts(); }
       else if (st.view === "lessonsView"){ nameLessonShelf(); paintLessonGrid(); }
       else if (st.view === "studentsView") loadStudents();
       else if (st.view === "progressView") openProgressView();
       else if (st.view === "resultsView") toResults();
-      else if (st.view === "classView"){ $("clsName").textContent = cls; }
+      else if (st.view === "classView") openClass(cls);
       else if (st.view === "timetableView" && window.timetable) window.timetable.paintEditor();
       else if (st.view === "studentView" && window.studentProfile) window.studentProfile.reopen(st.stu);
     }catch(err){}
@@ -1203,7 +1206,9 @@ async function restoreSpot(spot){
        whole with only the box waiting in it. */
     if (spot.view === "practiceView"){ toPractice(); return; }
     if (spot.view === "resultsView"){ await toResults(); return; }
-    if (here && spot.view === "classView"){ openClass(cls); return; }
+    /* unitsView was a screen of its own until the class page became it, and a
+       tab open across that update still has it noted. */
+    if (here && (spot.view === "classView" || spot.view === "unitsView")){ await openClass(cls); return; }
     if (here && spot.view === "studentsView"){ openClass(cls); show("studentsView"); loadStudents(); return; }
     /* The screens off the side menu and the class's own reports. Each was
        missing here, so refreshing any of them landed on Home. */
@@ -1217,9 +1222,6 @@ async function restoreSpot(spot){
        going back to the lesson hub flashed Home first, and going back to a
        class's units flashed the class. The dots stay until the screen that
        was actually asked for is ready. */
-    if (here && spot.view === "unitsView"){
-      nameClass(cls); await loadCatalogue(); show("unitsView"); paintClassUnits(); return;
-    }
     /* Both of a class's lesson screens come back the same way, through
        openUnit, so the heading and the crumbs are built by the one thing that
        builds them anywhere else. openUnit clears the part on its way in, so
@@ -1227,13 +1229,13 @@ async function restoreSpot(spot){
     if (here && (spot.view === "partsView" || spot.view === "lessonsView")){
       nameClass(cls); await loadCatalogue(); await loadClassLocks();
       const want = subunit;
-      openUnit(unit);
+      openUnit(unit, spot.kind);
       if (spot.view === "lessonsView") openPart(want);
       return;
     }
     if (spot.view === "hubView"){ await loadCatalogue(); show("hubView"); paintYears(); return; }
     if (spot.view === "hubUnitsView"){ await loadCatalogue(); openYear(hubYear); return; }
-    if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit); return; }
+    if (spot.view === "hubLessonsView"){ await loadCatalogue(); openYear(hubYear); openHubUnit(hubUnit, spot.kind); return; }
     /* openYear sends a GCSE or A Level year group to its components on its
        own, so these only have to carry on from there. */
     if (spot.view === "hubCompView"){ await loadCatalogue(); openYear(hubYear); return; }
@@ -1247,7 +1249,7 @@ async function restoreSpot(spot){
       await loadCatalogue(); openYear(hubYear);
       if (hubComp) openComponent(hubComp);
       if (hubStrand) openStrand(hubStrand);
-      if (hubPoint) openPoint(hubPoint);
+      if (hubPoint) openPoint(hubPoint, spot.kind);
       return;
     }
     show("homeView");          // a note pointing at nothing we can open
@@ -2244,11 +2246,18 @@ function whichVersion(id, question, then){
 /* Giving a lesson to this class, asking first where there is a choice to be
    made. A lesson with no versions goes straight in: a pop-up offering one
    option is a press for nothing. */
-async function addLessonToClass(id, onDone){
+/* opts.borrow: a cover lesson from another unit or year group. It stays
+   filed where it is, for every class that has it there, and this class sees
+   it under this unit instead of it being moved here for everyone. */
+async function addLessonToClass(id, onDone, opts){
   const family = familyOf(id);
+  /* A cover lesson keeps the unit it is filed in whatever unit a class finds
+     it under, so one from another unit is always borrowed, never moved. */
+  const borrow = !!(opts && opts.borrow) || (!!catOf(id).cover && (catOf(id).unit || "") !== unit);
   const go = async (chosen) => {
-    if ((catOf(chosen).unit || "") !== unit) await catPost({ op:"set-lesson", id: chosen, unit });
-    await catPost({ op:"assign", id: chosen, groups: [cls] });
+    if (!borrow && (catOf(chosen).unit || "") !== unit) await catPost({ op:"set-lesson", id: chosen, unit });
+    await catPost(borrow ? { op:"assign", id: chosen, groups: [cls], shownIn: unit }
+                         : { op:"assign", id: chosen, groups: [cls] });
     await loadCatalogue();
     onDone();
   };
@@ -2580,8 +2589,9 @@ function paintHubUnits(){
     g.appendChild(el("p","hint","No units here yet, press “+ New unit”."));
 }
 
-function openHubUnit(u){
+function openHubUnit(u, kind){
   hubUnit = u;
+  lessonKind = kind || "lessons";
   $("hubUnitName").textContent = u || "Not in a unit";
   $("backUnitYear").textContent = hubYear || "Lessons";
   showIf("renameHubUnitBtn", u);
@@ -2591,13 +2601,19 @@ function openHubUnit(u){
 }
 
 /* the lesson cards, used for a unit and for search results */
-function lessonCards(list, box){
+/* opts.where: the year group being looked at, for the cover hub, whose cards
+   say which units they suit. opts.here: the unit on screen, named first on a
+   card that suits it. opts.suggest: which of them suit it, put first with a
+   Suggested pill. */
+function lessonCards(list, box, opts){
+  opts = opts || {};
   box.innerHTML = "";
-  if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build a new lesson”.")); return; }
+  if (!list.length){ box.appendChild(el("p","hint","No lessons here yet, press “+ Build new”.")); return; }
   const grid = el("div","lessongrid");
   /* Sorted here rather than by each caller, so the hub, a point's lessons
      and a search all come out in the same order. */
   inOrder(list, (l) => titleOf(l.lesson_id));
+  suggestedFirst(list, opts.suggest);
   list.forEach(l => {
     const card = el("div","lessonpill");
     card.dataset.lesson = l.lesson_id;
@@ -2606,7 +2622,9 @@ function lessonCards(list, box){
     const alts = versionsOf(l.lesson_id);
     if (alts.length) head.appendChild(el("span","statechip open",
       alts.length + " version" + (alts.length === 1 ? "" : "s")));
+    if (opts.suggest && opts.suggest(l)) head.appendChild(suggestedPill());
     card.appendChild(head);
+    if (opts.where) card.appendChild(unitsLine("p", "lp-from", l, opts.where, opts.here));
     /* With no classes to publish to, what a teacher needs off this card is
        the address to paste into Teams, and the code that opens it if the
        link does not survive the journey. */
@@ -2641,38 +2659,432 @@ function lessonCards(list, box){
     const del = el("button","btn-ghost","Delete");
     del.addEventListener("click", deleteIt);
     acts.appendChild(give);
+    const download = ["Download lesson JSON", () => downloadLessonJson(l.lesson_id)];
     if (narrow()) acts.appendChild(overflowMenu([["Preview", previewIt],
                                                  ["Edit", () => editLesson(l.lesson_id)],
+                                                 download,
                                                  ["Delete", deleteIt]]));
-    else { acts.appendChild(pv); acts.appendChild(edit); acts.appendChild(del); }
+    else { acts.appendChild(pv); acts.appendChild(edit); acts.appendChild(del); acts.appendChild(overflowMenu([download])); }
     card.appendChild(acts);
     grid.appendChild(card);
   });
   box.appendChild(grid);
 }
-/* Cover lessons are kept out of the way under the taught ones, folded shut:
-   they are reached for on the morning somebody is off, not in the run of a
-   unit, and a number in the middle of the list would read as a lesson to teach. */
-function lessonCardsAndCover(list, box){
-  const cover = list.filter(l => l.cover);
-  const taught = list.filter(l => !l.cover);
-  if (taught.length || !cover.length) lessonCards(taught, box);
-  else box.innerHTML = "";
-  if (!cover.length) return;
-  const fold = document.createElement("details");
-  fold.className = "cover-fold";
-  const head = document.createElement("summary");
-  head.textContent = "Cover lessons (" + cover.length + ")";
-  fold.appendChild(head);
-  fold.appendChild(el("p","cover-fold-note",
-    "For the cover teacher: students sign in and open the lesson. They work down each page, pressing Understood or " +
-    "Finished to see the next task. They are finished when they reach the last screen, which shows how many pages they did."));
-  const holder = el("div");
-  fold.appendChild(holder);
-  box.appendChild(fold);
-  lessonCards(cover, holder);
+/* ---------- Lessons, Home Learning and Cover ----------
+   The three shelves of a unit, the same in the hub and in a class. Assessments
+   and practicals sit with the lessons, because they are taught in the run of a
+   unit. Home learning is set for outside the room, and cover is reached for on
+   the morning somebody is off, so neither belongs in a list of what to teach. */
+const LESSON_KINDS = [
+  { id:"lessons",  name:"Lessons",       words:"lessons" },
+  { id:"homework", name:"Home Learning", words:"home learning" },
+  { id:"cover",    name:"Cover",         words:"cover lessons" }
+];
+/* The builder saves one of these per lesson, but a practical comes back from
+   the server flagged as an assessment as well, so home learning is only home
+   learning if it is not one of those too. */
+const kindOf = (l) => l.cover ? "cover"
+                    : (l.homework && !l.assessment && !l.practical) ? "homework"
+                    : "lessons";
+const kindWords = (kind) => LESSON_KINDS.find(k => k.id === (kind || lessonKind)).words;
+/* The tabs, each saying how many are behind it, so an empty shelf can be told
+   from a full one without pressing it. */
+function drawKindTabs(bar, list, open, pick){
+  bar.innerHTML = "";
+  LESSON_KINDS.forEach(k => {
+    const here = k.id === open;
+    const b = el("button", here ? "on" : "", k.name);
+    b.type = "button";
+    b.dataset.kind = k.id;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", here ? "true" : "false");
+    const n = list.filter(l => kindOf(l) === k.id).length;
+    if (n) b.appendChild(el("span","kindcount", String(n)));
+    b.addEventListener("click", () => pick(k.id));
+    bar.appendChild(b);
+  });
 }
-function paintHub(){ lessonCardsAndCover(lessonsOfUnit(hubUnit), $("hubList")); }
+function paintKindTabs(bar, list, repaint){
+  drawKindTabs(bar, list, lessonKind, (kind) => {
+    lessonKind = kind;
+    /* Noted now rather than at the next change of screen, because a tab is
+       not one, and the builder is a page of its own: coming back from it
+       has to land on the shelf it was opened from. */
+    const spot = lastSpot();
+    if (spot){ spot.kind = kind; try{ sessionStorage.setItem("hub_spot", JSON.stringify(spot)); }catch(e){} }
+    repaint();
+  });
+}
+function kindShelf(list, bar, box, repaint){
+  paintKindTabs(bar, list, repaint);
+  const shown = list.filter(l => kindOf(l) === lessonKind);
+  box.innerHTML = "";
+  if (!shown.length){
+    box.appendChild(el("p","hint","No " + kindWords() + " here yet, press “+ Build new”."));
+    return;
+  }
+  const holder = el("div");
+  box.appendChild(holder);
+  lessonCards(shown, holder);
+}
+function paintHub(){
+  const list = lessonsOfUnit(hubUnit);
+  const coverHub = lessonKind === "cover" && coverHubYear(hubYear);
+  /* Topics are kept in the database, so not without a server. */
+  showIf("manageTopicsBtn", coverHub && !OFFLINE);
+  if (coverHub){
+    paintKindTabs($("hubKinds"), list, paintHub);
+    paintCoverHub($("hubList"), hubYear, hubUnit);
+    return;
+  }
+  kindShelf(list, $("hubKinds"), $("hubList"), paintHub);
+}
+
+/* ---------- the cover hub ----------
+   A unit's Cover tab: every cover lesson in the unit's topic, this unit's
+   and other units' together under the topic's name, then Other topics,
+   folded shut, holding a fold for each other topic that has a cover lesson
+   in it. Cover is set at short notice, and the lesson that suits the room is
+   as likely to be a Year 7 one as anything filed in this unit. Only KS3
+   year groups are in it, and GCSE and A Level units keep the plain shelf,
+   which is what coverHubYear() decides.
+
+   A topic belongs to units, not lessons (Manage topics). A cover lesson is
+   filed in one unit and can suit others too (the builder's Also suitable
+   for, coverUnits), and it is in the topic of every one of them. One that
+   suits the unit on screen is Suggested and comes first. */
+function coverHubYear(year){ return !!year && levelOf(year) === "KS3"; }
+const unitNamed = (name) => (cat.units || []).find(x => x.name === name);
+const yearOfUnit = (name) => { const u = unitNamed(name); return u ? (u.year || "") : ""; };
+const yearOfLesson = (l) => l.year || yearOfUnit(l.unit || "");
+const topicOfUnit = (name) => { const u = unitNamed(name); return u ? String(u.topic || "").trim() : ""; };
+/* Every unit a cover lesson suits, the one it is filed in first. */
+const unitsOf = (l) => {
+  const out = [];
+  [l.unit || ""].concat(l.cover_units || []).forEach(u => { if (u && out.indexOf(u) < 0) out.push(u); });
+  return out;
+};
+/* Its topics, one per topic however many of its units share it. */
+const topicsOf = (l) => {
+  const out = [];
+  unitsOf(l).forEach(u => { const t = topicOfUnit(u); if (t && !out.some(x => window.coverTopics.same(x, t))) out.push(t); });
+  return out;
+};
+const suitsUnit = (l, unitName) => unitsOf(l).indexOf(unitName) >= 0;
+const topicList = () => window.coverTopics.all(cat.coverTopics, cat.units);
+const isOther = (t) => window.coverTopics.same(t, window.coverTopics.OTHER);
+/* Originals only, as the hub lists. A unit with no topic yet has its own
+   cover lessons on top in its topic's place, so they are never out of sight. */
+function coverShelves(year, unitName){
+  const covers = (cat.lessons || []).filter(l => l.cover && !l.version_of);
+  const topic = topicOfUnit(unitName);
+  const mine = (l) => suitsUnit(l, unitName);
+  const inTopic = (l) => topic
+    ? topicsOf(l).some(t => window.coverTopics.same(t, topic)) && coverHubYear(yearOfLesson(l))
+    : mine(l);
+  return {
+    topic,
+    inTopic: covers.filter(inTopic),
+    others: covers.filter(l => !inTopic(l) && !mine(l) && coverHubYear(yearOfLesson(l)))
+  };
+}
+/* By topic, in the list's order, and units with no topic last. A lesson
+   suiting units in two topics is under both. */
+function byTopic(list){
+  const order = topicList().map(t => t.toLowerCase());
+  const groups = [];
+  list.forEach(l => {
+    const ts = topicsOf(l);
+    (ts.length ? ts : [""]).forEach(t => {
+      let g = groups.find(x => window.coverTopics.same(x.name, t));
+      if (!g){ g = { name: t, lessons: [] }; groups.push(g); }
+      g.lessons.push(l);
+    });
+  });
+  const rank = (n) => n ? (order.indexOf(n.toLowerCase()) < 0 ? 999 : order.indexOf(n.toLowerCase())) : 1000;
+  return groups.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
+}
+/* One fold: a heading button and a body drawn the first time it opens.
+   Returns a way to shut it from outside, for the topics that shut each
+   other. */
+function fold(box, cls, name, n, open, drawBody, onToggle){
+  const wrap = el("div", cls + (open ? " on" : ""));
+  const head = el("button","topichead");
+  head.type = "button";
+  head.setAttribute("aria-expanded", open ? "true" : "false");
+  head.appendChild(el("span","topicarrow", "▸"));
+  head.appendChild(el("span","topicname", name));
+  head.appendChild(el("span","kindcount", String(n)));
+  const body = el("div","topicbody");
+  body.hidden = !open;
+  if (open) drawBody(body);
+  const set = (now) => {
+    body.hidden = !now;
+    wrap.classList.toggle("on", now);
+    head.setAttribute("aria-expanded", now ? "true" : "false");
+    if (now && !body.childNodes.length) drawBody(body);
+  };
+  head.addEventListener("click", () => { const now = body.hidden; set(now); onToggle(now); });
+  wrap.appendChild(head); wrap.appendChild(body);
+  box.appendChild(wrap);
+  return { shut: () => set(false) };
+}
+/* Shut to begin with. Kept while the same unit is on screen, so a repaint
+   after Manage topics leaves them as they were, and shut again for another
+   unit or a fresh pop-up. topic is null when none is open: "" is a real key,
+   the units with no topic. */
+const coverFolds = { others: false, topic: null, unit: null };
+function shutCoverFolds(unitName){
+  coverFolds.others = false; coverFolds.topic = null; coverFolds.unit = unitName;
+}
+function otherTopics(box, list, drawRows){
+  fold(box, "topicfold otherfold", "Other topics", list.length, coverFolds.others, (outer) => {
+    const groups = byTopic(list);
+    const shutters = [];
+    groups.forEach((g, i) => {
+      const key = g.name.toLowerCase();
+      shutters.push(fold(outer, "topicfold", g.name || "No topic yet", g.lessons.length,
+        coverFolds.topic === key, (body) => drawRows(g.lessons, body), (now) => {
+          /* One topic open at a time: opening this shuts whichever was. */
+          if (now) shutters.forEach((s, j) => { if (j !== i) s.shut(); });
+          coverFolds.topic = now ? key : null;
+        }));
+    });
+  }, (now) => { coverFolds.others = now; });
+}
+/* The shelves, for the hub and for a class's Add existing alike. Only how a
+   lesson is drawn differs, which is drawRows. */
+function coverSections(box, year, unitName, shelves, drawRows){
+  const h = el("h3","coverhead", shelves.topic || ("In " + (unitName || "this unit")));
+  if (shelves.inTopic.length) h.appendChild(el("span","kindcount", String(shelves.inTopic.length)));
+  box.appendChild(h);
+  if (shelves.inTopic.length) drawRows(shelves.inTopic, box);
+  else box.appendChild(el("p","hint","None yet."));
+  if (shelves.others.length) otherTopics(box, shelves.others, drawRows);
+}
+/* Where a cover lesson is filed, said on its card: the year as well when it
+   is another year group's. */
+function whereFrom(l, year){
+  const y = yearOfLesson(l);
+  return (y && y !== year ? y + " · " : "") + (l.unit || "Not in a unit");
+}
+/* The line under a cover lesson's title: one unit, and "+2 more" when it
+   suits others too, which names those others on hover or focus in the site's
+   own tooltip. The one unit is the one on screen (here) when the lesson suits
+   it, so a Suggested card says why it is suggested, and otherwise the unit it
+   is filed in. The tooltip never repeats the unit already on the line. */
+function unitsLine(tag, cls, l, year, here){
+  const all = unitsOf(l);
+  const shown = here && all.indexOf(here) >= 0 ? here : (l.unit || "");
+  const shownYear = shown === (l.unit || "") ? yearOfLesson(l) : yearOfUnit(shown);
+  const line = el(tag, cls, (shownYear && shownYear !== year ? shownYear + " · " : "") + (shown || "Not in a unit"));
+  const rest = all.filter(u => u !== shown);
+  if (rest.length){
+    const more = el("span","units-more", "+" + rest.length + " more");
+    more.tabIndex = 0;
+    more.setAttribute("aria-label", "Also suits " + rest.join(", "));
+    hoverTip(more, rest.join(", "));
+    line.appendChild(document.createTextNode(" "));
+    line.appendChild(more);
+  }
+  return line;
+}
+/* One tooltip for the console, the look of the one over Continue in a
+   lesson and over the results columns (resultsbook.js). It hangs from the
+   page, so a card or a pop-up that clips its contents cannot cut it off, and
+   it is kept inside the window with its arrow still on the words. */
+let consoleTip = null;
+function hoverTip(over, words){
+  const show = () => {
+    if (!consoleTip){ consoleTip = el("span","tip restip"); document.body.appendChild(consoleTip); }
+    consoleTip.textContent = words;
+    consoleTip.hidden = false;
+    const r = over.getBoundingClientRect(), w = consoleTip.offsetWidth;
+    const mid = r.left + r.width / 2;
+    const left = Math.max(16 + w / 2, Math.min(window.innerWidth - 16 - w / 2, mid));
+    consoleTip.style.left = left + "px";
+    consoleTip.style.top = (r.bottom + 10) + "px";
+    consoleTip.style.setProperty("--arrow", (mid - left + w / 2) + "px");
+  };
+  const hide = () => { if (consoleTip) consoleTip.hidden = true; };
+  over.addEventListener("mouseenter", show);
+  over.addEventListener("focus", show);
+  over.addEventListener("mouseleave", hide);
+  over.addEventListener("blur", hide);
+  /* a click goes on to whatever the line sits in (a card opens the builder) */
+  over.addEventListener("click", (e) => { e.stopPropagation(); show(); });
+}
+/* Suggested lessons first, keeping the order they were in otherwise. */
+function suggestedFirst(list, suggest){
+  if (!suggest) return list;
+  const yes = list.filter(l => suggest(l)), no = list.filter(l => !suggest(l));
+  list.splice(0, list.length, ...yes, ...no);
+  return list;
+}
+const suggestedPill = () => el("span","statechip suggested","Suggested");
+function paintCoverHub(box, year, unitName){
+  if (coverFolds.unit !== unitName) shutCoverFolds(unitName);
+  box.innerHTML = "";
+  coverSections(box, year, unitName, coverShelves(year, unitName),
+    (list, into) => { const h = el("div"); into.appendChild(h);
+                      lessonCards(list, h, { where: year, here: unitName, suggest: (l) => suitsUnit(l, unitName) }); });
+}
+
+/* ---------- Manage topics ----------
+   Each topic with the units in it. A unit is in one topic at most, so adding
+   it to another moves it. Renaming to a topic already there merges the two,
+   which is how a typo is mended. Deleting moves its units to Other, which is
+   left alone, being where they go.
+
+   Every change sends the list as it stands, which the server writes in the
+   first time, while it is still the starting topics. */
+on("manageTopicsBtn", "click", () => manageTopics(() => paintHub()));
+const topicSeed = () => topicList().filter(t => !isOther(t));
+const unitsInTopic = (t) => (cat.units || []).filter(u => window.coverTopics.same(u.topic, t));
+/* KS3 units only: the hub has no topics for GCSE and A Level. */
+const ks3Units = () => (cat.units || []).filter(u => coverHubYear(u.year || ""));
+function manageTopics(after){
+  openModal(box => {
+    modalTitle(box, "Manage topics");
+    const list = el("div","topiclist");
+    box.appendChild(list);
+    const msg = el("p","hint","");
+    box.appendChild(msg);
+    /* Changes go to the server and the list is drawn again in place, so the
+       pop-up stays where it was scrolled to. */
+    const change = async (payload) => {
+      msg.textContent = "";
+      try{ await catPost(Object.assign({ seed: topicSeed() }, payload)); paint(); after(); }
+      catch(e){ msg.textContent = e.message; paint(); }
+    };
+    function paint(){
+      list.innerHTML = "";
+      topicList().forEach(t => {
+        const block = el("div","topicblock");
+        const row = el("div","topicrow");
+        row.appendChild(el("span","topicname", t));
+        if (!isOther(t)){
+          const ren = el("button","btn-ghost iconbtn","✎");
+          ren.title = "Rename " + t;
+          ren.addEventListener("click", () => renameTopic(t, after));
+          row.appendChild(ren);
+          const del = el("button","btn-ghost iconbtn","🗑");
+          del.title = "Delete " + t;
+          del.addEventListener("click", () => deleteTopic(t, unitsInTopic(t).length, after));
+          row.appendChild(del);
+        }
+        block.appendChild(row);
+        const units = el("div","topicunits");
+        unitsInTopic(t).forEach(u => {
+          const chip = el("span","topicunit", u.name);
+          const x = el("button","topicunit-x","✕");
+          x.type = "button";
+          x.title = "Take " + u.name + " out of " + t;
+          x.addEventListener("click", () => change({ op:"set-unit-topic", unit: u.name, topic: "" }));
+          chip.appendChild(x);
+          units.appendChild(chip);
+        });
+        /* The units not already here, by year group. One in another topic
+           says which, because choosing it moves it. */
+        const pick = el("select","topicadd");
+        pick.setAttribute("aria-label", "Add a unit to " + t);
+        const first = el("option","", "+ Add a unit");
+        first.value = "";
+        pick.appendChild(first);
+        const byYear = new Map();
+        ks3Units().filter(u => !window.coverTopics.same(u.topic, t)).forEach(u => {
+          if (!byYear.has(u.year)) byYear.set(u.year, []);
+          byYear.get(u.year).push(u);
+        });
+        byYear.forEach((us, y) => {
+          const g = document.createElement("optgroup");
+          g.label = y;
+          us.forEach(u => {
+            const o = el("option","", u.name + (u.topic ? " (in " + u.topic + ")" : ""));
+            o.value = u.name;
+            g.appendChild(o);
+          });
+          pick.appendChild(g);
+        });
+        pick.addEventListener("change", () => {
+          if (pick.value) change({ op:"set-unit-topic", unit: pick.value, topic: t });
+        });
+        units.appendChild(pick);
+        block.appendChild(units);
+        list.appendChild(block);
+      });
+    }
+    paint();
+    const add = el("button","btn-ghost topicnew","+ New topic");
+    add.addEventListener("click", () => askName("New topic", "").then(async (name) => {
+      if (!name){ manageTopics(after); return; }
+      try{ await catPost({ op:"add-cover-topic", name, seed: topicSeed() }); }
+      catch(e){ say("Could not add it", e.message); return; }
+      manageTopics(after);
+    }));
+    box.appendChild(add);
+    const done = el("button","btn-ghost modal-stay","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+    scrollBody(box);
+  });
+}
+/* A name typed in a pop-up of its own. Resolves to the name, or "" if it
+   was cancelled. */
+function askName(title, start){
+  return new Promise(resolve => {
+    openModal(box => {
+      modalTitle(box, title);
+      const w = el("div","bfield");
+      const inp = el("input");
+      inp.value = start;
+      inp.maxLength = 40;
+      w.appendChild(inp);
+      box.appendChild(w);
+      const go = el("button","btn-primary modal-cta","Save");
+      const take = () => { const v = inp.value.trim(); if (v) resolve(v); };
+      go.addEventListener("click", take);
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") take(); });
+      box.appendChild(go);
+      const no = el("button","btn-ghost modal-stay","Cancel");
+      no.addEventListener("click", () => resolve(""));
+      box.appendChild(no);
+      setTimeout(() => { try{ inp.focus(); inp.select(); }catch(e){} }, 30);
+    });
+  });
+}
+function renameTopic(from, after){
+  askName("Rename " + from, from).then(async (typed) => {
+    if (typed && typed !== from){
+      try{ await catPost({ op:"rename-cover-topic", from, to: typed, seed: topicSeed() }); after(); }
+      catch(e){ say("Could not rename it", e.message); return; }
+    }
+    manageTopics(after);
+  });
+}
+function deleteTopic(topic, n, after){
+  openModal(box => {
+    modalTitle(box, "Delete " + topic + "?");
+    if (n) box.appendChild(el("p","modal-text",
+      "Its " + countWord(n, "unit moves", "units move") + " to Other."));
+    const msg = el("p","hint","");
+    box.appendChild(msg);
+    const go = el("button","btn-primary modal-cta","Delete");
+    go.addEventListener("click", async () => {
+      msg.textContent = "Deleting…";
+      go.disabled = true;
+      try{
+        await catPost({ op:"delete-cover-topic", from: topic, seed: topicSeed() });
+        manageTopics(after);
+        after();
+      }catch(e){ msg.textContent = e.message; go.disabled = false; }
+    });
+    box.appendChild(go);
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", () => manageTopics(after));
+    box.appendChild(no);
+  });
+}
 
 /* ---------- the link to hand a class (no server) ----------
    Lessons reach students through Teams or Impero rather than a lesson list,
@@ -2921,8 +3333,9 @@ function paintPoints(){
   });
 }
 
-function openPoint(id){
+function openPoint(id, kind){
   hubPoint = id;
+  lessonKind = kind || "lessons";
   const p = pointById(id);
   const strand = pointById(hubStrand);
   $("pointName").textContent = p ? (p.code + " " + p.title) : "Lessons";
@@ -2930,7 +3343,7 @@ function openPoint(id){
   show("hubPointLessonsView");
   paintPointLessons();
 }
-function paintPointLessons(){ lessonCardsAndCover(lessonsOfPoint(hubPoint), $("hubPointList")); }
+function paintPointLessons(){ kindShelf(lessonsOfPoint(hubPoint), $("pointKinds"), $("hubPointList"), paintPointLessons); }
 on("refPoint", "click", () => refreshSpec("hubPointList", "Loading the lessons", paintPointLessons));
 on("backPointStrand", "click", () => { if (hubStrand) openStrand(hubStrand); else openComponent(hubComp); });
 /* The builder opens knowing where it is: the year group, the point, and the
@@ -3157,6 +3570,63 @@ on("deleteHubUnitBtn", "click", () => {
   });
 });
 
+/* The units a class already has, by what it has been given, each under the
+   unit that class sees it under. */
+function unitsOfClass(group){
+  const out = [];
+  classLessonsFor(group).forEach(l => { const u = l.unit || ""; if (u && out.indexOf(u) < 0) out.push(u); });
+  return out;
+}
+/* Where a cover lesson goes in each class it is given to, so giving one out
+   never makes a new unit appear in a class. The one unit of the lesson's
+   (filed or also suitable for) that the class already has is chosen without
+   asking. With none, or more than one, the teacher is asked, offered the
+   units that class already has, or the lesson's own when it has none at
+   all. Resolves to { class: unit }, or null if they cancel. */
+function coverPlaces(lesson, groups){
+  const order = (cat.units || []).map(u => u.name);
+  const byOrder = (a, b) => (order.indexOf(a) - order.indexOf(b)) || a.localeCompare(b);
+  const mine = unitsOf(lesson);
+  const places = {}, ask = [];
+  groups.forEach(g => {
+    const have = unitsOfClass(g);
+    const fits = mine.filter(u => have.indexOf(u) >= 0);
+    if (fits.length === 1) places[g] = fits[0];
+    else ask.push({ group: g, options: (fits.length ? fits : have.length ? have : mine).slice().sort(byOrder),
+                    suits: fits.length ? fits : [] });
+  });
+  if (!ask.length) return Promise.resolve(places);
+  return new Promise(resolve => {
+    openModal(box => {
+      modalTitle(box, "Which unit should it go in?");
+      box.appendChild(el("p","modal-text", ask.length === 1
+        ? "Pick the unit " + ask[0].group + " will find “" + titleOf(lesson.lesson_id) + "” under."
+        : "Pick the unit each class will find “" + titleOf(lesson.lesson_id) + "” under."));
+      const picks = {};
+      ask.forEach(a => {
+        const w = el("div","bfield");
+        w.appendChild(el("label","", a.group));
+        const sel = el("select");
+        a.options.forEach(u => {
+          const o = el("option","", u + (a.suits.indexOf(u) >= 0 ? " (suggested)" : ""));
+          o.value = u; sel.appendChild(o);
+        });
+        w.appendChild(sel); box.appendChild(w);
+        picks[a.group] = sel;
+      });
+      const go = el("button","btn-primary modal-cta","Give it out");
+      go.addEventListener("click", () => {
+        Object.keys(picks).forEach(g => { places[g] = picks[g].value; });
+        resolve(places);
+      });
+      box.appendChild(go);
+      const no = el("button","btn-ghost modal-stay","Back");
+      no.addEventListener("click", () => resolve(null));
+      box.appendChild(no);
+      scrollBody(box);
+    });
+  });
+}
 function distribute(id){
   openModal(box => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
@@ -3203,13 +3673,30 @@ function distribute(id){
         const move = chosen.filter(n => picks[n].other);
         const add = chosen.filter(n => !picks[n].other);
         const drop = Object.keys(picks).filter(n => !picks[n].cb.checked && picks[n].already);
-        if (add.length) await catPost({ op:"assign", id: id, groups: add });
+        /* A cover lesson goes into a unit each class already has (coverPlaces),
+           and is never refiled: the unit is the class's view of it. */
+        const lesson = catOf(id);
+        if (lesson.cover && add.length){
+          const places = await coverPlaces(lesson, add);
+          if (!places){ distribute(id); return; }        // they backed out: nothing saved
+          for (const n of add){
+            const u = places[n];
+            await catPost(u && u !== (lesson.unit || "") ? { op:"assign", id: id, groups: [n], shownIn: u }
+                                                         : { op:"assign", id: id, groups: [n] });
+          }
+        }
+        else if (add.length) await catPost({ op:"assign", id: id, groups: add });
         for (const n of move) await catPost({ op:"switch-version", from: picks[n].other, to: id, group: n });
         for (const n of drop) await catPost({ op:"unassign", id: id, group: n });
         await loadCatalogue();
         await b.done("Saved");
         closeModal(); paintHub();
-      }catch(e){ b.fail(); msg.textContent = e.message; }
+      }catch(e){
+        b.fail();
+        /* the unit question may have taken this pop-up's place */
+        if (document.body.contains(msg)) msg.textContent = e.message;
+        else { closeModal(); say("Could not give it out", e.message); }
+      }
     });
     box.appendChild(go); box.appendChild(msg);
   });
@@ -3315,23 +3802,45 @@ function nameClass(name){
 async function openClass(name){
   nameClass(name);
   show("classView");
-  /* Coverage is for a class doing GCSE or A Level work, and a KS3 class
-     should not be offered a screen that can only ever be empty for it.
+  /* A class opens on its units, because they are what a teacher came for. They
+     were one press further in once, behind a tile. The catalogue has to have
+     arrived first: a class opened straight from the home screen has not been
+     through the hub. */
+  if (!catLoaded) wait("unitGrid", "Loading the units", true);
+  try{ await loadCatalogue(); }
+  catch(e){ $("unitGrid").innerHTML = ""; $("unitGrid").appendChild(el("p","hint", e.message)); return; }
+  if (cls === name) paintClassUnits();
+}
+/* The bar across a class's screens, put under the heading of the one that is
+   up and left hidden everywhere else.
 
-     Nothing records which year group a class belongs to, and guessing
-     from its name is a guess: 10A is Year 10 until somebody calls a set
-     10X2 or 7-Green. So the test is what the class has actually been
-     given. A lesson filed against a point of the specification is the
-     only thing coverage counts, so a class with none has nothing to
-     show, whatever it is called.
+   Coverage is for a class doing GCSE or A Level work, and a KS3 class
+   should not be offered a screen that can only ever be empty for it.
 
-     The catalogue has to have arrived first: a class opened straight
-     from the home screen has not been through the hub. */
-  const cover = $("openCover");
-  if (cover) cover.hidden = true;
-  if (OFFLINE) return;
-  try{ await loadCatalogue(); }catch(e){ return; }
-  if (cover) cover.hidden = !classDoesSpecWork();
+   Nothing records which year group a class belongs to, and guessing
+   from its name is a guess: 10A is Year 10 until somebody calls a set
+   10X2 or 7-Green. So the test is what the class has actually been
+   given. A lesson filed against a point of the specification is the
+   only thing coverage counts, so a class with none has nothing to
+   show, whatever it is called. Asked again once the catalogue arrives,
+   because a refresh on Students comes back before it has. */
+const CLASS_TABS = { classView:"openLessons", studentsView:"openStudents",
+                     progressView:"openProgress", coverView:"openCover" };
+function paintClassTabs(){
+  const bar = $("classTabs");
+  if (!bar) return;
+  const view = VIEWS.find(x => $(x) && !$(x).hidden);
+  const tab = CLASS_TABS[view];
+  bar.hidden = !tab;
+  if (!tab) return;
+  const screen = $(view);
+  const head = screen.querySelector(":scope > .viewhead") || screen.querySelector(":scope > h2, :scope > .classhead");
+  if (head) head.after(bar);
+  Array.from(bar.children).forEach(b => {
+    b.classList.toggle("on", b.id === tab);
+    b.setAttribute("aria-selected", b.id === tab ? "true" : "false");
+  });
+  $("openCover").hidden = view !== "coverView" && !(catLoaded && classDoesSpecWork());
 }
 /* Has this class been given a lesson that is filed against the
    specification? Versions count: a class doing "1.1.1, lower ability" is
@@ -3343,6 +3852,7 @@ function classDoesSpecWork(){
     return familyOf(l.lesson_id).some(v => assignOf(v.lesson_id));
   });
 }
+on("openLessons", "click", () => openClass(cls));
 on("openCover", "click", () => { show("coverView"); loadCoverage(); });
 
 
@@ -3469,7 +3979,7 @@ async function openProgressView(force){
   }
 }
 /* The units this class has lessons in, same list and same order as the
-   Units & lessons tile offers, so a unit called the same thing in both
+   Units tab offers, so a unit called the same thing in both
    places is always the same unit. */
 function paintProgressUnitSelect(){
   const sel = $("progressUnitSelect");
@@ -3539,7 +4049,19 @@ async function unitProgressFor(unitName, group, force){
    screen. */
 function classLessonsFor(group){
   const g = String(group || "").toLowerCase();
-  return (cat.lessons || []).filter(l => assigns.some(a => a.lesson_id === l.lesson_id && a.group_name.toLowerCase() === g));
+  const out = [];
+  (cat.lessons || []).forEach(l => {
+    const a = assigns.find(x => x.lesson_id === l.lesson_id && x.group_name.toLowerCase() === g);
+    if (a) out.push(asShownTo(l, a));
+  });
+  return out;
+}
+/* A cover lesson borrowed from another unit or year stays filed there for
+   everyone else, and this class sees it under the unit it was added to:
+   its tiles, its tabs, its progress. A copy, so the catalogue keeps the
+   unit it is really filed in. */
+function asShownTo(l, a){
+  return a && a.shown_in && a.shown_in !== l.unit ? Object.assign({}, l, { unit: a.shown_in, filedIn: l.unit || "" }) : l;
 }
 async function loadUnitProgress(force){
   $("progressWait").hidden = false;
@@ -3669,7 +4191,7 @@ function paintUnitProgress(result){
       row.appendChild(bar);
       row.appendChild(el("span","covernum", l.mr.pct + "%"));
     }
-    const open = el("button","btn-ghost", "Open markbook");
+    const open = el("button","btn-ghost", "Open mark book");
     open.addEventListener("click", () => openWorkPage(l.id, "progress"));
     row.appendChild(open);
     rows.appendChild(row);
@@ -3819,7 +4341,6 @@ on("refLessons", "click", async () => {
   catch(e){ $("lessonGrid").innerHTML = ""; $("lessonGrid").appendChild(el("p","hint", e.message)); }
 });
 on("backClass1", "click", () => openClass(cls));
-on("backClass2", "click", () => openClass(cls));
 
 on("renameBtn", "click", () => {
   openModal(box => {
@@ -4281,6 +4802,9 @@ let unit = "";                            // the unit being managed
    has. It is the point's wording, "2.2.1 Programming fundamentals", because
    that is what the catalogue carries. */
 let subunit = "";
+/* Which of a unit's three shelves is open: lessons, homework or cover. One for
+   the hub and the class alike, since only one unit is ever on screen. */
+let lessonKind = "lessons";
 
 /* Kept for as long as the page is open. Reloading the page starts again,
    and every screen has a refresh button for when something has changed. */
@@ -4292,6 +4816,7 @@ async function loadCatalogue(force){
      console reads the units in the order this list holds them. */
   if (window.lessonOrder) window.lessonOrder.sortUnits(cat.units);
   catLoaded = true;
+  paintClassTabs();
 }
 async function fetchCatalogue(){
   fileLessons = [];
@@ -4312,6 +4837,8 @@ async function fetchCatalogue(){
       lessons: file.lessons.map(l => ({ lesson_id: l.id, unit: l.unit, year: l.year,
                                         code: l.code, position: 0, published: 1,
                                         title: l.title, cover: !!l.cover,
+                                        assessment: !!l.assessment, practical: !!l.practical,
+                                        homework: !!l.homework,
                                         version_of: l.versionOf || "",
                                         version_name: l.versionName || "",
                                         version_note: l.versionNote || "",
@@ -4342,9 +4869,16 @@ async function fetchCatalogue(){
   assigns = cat.assignments || [];
 }
 const catOf = (id) => (cat.lessons || []).find(l => l.lesson_id === id) || { unit: "", published: 0, position: 0, version_of: "" };
-/* An assessment is marked there: a practical by hand, a test a question at
-   a time, so the way into its work says so. A lesson is looked at. */
-const workLabel = (id) => (catOf(id).practical || catOf(id).assessment) ? "Mark work" : "View work";
+/* The way into a lesson's work, which is what the button on its card is for.
+   A practical is marked by hand, so it opens on the work. A test and home
+   learning mark themselves, so what a teacher wants first is the whole class
+   at once, and they open on the mark book. A lesson is looked at. */
+const workWay = (id) => {
+  const l = catOf(id);
+  if (l.practical) return { label:"Mark work", tab:"" };
+  if (l.assessment || kindOf(l) === "homework") return { label:"Mark book", tab:"markbook" };
+  return { label:"View work", tab:"" };
+};
 const titleOf = (id) => { const l = fileLessons.find(x => x.id === id); return l ? l.title : id; };
 async function catPost(payload){
   catLoaded = false;                 // whatever this changes, the copy we hold is stale
@@ -4355,18 +4889,8 @@ async function catPost(payload){
   return said;
 }
 
-on("openLessons", "click", async () => {
-  show("unitsView");
-  if (!catLoaded) wait("unitGrid", "Loading the units", true);
-  try{ await loadCatalogue(); paintClassUnits(); }
-  catch(e){ $("unitGrid").innerHTML = '<p class="hint">' + e.message + '</p>'; }
-});
-
 /* Only the units this class actually has lessons in. */
-function classLessons(){
-  return (cat.lessons || []).filter(l =>
-    assigns.some(a => a.lesson_id === l.lesson_id && a.group_name.toLowerCase() === cls.toLowerCase()));
-}
+function classLessons(){ return classLessonsFor(cls); }
 function paintClassUnits(){
   const g = $("unitGrid"); g.innerHTML = "";
   const mine = classLessons();
@@ -4378,20 +4902,27 @@ function paintClassUnits(){
     return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
   });
   names.forEach(n => {
-    const count = mine.filter(l => (l.unit || "") === n).length;
+    const here = mine.filter(l => (l.unit || "") === n);
+    const count = (kind) => here.filter(l => kindOf(l) === kind).length;
     const t = el("button","classtile");
     t.appendChild(el("b","", n || "Not in a unit"));
-    t.appendChild(el("span","", count + " lesson" + (count === 1 ? "" : "s")));
+    /* The same three shelves the unit opens on, so the tile and the tabs add
+       up. A shelf with nothing on it is not mentioned. */
+    const said = [];
+    if (count("lessons")) said.push(countWord(count("lessons"), "lesson", "lessons"));
+    if (count("homework")) said.push(count("homework") + " home learning");
+    if (count("cover")) said.push(count("cover") + " cover");
+    t.appendChild(el("span","", said.join(", ")));
     t.addEventListener("click", () => openUnit(n));
     g.appendChild(t);
   });
   if (!names.length)
-    g.appendChild(el("p","hint", cls + " has no lessons yet. Add some from the lesson hub, or with the button below."));
+    g.appendChild(el("p","hint", cls + " has no lessons yet. Add some from the lesson hub, or press “+ Add an existing unit”."));
 }
 /* Back off the lessons, which is the parts screen where the unit was divided
    and the units themselves where it was not. */
-on("backUnits", "click", () => { if (partsOfUnit().length) openUnit(unit); else toUnits(); });
-on("backUnits2", "click", toUnits);
+on("backUnits", "click", () => { if (partsOfUnit().length) openUnit(unit); else toClass(); });
+on("backUnits2", "click", toClass);
 on("refParts", "click", async () => {
   wait("partGrid", "Loading the parts", true);
   try{ await loadCatalogue(true); paintParts(); }
@@ -4417,7 +4948,7 @@ function partsOfUnit(){
   return names.sort(byPartName);
 }
 function classLessonsIn(name){
-  return (cat.lessons || []).filter(l => (l.unit || "") === name && assignOf(l.lesson_id));
+  return classLessons().filter(l => (l.unit || "") === name);
 }
 /* The number in the wording is read as a number, so 2.2.10 comes after
    2.2.9 rather than after 2.2.1. */
@@ -4429,17 +4960,19 @@ function byPartName(a, b){
 function namePartsUnit(){ $("partsUnitName").textContent = unit || "Not in a unit"; }
 function nameLessonShelf(){
   $("unitName").textContent = subunit || unit || "Not in a unit";
-  /* The back button says where it goes, which is not always Units now. */
+  /* The back button says where it goes, which is the class unless the unit
+     was divided into parts. */
   const parts = partsOfUnit().length;
-  document.querySelectorAll(".bkpart").forEach(b => { b.textContent = parts ? unitCode() || "Back" : "Units"; });
+  document.querySelectorAll(".bkpart").forEach(b => { b.textContent = parts ? unitCode() || "Back" : cls; });
 }
 
 /* A unit opens on its parts where it has any, and on its lessons where it has
    none. A KS3 unit never has any, so it goes straight through exactly as it
    always did. */
-function openUnit(name){
+function openUnit(name, kind){
   unit = name;
   subunit = "";
+  lessonKind = kind || "lessons";
   if (!partsOfUnit().length){ openPart(""); return; }
   namePartsUnit();
   show("partsView");
@@ -4457,9 +4990,10 @@ async function showLessonInClass(group, id){
   try{
     nameClass(group);
     await loadCatalogue();
-    const l = (cat.lessons || []).find(x => x.lesson_id === id) || {};
+    const l = classLessonsFor(group).find(x => x.lesson_id === id) || catOf(id);
     flashLesson = id; flashUntil = 0;
-    openUnit(l.unit || "");
+    /* opened on the shelf it is on, or there would be no card to pick out */
+    openUnit(l.unit || "", kindOf(l));
     if (partsOfUnit().length) openPart(l.subunit || "");
   }catch(e){ openClass(group); }
 }
@@ -4538,7 +5072,9 @@ function pointNamed(name){
 }
 
 on("addLessonBtn", "click", () => {
-  let showAll = false, term = "";
+  /* Its own idea of which tab is open, starting on the one behind it, so
+     looking through the pop-up does not move the page underneath. */
+  let showAll = false, term = "", kind = lessonKind;
   openModal(box => {
     /* Wider than an ordinary pop-up. This one is a list of lessons with a
        search box and a button on one line above it, and at the usual 440px
@@ -4548,6 +5084,10 @@ on("addLessonBtn", "click", () => {
     const x = el("button","btn-ghost iconbtn modal-x","\u2715");
     x.addEventListener("click", closeModal); box.appendChild(x);
     modalTitle(box, "Add a lesson to " + (subunit || unit || "no unit"));
+    const kinds = el("div","subtabs kindtabs");
+    kinds.setAttribute("role", "tablist");
+    kinds.setAttribute("aria-label", "Kind of lesson");
+    box.appendChild(kinds);
     const tools = el("div","toolrow");
     /* the same box as the one on the hub, rather than a bare input */
     const searchWrap = el("span","searchbox");
@@ -4568,10 +5108,42 @@ on("addLessonBtn", "click", () => {
 
     /* A lesson "belongs" to this unit if its own file says so, that is what
        the builder writes, even before it has been filed here. */
+    /* Not yet with this class, under any version, and matching the search. */
+    const notHere = (id) => !catOf(id).version_of && !assignOf(id) && !familyOf(id).some(v => assignOf(v.lesson_id));
+    const matches = (id) => { const t = term.trim().toLowerCase(); return !t || titleOf(id).toLowerCase().includes(t); };
+    /* Cover goes through the cover hub on a KS3 unit: the unit's topic,
+       then the other topics, so there is no unit toggle. */
+    const year = yearOfUnit(unit) || yearOfClass();
+    const coverHere = coverHubYear(year);
+    shutCoverFolds(null);
+    function coverOffer(){
+      const sh = coverShelves(year, unit);
+      const keep = (list) => list.filter(l => notHere(l.lesson_id) && matches(l.lesson_id));
+      return { topic: sh.topic, inTopic: keep(sh.inTopic), others: keep(sh.others) };
+    }
+    /* One filed in another unit is borrowed: it stays filed there, and this
+       class sees it under this unit. */
+    function coverRow(l, into){
+      const borrow = (l.unit || "") !== unit;
+      const row = el("button","ov-row");
+      const words = el("span","pick-lesson");
+      const t = el("span","t", titleOf(l.lesson_id));
+      if (suitsUnit(l, unit)) t.appendChild(suggestedPill());
+      words.appendChild(t);
+      words.appendChild(unitsLine("span", "pick-unit", l, year, unit));
+      row.appendChild(words);
+      row.appendChild(el("span","edit","Add →"));
+      row.addEventListener("click", () => {
+        closeModal();
+        addLessonToClass(l.lesson_id, () => { lessonKind = "cover"; openPart(""); }, { borrow })
+          .catch(e => say("Could not add that", e.message));
+      });
+      into.appendChild(row);
+    }
     function paint(){
       holder.innerHTML = "";
       const t = term.trim().toLowerCase();
-      const rows = fileLessons.filter(l => {
+      const offered = fileLessons.filter(l => {
         /* Versions are not offered here in their own right. The lesson they
            came from is, and which version this class gets is asked once it
            has been picked. */
@@ -4584,6 +5156,23 @@ on("addLessonBtn", "click", () => {
         if (showAll) return true;
         return (l.unit || "") === unit;                                // suggested by the lesson itself
       });
+      const cover = coverHere ? coverOffer() : null;
+      const tabList = offered.map(l => catOf(l.id));
+      if (cover) tabList.splice(0, tabList.length, ...tabList.filter(l => kindOf(l) !== "cover"),
+                                ...cover.inTopic, ...cover.others);
+      drawKindTabs(kinds, tabList, kind, (k) => { kind = k; paint(); });
+      toggle.hidden = !!cover && kind === "cover";
+      if (cover && kind === "cover"){
+        if (!cover.inTopic.length && !cover.others.length){
+          holder.appendChild(el("p","modal-text", t ? "No cover lessons match." : "No cover lessons to add."));
+          return;
+        }
+        coverSections(holder, year, unit, cover,
+          (list, into) => suggestedFirst(inOrder(list, l => titleOf(l.lesson_id)), (l) => suitsUnit(l, unit))
+                            .forEach(l => coverRow(l, into)));
+        return;
+      }
+      const rows = offered.filter(l => kindOf(catOf(l.id)) === kind);
       inOrder(rows);
       longWord.textContent = showAll ? "Only lessons for this unit" : "Show every lesson";
       shortWord.textContent = showAll ? "This unit" : "All units";
@@ -4592,8 +5181,8 @@ on("addLessonBtn", "click", () => {
            something shorter on a phone, and a message telling a teacher to
            press words that are not on screen is worse than no message. */
         holder.appendChild(el("p","modal-text", showAll
-          ? "No other lessons match."
-          : "No lessons name this unit yet. Look in every unit with the button above, or build a new one."));
+          ? "No other " + kindWords(kind) + " match."
+          : "No " + kindWords(kind) + " for this unit yet. Look in every unit with the button above, or build a new one."));
       }
       rows.forEach(l => {
         const row = el("button","ov-row");
@@ -4615,6 +5204,8 @@ on("addLessonBtn", "click", () => {
              rather than adding it somewhere it will not appear. */
           addLessonToClass(l.id, () => {
             const landed = catOf(l.id).subunit || "";
+            /* the shelf it landed on, the same as the part it landed in */
+            lessonKind = kindOf(catOf(l.id));
             if (landed === subunit) paintLessonGrid();
             else openPart(landed);
           }).catch(e => say("Could not add that", e.message));
@@ -4636,9 +5227,11 @@ function paintLessonGrid(){
   /* One shelf at a time: the part of the unit that was opened, or the whole
      of it, which on a KS3 unit is every lesson it has because nothing there
      carries a part. */
-  const mine = classLessonsIn(unit).filter(l => (l.subunit || "") === subunit);
+  const shelf = classLessonsIn(unit).filter(l => (l.subunit || "") === subunit);
+  paintKindTabs($("classKinds"), shelf, paintLessonGrid);
+  const mine = shelf.filter(l => kindOf(l) === lessonKind);
   if (!mine.length){
-    g.appendChild(el("p","hint","No lessons here yet for " + cls + ", add one from the hub above."));
+    g.appendChild(el("p","hint","No " + kindWords() + " here yet for " + cls + ". Add one with “+ Add existing”."));
     return;
   }
   inOrder(mine, (l) => titleOf(l.lesson_id));
@@ -4669,13 +5262,14 @@ function paintLessonGrid(){
     chip.appendChild(el("span","chip-state", state));
     chip.appendChild(el("span","chip-when", when));
     chip.title = when;
-    chip.addEventListener("click", (e) => { e.stopPropagation(); schedulePopup(l.lesson_id); });
+    chip.addEventListener("click", (e) => { e.stopPropagation(); publishPopup(l.lesson_id); });
     head.appendChild(chip);
     if (a && a.release_at && scheduled)
       card.appendChild(el("p","lp-note","Opens " + niceDate(a.release_at) + " at " + hhmm(a.release_at)));
     else if (a && a.close_on && live)
-      card.appendChild(el("p","lp-note", (closed ? "Closed " : "Closes ") + niceDate(a.close_on)));
+      card.appendChild(el("p","lp-note", (closed ? "Closed " : "Closes ") + niceDate(a.close_on) + " at " + CLOSES_AT));
     card.appendChild(head);
+    if (l.filedIn != null) card.appendChild(el("p","lp-from", "From " + whereFrom(catOf(l.lesson_id), yearOfUnit(unit))));
     /* Which version this class is on, and the way to change it. Only where
        there is more than one: a line reading "Version Original" on every card
        in a hub that has no versions in it is noise on 27 classes' worth of
@@ -4700,15 +5294,19 @@ function paintLessonGrid(){
     const pub = el("button", live ? "btn-ghost" : "btn-primary", live ? "Unpublish" : "Publish");
     pub.addEventListener("click", () => {
       if (live){ setPublish(l.lesson_id, false); return; }
-      schedulePopup(l.lesson_id);
+      publishPopup(l.lesson_id);
     });
-    const isAssessment = !!l.assessment;
-    const workBtn = el("button", isAssessment ? "btn-primary" : "btn-ghost",
-                       isAssessment ? "Markbook" : "View work");
-    /* The markbook is a tab of the work page now, opened on that tab. */
-    workBtn.addEventListener("click", () => openWorkPage(l.lesson_id, isAssessment ? "markbook" : ""));
-    const man = el("button","btn-ghost","Manage");
-    man.addEventListener("click", () => manageLesson(l.lesson_id));
+    const way = workWay(l.lesson_id);
+    const openWork = () => openWorkPage(l.lesson_id, way.tab);
+    /* Home learning has nothing to pace, so Manage had nothing in it. What a
+       teacher comes back to its card for is the link. */
+    const homework = kindOf(l) === "homework";
+    const cover = kindOf(l) === "cover";
+    const man = el("button","btn-ghost", homework ? "Copy link" : "Manage");
+    man.addEventListener("click", () => {
+      if (homework) sharePopup(l.lesson_id);
+      else manageLesson(l.lesson_id);
+    });
     const edit = el("button","btn-ghost","Edit");
     edit.title = "Open in the lesson builder";
     edit.addEventListener("click", () => editLesson(l.lesson_id));
@@ -4716,16 +5314,23 @@ function paintLessonGrid(){
     rem.title = "Take it away from " + cls;
     rem.addEventListener("click", () => removeFromClass(l));
     acts.appendChild(pub);
-    acts.appendChild(man);
+    /* A link to something not out yet is a link to nothing, so Copy link waits
+       until it is published or scheduled. A cover lesson has nothing to pace,
+       since none of its pages lock, so it has no Manage at all. It had Cover
+       details in that place until 17.8.4. */
+    if (!cover && (live || !homework)) acts.appendChild(man);
     /* View work is its own button, unless the screen is too narrow for four */
     const extras = [["Edit in the builder", () => editLesson(l.lesson_id)],
+                    ["Download lesson JSON", () => downloadLessonJson(l.lesson_id)],
                     ["Remove from " + cls, () => removeFromClass(l)]];
     if (family.length > 1) extras.unshift(["Choose the version", () => pickVersionFor(l.lesson_id)]);
-    if (isAssessment) extras.unshift(["Markbook", () => workBtn.click()]);
-    if (narrow()) extras.unshift([workLabel(l.lesson_id), () => openWorkPage(l.lesson_id)]);
+    /* A practical's own button goes to the marking, so its mark book is here.
+       A test's button already is the mark book. */
+    if (l.practical) extras.unshift(["Mark book", () => openWorkPage(l.lesson_id, "markbook")]);
+    if (narrow()) extras.unshift([way.label, openWork]);
     else {
-      const vw = el("button","btn-ghost",workLabel(l.lesson_id));
-      vw.addEventListener("click", () => openWorkPage(l.lesson_id));
+      const vw = el("button","btn-ghost",way.label);
+      vw.addEventListener("click", openWork);
       acts.appendChild(vw);
     }
     acts.appendChild(overflowMenu(extras));
@@ -4739,6 +5344,18 @@ function paintLessonGrid(){
    parts are a screen of their own now, so the list is only ever one of them
    and a heading over it would repeat the heading above it. */
 
+/* The lesson's file, saved straight to the teacher's computer: the same
+   JSON the builder's Import a lesson takes back in. */
+async function downloadLessonJson(id){
+  try{
+    const data = await fetchLesson(id);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type:"application/json" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = id + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }catch(e){ say("Could not download it", e.message); }
+}
 async function fetchLesson(id){
   /* The lessons folder is offline mode's. With a server the database is the
      only source, so a leftover file never stands in for what was published. */
@@ -4812,22 +5429,136 @@ function niceDate(iso){
   if (isNaN(d)) return iso;
   return d.toLocaleDateString(undefined, { weekday:"short", day:"numeric", month:"short" });
 }
+/* A lesson closes at the end of the day it opens, unless a teacher says
+   otherwise. close_on is a date and every page reads it as open until that
+   day is over, so 23:59 is what the date already means and is said here rather
+   than stored. The day is worked out on this computer and sent, because the
+   server's clock is on UTC, which is the wrong day for the first hour of a
+   British Summer Time morning.
+
+   closeOn left out means that default. An empty closeOn is different: it is
+   Undo or a re-save putting back a lesson from before every lesson had a
+   closing day, which keeps having none. */
+const CLOSES_AT = "23:59";
 async function setPublish(id, on, releaseAt, closeOn){
   try{
     await catPost({ op:"class-publish", id: id, group: cls, published: on,
-                    releaseAt: releaseAt || "", closeOn: closeOn || "" });
+                    releaseAt: releaseAt || "",
+                    closeOn: closeOn === undefined ? (on ? ymd(new Date()) : "") : closeOn,
+                    openEnded: !!on && closeOn === "" });
     await loadCatalogue(); paintLessonGrid();
   }catch(e){ say("Could not change that", e.message); paintLessonGrid(); }
 }
-function schedulePopup(id){
+/* What the timetable knows about this class. Waited for before a pop-up opens
+   rather than filling in afterwards: the first thing in it is decided by the
+   answer, and a button that moves as it is reached for gets the wrong press.
+   Home has usually fetched it already. A timetable that cannot be read is the
+   same as a class that is not on it. */
+async function timetableReady(){
+  if (OFFLINE || !window.timetable) return;
+  try{ await window.timetable.load(); }catch(e){}
+}
+const lessonAfter = (moment) => window.timetable ? window.timetable.lessonAfter(cls, moment) : null;
+const lessonDuring = (moment) => window.timetable && window.timetable.lessonDuring ? window.timetable.lessonDuring(cls, moment) : null;
+const lessonWhen = (n) => n.name + ", " + (ymd(n.date) === ymd(new Date()) ? "today" : niceDate(ymd(n.date))) + " at " + n.start;
+/* Home learning is due at the class's lesson next week, not the next lesson:
+   set on Monday for a class seen on Tuesday, tomorrow is too soon to do it.
+   "Next week" is the school week after the one a moment is in, so a holiday
+   week passes on to the lesson after it. */
+function lessonNextWeek(moment){
+  const d = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate());
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));   // the Monday after
+  return lessonAfter(d);
+}
+/* It closes the day before that lesson, because a closing day means open until
+   23:59, and closing on the lesson's own day would leave it open after the
+   lesson it was wanted for. */
+const dayBefore = (date) => { const d = new Date(date); d.setDate(d.getDate() - 1); return ymd(d); };
+
+/* Publishing is nearly always one of a few things, so those are what is
+   offered, with the form for anything else behind the last of them. A lesson
+   usually wants to open when the class arrives, and home learning is usually
+   set now and wanted back next lesson. Something already out goes straight to
+   its dates, because that is an edit rather than a decision. */
+async function publishPopup(id){
+  const already = assignOf(id);
+  if (already && already.published){ await schedulePopup(id); return; }
+  await timetableReady();
+  const homework = kindOf(catOf(id)) === "homework";
+  const next = homework ? lessonNextWeek(new Date()) : lessonAfter(new Date());
+  const during = homework ? null : lessonDuring(new Date());
+  openModal(box => {
+    modalTitle(box, "Publish \u201c" + titleOf(id) + "\u201d");
+    const choice = (style, words, note, go) => {
+      const b = el("button", "pubchoice " + style);
+      b.type = "button";
+      b.appendChild(el("b","", words));
+      if (note) b.appendChild(el("span","", note));
+      b.addEventListener("click", go);
+      box.appendChild(b);
+    };
+    const publish = (releaseAt, closeOn) => async () => {
+      closeModal();
+      await setPublish(id, true, releaseAt, closeOn);
+      offerHomeLearningLink(id);
+    };
+    if (!next && !during) box.appendChild(el("p","modal-text", cls + " is not on your timetable, so there is no lesson to go by."));
+    if (homework){
+      if (next){
+        const due = dayBefore(next.date);
+        choice("btn-primary", "Publish now, due next week’s lesson",
+               "For " + lessonWhen(next) + ". Closes at " + CLOSES_AT + " on " + niceDate(due) + ".",
+               publish("", due));
+      }
+      else choice("btn-primary", "Publish now", "Closes at " + CLOSES_AT + " today.", publish("", ymd(new Date())));
+    } else if (during){
+      /* The class is in the room, so now is when it is wanted. Their next
+         lesson would make them wait for something meant for today. */
+      choice("btn-primary", "Publish now", cls + " is in " + during.name + " now, until " + during.end + ". Closes at " + CLOSES_AT + " today.",
+             publish("", ymd(new Date())));
+    } else {
+      if (next){
+        const at = new Date(ymd(next.date) + "T" + next.start + ":00");
+        choice("btn-primary", "Publish for the next lesson", lessonWhen(next) + ". Closes at " + CLOSES_AT + " that day.",
+               publish(at.toISOString(), ymd(next.date)));
+      }
+      choice(next ? "btn-ghost" : "btn-primary", "Publish now", "Closes at " + CLOSES_AT + " today.", publish("", ymd(new Date())));
+    }
+    choice("btn-ghost", "Schedule a custom time", "", () => schedulePopup(id));
+  });
+}
+
+async function schedulePopup(id){
+  await timetableReady();
   openModal(box => {
     const already = assignOf(id);
     const live = already && already.published;
+    const homework = kindOf(catOf(id)) === "homework";
     modalTitle(box, "Schedule \u201c" + titleOf(id) + "\u201d");
     /* start from what is already set, so this edits rather than replaces */
     let date = (already && already.release_at) ? localDay(already.release_at) : ymd(new Date());
     let time = (already && already.release_at) ? hhmm(already.release_at) : "";
     let close = (already && already.close_on) ? already.close_on : "";
+    /* The day it closes unless a teacher says otherwise: the day it opens, or
+       for home learning the day before the class's lesson the week after,
+       the same as Publish now offers. */
+    const closeFor = (moment, day) => {
+      const next = homework ? lessonNextWeek(moment) : null;
+      return next ? dayBefore(next.date) : day;
+    };
+    /* Counted from now at the earliest: with no time picked yet, today's date
+       means midnight, and a lesson taught this morning would come back as the
+       next one. */
+    const usualClose = () => {
+      const opens = new Date(date + "T" + (time || "00:00") + ":00"), now = new Date();
+      return closeFor(opens < now ? now : opens, date);
+    };
+    /* Follows that until a teacher moves it. A closing day already saved on
+       some other day is a choice somebody made, and so is having none on a
+       lesson from before every lesson had one: that is left as it is rather
+       than quietly given a date. */
+    const noClosing = !!live && !close;
+    let closeTouched = noClosing || (!!close && close !== usualClose());
     const summary = el("p","modal-text","");
     const dateRow = el("div","bfield");
     dateRow.appendChild(el("label","","Opens on"));
@@ -4874,38 +5605,155 @@ function schedulePopup(id){
     timeRow.appendChild(customTime); box.appendChild(timeRow);
 
     const closeRow = el("div","bfield");
-    closeRow.appendChild(el("label","","Closes at the end of"));
+    closeRow.appendChild(el("label","","Closes at " + CLOSES_AT + " on"));
     const cIn = el("input"); cIn.type = "date";
     closeRow.appendChild(cIn);
     box.appendChild(closeRow);
 
-    let closeTouched = !!close;
     cIn.addEventListener("input", () => { closeTouched = true; close = cIn.value; refresh(); });
     dIn.addEventListener("input", () => {
       date = dIn.value;
-      if (!closeTouched){ close = date; cIn.value = date; }   // the closing date follows
       refresh();
     });
+    /* Opening now has no opening day to follow, so it goes by today, unless a
+       day still to come was picked for it. */
+    const closeIfNow = () => (closeTouched && close && close >= ymd(new Date())) ? close : closeFor(new Date(), ymd(new Date()));
     function refresh(){
-      if (!closeTouched){ close = date; cIn.value = date; }
-      summary.textContent = time
-        ? "Opens " + niceDate(date) + " at " + time + ", closes at the end of " + niceDate(close) + "."
-        : "Choose a time above, or publish now.";
+      if (!closeTouched){ close = usualClose(); cIn.value = close; }   // the closing day follows
+      summary.textContent = !time ? (live ? "Opening it now closes it at " + CLOSES_AT + " on " + niceDate(closeIfNow()) + "." : "Choose a time above.")
+        : close ? "Opens " + niceDate(date) + " at " + time + ", closes at " + CLOSES_AT + " on " + niceDate(close) + "."
+        : "Opens " + niceDate(date) + " at " + time + ", with no closing day.";
     }
-    close = date; cIn.value = date; refresh();
+    cIn.value = close; refresh();
     box.appendChild(summary);
 
-    const go = el("button","btn-primary modal-cta", live ? "Save these dates" : "Schedule lesson");
+    const go = el("button","btn-primary modal-cta", live ? "Save these dates" : homework ? "Schedule home learning" : "Schedule lesson");
     go.addEventListener("click", async () => {
       if (!time){ summary.textContent = "Pick a period first."; return; }
+      if (close && close < date){ summary.textContent = "It would close before it opens. Choose a later closing day."; return; }
       const at = new Date(date + "T" + time + ":00");
       closeModal();
       await setPublish(id, true, at.toISOString(), close);
+      /* Moving the dates of something already out is not publishing it, and
+         the class has had the link. */
+      if (!live) offerHomeLearningLink(id);
     });
-    const now = el("button","btn-ghost modal-stay", live ? "Open it now instead" : "Publish now");
-    now.addEventListener("click", async () => { closeModal(); await setPublish(id, true); });
+    /* Publishing now is one of the choices this was reached from, so it is not
+       offered twice. */
+    const now = el("button","btn-ghost modal-stay", live ? "Open it now instead" : "Back");
+    now.addEventListener("click", async () => {
+      if (!live){ publishPopup(id); return; }
+      closeModal(); await setPublish(id, true, "", closeIfNow());
+    });
     box.appendChild(go); box.appendChild(now);
   });
+}
+
+/* ---------- handing out home learning ----------
+   Home learning is set on Arbor, so what a teacher needs the moment it is
+   published is something to paste there. The link goes to the front page
+   rather than to the lesson, because the front page is what can ask a student
+   to sign in first: index.html opens the lesson itself once they have. */
+function homeLearningLink(id){
+  const url = new URL("index.html", location.href);
+  url.search = "?open=" + encodeURIComponent(id);
+  return url.href;
+}
+/* Plain text with the link on a line of its own, because an address only
+   reliably becomes a link when nothing is touching it. */
+function arborInstructions(id){
+  const a = assignOf(id);
+  const longDate = (day) => new Date(day + "T00:00:00")
+    .toLocaleDateString("en-GB", { weekday:"long", day:"numeric", month:"long" });
+  const lines = ["Your home learning is on the Computing Lesson Hub.", "",
+                 "1. Click this link:", homeLearningLink(id),
+                 "2. Sign in with your username and password if it asks you to.",
+                 "3. Your home learning will open. Answer every question, then press Finish."];
+  const later = a && a.release_at && a.release_at > new Date().toISOString();
+  if (later || (a && a.close_on)) lines.push("");
+  if (later) lines.push("It opens on " + longDate(localDay(a.release_at)) + " at " + hhmm(a.release_at) + ".");
+  if (a && a.close_on) lines.push("Complete it by " + longDate(a.close_on) + ".");
+  return lines.join("\n");
+}
+/* The same words as a web page, with the address made a real link. Arbor's
+   message box is a rich text editor: pasting plain text there leaves the
+   address as words nobody can click, and it only becomes a link when the
+   clipboard says so itself. A blank line starts a new paragraph rather than
+   becoming an empty one, which an editor's own paragraph spacing turns into
+   a double gap. */
+function asLinkedHtml(text){
+  const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const line = (s) => /^https?:\/\/\S+$/.test(s) ? '<a href="' + esc(s) + '">' + esc(s) + "</a>" : esc(s);
+  return text.split(/\n\s*\n/).map(block => "<p>" + block.split("\n").map(line).join("<br>") + "</p>").join("");
+}
+/* Plain text and the linked version together, so a plain box gets the words
+   and a rich one gets the link. A browser that cannot write both still gets
+   the words. */
+async function copyLinked(text){
+  if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write){
+    try{
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/plain": new Blob([text], { type:"text/plain" }),
+        "text/html": new Blob([asLinkedHtml(text)], { type:"text/html" })
+      })]);
+      return;
+    }catch(e){}
+  }
+  await navigator.clipboard.writeText(text);
+}
+function sharePopup(id, justPublished){
+  const a = assignOf(id);
+  const later = a && a.release_at && a.release_at > new Date().toISOString();
+  openModal(box => {
+    modalTitle(box, justPublished ? "Published for " + cls : "\u201c" + titleOf(id) + "\u201d");
+    box.appendChild(el("p","modal-text",
+      later ? "The link will open for " + cls + " from " + niceDate(a.release_at) + " at " + hhmm(a.release_at) + "."
+      : "Now tell " + cls + " about it. The link takes them straight to it, signing in first if they need to."));
+    /* What is about to be copied, and the way to get it if a school has
+       switched off the clipboard for scripts: it is ready to select. */
+    const words = el("textarea","sharewords");
+    words.readOnly = true;
+    words.rows = 11;
+    words.value = arborInstructions(id);
+    words.setAttribute("aria-label", "What will be copied");
+    /* Ctrl+C here, where a school has switched the clipboard off for scripts,
+       carries the link as well. Only for the whole of it: a teacher copying
+       one line by hand wants that line. */
+    words.addEventListener("copy", (e) => {
+      if (words.selectionStart !== 0 || words.selectionEnd !== words.value.length || !e.clipboardData) return;
+      e.clipboardData.setData("text/plain", words.value);
+      e.clipboardData.setData("text/html", asLinkedHtml(words.value));
+      e.preventDefault();
+    });
+    box.appendChild(words);
+    const offers = [];
+    const offer = (style, label, note, text) => {
+      const b = el("button", "pubchoice " + style);
+      b.type = "button";
+      const head = el("b","", label);
+      b.appendChild(head);
+      b.appendChild(el("span","", note));
+      b.addEventListener("click", async () => {
+        offers.forEach(o => { o.head.textContent = o.label; });
+        words.value = text;
+        try{ await copyLinked(text); head.textContent = "Copied \u2713"; }
+        catch(e){ words.focus(); words.select(); head.textContent = "Now press Ctrl+C"; }
+      });
+      offers.push({ head: head, label: label });
+      box.appendChild(b);
+    };
+    offer("btn-primary", "Copy Arbor instructions", "Short steps for students, with the link in them.", arborInstructions(id));
+    offer("btn-ghost", "Copy link", "Only the link.", homeLearningLink(id));
+    const done = el("button","btn-ghost modal-stay","Done");
+    done.addEventListener("click", closeModal);
+    box.appendChild(done);
+  });
+}
+/* Only once it has really gone out: setPublish says so itself when it fails,
+   and a link to something still in draft would be a link to nothing. */
+function offerHomeLearningLink(id){
+  const a = assignOf(id);
+  if (kindOf(catOf(id)) === "homework" && a && a.published) sharePopup(id, true);
 }
 
 /* Units belong to a year group. This offers the ones from this class's year
@@ -4990,7 +5838,7 @@ function yearOfClass(){
   return first ? first.year : "";
 }
 function unitHasLessonFor(name){
-  return (cat.lessons || []).some(l => l.unit === name && assignOf(l.lesson_id));
+  return classLessons().some(l => l.unit === name);
 }
 /* giving a class every lesson in a unit is what "adding" it means */
 /* The original of each lesson, never a version: a class starts on the
@@ -5169,15 +6017,16 @@ function openManage(){
           closeModal(); paintLessonGrid(); openManage();
         } else {
           closeModal();
-          schedulePopup(lessonId);
+          publishPopup(lessonId);
         }
       }catch(e){ say("Could not change that", e.message); }
     });
-    const workBtn = el("button","btn-ghost",workLabel(lessonId));
-    workBtn.addEventListener("click", () => openWorkPage(lessonId));
+    const way = workWay(lessonId);
+    const workBtn = el("button","btn-ghost",way.label);
+    workBtn.addEventListener("click", () => openWorkPage(lessonId, way.tab));
     bar.appendChild(pubBtn); bar.appendChild(workBtn);
-    if (lessonJson && lessonJson.assessment){
-      const mb = el("button","btn-ghost","Markbook");
+    if (lessonJson && lessonJson.practical){
+      const mb = el("button","btn-ghost","Mark book");
       mb.addEventListener("click", () => openWorkPage(lessonId, "markbook"));
       bar.appendChild(mb);
     }

@@ -388,6 +388,10 @@ const TASK_ICONS = {
   table:     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M10 4v16"/>',
   label:     '<path d="M3 12V4h8l10 10-7 7z"/><circle cx="7.5" cy="8.5" r="1.3"/>',
   hotspot:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="14" cy="11" r="3.5"/><path d="M14 11h.01M7 16l2.5-2.5"/>',
+  boardgame: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/>',
+  swipe:     '<rect x="6" y="4" width="11" height="15" rx="2" transform="rotate(10 12 12)"/><path d="M3 20h5M16 20h5"/>',
+  quest:     '<path d="M3 20c4-6 14-6 18 0"/><path d="M12 15V4l6 3-6 3"/>',
+  pixels:    '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>',
   picture:   '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 8"/>',
   embed:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
   video:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18M10.5 10.3l3.5 1.7-3.5 1.7z"/>',
@@ -398,6 +402,8 @@ const TASK_ICONS = {
   mindmap:   '<circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5.5" r="1.8"/><circle cx="19.5" cy="5.5" r="1.8"/><circle cx="4.5" cy="18.5" r="1.8"/><circle cx="19.5" cy="18.5" r="1.8"/><path d="M9.8 9.8 5.8 6.8M14.2 9.8l4-3M9.8 14.2l-4 3M14.2 14.2l4 3"/>',
   board:     '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 13c2-4 3 1 5-2s3 1 5-1M9 21l3-4 3 4"/>',
   storyboard:'<rect x="2.5" y="7" width="5.6" height="10" rx="1"/><rect x="9.2" y="7" width="5.6" height="10" rx="1"/><rect x="15.9" y="7" width="5.6" height="10" rx="1"/>',
+  poster:    '<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><path d="M8 6.5h8M7.5 18l3.2-4 2.3 2.6 1.7-1.9 2.3 3.3z"/>',
+  boss:      '<path d="M3.5 18.5h17l1-11-5.5 4.5L12 5l-4 7-5.5-4.5zM3.5 21h17"/>',
   code:      '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   ide:       '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   web:       '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M10 13l-2 2 2 2M14 13l2 2-2 2"/>',
@@ -1009,6 +1015,9 @@ EDITORS.scratch = function(b, k){
   const { F, R, add, redraw } = k;
   F("Heading (optional)", "title");
   R("Subheading (optional)", "task", { rows:2 });
+  R("Instructions (optional)", "instructions", { rows:8,
+    placeholder: "What to make, step by step. Start with the fun part: a sprite and something to draw.",
+    help: "Shown in an Instructions tab beside the editor. Students see it first, and the Scratch tab pulses until they open it." });
   const w = el("div","bfield");
   w.appendChild(el("label","","Starter project"));
   const has = !!(b.project && typeof b.project === "object");
@@ -1458,6 +1467,8 @@ EDITORS.choice = function(b, k){
   const another = el("button","btn-ghost bmini2","+ Another choice");
   another.addEventListener("click", () => { b.options.push({ label:"", blocks:[] }); redraw(); schedulePreview(); });
   add(another);
+  k.settings(() => k.toggleRow([["swap", "Continue moves to a choice not tried yet", false]], "Options",
+    "With this on, pressing Continue after one choice opens the other instead of the next page, if they have not touched it. It does this once for each choice."));
 };
 
 EDITORS.image = function(b, k){
@@ -1761,6 +1772,262 @@ EDITORS.board = function(b, k){
   });
 };
 
+/* A poster made in the lesson's own photo editor. The finished poster is
+   saved as one compressed picture, so there is nothing more to set. */
+EDITORS.poster = function(b, k){
+  const { F } = k;
+  F("Heading", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2,
+    help:"What the poster is about, for example: make a poster that explains how to convert binary to denary." });
+  F("Words already on the poster (optional)", "heading",
+    { help:"The title the poster starts with, ready for them to change. Leave empty for Your title here." });
+};
+
+/* The quiz's own question editor, with the boss on top. */
+EDITORS.boss = function(b, k){
+  const { F, pickRow } = k;
+  F("Boss name", "boss", { help:"Shown above the boss's health bar, for example The Pixel Goblin." });
+  EDITORS.quiz(b, k);
+  F("Hits to win", "hits", { num:true, help:"How many right answers beat the boss. Questions come round again if there are fewer." });
+  F("Student hearts", "hearts", { num:true, help:"How many wrong answers before the boss wins. They can always try again." });
+  F("How the boss looks", "look", { help:"goblin, dragon, robot or ghost." });
+};
+
+/* Pixel studio. The grid in the builder is the student's own grid, so what
+   is drawn here is exactly what they will see; what it is for (a picture
+   to copy, binary to decode, or the frames they start from) is chosen above. */
+EDITORS.pixels = function(b, k){
+  const { F, add, redraw, toggleRow, settings } = k;
+  F("Heading (optional)", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+
+  const pick = (label, help, list, now, set) => {
+    const w = el("div","bfield");
+    const head = el("div","brow");
+    head.appendChild(el("label","",label));
+    if (help) head.appendChild(helpDot(help));
+    w.appendChild(head);
+    const row = el("div","brow");
+    list.forEach(pair => {
+      const btn = el("button","btn-ghost bmini2" + (now() === pair[0] ? " right" : ""), pair[1]);
+      btn.type = "button";
+      btn.addEventListener("click", () => { set(pair[0]); saveDraft(); redraw(); schedulePreview(); });
+      row.appendChild(btn);
+    });
+    w.appendChild(row);
+    add(w);
+  };
+  const size = () => (Number(b.w) || 8) + "x" + (Number(b.h) || 8);
+  pick("Size of the grid", "Squares across by squares down. Changing it clears the drawing below.",
+    [["8x8","8 \u00d7 8"],["10x10","10 \u00d7 10"],["12x12","12 \u00d7 12"],["16x16","16 \u00d7 16"],["16x12","16 \u00d7 12"],["24x24","24 \u00d7 24"]],
+    size, (v) => {
+      if (v === size()) return;
+      const two = v.split("x").map(Number);
+      b.w = two[0]; b.h = two[1];
+      delete b.target; delete b.start;
+    });
+  pick("Colours", "Bits for each pixel. 1 bit gives black and white, 2 bits four colours, 4 bits all sixteen.",
+    [["1","2 colours (1 bit)"],["2","4 colours (2 bits)"],["3","8 colours (3 bits)"],["4","16 colours (4 bits)"]],
+    () => String(Number(b.depth) || 1), (v) => { b.depth = Number(v); });
+  /* what the drawing is for, worked out from what the task holds, so a
+     lesson written by hand opens on the right one */
+  const mode = () => b.target ? (b.clue === "binary" ? "decode" : "copy")
+                   : (Array.isArray(b.start) && b.start.length ? "start" : (b.drawFor || "none"));
+  const want = mode();
+  pick("The drawing below is", "A picture to copy is checked square by square. Binary to decode shows the same picture as rows of bits instead. Where they start is a picture or animation they open with and change.",
+    [["none","Not used"],["copy","A picture to copy"],["decode","Binary to decode"],["start","Where they start"]],
+    mode, (v) => {
+      b.drawFor = v;
+      const frames = Array.isArray(b.start) && b.start.length ? b.start : (b.target ? [b.target] : []);
+      delete b.target; delete b.start; delete b.clue;
+      if ((v === "copy" || v === "decode") && frames.length) b.target = frames[0];
+      if (v === "decode") b.clue = "binary";
+      if (v === "start" && frames.length) b.start = frames;
+    });
+
+  if (want !== "none" && window.rPixels){
+    const w = el("div","bfield");
+    w.appendChild(el("label","", want === "start" ? "Draw where they start" : "Draw the picture"));
+    /* the student's grid, with nothing to copy and no binary, holding what
+       has been drawn so far */
+    const drawing = { type:"pixels", w: b.w, h: b.h, depth: 4, binary: false,
+      frames: want === "start" && b.frames === true, maxFrames: b.maxFrames, fps: b.fps,
+      start: want === "start" ? b.start : (b.target ? [b.target] : undefined) };
+    let made = null;
+    made = window.rPixels(drawing, { changed: () => {
+      const v = made && made.get();
+      if (!v) return;
+      if (want === "start") b.start = v.frames;
+      else b.target = v.frames[0];
+      if (want === "decode") b.clue = "binary";
+      /* the student's colours have to be able to make the picture */
+      const most = Math.max.apply(null, v.frames.join("").split("").map(c => parseInt(c, 16) || 0));
+      let d = Number(b.depth) || 1;
+      while ((1 << d) <= most && d < 4) d++;
+      if (d !== (Number(b.depth) || 1)) b.depth = d;
+      saveDraft(); schedulePreview();
+    }});
+    w.appendChild(made.section);
+    add(w);
+  }
+
+  settings(() => {
+    toggleRow([["depthChoice", "They choose how many colours", false],
+               ["frames", "Frames and Play", false],
+               ["binary", "Show the binary button", true]]);
+    if (b.frames === true){
+      /* An animation to watch: drawn here under Where they start, played
+         there, with nothing for them to change and nothing saved. */
+      toggleRow([["viewOnly", "Watch only, no drawing", false]]);
+      F("Most frames", "maxFrames", { num:true, help:"Up to 24." });
+      F("Frames a second to start at", "fps", { num:true, help:"1 to 24. They can change it with the slider." });
+    }
+  });
+};
+
+/* Board game: the board is made from the number of squares, so all a
+   teacher writes is the questions, in the quiz's own editor. */
+EDITORS.boardgame = function(b, k){
+  const { F } = k;
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+  F("Squares on the board", "squares", { num:true, help:"20 to 48. About 36 makes a game of five minutes or so. Shortcuts, sharks and treasure are put in for you." });
+  F("Coins to bank (optional)", "goal", { num:true, help:"Coins to collect across as many games as it takes, so they play more than once. A game earns about 10 to 15. Answering this many questions also counts, so nobody is stuck." });
+  EDITORS.quiz(b, k);           // its own Heading box comes first in here
+};
+
+/* Quest: a look, a coin bank, and worlds, each a name and its own
+   questions. One answer is right, picked with the round button beside it. */
+EDITORS.quest = function(b, k){
+  const { F, add, redraw } = k;
+  F("Heading (optional)", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+  const tw = el("div","bfield");
+  const th = el("div","brow");
+  th.appendChild(el("label","","How it looks"));
+  th.appendChild(helpDot("Changes the sky, the ground, the hazards and the finish. It plays the same whichever you pick."));
+  tw.appendChild(th);
+  const tr = el("div","brow");
+  [["islands","Floating islands"],["space","Outer space"],["city","City rooftops"],["snow","Snowy peaks"]].forEach(pair => {
+    const btn = el("button","btn-ghost bmini2" + ((b.theme || "islands") === pair[0] ? " right" : ""), pair[1]);
+    btn.type = "button";
+    btn.addEventListener("click", () => { b.theme = pair[0]; saveDraft(); redraw(); schedulePreview(); });
+    tr.appendChild(btn);
+  });
+  tw.appendChild(tr);
+  add(tw);
+  F("Coins to bank (optional)", "goal", { num:true, help:"Coins to collect across levels, so they keep playing. One level earns about 50 to 70, so 150 is roughly three levels. Answering a question for every 12 coins also counts, so nobody is stuck." });
+  F("What a hazard says (optional)", "hazard", { help:"Shown when a hazard knocks them back, for example: A phishing hook! Do not take the bait." });
+
+  if (!Array.isArray(b.worlds) || !b.worlds.length) b.worlds = [{ name:"", questions: Array.isArray(b.questions) ? b.questions : [] }];
+  const changed = () => { saveDraft(); schedulePreview(); };
+  const input = (value, ph, set) => {
+    const i = el("input"); i.type = "text"; i.value = value || ""; i.placeholder = ph;
+    i.addEventListener("input", () => { set(i.value); changed(); });
+    return i;
+  };
+  b.worlds.forEach((w, wi) => {
+    if (!Array.isArray(w.questions)) w.questions = [];
+    const box = el("div","quest-world");
+    const head = el("div","brow");
+    head.appendChild(el("b","", "World " + (wi + 1)));
+    head.appendChild(input(w.name, "Its name, for example Password Peak", v => { w.name = v; }));
+    if (b.worlds.length > 1){
+      const rm = el("button","btn-ghost bmini2","Remove world");
+      rm.type = "button";
+      rm.addEventListener("click", () => askDelete("World " + (wi + 1), () => { b.worlds.splice(wi, 1); changed(); redraw(); }));
+      head.appendChild(rm);
+    }
+    box.appendChild(head);
+    w.questions.forEach((q, qi) => {
+      if (!Array.isArray(q.options)) q.options = ["", ""];
+      if (!Array.isArray(q.answers)) q.answers = [0];
+      const qb = el("div","quest-q");
+      const qh = el("div","brow");
+      qh.appendChild(input(q.q, "Question " + (qi + 1), v => { q.q = v; }));
+      const rm = el("button","btn-ghost bmini","\u2715"); rm.type = "button"; rm.title = "Remove this question";
+      rm.addEventListener("click", () => { w.questions.splice(qi, 1); changed(); redraw(); });
+      qh.appendChild(rm);
+      qb.appendChild(qh);
+      const group = "qw" + wi + "_" + qi + "_" + Math.random().toString(36).slice(2, 7);
+      q.options.forEach((o, oi) => {
+        const row = el("label","quest-opt");
+        const radio = el("input"); radio.type = "radio"; radio.name = group; radio.checked = Number(q.answers[0]) === oi;
+        radio.title = "The right answer";
+        radio.addEventListener("change", () => { q.answers = [oi]; changed(); });
+        row.appendChild(radio);
+        row.appendChild(input(o, "Answer " + (oi + 1), v => { q.options[oi] = v; }));
+        if (q.options.length > 2){
+          const x = el("button","btn-ghost bmini","\u2715"); x.type = "button"; x.title = "Remove this answer";
+          x.addEventListener("click", (ev) => { ev.preventDefault(); q.options.splice(oi, 1);
+            if (Number(q.answers[0]) >= q.options.length) q.answers = [0]; changed(); redraw(); });
+          row.appendChild(x);
+        }
+        qb.appendChild(row);
+      });
+      const qr = el("div","brow");
+      if (q.options.length < 4){
+        const more = el("button","btn-ghost bmini2","+ Answer"); more.type = "button";
+        more.addEventListener("click", () => { q.options.push(""); changed(); redraw(); });
+        qr.appendChild(more);
+      }
+      const tf = el("button","btn-ghost bmini2","True / False"); tf.type = "button";
+      tf.title = "Make the answers True and False";
+      tf.addEventListener("click", () => { q.options = ["True", "False"]; q.answers = [0]; changed(); redraw(); });
+      qr.appendChild(tf);
+      qb.appendChild(qr);
+      qb.appendChild(input(q.why, "Why (optional), shown after they answer", v => { q.why = v; }));
+      box.appendChild(qb);
+    });
+    const addQ = el("button","btn-ghost bmini2","+ Question"); addQ.type = "button";
+    addQ.addEventListener("click", () => { w.questions.push({ q:"", options:["",""], answers:[0], why:"" }); changed(); redraw(); });
+    box.appendChild(addQ);
+    add(box);
+  });
+  const addW = el("button","btn-ghost bmini2","+ Another world"); addW.type = "button";
+  addW.addEventListener("click", () => { b.worlds.push({ name:"", questions:[{ q:"", options:["",""], answers:[0], why:"" }] }); changed(); redraw(); });
+  add(addW);
+};
+
+/* Swipe: two answers, and a pile of cards each belonging to one of them. */
+EDITORS.swipe = function(b, k){
+  const { F, add, redraw } = k;
+  F("Heading (optional)", "title");
+  F("Instruction (optional)", "task", { area:true, rows:2 });
+  F("Left answer", "left", { help:"What swiping left means, for example Scam or Not safe." });
+  F("Right answer", "right", { help:"What swiping right means, for example Real or Safe." });
+  if (!Array.isArray(b.cards)) b.cards = [];
+  const w = el("div","bfield");
+  const head = el("div","brow");
+  head.appendChild(el("label","","Cards (" + b.cards.length + ")"));
+  head.appendChild(helpDot("Each card goes to one side. The reason shows after they choose, so a wrong answer still teaches something."));
+  w.appendChild(head);
+  b.cards.forEach((c, i) => {
+    const row = el("div","swipe-edit");
+    const words = el("input"); words.type = "text"; words.value = c.text || ""; words.placeholder = "Card " + (i + 1);
+    words.addEventListener("input", () => { c.text = words.value; saveDraft(); schedulePreview(); });
+    const sides = el("div","brow");
+    [["left", b.left || "Left"], ["right", b.right || "Right"]].forEach(pair => {
+      const btn = el("button","btn-ghost bmini2" + ((c.side === "left" ? "left" : "right") === pair[0] ? " right" : ""), pair[1]);
+      btn.type = "button";
+      btn.addEventListener("click", () => { c.side = pair[0]; saveDraft(); redraw(); schedulePreview(); });
+      sides.appendChild(btn);
+    });
+    const rm = el("button","btn-ghost bmini2","Remove");
+    rm.type = "button";
+    rm.addEventListener("click", () => { b.cards.splice(i, 1); saveDraft(); redraw(); schedulePreview(); });
+    sides.appendChild(rm);
+    const why = el("input"); why.type = "text"; why.value = c.why || ""; why.placeholder = "Why (optional)";
+    why.addEventListener("input", () => { c.why = why.value; saveDraft(); schedulePreview(); });
+    row.appendChild(words); row.appendChild(sides); row.appendChild(why);
+    w.appendChild(row);
+  });
+  const more = el("button","btn-ghost bmini2","+ Add a card");
+  more.type = "button";
+  more.addEventListener("click", () => { b.cards.push({ text:"", side:"right", why:"" }); saveDraft(); redraw(); });
+  w.appendChild(more);
+  add(w);
+};
+
 EDITORS.storyboard = function(b, k){
   const { F, toggleRow, settings } = k;
   if (b.namesText === undefined) b.namesText = (b.names || []).join("\n");
@@ -1796,7 +2063,7 @@ EDITORS.hotspot = function(b, k){
   const w = el("div","bfield");
   const head = el("div","brow");
   head.appendChild(el("label","","The right spot"));
-  head.appendChild(helpDot("Drag across the picture to draw the right spot, or click to move it there. Drag the shape to move it and the dot on its edge to change its size. Anywhere inside counts as right."));
+  head.appendChild(helpDot("Drag across the picture to draw the right spot, or click to move it there. Drag the shape to move it. Drag a corner dot to make it bigger or smaller, a side bar to stretch it, and the dot above it to turn it. Anywhere inside counts as right."));
   w.appendChild(head);
 
   const shapes = el("div","brow");
@@ -1838,42 +2105,67 @@ EDITORS.hotspot = function(b, k){
     holder.appendChild(img);
     const area = el("div","hotspot-ring");
     const dot = el("div","hotspot-pin");
-    const grip = el("div","hotspot-grip");
-    grip.title = "Drag to change the size";
-    holder.appendChild(area); holder.appendChild(dot); holder.appendChild(grip);
+    holder.appendChild(area); holder.appendChild(dot);
     const missing = el("p","hint","There is no picture at that address yet.");
     missing.hidden = true;
     picBox.appendChild(holder);
     picBox.appendChild(missing);
 
-    const size = el("div","brow");
-    size.appendChild(el("span","bhelp","How big the ring is"));
-    const range = el("input");
-    range.type = "range"; range.min = "1"; range.max = "50"; range.step = "0.5";
-    range.addEventListener("input", () => { b.r = Number(range.value); paintArea(); saveDraft(); schedulePreview(); });
-    size.appendChild(range);
-    picBox.appendChild(size);
+    /* The spot is kept in per cent of the picture, but turned and stretched
+       in pixels: a per cent across is not a per cent down on a picture that
+       is not square, and a turned shape would come out squashed. These two
+       go between them. A circle's r and ry are both shares of the width. */
+    const tenth = (n) => Math.round(n * 10) / 10;
+    const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+    function spotPx(){
+      const W = img.clientWidth, H = img.clientHeight;
+      if (!W || !H) return null;
+      const x = (Number(b.x) || 0) / 100 * W + img.offsetLeft, y = (Number(b.y) || 0) / 100 * H + img.offsetTop;
+      const rot = Number(b.rot) || 0;
+      if (hotspotShape(b) === "rect")
+        return { x, y, rot, w: (Number(b.w) || 16) / 100 * W, h: (Number(b.h) || 16) / 100 * H };
+      const r = Number(b.r) || 8, ry = Number(b.ry) > 0 ? Number(b.ry) : r;
+      return { x, y, rot, w: 2 * r / 100 * W, h: 2 * ry / 100 * W };
+    }
+    function spotFromPx(bx){
+      const W = img.clientWidth, H = img.clientHeight;
+      b.x = tenth(clamp((bx.x - img.offsetLeft) / W * 100, 0, 100));
+      b.y = tenth(clamp((bx.y - img.offsetTop) / H * 100, 0, 100));
+      if (bx.rot) b.rot = tenth(bx.rot); else delete b.rot;
+      if (hotspotShape(b) === "rect"){
+        b.w = tenth(clamp(bx.w / W * 100, 1, 100)); b.h = tenth(clamp(bx.h / H * 100, 1, 100));
+      } else {
+        b.r = tenth(clamp(bx.w / 2 / W * 100, 1, 50));
+        const ry = tenth(clamp(bx.h / 2 / W * 100, 1, 100));
+        /* still round, so it stays a plain circle in the saved lesson */
+        if (Math.abs(ry - b.r) < 0.15) delete b.ry; else b.ry = ry;
+      }
+    }
 
     paintArea = () => {
       const rect = hotspotShape(b) === "rect";
       shapeBtns.forEach(s => s.btn.classList.toggle("right", s.shape === hotspotShape(b)));
       const x = Number(b.x) || 0, y = Number(b.y) || 0;
-      area.dataset.shape = rect ? "rect" : "circle";
+      area.dataset.shape = rect ? "rect" : Number(b.ry) > 0 ? "oval" : "circle";
       area.style.left = dot.style.left = x + "%";
       area.style.top = dot.style.top = y + "%";
       if (rect){
-        const half = { w: (Number(b.w) || 16) / 2, h: (Number(b.h) || 16) / 2 };
-        area.style.width = 2 * half.w + "%"; area.style.height = 2 * half.h + "%";
-        grip.style.left = (x + half.w) + "%"; grip.style.top = (y + half.h) + "%";
+        area.style.width = (Number(b.w) || 16) + "%"; area.style.height = (Number(b.h) || 16) + "%";
       } else {
         const r = Number(b.r) || 8;
-        area.style.width = 2 * r + "%"; area.style.height = "";
-        grip.style.left = (x + r) + "%"; grip.style.top = y + "%";
-        range.value = String(r);
+        area.style.width = 2 * r + "%";
+        area.style.height = Number(b.ry) > 0 ? 2 * Number(b.ry) / hotspotRatio(b) + "%" : "";
       }
-      size.hidden = rect;
-      grip.style.cursor = rect ? "nwse-resize" : "ew-resize";
+      area.style.transform = "translate(-50%,-50%) rotate(" + (Number(b.rot) || 0) + "deg)";
+      if (handles) handles.place();
     };
+    /* corners, sides and a turning dot, the same as everywhere else */
+    const handles = window.boxKit ? window.boxKit.overlay(holder, {
+      get: spotPx,
+      set: (bx) => { spotFromPx(bx); paintArea(); },
+      done: () => { saveDraft(); schedulePreview(); },
+      min: 8
+    }) : null;
 
     /* The circle is a share of the picture's width, so how tall it is on
        the picture depends on the picture's shape, measured here. */
@@ -1883,15 +2175,16 @@ EDITORS.hotspot = function(b, k){
         const ratio = Math.round(img.naturalHeight / img.naturalWidth * 10000) / 10000;
         if (ratio !== b.ratio){ b.ratio = ratio; saveDraft(); }
       }
+      paintArea();
     });
-    img.addEventListener("error", () => { missing.hidden = false; holder.hidden = true; size.hidden = true; });
+    img.addEventListener("error", () => { missing.hidden = false; holder.hidden = true; });
+    /* the handles are in pixels, so they follow the picture when the card is resized */
+    if (window.ResizeObserver){ try{ new ResizeObserver(() => paintArea()).observe(img); }catch(e){} }
 
-    /* One press does one of three things, decided by what it lands on:
-       the dot on the edge resizes, the shape itself moves, and the bare
-       picture draws a new spot from where the press started (or, if the
-       pointer barely moved, puts the spot there at the size it was). */
-    const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
-    const tenth = (n) => Math.round(n * 10) / 10;
+    /* A press on a handle is the handles' own. Otherwise it does one of two
+       things, decided by what it lands on: the shape itself moves, and the
+       bare picture draws a new spot from where the press started (or, if
+       the pointer barely moved, puts the spot there at the size it was). */
     const at = (e) => {
       const r = img.getBoundingClientRect();
       return { x: (e.clientX - r.left) / r.width * 100, y: (e.clientY - r.top) / r.height * 100,
@@ -1903,11 +2196,8 @@ EDITORS.hotspot = function(b, k){
       e.preventDefault();
       holder.setPointerCapture(e.pointerId);
       const p = at(e);
-      const kind = e.target === grip ? "size" : e.target === area ? "move" : "draw";
-      press = { kind, from: p, moved: false,
-                off: { x: p.x - (Number(b.x) || 0), y: p.y - (Number(b.y) || 0) },
-                corner: { x: (Number(b.x) || 0) - (Number(b.w) || 16) / 2,
-                          y: (Number(b.y) || 0) - (Number(b.h) || 16) / 2 } };
+      press = { kind: e.target === area ? "move" : "draw", from: p, moved: false,
+                off: { x: p.x - (Number(b.x) || 0), y: p.y - (Number(b.y) || 0) } };
     });
     holder.addEventListener("pointermove", (e) => {
       if (!press) return;
@@ -1921,19 +2211,15 @@ EDITORS.hotspot = function(b, k){
       if (press.kind === "move"){
         b.x = tenth(clamp(p.x - press.off.x, 0, 100));
         b.y = tenth(clamp(p.y - press.off.y, 0, 100));
-      } else if (press.kind === "size" && rect){
-        /* the top left corner stays put and the dot drags the other */
-        const wide = clamp(p.x - press.corner.x, 2, 100), tall = clamp(p.y - press.corner.y, 2, 100);
-        b.w = tenth(wide); b.h = tenth(tall);
-        b.x = tenth(press.corner.x + wide / 2); b.y = tenth(press.corner.y + tall / 2);
-      } else if (press.kind === "size"){
-        b.r = tenth(clamp(reach({ x: Number(b.x) || 0, y: Number(b.y) || 0 }), 1, 50));
       } else if (rect){
+        /* a new spot is drawn upright; the dot above turns it afterwards */
+        delete b.rot;
         const left = clamp(Math.min(press.from.x, p.x), 0, 100), right = clamp(Math.max(press.from.x, p.x), 0, 100);
         const top = clamp(Math.min(press.from.y, p.y), 0, 100), bottom = clamp(Math.max(press.from.y, p.y), 0, 100);
         b.w = tenth(Math.max(2, right - left)); b.h = tenth(Math.max(2, bottom - top));
         b.x = tenth((left + right) / 2); b.y = tenth((top + bottom) / 2);
       } else {
+        delete b.rot; delete b.ry;
         b.x = tenth(clamp(press.from.x, 0, 100)); b.y = tenth(clamp(press.from.y, 0, 100));
         b.r = tenth(clamp(reach(press.from), 1, 50));
       }
@@ -1941,7 +2227,7 @@ EDITORS.hotspot = function(b, k){
     });
     const letGo = (e) => {
       if (!press) return;
-      if (!press.moved && press.kind !== "size"){
+      if (!press.moved){
         const p = at(e);
         b.x = tenth(clamp(p.x, 0, 100)); b.y = tenth(clamp(p.y, 0, 100));
         paintArea();
@@ -1972,7 +2258,7 @@ EDITORS.label = function(b, k){
   const w = el("div","bfield");
   const labHead = el("div","brow");
   labHead.appendChild(el("label","","The picture, and where the labels go"));
-  labHead.appendChild(helpDot("Drag on the picture to draw a box, then type the word for it below."));
+  labHead.appendChild(helpDot("Drag on the picture to draw a box, then type the word for it below. Click a box to move it, or drag its corner dots and side bars to change its size."));
   w.appendChild(labHead);
 
   /* With no picture there is nothing to draw boxes on, so only the hint
@@ -2000,15 +2286,75 @@ EDITORS.label = function(b, k){
     const list = el("div","label-list");
     labelBox.appendChild(list);
 
+    /* The box that has been clicked, which has the handles. A label box
+       has no turning dot: the word dropped into it would be on its side. */
+    let chosen = -1;
+    const marks = [];
+    const tenth = (n) => Math.round(n * 10) / 10;
+    const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+    function placeMark(i){
+      const sp = b.spots[i], mark = marks[i];
+      if (!sp || !mark) return;
+      mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
+      mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
+      mark.classList.toggle("chosen", i === chosen);
+    }
+    const handles = window.boxKit ? window.boxKit.overlay(holder, {
+      rotate: false, min: 12,
+      /* the boxes are kept in per cent of the picture, from their top left */
+      get: () => {
+        const sp = b.spots[chosen], W = holder.clientWidth, H = holder.clientHeight;
+        if (!sp || !W || !H) return null;
+        return { x: (sp.x + sp.w / 2) / 100 * W, y: (sp.y + sp.h / 2) / 100 * H,
+                 w: sp.w / 100 * W, h: sp.h / 100 * H, rot: 0 };
+      },
+      set: (bx) => {
+        const sp = b.spots[chosen], W = holder.clientWidth, H = holder.clientHeight;
+        if (!sp) return;
+        sp.w = tenth(clamp(bx.w / W * 100, 2, 100)); sp.h = tenth(clamp(bx.h / H * 100, 2, 100));
+        sp.x = tenth(clamp((bx.x - bx.w / 2) / W * 100, 0, 100 - sp.w));
+        sp.y = tenth(clamp((bx.y - bx.h / 2) / H * 100, 0, 100 - sp.h));
+        placeMark(chosen);
+      },
+      done: () => { saveDraft(); schedulePreview(); }
+    }) : null;
+    function choose(i){
+      chosen = i;
+      marks.forEach((m, k) => m.classList.toggle("chosen", k === i));
+      if (handles) handles.place();
+    }
+    if (window.ResizeObserver){ try{ new ResizeObserver(() => { if (handles) handles.place(); }).observe(holder); }catch(e){} }
+
     function paintSpots(){
       holder.querySelectorAll(".label-spot").forEach(n => n.remove());
+      marks.length = 0;
       list.innerHTML = "";
+      if (chosen >= b.spots.length) chosen = -1;
       b.spots.forEach((sp, i) => {
         const mark = el("div","label-spot");
-        mark.style.left = sp.x + "%"; mark.style.top = sp.y + "%";
-        mark.style.width = sp.w + "%"; mark.style.height = sp.h + "%";
         mark.textContent = sp.answer || String(i + 1);
         holder.appendChild(mark);
+        marks[i] = mark;
+        placeMark(i);
+        /* pressed to pick it, and dragged to move it */
+        let grab = null;
+        mark.addEventListener("pointerdown", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          choose(i);
+          try{ mark.setPointerCapture(e.pointerId); }catch(err){}
+          const r = holder.getBoundingClientRect();
+          grab = { r, x: e.clientX, y: e.clientY, sx: sp.x, sy: sp.y };
+        });
+        mark.addEventListener("pointermove", (e) => {
+          if (!grab) return;
+          sp.x = tenth(clamp(grab.sx + (e.clientX - grab.x) / grab.r.width * 100, 0, 100 - sp.w));
+          sp.y = tenth(clamp(grab.sy + (e.clientY - grab.y) / grab.r.height * 100, 0, 100 - sp.h));
+          placeMark(i);
+          if (handles) handles.place();
+        });
+        const drop = () => { if (!grab) return; grab = null; saveDraft(); schedulePreview(); };
+        mark.addEventListener("pointerup", drop);
+        mark.addEventListener("pointercancel", drop);
 
         /* the word for this box, typed underneath rather than in a list
            of commas somewhere else */
@@ -2024,11 +2370,12 @@ EDITORS.label = function(b, k){
         });
         const rm = el("button","btn-ghost bmini","\u2715");
         rm.title = "Remove this box";
-        rm.addEventListener("click", () => { b.spots.splice(i, 1); saveDraft(); paintSpots(); schedulePreview(); });
+        rm.addEventListener("click", () => { b.spots.splice(i, 1); chosen = -1; saveDraft(); paintSpots(); schedulePreview(); });
         row.appendChild(word); row.appendChild(rm);
         list.appendChild(row);
       });
       if (!b.spots.length) list.appendChild(el("p","hint","No boxes yet. Drag on the picture to draw one."));
+      if (handles) handles.place();
     }
 
     let from = null;
@@ -2040,6 +2387,7 @@ EDITORS.label = function(b, k){
     holder.addEventListener("pointerdown", (e) => {
       if (e.target.classList.contains("label-spot")) return;
       e.preventDefault();
+      choose(-1);           // the bare picture puts the handles away and starts a new box
       holder.setPointerCapture(e.pointerId);
       from = pct(e);
       ghost.hidden = false;
@@ -2063,6 +2411,7 @@ EDITORS.label = function(b, k){
       ghost.hidden = true;
       if (spot.w < 3 || spot.h < 3) return;      // a stray click, not a box
       b.spots.push(spot);
+      chosen = b.spots.length - 1;               // ready to be nudged into place
       saveDraft(); paintSpots(); schedulePreview();
     });
 
