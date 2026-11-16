@@ -240,5 +240,68 @@
   if (document.documentElement) watch();
   else document.addEventListener("DOMContentLoaded", watch, { once: true });
 
-  window.hubMotion = { off, busy, tick, nudge, pop, arrive, reveal, breathe };
+  /* A list that has just been drawn comes in one item after another, a
+     moment apart, so a screen of cards reads as arriving rather than as a
+     block that was simply there. Only the first dozen wait their turn: the
+     rest come with the twelfth, so a long list is never slow to finish. */
+  function stagger(items, rise){
+    if (off()) return;
+    Array.from(items || []).forEach((el, i) => {
+      if (!el || !el.animate || !el.getClientRects().length) return;
+      play(el, [{ opacity: 0, transform: "translateY(" + (rise === undefined ? 8 : rise) + "px)" },
+                { opacity: 1, transform: "none" }],
+           { duration: 240, delay: Math.min(i, 12) * 28, easing: EASE_OUT, fill: "backwards" });
+    });
+  }
+  /* A highlight that moves from one item to another, such as the side
+     menu's current screen. A pill is laid over the old item, glides to the
+     new one and is taken away, and the new item's own background is held
+     back meanwhile (mo-gliding) so there are never two. */
+  function glide(from, to, holder, cls){
+    if (!can(to) || !from || from === to || !holder) return;
+    const a = from.getBoundingClientRect(), b = to.getBoundingClientRect(), h = holder.getBoundingClientRect();
+    if (!a.height || !b.height) return;
+    const pill = document.createElement("span");
+    pill.className = "mo-pill " + (cls || "");
+    pill.setAttribute("aria-hidden", "true");
+    pill.style.left = (b.left - h.left + holder.scrollLeft) + "px";
+    pill.style.top = (b.top - h.top + holder.scrollTop) + "px";
+    pill.style.width = b.width + "px";
+    pill.style.height = b.height + "px";
+    holder.appendChild(pill);
+    to.classList.add("mo-gliding");
+    const anim = play(pill, [{ transform: "translate(" + (a.left - b.left) + "px," + (a.top - b.top) + "px)" },
+                             { transform: "none" }],
+                      { duration: 260, easing: EASE_OUT });
+    const end = () => { pill.remove(); to.classList.remove("mo-gliding"); };
+    if (anim){ anim.onfinish = end; anim.oncancel = end; } else end();
+    setTimeout(end, 600);
+  }
+  /* A console screen that has just been changed to. Its cards come in one
+     after another; and since most screens fill their cards only once an
+     answer comes back from the server, the screen is watched for a moment
+     afterwards and cards arriving late come in the same way. A card inside
+     another card waits for its parent rather than moving twice. */
+  const CARDS = ".lessonCard, .classtile, .lessonpill, .richcard, .ov-row, .who-row, .taskrow, " +
+                ".unit-lesson-row, .coverrow, .topicrow, .specrow, .pace-row, .summary-row, .changerow, .mbstat";
+  const topCards = (list) => list.filter(el => !(el.parentElement && el.parentElement.closest(CARDS)));
+  function settle(view, watchMs){
+    if (!view || off()) return;
+    stagger(topCards(Array.from(view.querySelectorAll(CARDS))));
+    if (!window.MutationObserver) return;
+    const seen = new WeakSet();
+    const mo = new MutationObserver(list => {
+      const fresh = [];
+      list.forEach(m => m.addedNodes.forEach(n => {
+        if (n.nodeType !== 1) return;
+        if (n.matches(CARDS)) fresh.push(n);
+        n.querySelectorAll(CARDS).forEach(x => fresh.push(x));
+      }));
+      const now = topCards(fresh.filter(x => !seen.has(x) && (seen.add(x), true)));
+      if (now.length) stagger(now);
+    });
+    mo.observe(view, { childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), watchMs || 1500);
+  }
+  window.hubMotion = { off, busy, tick, nudge, pop, arrive, reveal, breathe, stagger, glide, settle, leave: fadeOut };
 })();

@@ -689,11 +689,21 @@ function show(view, quiet){
      stays up behind them, dimmed, blurred and out of reach until they go. */
   const entry = view === "keyView" || view === "whoView";
   const before = VIEWS.find(v => { const e = $(v); return e && !e.hidden; });
+  const fromEntry = before === "keyView" || before === "whoView";
+  /* The sign-in card fades away over the console as it opens, rather than
+     vanishing; taken before it is hidden, while there is still something to
+     copy. */
+  if (window.hubMotion && fromEntry && before !== view) window.hubMotion.leave($(before));
   VIEWS.forEach(v => { const e = $(v); if (e) e.hidden = v !== view && !(entry && v === "homeView"); });
   /* One screen of the console looks a lot like the next, so it fades in
-     rather than simply being there. Not behind the sign-in, which has its
-     own pop-up arriving over the top. */
-  if (!entry && before !== view && window.hubMotion) window.hubMotion.arrive($(view), 4);
+     rather than simply being there, and its cards follow it in one after
+     another. Not behind the sign-in, which has its own card arriving over
+     the top. Coming in from the sign-in, Home is already on screen behind
+     it, so only its cards move. */
+  if (!entry && before !== view && window.hubMotion){
+    if (!fromEntry) window.hubMotion.arrive($(view), 4);
+    window.hubMotion.settle($(view));
+  }
   document.body.classList.toggle("entry-open", entry);
   ["topbar","crumbBar","homeView","rail"].forEach(id => {
     const e = $(id);
@@ -966,8 +976,11 @@ async function offlineConsole(){
 async function tryKey(){
   KEY = $("keyIn").value.trim();
   const code = ($("codeIn").value || "").trim();
-  if (!KEY){ $("keyMsg").textContent = "Type the teacher key first."; return; }
-  $("keyMsg").textContent = "Checking…";
+  if (!KEY){ $("keyMsg").textContent = "Type the teacher key first."; if (window.hubMotion) hubMotion.nudge($("keyIn")); return; }
+  /* The dots are in the Sign in button while the key is checked, and a key
+     that is turned away shakes the card, the way a wrong password does. */
+  const keyBusy = window.hubMotion ? hubMotion.busy($("keyGo"), "Checking") : null;
+  $("keyMsg").textContent = keyBusy ? "" : "Checking…";
   let device = "";
   try{ device = localStorage.getItem("hub_tdevice") || ""; }catch(e){}
   try{
@@ -1014,8 +1027,10 @@ async function tryKey(){
     groups = gd.groups || [];
     groupsAt = Date.now();
     await loadTeachers();
+    if (keyBusy) keyBusy.reset();
     await afterSignIn();
   }catch(e){
+    if (keyBusy){ keyBusy.reset(); hubMotion.nudge($("keyView").querySelector(".station")); }
     $("keyMsg").textContent = e.message === "Failed to fetch" ? "Could not reach the server." : e.message;
     /* An attempt the browser set going has failed, so the dots come down and
        the box appears underneath the message. A spinner that never stops is

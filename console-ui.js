@@ -172,6 +172,11 @@
     if (view === "keyView" || view === "whoView") rail.setAttribute("inert", ""); else rail.removeAttribute("inert");
     document.body.classList.toggle("has-rail", !!want);
     const here = SECTION[view] || "";
+    /* The highlight slides from the screen that was current to the new one,
+       so it is plain which item the change came from. */
+    const was = rail.querySelector(".rail-item.on");
+    const now = rail.querySelector('.rail-item[data-go="' + here + '"]');
+    if (was && now && was !== now && window.hubMotion && !rail.hidden) window.hubMotion.glide(was, now, rail);
     rail.querySelectorAll(".rail-item").forEach(b => {
       const hit = b.dataset.go === here;
       b.classList.toggle("on", hit);
