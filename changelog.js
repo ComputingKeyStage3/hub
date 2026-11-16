@@ -28,7 +28,8 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
-  { v:"18.0.3", text:"Console: Back and Forward buttons sit beside Refresh at the top, in place of each screen's own back link, so every screen starts higher up. Back now works first time after closing a pop-up." },
+  { v:"18.1", text:"GCSE and A Level students get a new home page with Home, Lessons, Topics, Revise and Feedback down the side (along the bottom on a phone). Topics lists lessons by specification point and lets students rate how confident they are. Home learning now shows on students' Home Learning tab." },
+  { v:"18.0.3",text:"Console: Back and Forward buttons sit beside Refresh at the top, in place of each screen's own back link, so every screen starts higher up. Back now works first time after closing a pop-up." },
   { v:"18.0.2", text:"Console: cards no longer come in twice, a class opens by growing out of its tile, and tabs slide their highlight across. A class's Units, Students and Progress tabs now change only the pane underneath: the heading, the trail at the top and Back stay as they are." },
   { v:"18.0.1", text:"Buttons no longer flash blank when the pointer first goes over them. In the console, signing in rises into place and fades away as the console opens, the side menu's highlight slides to the screen you pick, cards and classes come in one after another, and menus unroll." },
   { v:"18.0", text:"Things move again on school computers. Save buttons show they are working and draw a tick when done, pop-ups and menus fade in, right and wrong answers react, and loading lists pulse. Settings has a new Reduce animation switch for anyone who needs the movement off." },

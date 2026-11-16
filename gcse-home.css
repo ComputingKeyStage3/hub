@@ -1,0 +1,124 @@
+/* The GCSE and A Level home page (gcse-home.js). Every rule starts
+   html.gcse-home, so a KS3 student, or anyone signed out, gets none of it:
+   this file is loaded on the home page for everyone and changes nothing
+   until the script decides a student is GCSE. */
+
+/* ---------- the rail ---------- */
+.gh-rail{display:none}
+html.gcse-home .gh-rail{
+  display:flex; flex-direction:column; gap:4px;
+  position:fixed; left:0; top:var(--gh-top, 57px); bottom:0; width:210px; box-sizing:border-box;
+  padding:18px 12px; background:var(--panel); border-right:1px solid var(--line); z-index:20; overflow-y:auto;
+}
+html.gcse-home .gh-nav{
+  display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0 14px;
+  background:transparent; border:1.5px solid transparent; border-radius:var(--rad-md);
+  color:var(--muted); font:inherit; font-size:var(--text-md); font-weight:700; text-align:left; cursor:pointer;
+}
+html.gcse-home .gh-nav:hover{color:var(--text); background:var(--panel-2)}
+html.gcse-home .gh-nav.on{color:var(--text); background:var(--panel-2); border-color:var(--amber)}
+html.gcse-home .gh-label{flex:1}
+html.gcse-home .gh-badge{
+  min-width:22px; height:22px; padding:0 6px; box-sizing:border-box; border-radius:var(--rad-pill);
+  background:var(--amber); color:#fff; font-size:var(--text-xs); font-weight:800; display:grid; place-items:center;
+}
+html.gcse-home .gh-badge[hidden]{display:none}
+html.gcse-home .gh-rail #refTab{margin-top:auto; align-self:flex-start}
+
+html.gcse-home .page{margin-left:max(210px, calc((100vw - 900px) / 2)); margin-right:auto}
+@media (min-width:1330px){ html.gcse-home .page{margin-left:auto} }
+html.gcse-home .masthead{margin:6px 0 22px}
+html.gcse-home .masthead h1{font-size:var(--text-5xl, 40px)}
+html.gcse-home .gh-view[hidden]{display:none}
+
+/* ---------- cards ---------- */
+html.gcse-home .gh-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--rad-md);
+  padding:18px 20px; box-shadow:0 1px 3px rgba(0,0,0,.07); min-width:0;
+}
+html.gcse-home .gh-card-title{font-size:var(--text-lg); margin:0 0 10px}
+html.gcse-home .gh-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-top:16px; align-items:start}
+html.gcse-home .gh-eyebrow{
+  font-family:var(--mono); font-size:var(--text-xs); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--amber); margin:0 0 8px;
+}
+html.gcse-home .gh-quiet{color:var(--muted); margin:0 0 6px}
+html.gcse-home .gh-intro{color:var(--muted); margin:0 0 18px}
+html.gcse-home .gh-from{font-weight:700; margin:0 0 6px}
+html.gcse-home .gh-topic{font-family:var(--display); font-weight:700; font-size:var(--text-lg); margin:0 0 6px}
+html.gcse-home .gh-more{margin-top:8px}
+html.gcse-home .gh-carry{padding:22px 24px}
+html.gcse-home .gh-carry-link{display:flex; flex-direction:column; gap:4px; text-decoration:none; color:var(--text)}
+html.gcse-home .gh-carry-link b{font-family:var(--display); font-size:var(--text-3xl); line-height:1.2}
+html.gcse-home .gh-carry-link span{color:var(--muted); font-size:var(--text-lg)}
+html.gcse-home .gh-carry-link .gh-carry-go{color:var(--amber); font-weight:800; margin-top:8px}
+html.gcse-home .gh-carry-link:hover .gh-carry-go{text-decoration:underline}
+
+/* one line per lesson inside a card or a topic */
+html.gcse-home .gh-row, html.gcse-home .gh-weak{
+  display:flex; align-items:center; gap:12px; min-height:44px; padding:8px 10px; margin:0 -10px;
+  border-radius:var(--rad-sm); text-decoration:none; color:var(--text);
+  background:transparent; border:none; font:inherit; text-align:left; width:calc(100% + 20px); cursor:pointer;
+}
+html.gcse-home .gh-row:hover, html.gcse-home .gh-weak:hover{background:var(--panel-2)}
+html.gcse-home .gh-row-words{flex:1; min-width:0; display:flex; flex-direction:column}
+html.gcse-home .gh-row-words b{font-weight:700}
+html.gcse-home .gh-row-words span{color:var(--muted); font-size:var(--text-sm)}
+html.gcse-home .gh-tick{color:var(--mint); font-weight:800}
+html.gcse-home .gh-go{color:var(--amber); flex:none}
+
+/* ---------- topics ---------- */
+html.gcse-home .gh-strand{margin:0 0 26px}
+html.gcse-home .gh-strand-title{display:flex; align-items:center; gap:12px; font-size:var(--text-xl); margin:0 0 10px}
+html.gcse-home .gh-strand-dots{display:inline-flex; gap:4px}
+html.gcse-home .gh-point{background:var(--panel); border:1px solid var(--line); border-radius:var(--rad-md); margin:0 0 8px}
+html.gcse-home .gh-point-head{
+  display:flex; align-items:center; gap:12px; width:100%; min-height:52px; padding:10px 16px;
+  background:transparent; border:none; font:inherit; color:var(--text); text-align:left; cursor:pointer;
+}
+html.gcse-home .gh-point-head b{flex:1; min-width:0}
+html.gcse-home .gh-point-head::after{content:"\203A"; color:var(--muted); font-size:22px; transition:transform .15s}
+html.gcse-home .gh-point-head.open::after{transform:rotate(90deg)}
+html.gcse-home .gh-count{color:var(--muted); font-size:var(--text-sm); white-space:nowrap}
+html.gcse-home .gh-point-body{padding:0 16px 14px; border-top:1px solid var(--line)}
+html.gcse-home .gh-point-body[hidden]{display:none}
+html.gcse-home .gh-ask{font-weight:700; margin:14px 0 8px}
+html.gcse-home .gh-list{margin-top:10px}
+html.gcse-home .gh-targets .me-fb{margin:0 0 6px}
+
+/* the student's own red, amber and green */
+html.gcse-home .gh-dot{flex:none; width:12px; height:12px; border-radius:50%; background:var(--line-2); display:inline-block}
+html.gcse-home .gh-dot-r{background:#C0392B}
+html.gcse-home .gh-dot-a{background:#D68910}
+html.gcse-home .gh-dot-g{background:#27AE60}
+html.gcse-home .gh-rag{display:flex; flex-wrap:wrap; gap:8px}
+html.gcse-home .gh-rag-btn{
+  display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 16px;
+  border:1.5px solid var(--line-2); border-radius:var(--rad-pill); background:var(--panel);
+  color:var(--text); font:inherit; font-weight:700; cursor:pointer;
+}
+html.gcse-home .gh-rag-r .gh-dot{background:#C0392B}
+html.gcse-home .gh-rag-a .gh-dot{background:#D68910}
+html.gcse-home .gh-rag-g .gh-dot{background:#27AE60}
+html.gcse-home .gh-rag-btn.on{border-color:var(--text); background:var(--panel-2)}
+
+html.gcse-home .gh-section-title{font-size:var(--text-xl); margin:28px 0 12px}
+
+/* ---------- a phone: the rail is the bar along the bottom ---------- */
+@media (max-width:760px){
+  html.gcse-home .gh-rail{
+    top:auto; left:0; right:0; bottom:0; width:auto; height:auto;
+    flex-direction:row; gap:0; padding:4px 4px calc(4px + env(safe-area-inset-bottom));
+    border-right:none; border-top:1px solid var(--line); overflow:visible;
+  }
+  html.gcse-home .gh-nav{
+    flex:1 1 0; min-width:0; flex-direction:column; gap:2px; padding:6px 2px; min-height:52px;
+    font-size:var(--text-2xs, 11px); text-align:center; justify-content:center; position:relative;
+  }
+  html.gcse-home .gh-nav.on{border-color:transparent; color:var(--amber)}
+  html.gcse-home .gh-label{flex:none}
+  html.gcse-home .gh-badge{position:absolute; top:2px; left:calc(50% + 6px); min-width:18px; height:18px; font-size:10px}
+  /* refreshing a phone is pulling the page down */
+  html.gcse-home .gh-rail #refTab{display:none}
+  html.gcse-home .page{margin-left:auto; padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+}
