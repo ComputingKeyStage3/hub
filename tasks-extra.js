@@ -4522,4 +4522,467 @@
     };
   };
 
+  /* ===================================================================
+     REVISION RESOURCE
+     { type:"revise", title, task, kinds:["cards","mindmap","poster","quiz","photo"] }
+     Saved as { kind, cards:[{f,b}], quiz:[{q,a}], map:{nodes}, poster:{img},
+                photos:[data url], binned }
+
+     Home learning near the end of a unit: make something to revise from,
+     here or on paper. Each kind keeps its own part of the value, so
+     changing their mind from flashcards to a quiz and back loses nothing,
+     and only `kind` says which one is handed in.
+
+     Everything made here is words, a few KB. The one exception is a photo
+     of paper work, which is why there are at most two and why each is
+     squeezed harder than a screenshot (see squeezePhoto). A teacher can
+     clear photos away once they have looked; `binned` is then the time
+     they did, and the photos are in the recycle bin, not here.
+     =================================================================== */
+  const REVISE_KINDS = {
+    cards:   { name: "Flashcards",     say: "A question or word on the front, the answer on the back" },
+    mindmap: { name: "Mind map",       say: "The big idea in the middle, with branches" },
+    poster:  { name: "Poster",         say: "One page with the key facts on it" },
+    quiz:    { name: "Quiz questions", say: "Questions with their answers, to test yourself" }
+  };
+  const REVISE_MOST = 60;        // cards or questions
+  const REVISE_WORDS = 300;      // characters on one side of a card
+  const PHOTO_MOST = 2;
+  /* A photo of a page of handwriting. Longest side 1400px keeps pencil
+     legible when the teacher zooms in. Colour is kept but turned down:
+     a page of paper is mostly white with a few pens on it, and the
+     strength of the colour is a big part of what a JPEG has to store.
+     Measured on a made-up 12MP photo of a page of coloured-pen notes
+     (noise and lighting added, 3.9MB from the "camera"): 141KB this way
+     against 300KB as a full-colour 0.8 JPEG at the same size. Not yet
+     measured on a real phone photo. */
+  const PHOTO_SIDE = 1400;
+  const PHOTO_BYTES = 260000;    // characters of data URL, about 190KB
+  function squeezePhoto(file, cb){
+    if (!file || !/^image\//.test(file.type || "")){ cb(null, "That file is not a picture. Try a different one."); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h){ cb(null, "That picture could not be opened."); return; }
+      const r = Math.min(1, PHOTO_SIDE / Math.max(w, h));
+      w = Math.round(w * r); h = Math.round(h * r);
+      const c = make("canvas");
+      c.width = w; c.height = h;
+      const pen = c.getContext("2d");
+      pen.fillStyle = "#FFFFFF";
+      pen.fillRect(0, 0, w, h);
+      pen.filter = "saturate(0.5)";
+      pen.imageSmoothingQuality = "high";
+      pen.drawImage(img, 0, 0, w, h);
+      let out = c.toDataURL("image/jpeg", 0.6);
+      for (const q of [0.5, 0.4, 0.3]) if (out.length > PHOTO_BYTES) out = c.toDataURL("image/jpeg", q);
+      cb(out, null);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); cb(null, "That picture could not be opened. Try taking it again."); };
+    img.src = url;
+  }
+  /* A quarter turn of a photo already squeezed. The canvas has no filter
+     this time: the colour was turned down once and doing it again would
+     wash it out. */
+  function turnPhoto(src, cb){
+    const img = new Image();
+    img.onload = () => {
+      const c = make("canvas");
+      c.width = img.naturalHeight; c.height = img.naturalWidth;
+      const pen = c.getContext("2d");
+      pen.translate(c.width, 0);
+      pen.rotate(Math.PI / 2);
+      pen.drawImage(img, 0, 0);
+      cb(c.toDataURL("image/jpeg", 0.6));
+    };
+    img.onerror = () => cb(src);
+    img.src = src;
+  }
+  const cleanPairs = (list, a, b) => (Array.isArray(list) ? list : []).slice(0, REVISE_MOST)
+    .filter(x => x && typeof x === "object")
+    .map(x => ({ [a]: String(x[a] || "").slice(0, REVISE_WORDS), [b]: String(x[b] || "").slice(0, REVISE_WORDS) }));
+  /* The ones with something on both sides, which are the only ones a
+     student can be tested on. */
+  const fullPairs = (list, a, b) => cleanPairs(list, a, b).filter(x => x[a].trim() && x[b].trim());
+
+  /* Test me: one card at a time, front first. "Not yet" puts it back at
+     the end, so a round finishes once every card has been known once.
+     Nothing in here is saved: it is practice, and the only thing anyone
+     learns from it is that it was opened (onStart, which the lesson page
+     counts). */
+  function revisePlayer(items, kind, onStart){
+    if (!items.length) return;
+    if (onStart) try{ onStart(); }catch(e){}
+    const quiz = kind === "quiz";
+    const back = make("div", "modal-back no-print rv-play-back");
+    const box = make("div", "modal rv-play");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    box.setAttribute("aria-label", "Test me");
+    const x = make("button", "btn-ghost iconbtn modal-x", "✕");
+    x.type = "button"; x.title = "Close"; x.setAttribute("aria-label", "Close");
+    box.appendChild(x);
+    const count = make("p", "rv-count");
+    const card = make("button", "rv-card");
+    card.type = "button";
+    const side = make("p", "rv-side");
+    const words = make("p", "rv-words");
+    card.appendChild(side); card.appendChild(words);
+    const row = make("div", "rv-moves");
+    const turn = make("button", "btn-primary", quiz ? "Show the answer" : "Turn over");
+    const yes = make("button", "btn-primary", "I knew it");
+    const no = make("button", "btn-ghost", "Not yet");
+    [turn, yes, no].forEach(btn => { btn.type = "button"; });
+    row.appendChild(no); row.appendChild(turn); row.appendChild(yes);
+    box.appendChild(count); box.appendChild(card); box.appendChild(row);
+    back.appendChild(box);
+    document.body.appendChild(back);
+
+    let queue, firstGo, knewFirst, total, flipped, current;
+    function start(){
+      queue = items.map((it, i) => i);
+      for (let i = queue.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [queue[i], queue[j]] = [queue[j], queue[i]]; }
+      firstGo = new Set(queue); knewFirst = 0; total = queue.length;
+      next();
+    }
+    function next(){
+      if (!queue.length){ finish(); return; }
+      current = queue.shift();
+      flipped = false;
+      paint();
+    }
+    function paint(){
+      const it = items[current];
+      count.textContent = (total - queue.length) + " of " + total;
+      side.textContent = flipped ? (quiz ? "Answer" : "Back") : (quiz ? "Question" : "Front");
+      words.textContent = flipped ? (quiz ? it.a : it.b) : (quiz ? it.q : it.f);
+      card.classList.toggle("over", flipped);
+      card.setAttribute("aria-label", flipped ? "Showing the answer" : "Press to see the answer");
+      turn.hidden = flipped; yes.hidden = !flipped; no.hidden = !flipped;
+      (flipped ? yes : turn).focus();
+    }
+    function flip(){ if (!flipped){ flipped = true; paint(); } }
+    function finish(){
+      box.innerHTML = "";
+      box.appendChild(x);
+      box.appendChild(make("h2", "", "That's the lot!"));
+      box.appendChild(make("p", "modal-text",
+        "You knew " + knewFirst + " of " + total + " first time." +
+        (knewFirst === total ? " Brilliant." : " Go again to practise the ones you didn't know yet.")));
+      const again = make("button", "btn-primary modal-cta", "Go again");
+      again.type = "button";
+      again.addEventListener("click", () => {
+        box.innerHTML = "";
+        box.appendChild(x); box.appendChild(count); box.appendChild(card); box.appendChild(row);
+        if (onStart) try{ onStart(); }catch(e){}
+        start();
+      });
+      box.appendChild(again);
+      again.focus();
+    }
+    card.addEventListener("click", flip);
+    turn.addEventListener("click", flip);
+    yes.addEventListener("click", () => { if (firstGo.has(current)) knewFirst++; firstGo.delete(current); next(); });
+    no.addEventListener("click", () => { firstGo.delete(current); queue.push(current); next(); });
+    const close = () => { back.remove(); document.removeEventListener("keydown", onKey, true); };
+    function onKey(e){
+      if (e.key === "Escape"){ e.preventDefault(); close(); }
+    }
+    x.addEventListener("click", close);
+    back.addEventListener("pointerdown", (e) => { if (e.target === back) close(); });
+    document.addEventListener("keydown", onKey, true);
+    start();
+  }
+
+  /* What a value holds for its kind, in the order Test me and the
+     finished screen want it. */
+  window.reviseKit = {
+    items(v){
+      if (!v || typeof v !== "object") return [];
+      if (v.kind === "cards") return fullPairs(v.cards, "f", "b");
+      if (v.kind === "quiz") return fullPairs(v.quiz, "q", "a");
+      return [];
+    },
+    /* Can be revised from on screen: the ones Test me runs, and a mind map
+       or poster, which are looked at again. A photo cannot, which is why
+       its revising is never counted. */
+    canRevise(v){
+      if (!v || typeof v !== "object") return false;
+      if (v.kind === "cards" || v.kind === "quiz") return this.items(v).length > 0;
+      if (v.kind === "mindmap") return !!(v.map && Array.isArray(v.map.nodes) && v.map.nodes.some(n => n.parent !== null && String(n.text || "").trim()));
+      if (v.kind === "poster") return !!(v.poster && v.poster.img);
+      return false;
+    },
+    open(b, v, onStart){
+      if (!this.canRevise(v)) return;
+      if (v.kind === "cards" || v.kind === "quiz"){ revisePlayer(this.items(v), v.kind, onStart); return; }
+      if (onStart) try{ onStart(); }catch(e){}
+      const back = make("div", "modal-back no-print rv-look-back");
+      const box = make("div", "modal rv-look");
+      box.setAttribute("role", "dialog");
+      box.setAttribute("aria-modal", "true");
+      box.setAttribute("aria-label", REVISE_KINDS[v.kind].name);
+      const x = make("button", "btn-ghost iconbtn modal-x", "✕");
+      x.type = "button"; x.title = "Close"; x.setAttribute("aria-label", "Close");
+      box.appendChild(x);
+      const middle = make("div", "modal-scroll");
+      box.appendChild(middle);
+      middle.appendChild(make("h2", "", (b && b.title) || "Your " + REVISE_KINDS[v.kind].name.toLowerCase()));
+      if (v.kind === "poster"){
+        const im = make("img", "rv-look-img");
+        im.src = v.poster.img; im.alt = "Your poster";
+        middle.appendChild(im);
+      } else {
+        /* The map's own drawing, with its buttons hidden: this is for reading,
+           and a change made here would go nowhere. */
+        const made = window.rMindmap({ type: "mindmap", centre: (b && b.title) || "" }, { changed(){} });
+        made.set(v.map);
+        made.section.classList.add("rv-readonly");
+        middle.appendChild(made.section);
+      }
+      back.appendChild(box);
+      document.body.appendChild(back);
+      const close = () => { back.remove(); document.removeEventListener("keydown", onKey, true); };
+      function onKey(e){ if (e.key === "Escape"){ e.preventDefault(); close(); } }
+      x.addEventListener("click", close);
+      back.addEventListener("pointerdown", (e) => { if (e.target === back) close(); });
+      document.addEventListener("keydown", onKey, true);
+      setTimeout(() => x.focus(), 30);
+    },
+    squeezePhoto
+  };
+
+  window.rRevise = function(b, ctx){
+    const s = make("section", "revise");
+    const allowed = (Array.isArray(b.kinds) && b.kinds.length ? b.kinds : ["cards","mindmap","poster","quiz","photo"])
+      .filter(k => k === "photo" || REVISE_KINDS[k]);
+    const digital = allowed.filter(k => k !== "photo");
+    let v = { kind: "", cards: [], quiz: [], map: null, poster: null, photos: [] };
+    /* "here" or "paper", before a kind is picked. Worked out from kind once
+       there is one, so it is never saved. */
+    let route = "";
+    let sub = null;               // the mind map or poster drawn inside this task
+    const changed = () => { if (ctx && ctx.changed) ctx.changed(); };
+
+    function pickBtn(title, said, cls, fn){
+      const btn = make("button", "rv-pick " + (cls || ""));
+      btn.type = "button";
+      btn.appendChild(make("b", "", title));
+      if (said) btn.appendChild(make("span", "", said));
+      btn.addEventListener("click", fn);
+      return btn;
+    }
+    function backLink(words, fn){
+      const btn = make("button", "btn-ghost rv-back", "← " + words);
+      btn.type = "button";
+      btn.addEventListener("click", fn);
+      return btn;
+    }
+
+    function paint(){
+      /* the poster keeps its picture a moment after the last change, so
+         take it before its editor is thrown away */
+      if (sub && sub.kind === "poster" && sub.made) v.poster = sub.made.get();
+      if (sub && sub.kind === "mindmap" && sub.made) v.map = sub.made.get();
+      sub = null;
+      s.innerHTML = "";
+      const kind = v.kind;
+      if (!kind && !route){
+        if (!digital.length){ route = "paper"; return paint(); }
+        if (allowed.indexOf("photo") < 0){ route = "here"; return paint(); }
+        s.appendChild(make("p", "rv-ask", "How are you making your revision resource?"));
+        const two = make("div", "rv-two");
+        two.appendChild(pickBtn("Make it here", "Flashcards, a mind map, a poster or a quiz", "rv-big", () => { route = "here"; paint(); }));
+        two.appendChild(pickBtn("I did it on paper", "Take a photo of it and hand that in", "rv-big", () => { route = "paper"; v.kind = "photo"; changed(); paint(); }));
+        s.appendChild(two);
+        return;
+      }
+      if (!kind && route === "here"){
+        if (allowed.indexOf("photo") >= 0) s.appendChild(backLink("Back", () => { route = ""; paint(); }));
+        s.appendChild(make("p", "rv-ask", "What would you like to make?"));
+        const grid = make("div", "rv-kinds");
+        digital.forEach(k => grid.appendChild(pickBtn(REVISE_KINDS[k].name, REVISE_KINDS[k].say, "", () => {
+          v.kind = k; changed(); paint();
+        })));
+        s.appendChild(grid);
+        return;
+      }
+      const others = kind === "photo" ? digital.length > 0 : (digital.length > 1 || allowed.indexOf("photo") >= 0);
+      if (others) s.appendChild(backLink(kind === "photo" ? "Make it here instead" : "Make something else", () => {
+        v.kind = ""; route = kind === "photo" ? "here" : (digital.length > 1 ? "here" : ""); changed(); paint();
+      }));
+      if (kind === "cards") paintPairs("cards", "f", "b", "Front", "Back", "+ Add a card");
+      else if (kind === "quiz") paintPairs("quiz", "q", "a", "Question", "Answer", "+ Add a question");
+      else if (kind === "mindmap" || kind === "poster") paintDrawn(kind);
+      else if (kind === "photo") paintPhotos();
+    }
+
+    /* Flashcards and quiz questions are the same thing with different
+       words on: two boxes a row, and Test me once two rows are full. */
+    let testBtn = null;
+    function paintPairs(key, a, z, aSaid, zSaid, addSaid){
+      if (!v[key].length) v[key] = [{ [a]: "", [z]: "" }, { [a]: "", [z]: "" }];
+      const list = make("ol", "rv-pairs");
+      function row(item, i){
+        const li = make("li", "rv-pair");
+        const boxA = make("textarea", "rv-in");
+        const boxZ = make("textarea", "rv-in");
+        boxA.rows = 2; boxZ.rows = 2;
+        boxA.maxLength = REVISE_WORDS; boxZ.maxLength = REVISE_WORDS;
+        boxA.placeholder = aSaid; boxZ.placeholder = zSaid;
+        boxA.setAttribute("aria-label", aSaid + " " + (i + 1));
+        boxZ.setAttribute("aria-label", zSaid + " " + (i + 1));
+        boxA.value = item[a]; boxZ.value = item[z];
+        boxA.addEventListener("input", () => { item[a] = boxA.value; changed(); paintTest(); });
+        boxZ.addEventListener("input", () => { item[z] = boxZ.value; changed(); paintTest(); });
+        const del = make("button", "btn-ghost iconbtn rv-del", "✕");
+        del.type = "button"; del.title = "Remove this one"; del.setAttribute("aria-label", "Remove " + aSaid.toLowerCase() + " " + (i + 1));
+        del.addEventListener("click", () => {
+          v[key].splice(v[key].indexOf(item), 1);
+          changed(); paint();
+        });
+        li.appendChild(boxA); li.appendChild(boxZ); li.appendChild(del);
+        return li;
+      }
+      v[key].forEach((item, i) => list.appendChild(row(item, i)));
+      s.appendChild(list);
+      const foot = make("div", "row rv-foot");
+      const add = make("button", "btn-ghost", addSaid);
+      add.type = "button";
+      add.disabled = v[key].length >= REVISE_MOST;
+      add.addEventListener("click", () => {
+        v[key].push({ [a]: "", [z]: "" });
+        changed(); paint();
+        const boxes = s.querySelectorAll(".rv-pair:last-child .rv-in");
+        if (boxes[0]) boxes[0].focus();
+      });
+      testBtn = make("button", "btn-primary rv-test", "Test me");
+      testBtn.type = "button";
+      testBtn.addEventListener("click", () => window.reviseKit.open(b, v, ctx && ctx.revised));
+      foot.appendChild(add); foot.appendChild(testBtn);
+      s.appendChild(foot);
+      paintTest();
+    }
+    function paintTest(){
+      if (!testBtn) return;
+      const n = window.reviseKit.items(v).length;
+      testBtn.hidden = n < 2;
+    }
+
+    /* The lesson's own mind map and poster, drawn inside this task with
+       this task's part of the value. */
+    function paintDrawn(kind){
+      const inner = { type: kind, id: b.id + "_" + kind, title: "", task: "",
+                      centre: kind === "mindmap" ? (b.title || "") : undefined,
+                      heading: kind === "poster" ? (b.title || "") : undefined };
+      const build = kind === "mindmap" ? window.rMindmap : window.rPoster;
+      const made = build(inner, { changed(){
+        if (kind === "mindmap") v.map = made.get(); else v.poster = made.get();
+        changed();
+      }, assessment: ctx && ctx.assessment });
+      const had = kind === "mindmap" ? v.map : v.poster;
+      if (had) made.set(had);
+      sub = { kind, made };
+      s.appendChild(made.section);
+    }
+
+    function paintPhotos(){
+      s.appendChild(make("p", "rv-ask", v.photos.length ? "Your photos" : "Take a photo of your revision resource"));
+      if (v.binned && !v.photos.length)
+        s.appendChild(make("p", "rv-note", "Your teacher has looked at your photos and cleared them away."));
+      const grid = make("div", "rv-photos");
+      v.photos.forEach((src, i) => {
+        const fig = make("figure", "rv-photo");
+        const im = make("img");
+        im.src = src; im.alt = "Photo " + (i + 1) + " of your revision resource";
+        fig.appendChild(im);
+        const tools = make("div", "rv-photo-tools");
+        const turn = make("button", "btn-ghost", "↻ Turn");
+        turn.type = "button"; turn.title = "Turn it round a quarter";
+        turn.addEventListener("click", () => turnPhoto(src, (out) => { v.photos[i] = out; changed(); paint(); }));
+        const del = make("button", "btn-ghost", "✕ Remove");
+        del.type = "button";
+        del.addEventListener("click", () => { v.photos.splice(i, 1); changed(); paint(); });
+        tools.appendChild(turn); tools.appendChild(del);
+        fig.appendChild(tools);
+        grid.appendChild(fig);
+      });
+      s.appendChild(grid);
+      const msg = make("p", "rv-note");
+      msg.setAttribute("role", "status");
+      msg.hidden = true;
+      if (v.photos.length < PHOTO_MOST){
+        /* accept="image/*" and no capture attribute: a phone then offers
+           the camera and the photo library both, and a computer the
+           Pictures folder. */
+        const input = make("input");
+        input.type = "file"; input.accept = "image/*"; input.multiple = true; input.hidden = true;
+        const take = make("button", "btn-primary rv-take", v.photos.length ? "+ Add another photo" : "Take or choose a photo");
+        take.type = "button";
+        take.addEventListener("click", () => input.click());
+        input.addEventListener("change", () => {
+          const files = [...(input.files || [])].slice(0, PHOTO_MOST - v.photos.length);
+          if (!files.length) return;
+          take.disabled = true; take.textContent = "Getting it ready…";
+          let left = files.length;
+          files.forEach(f => squeezePhoto(f, (out, err) => {
+            if (out && v.photos.length < PHOTO_MOST){ v.photos.push(out); v.binned = undefined; }
+            if (err){ msg.textContent = err; msg.hidden = false; }
+            if (--left === 0){ changed(); paint(); if (err){ const m = s.querySelector(".rv-photos + .rv-note"); if (m){ m.textContent = err; m.hidden = false; } } }
+          }));
+        });
+        s.appendChild(msg);
+        s.appendChild(take);
+        s.appendChild(input);
+        s.appendChild(make("p", "rv-small", "Up to " + PHOTO_MOST + " photos. Make sure all your writing is in the picture and easy to read."));
+      } else {
+        s.appendChild(msg);
+        s.appendChild(make("p", "rv-small", "That's the most photos you can add. Remove one to take it again."));
+      }
+    }
+
+    paint();
+    return {
+      section: s,
+      get: () => {
+        if (sub && sub.kind === "mindmap") v.map = sub.made.get();
+        if (sub && sub.kind === "poster") v.poster = sub.made.get();
+        const out = { kind: v.kind || "" };
+        if (v.cards.length) out.cards = cleanPairs(v.cards, "f", "b");
+        if (v.quiz.length) out.quiz = cleanPairs(v.quiz, "q", "a");
+        if (v.map) out.map = v.map;
+        if (v.poster) out.poster = v.poster;
+        if (v.photos.length) out.photos = v.photos.slice(0, PHOTO_MOST);
+        if (v.binned) out.binned = v.binned;
+        return out;
+      },
+      set: (val) => {
+        if (!val || typeof val !== "object") return;
+        v = {
+          kind: (val.kind === "photo" || REVISE_KINDS[val.kind]) ? val.kind : "",
+          cards: cleanPairs(val.cards, "f", "b"),
+          quiz: cleanPairs(val.quiz, "q", "a"),
+          map: val.map && typeof val.map === "object" ? val.map : null,
+          poster: val.poster && typeof val.poster === "object" ? val.poster : null,
+          photos: (Array.isArray(val.photos) ? val.photos : []).filter(p => typeof p === "string" && /^data:image\//.test(p)).slice(0, PHOTO_MOST),
+          binned: typeof val.binned === "string" ? val.binned : undefined
+        };
+        route = v.kind === "photo" ? "paper" : v.kind ? "here" : "";
+        sub = null;
+        paint();
+      },
+      /* Handed in once there is something of the kind they chose. A photo
+         that a teacher has already cleared away still counts: they did it. */
+      done: () => {
+        if (v.kind === "photo") return v.photos.length > 0 || !!v.binned;
+        if (v.kind === "cards" || v.kind === "quiz") return window.reviseKit.items({ kind: v.kind, cards: v.cards, quiz: v.quiz }).length > 0;
+        if (v.kind === "mindmap"){ if (sub) v.map = sub.made.get(); return window.reviseKit.canRevise({ kind: "mindmap", map: v.map }); }
+        if (v.kind === "poster"){ if (sub) v.poster = sub.made.get(); return !!(v.poster && v.poster.img); }
+        return false;
+      }
+    };
+  };
+
 })();

@@ -30,6 +30,7 @@
   <div class="subtabs worktabs">
     <button class="on" id="tabWork">View work</button>
     <button id="tabProgress">Mark book</button>
+    <button id="tabGlance" hidden>At a glance</button>
   </div>
   <button class="btn-ghost iconbtn" id="setBtn" title="Settings">&#9881;&#65038;</button>
 </div>
@@ -149,6 +150,21 @@
       </div>
     </aside>
   </div>
+</div>
+
+<!-- ================= a revision resource, a class at a time =================
+     Home learning holding a Revision resource task: everyone's on one
+     screen, each with Done and Redo, so a class is checked without opening
+     thirty pieces of work one after another. -->
+<div id="glancePane" class="workwrap glancepane" hidden>
+  <div class="glance-bar">
+    <p class="glance-stats" id="glanceStats"></p>
+    <span class="grow"></span>
+    <button class="btn-ghost" id="glanceToCheck" aria-pressed="false">To check only</button>
+    <button class="btn-ghost" id="glanceBin">Recycle bin</button>
+  </div>
+  <p class="hint" id="glanceMsg" role="status"></p>
+  <div class="glance-grid" id="glanceGrid"></div>
 </div>
 
 <div class="modal-back" id="mBack" hidden><div class="modal" id="mBox"></div></div>
@@ -312,6 +328,10 @@ async function boot(){
       document.title = "Student work \u00b7 " + (lessonJson && lessonJson.title ? lessonJson.title : lessonId);
     }
     if (!PRACTICE) paintSecondTab();
+    if (!PRACTICE && reviseTasks().length){
+      $("tabGlance").hidden = false;
+      await loadRevisionCounts();
+    }
     /* Never held up for this: it is a second fetch on top of the ones the
        markbook already needed, and the table above it is worth showing
        whether or not it ever arrives. An assessment has the markbook in
@@ -527,17 +547,24 @@ on("refreshWork", "click", refreshWork);
    not have to wait for the work to arrive before they can say so. */
 /* An assessment's Markbook button in the console asks for "markbook";
    either word opens whichever of the two this lesson has. */
-let wantedTab = (qs.get("tab") === "progress" || qs.get("tab") === "markbook") ? "progress" : "work";
+let wantedTab = (qs.get("tab") === "progress" || qs.get("tab") === "markbook") ? "progress"
+              : qs.get("tab") === "glance" ? "glance" : "work";
 function tab(which){
-  const progress = which === "progress";
-  wantedTab = progress ? "progress" : "work";
+  /* At a glance only exists for home learning with a revision resource in
+     it, so asking for it anywhere else is View work. */
+  if (which === "glance" && lessonJson && !reviseTasks().length) which = "work";
+  const progress = which === "progress", glance = which === "glance";
+  wantedTab = which;
   $("tabProgress").classList.toggle("on", progress);
-  $("tabWork").classList.toggle("on", !progress);
+  $("tabGlance").classList.toggle("on", glance);
+  $("tabWork").classList.toggle("on", !progress && !glance);
   if (!$("loadPane").hidden) return;      // nothing to show yet
   const mb = markbookMode();
   $("progressPane").hidden = !progress || mb;
   $("markbookPane").hidden = !progress || !mb;
-  $("workPane").hidden = progress;
+  $("glancePane").hidden = !glance;
+  $("workPane").hidden = progress || glance;
+  if (glance){ paintGlance(); return; }
   /* Drawn again on the way in, because marking on the other tab changes
      what it says: a mark saved there is a mark here. */
   if (progress && mb) paintMarkbookPane();
@@ -545,8 +572,248 @@ function tab(which){
   if (!progress && !framedYet) showStudent(idx);
 }
 on("tabProgress", "click", () => tab("progress"));
+on("tabGlance", "click", () => tab("glance"));
 on("tabWork", "click", () => tab("work"));
 tab(wantedTab);
+
+/* ---------------- a revision resource, at a glance ----------------
+   Everything here reads what is already fetched (rows, roster) apart from
+   how often each student has revised with it, which lives in their own
+   __revision row and is fetched once. Done and Redo write the feedback
+   through revise-check; Clear photos moves them to the recycle bin. */
+const REVISION_ID = "__revision";
+let revisionCounts = {};      // username -> { task id: { n, last } }
+let glanceToCheck = false;
+function reviseTasks(){
+  const out = [];
+  const walk = (list) => (list || []).forEach(b => {
+    if (!b) return;
+    if (b.type === "revise") out.push(b);
+    if (Array.isArray(b.blocks)) walk(b.blocks);
+  });
+  if (lessonJson) walk(lessonJson.blocks);
+  return out;
+}
+async function loadRevisionCounts(){
+  revisionCounts = {};
+  try{
+    const r = await fetch(API + "/api/teacher/work?lesson=" + encodeURIComponent(REVISION_ID) +
+                          "&group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+    if (!r.ok) return;
+    ((await r.json()).rows || []).forEach(row => {
+      const mine = row.data && row.data[lessonId];
+      if (mine && typeof mine === "object") revisionCounts[row.username] = mine;
+    });
+  }catch(e){}
+}
+function feedbackOf(row){
+  let f = {};
+  try{ f = JSON.parse((row && row.feedback) || "{}") || {}; }catch(e){ f = {}; }
+  return (f && typeof f === "object") ? f : {};
+}
+const KIND_NAMES = { cards: "Flashcards", quiz: "Quiz questions", mindmap: "Mind map", poster: "Poster", photo: "Photo of paper work" };
+function paintGlance(){
+  const tasks = reviseTasks();
+  const grid = $("glanceGrid");
+  grid.innerHTML = "";
+  if (!tasks.length) return;
+  const t = tasks[0];
+  let done = 0, redo = 0, toCheck = 0, none = 0;
+  /* What has come in first; nothing handed in is the least to look at. */
+  const madeIt = (st) => { const r = rows.find(x => x.username === st.username); return !!(r && r.raw && r.raw[t.id] && r.raw[t.id].kind); };
+  roster.slice().sort((a, b) => (madeIt(b) ? 1 : 0) - (madeIt(a) ? 1 : 0)).forEach(st => {
+    const row = rows.find(r => r.username === st.username);
+    const v = row && row.raw ? row.raw[t.id] : null;
+    const made = !!(v && v.kind);
+    const check = feedbackOf(row).check || "";
+    if (!made) none++;
+    else if (check === "done") done++;
+    else if (check === "redo") redo++;
+    else toCheck++;
+    if (glanceToCheck && (!made || check)) return;
+    grid.appendChild(glanceCard(st, row, t, v, check));
+  });
+  $("glanceStats").textContent = toCheck + " to check · " + done + " done · " + redo + " to redo · " + none + " not started";
+  if (!grid.children.length)
+    grid.appendChild(el("p","hint", glanceToCheck ? "Nothing left to check." : "Nobody in this class yet."));
+}
+function glanceCard(st, row, t, v, check){
+  const card = el("article","glance-card" + (check ? " is-" + check : ""));
+  const head = el("div","glance-head");
+  head.appendChild(el("b","", st.display_name || st.username));
+  const kind = v && v.kind;
+  head.appendChild(el("span","glance-kind", kind ? KIND_NAMES[kind] || kind : "Not started"));
+  card.appendChild(head);
+
+  /* What they made, small enough for a class to fit on one screen. A
+     click opens it in View work, the whole thing, at their page. */
+  const look = el("button","glance-look");
+  look.type = "button";
+  look.title = "Open their work";
+  if (kind === "photo" && Array.isArray(v.photos) && v.photos.length){
+    v.photos.forEach(src => { const im = el("img"); im.src = src; im.alt = "Their photo"; look.appendChild(im); });
+  } else if (kind === "photo" && v.binned){
+    look.appendChild(el("p","glance-words", "Photos cleared away " + niceSaved(v.binned) + "."));
+  } else if (kind === "poster" && v.poster && v.poster.img){
+    const im = el("img"); im.src = v.poster.img; im.alt = "Their poster"; look.appendChild(im);
+  } else if (kind === "cards" || kind === "quiz"){
+    const list = (kind === "cards" ? v.cards : v.quiz) || [];
+    const full = list.filter(x => x && String(x.f || x.q || "").trim() && String(x.b || x.a || "").trim());
+    look.appendChild(el("p","glance-words", full.length + (kind === "cards" ? (full.length === 1 ? " card" : " cards") : (full.length === 1 ? " question" : " questions"))));
+    full.slice(0, 3).forEach(x => look.appendChild(el("p","glance-line", (x.f || x.q) + " → " + (x.b || x.a))));
+  } else if (kind === "mindmap" && v.map && Array.isArray(v.map.nodes)){
+    const nodes = v.map.nodes;
+    const root = nodes.find(n => n.parent === null);
+    look.appendChild(el("p","glance-words", (root && root.text) || "Mind map"));
+    nodes.filter(n => root && n.parent === root.id).slice(0, 5)
+      .forEach(n => look.appendChild(el("p","glance-line", "• " + n.text)));
+    look.appendChild(el("p","glance-line", (nodes.length - 1) + " boxes in all"));
+  } else {
+    look.appendChild(el("p","glance-words", kind ? "Started, nothing in it yet" : "Nothing handed in yet"));
+  }
+  look.addEventListener("click", () => {
+    const at = roster.findIndex(x => x.username === st.username);
+    if (at >= 0) idx = at;
+    tab("work");
+    showStudent(idx);
+  });
+  card.appendChild(look);
+
+  /* How often they have revised from it. Only a digital one can say: a
+     sheet of paper is revised from at the kitchen table. */
+  const counted = revisionCounts[st.username] && revisionCounts[st.username][t.id];
+  const n = counted ? Number(counted.n) || 0 : 0;
+  card.appendChild(el("p","glance-count",
+    kind === "photo" ? "Revising on paper is not counted"
+    : !kind ? ""
+    : n ? "Revised with it " + n + (n === 1 ? " time" : " times") + ", last " + niceSaved(counted.last)
+    : "Not revised with it yet"));
+
+  if (kind && !st.guest){
+    const btns = el("div","glance-btns");
+    const doneBtn = el("button","btn-ghost glance-done" + (check === "done" ? " on" : ""), "✓ Done");
+    const redoBtn = el("button","btn-ghost glance-redo" + (check === "redo" ? " on" : ""), "Redo");
+    [doneBtn, redoBtn].forEach(btn => { btn.type = "button"; });
+    doneBtn.setAttribute("aria-pressed", String(check === "done"));
+    redoBtn.setAttribute("aria-pressed", String(check === "redo"));
+    /* Pressed again, it takes the mark back off. */
+    doneBtn.addEventListener("click", () => setCheck(st, row, check === "done" ? "" : "done", card));
+    redoBtn.addEventListener("click", () => setCheck(st, row, check === "redo" ? "" : "redo", card));
+    btns.appendChild(doneBtn); btns.appendChild(redoBtn);
+    if (kind === "photo" && Array.isArray(v.photos) && v.photos.length){
+      const bin = el("button","btn-ghost glance-binit", "Clear photos");
+      bin.type = "button";
+      bin.title = "Move their photos to the recycle bin. They are kept there for 30 days.";
+      bin.addEventListener("click", () => binPhotos(st, row, t, bin));
+      btns.appendChild(bin);
+    }
+    card.appendChild(btns);
+  }
+  return card;
+}
+function glanceSay(text){ $("glanceMsg").textContent = text || ""; }
+async function setCheck(st, row, check, card){
+  card.querySelectorAll(".glance-btns button").forEach(b => { b.disabled = true; });
+  try{
+    const r = await fetch(API + "/api/teacher/revise-check", { method: "POST", headers: HJ(),
+      body: JSON.stringify({ username: st.username, lesson: lessonId, check }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "That did not save. Try again.");
+    const f = feedbackOf(row);
+    if (check) f.check = check; else delete f.check;
+    if (row) row.feedback = JSON.stringify(f);
+    else rows.push({ username: st.username, display_name: st.display_name, data: {}, raw: {}, feedback: JSON.stringify(f) });
+    glanceSay("");
+    paintGlance();
+  }catch(e){
+    glanceSay(e.message);
+    card.querySelectorAll(".glance-btns button").forEach(b => { b.disabled = false; });
+  }
+}
+async function binPhotos(st, row, t, btn){
+  btn.disabled = true;
+  try{
+    const r = await fetch(API + "/api/teacher/bin-photos", { method: "POST", headers: HJ(),
+      body: JSON.stringify({ username: st.username, lesson: lessonId, task: t.id }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "Those photos could not be cleared. Try again.");
+    const v = Object.assign({}, row.raw[t.id], { photos: [], binned: d.at });
+    row.raw = Object.assign({}, row.raw, { [t.id]: v });
+    row.data = Object.assign({}, row.data, { [t.id]: v });
+    const f = feedbackOf(row);
+    f.binned = Object.assign({}, f.binned || {}, { [t.id]: d.at });
+    row.feedback = JSON.stringify(f);
+    glanceSay((st.display_name || st.username) + "'s photos are in the recycle bin for 30 days.");
+    paintGlance();
+  }catch(e){
+    glanceSay(e.message);
+    btn.disabled = false;
+  }
+}
+async function openBin(){
+  let d;
+  try{
+    const r = await fetch(API + "/api/teacher/photo-bin?group=" + encodeURIComponent(cls), { headers: H(), cache:"no-store" });
+    d = await r.json();
+    if (!r.ok) throw new Error(d.error || "The recycle bin could not be opened.");
+  }catch(e){ glanceSay(e.message); return; }
+  const mine = (d.rows || []).filter(x => x.lesson === lessonId);
+  openModal(box => {
+    box.classList.add("glance-binbox");
+    box.appendChild(el("h2","", "Recycle bin"));
+    box.appendChild(el("p","modal-text",
+      "Photos cleared away from this home learning. Each is emptied for good " + (d.days || 30) + " days after it was cleared."));
+    if (!mine.length){ box.appendChild(el("p","hint", "The recycle bin is empty.")); return; }
+    const list = el("div","glance-binlist");
+    mine.forEach(item => {
+      const line = el("div","glance-binrow");
+      const gone = new Date(new Date(item.at).getTime() + (d.days || 30) * 86400000);
+      const left = Math.max(0, Math.ceil((gone - Date.now()) / 86400000));
+      const who = el("div","glance-binwho");
+      who.appendChild(el("b","", item.name || item.username));
+      who.appendChild(el("span","hint", " cleared " + niceSaved(item.at) + ", " + left + (left === 1 ? " day" : " days") + " left"));
+      line.appendChild(who);
+      const peek = el("button","btn-ghost", "View");
+      const back = el("button","btn-ghost", "Restore");
+      const rid = el("button","btn-ghost", "Empty now");
+      [peek, back, rid].forEach(b => { b.type = "button"; });
+      const pics = el("div","glance-binpics");
+      peek.addEventListener("click", async () => {
+        if (pics.children.length){ pics.innerHTML = ""; return; }
+        const r = await fetch(API + "/api/teacher/photo-bin?id=" + item.id, { headers: H(), cache:"no-store" });
+        const got = await r.json().catch(() => ({}));
+        (got.photos || []).forEach(src => { const im = el("img"); im.src = src; im.alt = "Cleared photo"; pics.appendChild(im); });
+      });
+      const act = async (what) => {
+        back.disabled = rid.disabled = true;
+        const r = await fetch(API + "/api/teacher/photo-bin", { method: "POST", headers: HJ(),
+          body: JSON.stringify({ id: item.id, [what]: true }) });
+        const got = await r.json().catch(() => ({}));
+        if (!r.ok){ line.appendChild(el("p","hint", got.error || "That did not work. Try again.")); back.disabled = rid.disabled = false; return; }
+        line.remove();
+        if (what === "restore"){
+          rows = await fetchWork();
+          paintGlance();
+        }
+      };
+      back.addEventListener("click", () => act("restore"));
+      rid.addEventListener("click", () => act("remove"));
+      const btns = el("div","glance-btns");
+      btns.appendChild(peek); btns.appendChild(back); btns.appendChild(rid);
+      line.appendChild(btns);
+      line.appendChild(pics);
+      list.appendChild(line);
+    });
+    box.appendChild(list);
+  });
+}
+on("glanceToCheck", "click", () => {
+  glanceToCheck = !glanceToCheck;
+  $("glanceToCheck").setAttribute("aria-pressed", String(glanceToCheck));
+  $("glanceToCheck").classList.toggle("on", glanceToCheck);
+  paintGlance();
+});
+on("glanceBin", "click", openBin);
 
 /* ---------------- the markbook ----------------
    An assessment, standard or practical, has the markbook where a lesson has

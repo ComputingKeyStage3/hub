@@ -400,6 +400,7 @@ const TASK_ICONS = {
   notes:     '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/>',
   helper:    '<path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.2-.8.6-.8 1.1"/><path d="M12 14h.01"/>',
   mindmap:   '<circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5.5" r="1.8"/><circle cx="19.5" cy="5.5" r="1.8"/><circle cx="4.5" cy="18.5" r="1.8"/><circle cx="19.5" cy="18.5" r="1.8"/><path d="M9.8 9.8 5.8 6.8M14.2 9.8l4-3M9.8 14.2l-4 3M14.2 14.2l4 3"/>',
+  revise:    '<rect x="3" y="7" width="13" height="10" rx="1.5"/><path d="M8 4.5h11.5a1.5 1.5 0 0 1 1.5 1.5v8M6.5 12h6"/>',
   board:     '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 13c2-4 3 1 5-2s3 1 5-1M9 21l3-4 3 4"/>',
   storyboard:'<rect x="2.5" y="7" width="5.6" height="10" rx="1"/><rect x="9.2" y="7" width="5.6" height="10" rx="1"/><rect x="15.9" y="7" width="5.6" height="10" rx="1"/>',
   poster:    '<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><path d="M8 6.5h8M7.5 18l3.2-4 2.3 2.6 1.7-1.9 2.3 3.3z"/>',
@@ -1760,6 +1761,35 @@ EDITORS.mindmap = function(b, k){
   settings(() => {
     toggleRow([["lockCentre","Students cannot change the middle", false]]);
   });
+};
+
+/* A revision resource. The teacher only says which kinds are on offer:
+   what goes in it comes from the student and their Knowledge Organiser,
+   which is attached to the lesson as a document in the usual way. */
+EDITORS.revise = function(b, k){
+  const { F, add, redraw } = k;
+  F("Heading (optional)", "title", { help:"Also the idea in the middle of a mind map, so the unit name works well here." });
+  F("Instruction", "task", { area:true, rows:2 });
+  const ALL = [["cards","Flashcards"],["mindmap","Mind map"],["poster","Poster"],["quiz","Quiz questions"],["photo","Photo of paper work"]];
+  if (!Array.isArray(b.kinds) || !b.kinds.length) b.kinds = ALL.map(x => x[0]);
+  const w = el("div","bfield");
+  w.dataset.toggles = "1";
+  w.appendChild(el("label","", "What students can choose"));
+  const row = el("div","brow");
+  ALL.forEach(([key, name]) => {
+    const on = b.kinds.indexOf(key) >= 0;
+    const btn = el("button","btn-ghost bmini2" + (on ? " right" : ""), name + ": " + (on ? "on" : "off"));
+    btn.addEventListener("click", () => {
+      /* the last one stays on: with nothing to choose there is no task */
+      if (on && b.kinds.length === 1) return;
+      b.kinds = on ? b.kinds.filter(x => x !== key) : ALL.map(x => x[0]).filter(x => x === key || b.kinds.indexOf(x) >= 0);
+      saveDraft(); redraw(); schedulePreview();
+    });
+    row.appendChild(btn);
+  });
+  row.appendChild(helpDot("A photo is up to two pictures of work done on paper. Flashcards and quiz questions get a Test me button, and every go at it is counted for you in Mark work."));
+  w.appendChild(row);
+  add(w);
 };
 
 EDITORS.board = function(b, k){

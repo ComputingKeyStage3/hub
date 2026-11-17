@@ -245,6 +245,7 @@
         <div class="palbody" hidden>
           <button class="pal" data-add="notes"><b>Notes</b><span>Their own notes, with formatting</span></button>
           <button class="pal" data-add="mindmap"><b>Mind map</b><span>A middle idea with branches</span></button>
+          <button class="pal" data-add="revise"><b>Revision</b><span>Flashcards, a mind map, poster or quiz, or a photo of paper work</span></button>
           <button class="pal" data-add="board"><b>Whiteboard</b><span>Draw and write freely</span></button>
           <button class="pal" data-add="storyboard"><b>Storyboard</b><span>Plan an animation, panel by panel</span></button>
           <button class="pal" data-add="poster"><b>Poster</b><span>Make a poster in an easy photo editor</span></button>
@@ -656,6 +657,8 @@ const BLANK = {
   helper:   () => ({ type:"helper", title:"Stuck? Ask for help", topic:"photoshop",
                      task:"Type what you want to do in Photoshop, or what has gone wrong." }),
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
+  revise:   () => ({ type:"revise", title:"", task:"Use your Knowledge Organiser to make a revision resource. Make it here, or do it on paper and take a photo.",
+                     kinds:["cards","mindmap","poster","quiz","photo"] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
   poster:   () => ({ type:"poster", title:"Make a poster", task:"", heading:"" }),
   pixels:   () => ({ type:"pixels", title:"", task:"", w:8, h:8, depth:1 }),
@@ -761,7 +764,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boardgame:"Board game", swipe:"Swipe", quest:"Quest", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", revise:"Revision", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boardgame:"Board game", swipe:"Swipe", quest:"Quest", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -1445,6 +1448,14 @@ function compileOne(b, id, target){
       push(keepArrays({ type:"mindmap", id, title: b.title || "", task: b.task || "",
         centre: b.centre || "", lockCentre: b.lockCentre === true,
         starter: Array.isArray(b.starter) ? b.starter : [] }));
+    else if (b.type === "revise"){
+      /* Which kinds a student may pick. All of them when none is ticked:
+         a resource with nothing to choose would be a task nobody can do. */
+      const ALL = ["cards","mindmap","poster","quiz","photo"];
+      const kinds = (Array.isArray(b.kinds) ? b.kinds : []).filter(k => ALL.indexOf(k) >= 0);
+      push(keepArrays({ type:"revise", id, title: b.title || "", task: b.task || "",
+        kinds: kinds.length ? ALL.filter(k => kinds.indexOf(k) >= 0) : ALL }));
+    }
     else if (b.type === "board")
       push(keepArrays({ type:"board", id, title: b.title || "", task: b.task || "",
         height: Number(b.height) || 420 }));

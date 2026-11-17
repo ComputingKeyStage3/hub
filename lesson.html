@@ -552,7 +552,7 @@ function parseFeedback(raw){
   try{ f = JSON.parse(raw); }catch(e){ f = { comment: String(raw) }; }
   if (!f || typeof f !== "object") f = { comment: String(raw) };
   /* a note can be only ticks, given while marking before anything was written */
-  if (!f.strength && !f.target && !f.comment && !f.ticks && !f.edits) return null;
+  if (!f.strength && !f.target && !f.comment && !f.ticks && !f.edits && !f.check && !f.binned) return null;
   return f;
 }
 /* a practical is marked by hand, so the mark comes from the results list */
@@ -2469,7 +2469,7 @@ function arrangeHomework(){
       if (ASSESS_READING.includes(entry.type)) return;
       const n = ++num;
       entry.item.classList.add("aq-card");
-      entry.item.insertBefore(tel("p","aq-num","Question " + n), entry.item.firstChild);
+      entry.item.insertBefore(tel("p","aq-num", entry.block && entry.block.type === "revise" ? "Revision" : "Question " + n), entry.item.firstChild);
       items.push({ step: i, block: entry.block, num: n, item: entry.item, built: entry.built });
       questionNo[entry.block.id] = n;     // the marked work numbers them the same
     });
@@ -2505,7 +2505,7 @@ function assessItem(st, b, num){
   item.dataset.blockId = b.id;
   if (num !== null && num !== undefined){
     item.classList.add("aq-card");
-    item.appendChild(tel("p","aq-num","Question " + num));
+    item.appendChild(tel("p","aq-num", b.type === "revise" ? "Revision" : "Question " + num));
   }
   if (b.type !== "picture"){
     if (bb.title) item.appendChild(el("h3","pg-h", bb.title));
@@ -2541,6 +2541,8 @@ function questionAnswered(it){
     case "binary": case "binadd":
       return !!(v && Array.isArray(v.answers) && v.answers.length && v.answers.every(filled));
     case "ide": case "web": return !!(v && v.ran);
+    /* Picking a kind is not doing it: answered once its check would pass. */
+    case "revise": try{ return it.built.check().ok; }catch(e){ return false; }
   }
   /* A written answer or a quiz has no check that can fail, so in home learning,
      which can hold them, that would count them as answered before they were
@@ -2898,7 +2900,12 @@ function paintAssessTracker(){
   const onSummaryNow = !!(ds && !ds.hidden);
   /* Only while the questions are on screen: the pages before them have no
      questions to count, and the summary has a score to show instead. */
-  const showing = A.onQuestions && !onSummaryNow;
+  /* Home learning that is nothing but revision has one thing to do, and a
+     bar numbering it down the side is clutter. */
+  const onlyRevision = A.items.length > 0 && A.items.every(it => it.block && it.block.type === "revise");
+  const showing = A.onQuestions && !onSummaryNow && !onlyRevision;
+  /* nor is there a "last question" to have reached */
+  A.screens.forEach(sc => sc.el.querySelectorAll(".assess-end").forEach(p => { p.hidden = onlyRevision; }));
   A.bar.hidden = !showing;
   A.navBtn.hidden = !showing;
   document.body.classList.toggle("assess-on-questions", showing);
@@ -3805,6 +3812,10 @@ const TASK_ICON = {
   mindmap:   { name:"Mind map",
                d:'<circle cx="5.5" cy="12" r="2.5"/><circle cx="18" cy="6.5" r="2"/>' +
                  '<circle cx="18" cy="17.5" r="2"/><path d="M8 11l8-3.6M8 13l8 3.6"/>' },
+  /* two cards, one behind the other */
+  revise:    { name:"Revision",
+               d:'<rect x="3" y="7" width="13" height="10" rx="1.5"/><path d="M8 4.5h11.5a1.5 1.5 0 0 1 1.5 1.5v8"/>' +
+                 '<path d="M6.5 12h6"/>' },
   /* three frames along a strip */
   storyboard:{ name:"Storyboard",
                d:'<rect x="2.5" y="7" width="5.6" height="10" rx="1"/><rect x="9.2" y="7" width="5.6" height="10" rx="1"/>' +
@@ -5018,7 +5029,8 @@ function buildBlock(b, i){
               exam:rExamTask, table:rTableTask, hotspot:rHotspotTask,
               extension:rExtension, group:rGroup, choice:rChoice,
               poster:rPosterTask, boss:rBossTask, pixels:rPixelsTask,
-              boardgame:rBoardGameTask, swipe:rSwipeTask, quest:rQuestTask }[b.type];
+              boardgame:rBoardGameTask, swipe:rSwipeTask, quest:rQuestTask,
+              revise:rReviseTask }[b.type];
   if (!R){ console.warn("Unknown block type:", b.type); return null; }
   try {
     const made = R(b);
@@ -6544,6 +6556,33 @@ function applyTeacherEdits(){
       changed = true;
       localStorage.setItem(seenKey, String(e.at));
     }catch(err){}
+  });
+  if (changed && restoreDone) save();
+  applyBinnedPhotos();
+}
+/* Photos a teacher put in the recycle bin. They went from the database
+   then, but this browser still holds its own copy of the work and hands
+   that in whole, which would put them straight back. So the copy here
+   loses them too, once, for the time they were binned. A photo taken
+   after that time is a new one and stays. */
+function applyBinnedPhotos(){
+  const binned = teacherNote && teacherNote.binned;
+  if (spectate || !binned || typeof binned !== "object") return;
+  let changed = false;
+  Object.keys(binned).forEach(id => {
+    const f = fields[id];
+    if (!f || typeof f.get !== "function") return;
+    /* Remembered the way a teacher's code edit is, so each clearing is
+       done once and new photos taken afterwards are left alone. */
+    const seenKey = "hub_bin_" + lessonId + "_" + id;
+    try{ if (localStorage.getItem(seenKey) === String(binned[id])) return; }catch(e){}
+    const v = f.get();
+    if (v && v.kind === "photo"){
+      v.photos = [];
+      v.binned = String(binned[id]);
+      try{ f.set(v); changed = true; }catch(e){}
+    }
+    try{ localStorage.setItem(seenKey, String(binned[id])); }catch(e){}
   });
   if (changed && restoreDone) save();
 }
@@ -8873,6 +8912,54 @@ function floatHelp(b, section){
   return true;
 }
 const rMindmapTask = (b) => wrapExtra(b, window.rMindmap, "Mind map");
+/* A revision resource is a wrapExtra task that also says when it is used
+   to revise from, which the lesson page counts (countRevision). */
+function rReviseTask(b){
+  const made = window.rRevise(b, { changed: markDirty, assessment: marksAtEnd(),
+                                   revised: () => countRevision(b.id) });
+  fields[b.id] = { get: made.get, set: made.set };
+  return {
+    section: made.section,
+    check: () => (b.required === false || made.done())
+      ? { ok:true }
+      : { ok:false, message:"There is still something to do here" },
+    brief: { eyebrow: "Revision", title: b.title || "", text: b.task || "" }
+  };
+}
+
+/* ---------- how often a revision resource is revised from ----------
+   Each Test me, or each look at a mind map or poster from the finished
+   screen, is one go. Kept in the student's own row under the reserved
+   lesson id __revision, the way the practice sandbox keeps its programs:
+   { <lesson id>: { <task id>: { n, last } } }. Not in this lesson's work,
+   because that row is written whole from whatever this browser holds and
+   a count on another computer would be written over. A teacher's view, a
+   preview and the offline site count nothing. */
+const REVISION_ID = "__revision";
+let revisionRow = null;          // what the server holds, once read
+let revisionSending = Promise.resolve();
+function countRevision(taskId){
+  if (spectate || teacherTools || OFFLINE || !token || !apiReady || !taskId) return;
+  revisionSending = revisionSending.then(async () => {
+    try{
+      if (!revisionRow){
+        const r = await fetch(API + "/api/work?lesson=" + encodeURIComponent(REVISION_ID),
+                              { headers: { Authorization: "Bearer " + token } });
+        if (!r.ok) return;
+        const d = await r.json();
+        revisionRow = (d && d.data && typeof d.data === "object" && !Array.isArray(d.data)) ? d.data : {};
+      }
+      const mine = revisionRow[lessonId] = Object.assign({}, revisionRow[lessonId]);
+      const was = mine[taskId] || {};
+      mine[taskId] = { n: (Number(was.n) || 0) + 1, last: new Date().toISOString() };
+      await fetch(API + "/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ lesson: REVISION_ID, data: revisionRow })
+      });
+    }catch(e){ /* a go not counted is not worth telling a child about */ }
+  });
+}
 
 function rQuiz(b){
   /* A quiz used to hold a student on a question until they got it right,
@@ -10936,6 +11023,22 @@ function labelMarks(b, v){
   });
   return { got: items.filter(x => x.ok).length, max: items.length, items };
 }
+/* A revision resource in View my work: what it was, in words, since the
+   thing itself is opened from the finished screen. */
+function reviseSaid(v){
+  if (!v || typeof v !== "object") return "";
+  const n = window.reviseKit ? window.reviseKit.items(v).length : 0;
+  if (v.kind === "cards") return n ? n + (n === 1 ? " flashcard" : " flashcards") : "";
+  if (v.kind === "quiz") return n ? n + (n === 1 ? " quiz question" : " quiz questions") : "";
+  if (v.kind === "mindmap") return "A mind map";
+  if (v.kind === "poster") return "A poster";
+  if (v.kind === "photo"){
+    const p = Array.isArray(v.photos) ? v.photos.length : 0;
+    return p ? p + (p === 1 ? " photo" : " photos") + " of your work on paper"
+             : v.binned ? "Photos of your work on paper" : "";
+  }
+  return "";
+}
 function computeAssessment(){
   const perQ = [], byTopic = {};
   let score = 0, outOf = 0, n = 0;
@@ -10946,7 +11049,8 @@ function computeAssessment(){
     if (!home) return;
     n++;
     const v = fields[b.id] ? fields[b.id].get() : null;
-    const said = (Array.isArray(v) ? v : [v]).filter(x => typeof x === "string" && x.trim()).join("\n\n");
+    const said = b.type === "revise" ? reviseSaid(v)
+      : (Array.isArray(v) ? v : [v]).filter(x => typeof x === "string" && x.trim()).join("\n\n");
     perQ.push({ id: b.id, n: questionNo[b.id] || n, type: "unmarked", pts: 0, max: 0, auto: 0,
                 title: stripTags(b.prompt || b.heading || b.title || b.task || "") || "Your work",
                 review: { yours: said } });
@@ -11600,6 +11704,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
     hero.appendChild(el("div","done-pct", pct + "%"));
   }
   if (home) homeworkHandIn(hero, justFinished);
+  if (home) reviseOnSummary(hero);
   /* A way straight into the marked work, where the "result saved" line used
      to sit. It fades in last, once the cards have settled. */
   const seeBtn = el("button","btn-primary done-save fadein", home ? "View my work" : "View my assessment");
@@ -11714,6 +11819,36 @@ function renderAssessmentComplete(justFinished, res, st, sent){
 /* Home learning hands itself in from its summary, there being no rocket to do
    it first, and this line is what says it arrived. Offline nothing has gone
    anywhere, so the way to hand it in is here instead, as on a lesson's. */
+/* Home learning holding a revision resource: what the teacher made of it,
+   and the way back into it to revise. This screen is where a student who
+   has handed it in lands every time they open it again, so it is the
+   place to revise from. */
+function reviseOnSummary(hero){
+  const tasks = homeworkTasks().filter(b => b.type === "revise");
+  if (!tasks.length) return;
+  const check = teacherNote && teacherNote.check;
+  if (check === "done"){
+    hero.appendChild(el("p","rv-checked", "✓ Your teacher has checked this."));
+  } else if (check === "redo"){
+    hero.appendChild(el("p","rv-redo", "Your teacher would like you to have another go at this."));
+    if (!spectate && !markingLocked){
+      const again = el("button","btn-primary fadein", "Have another go");
+      again.addEventListener("click", () => reopenAssessment());
+      hero.appendChild(again);
+    }
+  }
+  if (!window.reviseKit) return;
+  tasks.forEach(b => {
+    const v = fields[b.id] ? fields[b.id].get() : null;
+    if (!window.reviseKit.canRevise(v)) return;
+    const word = v.kind === "cards" ? "Revise with my flashcards"
+               : v.kind === "quiz" ? "Test myself with my quiz"
+               : v.kind === "mindmap" ? "Revise with my mind map" : "Revise with my poster";
+    const go = el("button","btn-primary rv-go fadein", word);
+    go.addEventListener("click", () => window.reviseKit.open(b, v, () => countRevision(b.id)));
+    hero.appendChild(go);
+  });
+}
 function homeworkHandIn(hero, justFinished){
   const status = el("p","handin");
   hero.appendChild(status);
@@ -14059,6 +14194,44 @@ function buildPdf(){
          run it over onto a second sheet. */
       const w = W * 0.55;
       out.push({ t: "img", data: data, fmt: "JPEG", w: w, h: w * 848 / 600 });
+      return out;
+    }
+    /* A revision resource prints as whichever kind they made, through the
+       branch that kind already has, so a mind map made here prints the way
+       a Mind map task does. */
+    if (b.type === "revise"){
+      const kind = v && v.kind;
+      const named = { cards: "Flashcards", quiz: "Quiz questions", mindmap: "Mind map", poster: "Poster", photo: "Photos" }[kind];
+      if (kind === "mindmap") return partsFor({ type: "mindmap", title: title ? title + ": mind map" : "Mind map" }, v.map, f);
+      if (kind === "poster") return partsFor({ type: "poster", title: title ? title + ": poster" : "Poster" }, v.poster, f);
+      out.push({ t: "text", face: "task", text: (title || "Revision") + (named ? ": " + named.toLowerCase() : "") });
+      if (kind === "cards" || kind === "quiz"){
+        const items = window.reviseKit ? window.reviseKit.items(v) : [];
+        if (!items.length){ out.push(answerBox("", "Nothing written")); return out; }
+        items.forEach((it, i) => {
+          out.push({ t: "text", face: "sub", text: (i + 1) + ". " + pdfText(kind === "quiz" ? it.q : it.f) });
+          out.push({ t: "text", face: "p", text: pdfText(kind === "quiz" ? it.a : it.b), colour: PDF.MUTED });
+        });
+        return out;
+      }
+      if (kind === "photo"){
+        const photos = (v && Array.isArray(v.photos)) ? v.photos : [];
+        if (!photos.length){
+          out.push(answerBox("", v && v.binned ? "Photos looked at and cleared away by the teacher" : "No photo added"));
+          return out;
+        }
+        photos.forEach(data => {
+          try{
+            const props = doc.getImageProperties(data);
+            let w = W, h = (props.height / props.width) * W;
+            const maxH = PDF.BOTTOM - PDF.M;
+            if (h > maxH){ h = maxH; w = (props.width / props.height) * h; }
+            out.push({ t: "img", data: data, fmt: "JPEG", w: w, h: h });
+          }catch(e){ out.push(answerBox("", "This photo could not be added")); }
+        });
+        return out;
+      }
+      out.push(answerBox("", "Not started"));
       return out;
     }
     if (b.type === "boss"){

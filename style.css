@@ -8909,3 +8909,77 @@ body.dc-pin-right.sl-pin-right .hp-fab, body.dc-pin-right.sl-pin-right .hp-float
   .topbar > #brief h2{ font-size:var(--text-base) }
   .topbar > #brief p{ font-size:var(--text-xs) }
 }
+
+/* ---------- Revision resource ----------
+   Its own names throughout (rv-), so nothing here beats a rule meant for
+   another task, and its phone rules sit with it. */
+.revise .rv-ask{font-size:var(--text-md); font-weight:700; margin:0 0 12px}
+.revise .rv-two, .revise .rv-kinds{display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr))}
+.revise .rv-pick{display:flex; flex-direction:column; gap:4px; text-align:left; padding:16px 18px;
+  background:var(--panel); border:1.5px solid var(--line); border-radius:var(--rad-md); cursor:pointer;
+  color:var(--text); font:inherit; min-height:44px}
+.revise .rv-pick:hover, .revise .rv-pick:focus-visible{border-color:var(--amber)}
+.revise .rv-pick b{font-size:var(--text-md)}
+.revise .rv-pick span{color:var(--muted); font-size:var(--text-sm)}
+.revise .rv-pick.rv-big{padding:24px 22px}
+.revise .rv-back{margin:0 0 10px}
+.revise .rv-pairs{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; counter-reset:rv}
+.revise .rv-pair{display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:start; counter-increment:rv}
+.revise .rv-in{width:100%; box-sizing:border-box; resize:vertical; font:inherit; padding:8px 10px;
+  border:1.5px solid var(--line); border-radius:var(--rad-sm); background:var(--panel); color:var(--text)}
+.revise .rv-foot{margin-top:12px; gap:10px; flex-wrap:wrap}
+.revise .rv-photos{display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); margin-bottom:12px}
+.revise .rv-photos:empty{display:none}
+.revise .rv-photo{margin:0; border:1.5px solid var(--line); border-radius:var(--rad-md); overflow:hidden; background:var(--panel)}
+.revise .rv-photo img{display:block; width:100%; max-height:420px; object-fit:contain; background:#fff}
+.revise .rv-photo-tools{display:flex; gap:6px; padding:6px; justify-content:space-between}
+.revise .rv-small, .revise .rv-note{color:var(--muted); font-size:var(--text-sm); margin:8px 0 0}
+.rv-play{max-width:560px; width:100%; text-align:center}
+.rv-count{color:var(--muted); font-size:var(--text-sm); margin:0 0 10px}
+.rv-card{display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; width:100%;
+  min-height:220px; padding:24px; box-sizing:border-box; cursor:pointer; font:inherit; color:var(--text);
+  background:var(--panel); border:2px solid var(--line); border-radius:var(--rad-md)}
+.rv-card.over{border-color:var(--mint)}
+.rv-side{margin:0; color:var(--muted); font-size:var(--text-sm); text-transform:uppercase; letter-spacing:.06em}
+.rv-words{margin:0; font-size:var(--text-lg); white-space:pre-wrap; overflow-wrap:anywhere}
+.rv-moves{display:flex; gap:10px; justify-content:center; margin-top:14px; flex-wrap:wrap}
+.rv-look{max-width:min(960px, 96vw); width:100%}
+.rv-look-img{display:block; max-width:100%; max-height:70vh; max-height:70dvh; margin:0 auto}
+.rv-readonly .map-bar, .rv-readonly .map-hint{display:none}
+.rv-readonly{pointer-events:none}
+.done-hero .rv-go{margin-top:10px}
+.rv-checked{color:var(--mint); font-weight:700; margin:8px 0 0}
+.rv-redo{color:var(--amber-dark); font-weight:700; margin:8px 0 6px}
+@media (max-width:620px){
+  .revise .rv-pair{grid-template-columns:1fr auto}
+  .revise .rv-pair .rv-in:nth-child(2){grid-row:2; grid-column:1}
+  .revise .rv-pair .rv-del{grid-row:1 / span 2; grid-column:2}
+  .rv-card{min-height:180px}
+}
+
+/* ---------- At a glance: a class of revision resources ---------- */
+.glancepane .glance-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px}
+.glancepane .glance-stats{margin:0; font-weight:700}
+.glancepane .glance-bar .on{border-color:var(--amber)}
+.glancepane .glance-grid{display:grid; gap:14px; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr))}
+.glance-card{display:flex; flex-direction:column; gap:8px; padding:12px; background:var(--panel);
+  border:1.5px solid var(--line); border-radius:var(--rad-md); min-width:0}
+.glance-card.is-done{border-color:var(--mint)}
+.glance-card.is-redo{border-color:var(--amber)}
+.glance-head{display:flex; justify-content:space-between; gap:8px; align-items:baseline}
+.glance-head b{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.glance-kind{color:var(--muted); font-size:var(--text-sm); white-space:nowrap}
+.glance-look{display:flex; flex-direction:column; gap:4px; align-items:stretch; text-align:left; height:180px; overflow:hidden;
+  padding:8px; border:1px solid var(--line); border-radius:var(--rad-sm); background:var(--panel-2); cursor:zoom-in;
+  color:var(--text); font:inherit}
+.glance-look img{display:block; width:100%; min-height:0; flex:1 1 0; object-fit:contain; background:#fff}
+.glance-words{margin:0; font-weight:700}
+.glance-line{margin:0; font-size:var(--text-sm); color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.glance-count{margin:0; font-size:var(--text-sm); color:var(--muted); min-height:1.2em}
+.glance-btns{display:flex; gap:6px; flex-wrap:wrap}
+.glance-done.on{border-color:var(--mint); color:var(--mint); font-weight:700}
+.glance-redo.on{border-color:var(--amber); color:var(--amber-dark); font-weight:700}
+.glance-binlist{display:flex; flex-direction:column; gap:10px}
+.glance-binrow{display:flex; flex-direction:column; gap:6px; padding:8px 0; border-bottom:1px solid var(--line)}
+.glance-binpics{display:flex; gap:8px; flex-wrap:wrap}
+.glance-binpics img{max-width:220px; max-height:220px; object-fit:contain; background:#fff}

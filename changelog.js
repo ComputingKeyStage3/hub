@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.2", text:"New Revision task for home learning: students make flashcards, a mind map, a poster or quiz questions on the hub, or hand in up to two photos of work done on paper. Flashcards and quizzes have Test me, and each go is counted. Mark work has an At a glance tab with Done and Redo for the whole class, and photos can be cleared to a recycle bin that empties itself after 30 days." },
   { v:"18.1", text:"GCSE and A Level students get a new home page with Home, Lessons, Topics, Revise and Feedback down the side (along the bottom on a phone). Topics lists lessons by specification point and lets students rate how confident they are. Home learning now shows on students' Home Learning tab." },
   { v:"18.0.3",text:"Console: Back and Forward buttons sit beside Refresh at the top, in place of each screen's own back link, so every screen starts higher up. Back now works first time after closing a pop-up." },
   { v:"18.0.2", text:"Console: cards no longer come in twice, a class opens by growing out of its tile, and tabs slide their highlight across. A class's Units, Students and Progress tabs now change only the pane underneath: the heading, the trail at the top and Back stay as they are." },
