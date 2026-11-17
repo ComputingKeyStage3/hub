@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.3.3", text:"A student who gets their password wrong too many times waits a few minutes before trying again. Passwords lists anyone locked out, with Let them back in to end the wait straight away." },
   { v:"18.3.2", text:"Students sign in with their username and password together, with no Continue step. A student with no password yet signs in the first time with the class starting password, then picks their own." },
   { v:"18.3.1", text:"A poster inside a Revision task no longer freezes the page a moment after it is first changed. Posters on their own also stop making a fresh picture every time the lesson saves." },
   { v:"18.3", text:"New Revision task for home learning: students make flashcards, a mind map, a poster or quiz questions on the hub, or hand in up to two photos of work done on paper. Flashcards and quizzes have Test me, and each go is counted. Mark work has an At a glance tab with Done and Redo for the whole class, and photos can be cleared to a recycle bin that empties itself after 30 days." },

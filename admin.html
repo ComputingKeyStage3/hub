@@ -6476,10 +6476,39 @@ async function loadResetQueue(){
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Could not load requests.");
     const list = d.requests || [];
-    $("pwCount").textContent = list.length;
-    $("pwCount").hidden = !list.length;
+    const locked = d.lockouts || [];
+    $("pwCount").textContent = list.length + locked.length;
+    $("pwCount").hidden = !(list.length + locked.length);
     const box = $("pwList"); box.innerHTML = "";
-    if (!list.length){ box.appendChild(el("p","hint","Nothing waiting. Requests appear here within a few seconds of a student asking, and go again 5 minutes later.")); return; }
+    /* First, because a child locked out is sat there doing nothing until a
+       teacher presses this. Shown only while somebody is. */
+    if (locked.length){
+      box.appendChild(el("b","","Locked out of signing in"));
+      box.appendChild(el("p","hint","Too many wrong passwords. Letting them back in keeps their password as it is; if they have forgotten it, they can press Forgot password."));
+      locked.forEach(x => {
+        const line = el("div","who-row");
+        const mins = Math.max(1, Math.ceil(x.left / 60000));
+        line.appendChild(el("span","nm", x.display_name + " · " + x.username + (x.group_name ? " · " + x.group_name : "")));
+        line.appendChild(el("span","st no", x.fails + " wrong tries · " + mins + " minute" + (mins === 1 ? "" : "s") + " left"));
+        const go = el("button","btn-primary","Let them back in");
+        go.addEventListener("click", async () => {
+          go.disabled = true; go.textContent = "…";
+          try{
+            const r2 = await fetch(API + "/api/teacher/unlock-signin", { method:"POST", headers: HJ(),
+              body: JSON.stringify({ username: x.username }) });
+            if (!r2.ok) throw new Error();
+          }catch(e){ go.disabled = false; go.textContent = "Try again"; return; }
+          loadResetQueue();
+        });
+        line.appendChild(go);
+        box.appendChild(line);
+      });
+      if (list.length) box.appendChild(el("b","","Password help requested"));
+    }
+    if (!list.length){
+      if (!locked.length) box.appendChild(el("p","hint","Nothing waiting. Requests appear here within a few seconds of a student asking, and go again 5 minutes later."));
+      return;
+    }
     list.forEach(x => {
       const line = el("div","who-row");
       line.appendChild(el("span","nm", x.display_name + " \u00b7 " + x.username + (x.group_name ? " \u00b7 " + x.group_name : "")));
