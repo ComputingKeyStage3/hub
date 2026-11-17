@@ -28,6 +28,9 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.2.1", text:"GCSE and A Level students: the Learning Map is now a map. Each strand is a block of topic tiles, coloured by how confident they are, with a bar for lessons done and a mark when revised. Tapping a tile opens the topic." },
+  { v:"18.2", text:"GCSE and A Level students: the home page is now Home, Learning Map and Feedback. The Learning Map shows every topic under Component 1 or Component 2, marked for done in lesson, revised and how confident they are, with home learning and anything worth revising at the top." },
+  { v:"18.1.1", text:"GCSE and A Level students: the Due choice on Lessons has gone. Home still lists what is due in the next week." },
   { v:"18.1", text:"GCSE and A Level students get a new home page with Home, Lessons, Topics, Revise and Feedback down the side (along the bottom on a phone). Topics lists lessons by specification point and lets students rate how confident they are. Home learning now shows on students' Home Learning tab." },
   { v:"18.0.3",text:"Console: Back and Forward buttons sit beside Refresh at the top, in place of each screen's own back link, so every screen starts higher up. Back now works first time after closing a pop-up." },
   { v:"18.0.2", text:"Console: cards no longer come in twice, a class opens by growing out of its tile, and tabs slide their highlight across. A class's Units, Students and Progress tabs now change only the pane underneath: the heading, the trail at the top and Back stay as they are." },
