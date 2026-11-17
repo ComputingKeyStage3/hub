@@ -37,30 +37,29 @@
     <h1 id="headline">Sign in</h1>
   </div>
 
-  <!-- Username first, then Continue, then the password underneath it.
-       Both boxes are in the one form from the start, the password folded
-       away rather than missing, so a password manager still sees a username
-       and a password together and fills them as it always has. A student
-       with no password yet never sees the password box at all: Continue
-       signs them in and asks them to pick one. -->
+  <!-- Username and password together, always. There used to be a Continue
+       step that sent the username alone, and an account with no password
+       yet was signed in by that, so anyone who could guess a username could
+       take it. A first sign-in now uses the class starting password, which
+       the teacher gives out and the site never shows. -->
   <section class="station signin" id="loginCard">
     <form id="loginForm" class="signin-form" autocomplete="on" novalidate>
       <div class="signin-field">
         <label for="u">Username</label>
         <input type="text" id="u" name="username" autocomplete="username" autocapitalize="off" spellcheck="false">
       </div>
-      <div class="signin-pass" id="passWrap">
+      <div class="signin-pass open" id="passWrap">
         <div class="signin-pass-inner">
           <div class="signin-field">
             <label for="p">Password</label>
-            <input type="password" id="p" name="password" autocomplete="current-password" tabindex="-1">
+            <input type="password" id="p" name="password" autocomplete="current-password">
           </div>
         </div>
       </div>
       <div class="signin-acts">
-        <button class="btn-primary" id="loginBtn" type="submit">Continue</button>
+        <button class="btn-primary" id="loginBtn" type="submit">Sign in</button>
         <button class="crumb" id="forgotUserBtn" type="button">Forgot username?</button>
-        <button class="crumb" id="forgotBtn" type="button" hidden>Forgot password?</button>
+        <button class="crumb" id="forgotBtn" type="button">Forgot password?</button>
       </div>
       <p class="err" id="loginErr" role="alert"></p>
     </form>
@@ -104,9 +103,9 @@
            heading instead of centred the way a one line pop-up message is. -->
       <div class="set-group" style="text-align:left">
         <span class="set-label">How to sign in</span>
-        <p class="modal-text">Type in your computer username and press Continue, then type your password underneath.</p>
-        <p class="modal-text">If this is your first time, you will be asked to pick a password of your own
-          straight after pressing Continue.</p>
+        <p class="modal-text">Type in your computer username and your password, then press Sign in.</p>
+        <p class="modal-text">If this is your first time, use the starting password your teacher gives you.
+          You will then be asked to pick a password of your own.</p>
         <p class="modal-text">If you have forgotten your password, press Forgot password and put your
           hand up, so your teacher can let you back in.</p>
       </div>
@@ -415,46 +414,17 @@ on("helpFix", "click", () => {
 });
 renderAuth();
 
-/* ---- signing in, a box at a time ----
-   Continue first tries the username on its own. The server signs in a
-   student who has no password yet (and tells us they must pick one), and
-   answers everyone else, real username or not, with the same "enter your
-   password", so this shows nothing about which usernames exist. That answer
-   is what opens the password box. */
-var passOpen = false;      // var: renderAuth runs above this line and resets it
-function openPassword(focus){
-  if (!passOpen){
-    passOpen = true;
-    $("passWrap").classList.add("open");
-    $("p").tabIndex = 0;
-    $("forgotBtn").hidden = false;
-    $("loginBtn").textContent = "Sign in";
-  }
-  if (focus) setTimeout(() => { try{ $("p").focus(); }catch(e){} }, 120);
-}
-function closePassword(){
-  passOpen = false;
-  $("passWrap").classList.remove("open");
-  $("p").tabIndex = -1;
-  $("forgotBtn").hidden = true;
-  $("loginBtn").textContent = "Continue";
-}
+/* ---- signing in ----
+   Username and password together. Nothing is sent until both are there and
+   the password is a length a stored password can be, because anything else is
+   certainly wrong and every request is paid for. Too short or too long gets
+   the same words as a wrong password, so the rule is not given away. */
+const WRONG_SIGN_IN = "That username or password isn't right.";
 /* Back to the start, for the next student on a shared computer. */
 function resetSignIn(){
-  closePassword();
   try{ $("p").value = ""; }catch(e){}
   $("loginErr").textContent = "";
 }
-/* A password manager that fills both boxes, as the page loads or when a
-   name is picked from its list, has answered the question Continue asks:
-   the box opens to show what it put there. */
-function noticeFilled(){ if ($("p").value) openPassword(false); }
-[300, 1000, 2500].forEach(ms => setTimeout(noticeFilled, ms));
-on("p", "input", noticeFilled);
-on("p", "change", noticeFilled);
-/* A different username while the box is still empty starts again; one the
-   password manager changed together with the password keeps both. */
-on("u", "input", () => { if (passOpen && !$("p").value){ closePassword(); $("loginErr").textContent = ""; } });
 
 on("loginForm", "submit", (e) => { e.preventDefault(); signIn(); });
 let signingIn = false;
@@ -463,27 +433,24 @@ async function signIn(){
   $("loginErr").textContent = "";
   if (!ready){ $("loginErr").textContent = "Site not connected to its server yet (config.js)."; return; }
   const username = $("u").value.trim();
+  const password = $("p").value;
   if (!username){ $("loginErr").textContent = "Type your username first."; $("u").focus(); return; }
-  if (passOpen && !$("p").value){ $("loginErr").textContent = "Type your password."; $("p").focus(); return; }
+  if (!password){ $("loginErr").textContent = "Type your password."; $("p").focus(); return; }
+  /* 4, not 12: a teacher can give a student a password that short, and the
+     server checks the same. */
+  if (password.length < 4 || password.length > 200){ $("loginErr").textContent = WRONG_SIGN_IN; $("p").focus(); return; }
   const btn = $("loginBtn");
   const label = btn.textContent;
   signingIn = true;
   /* The dots in the button say it is working; the words under it are kept
      for what went wrong. */
-  const busy = hubMotion.busy(btn, passOpen ? "Signing in" : "Checking");
+  const busy = hubMotion.busy(btn, "Signing in");
   try{
     const r = await fetch(API + "/api/login", {
       method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ username: username, password: passOpen ? $("p").value : "" })
+      body: JSON.stringify({ username: username, password: password })
     });
     const d = await r.json();
-    /* Turned away without a password: they have one, so ask for it. */
-    if (!r.ok && !passOpen && r.status !== 503 && r.status < 500){
-      busy.reset();
-      btn.disabled = false; signingIn = false;
-      openPassword(true);
-      return;
-    }
     if (!r.ok) throw new Error(d.error || "Sign-in failed.");
     /* Shared computers: if this is a DIFFERENT student from the last one to
        sign in here, drop the cached work so nobody sees someone else's answers.
@@ -506,7 +473,7 @@ async function signIn(){
     busy.reset();
     signingIn = false;
     btn.disabled = false;
-    if (btn.textContent === "Checking…" || btn.textContent === "Signing in…") btn.textContent = passOpen ? "Sign in" : label;
+    if (btn.textContent === "Signing in…") btn.textContent = label;
   }
 }
 

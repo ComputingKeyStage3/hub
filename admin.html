@@ -4512,7 +4512,7 @@ async function loadResets(){
     if (!mine.length) return;
     const card = el("div","station"); card.style.marginBottom = "18px";
     card.appendChild(el("b","","Password help requested"));
-    card.appendChild(el("p","hint","Approving lets them sign in with an empty password box and choose a new one. A request only waits 5 minutes, then it goes and they ask again."));
+    card.appendChild(el("p","hint","Approving puts the new password they chose in place and signs them in on their screen. A request only waits 5 minutes, then it goes and they ask again."));
     mine.forEach(x => {
       const line = el("div","who-row");
       line.appendChild(el("span","nm", x.display_name + " (" + x.username + ")"));
@@ -4728,7 +4728,7 @@ on("addOneBtn", "click", () => {
     const d = fieldRow(box, "Display name", "text", "");
     const u = fieldRow(box, "Username", "text", "");
     const p = pwField(box, "Password (leave empty, recommended)");
-    box.appendChild(el("p","subnote","Leave the password empty and the student picks their own the first time they sign in. Only set one here if you need to."));
+    box.appendChild(el("p","subnote","Leave the password empty and the student signs in the first time with the class starting password, then picks their own. Only set one here if you need to."));
     const msg = el("p","hint","");
     const go = el("button","btn-primary modal-cta","Add student");
     go.addEventListener("click", async () => {
@@ -4904,7 +4904,7 @@ function askPasswords(found){
       "There is a Password column in that file, filled in for " + howMany +
       " student" + (howMany === 1 ? "" : "s") + ". Do you want to use those as their passwords?"));
     box.appendChild(el("p","modal-text",
-      "Say no and they are added without one, and each student picks their own the first time they sign in."));
+      "Say no and they are added without one. Each student signs in the first time with the class starting password, then picks their own."));
     const yes = el("button","btn-primary modal-cta","Yes, use these passwords");
     yes.addEventListener("click", () => openImport({ found: found, usePasswords: true }));
     const no = el("button","btn-ghost modal-stay","No, let them pick their own");
