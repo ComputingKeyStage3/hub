@@ -3914,11 +3914,18 @@
       for (const q of [0.62, 0.48, 0.35]) if (url.length > POSTER_MAX) url = out.toDataURL("image/jpeg", q);
       return url;
     }
-    function saveNow(){
+    /* Only a change made since the last picture is worth a new one, so
+       touched goes back to false once it is taken. Left true, asking for
+       the poster with get() made a fresh picture and told ctx again every
+       time, and the revision task, which asks for it from inside its
+       changed(), went round that for ever and froze the page. `quiet` is
+       get() asking: it wants the picture, not another change reported. */
+    function saveNow(quiet){
       clearTimeout(saveTimer);
       if (!touched) return;
       try{ saved = { img: exportPoster() }; }catch(e){ return; }
-      ctx.changed();
+      touched = false;
+      if (!quiet) ctx.changed();
     }
 
     /* --- the buttons along the top --- */
@@ -4279,7 +4286,7 @@
 
     return {
       section: s,
-      get: () => { if (touched) saveNow(); return saved; },
+      get: () => { if (touched) saveNow(true); return saved; },
       set: (v) => {
         if (!v || typeof v.img !== "string" || !/^data:image\//.test(v.img)) return;
         saved = { img: v.img };

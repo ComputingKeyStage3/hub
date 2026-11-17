@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.3.1", text:"A poster inside a Revision task no longer freezes the page a moment after it is first changed. Posters on their own also stop making a fresh picture every time the lesson saves." },
   { v:"18.3", text:"New Revision task for home learning: students make flashcards, a mind map, a poster or quiz questions on the hub, or hand in up to two photos of work done on paper. Flashcards and quizzes have Test me, and each go is counted. Mark work has an At a glance tab with Done and Redo for the whole class, and photos can be cleared to a recycle bin that empties itself after 30 days." },
   { v:"18.2.2", text:"Console in a lesson preview now goes straight back to the console on the first press. Refresh works on Home, the numbers beside Today and Live now have gone, and Live now lists lessons in the order they were released." },
   { v:"18.2.1", text:"GCSE and A Level students: the Learning Map is now a map. Each strand is a block of topic tiles, coloured by how confident they are, with a bar for lessons done and a mark when revised. Tapping a tile opens the topic." },
