@@ -6705,8 +6705,6 @@ html[data-ui-skeletons=on] .loading.mid > span:not(.skel){display:none}
 .dash-panel{background:var(--panel); border:1.5px solid var(--line); border-radius:var(--rad-lg); padding:14px 16px}
 .dash-head{display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:var(--text-lg)}
 .dash-head .hi{color:var(--amber)}
-.dash-count{margin-left:auto; min-width:24px; padding:1px 8px; border-radius:var(--rad-pill); background:var(--panel-2);
-  font-size:var(--text-sm); text-align:center; color:var(--muted)}
 .dash-row{display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--line)}
 .dash-row:first-of-type{border-top:none}
 .dash-words{flex:1; min-width:0}

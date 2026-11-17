@@ -665,7 +665,7 @@ function paintLessons(byId){
      Past, the same units, and only what is in it differs. */
   const homeTab = openTab === "homework";
   /* The GCSE home page has no Home Learning tab: homework is in this list,
-     marked as such, and found under Due by its closing date. */
+     marked as such. */
   const gcse = !!(window.gcseHome && window.gcseHome.on);
   if (!gcse) visible = visible.filter(c => !!c.homework === homeTab);
   /* A lesson is in the past once its closing date has gone by, or once the
@@ -679,15 +679,9 @@ function paintLessons(byId){
   const closeOf = (c) => c.close_on || (anyDates ? "" : (closeDates[c.lesson_id] || ""));
   const isPast = (c) => { const shut = closeOf(c); return (shut && shut < today) || doneLessons.has(c.lesson_id); };
   rememberCloses(cat, anyDates);
-  visible = visible.filter(c => showing === "done" ? isPast(c)
-                              : showing === "due" ? (gcse && window.gcseHome.dueFilter(c))
-                              : !isPast(c));
+  visible = visible.filter(c => showing === "done" ? isPast(c) : !isPast(c));
 
   if (!visible.length){
-    if (showing === "due"){
-      box.innerHTML = '<p class="hint">Nothing has a date coming up. Anything your teacher sets with a due date will be here.</p>';
-      return;
-    }
     box.innerHTML = '<p class="hint">' + (homeTab
       ? (showing === "done" ? "Nothing here yet. Home learning moves here once you finish it, or once it closes."
                             : "You have no home learning to do right now.")

@@ -652,6 +652,12 @@ function refreshHere(){
   const v = VIEWS.find(x => $(x) && !$(x).hidden);
   const own = v && $(v).querySelector("button.refresh");
   if (own){ own.click(); return; }
+  /* Home was already up, so putting it up again changed nothing, and the
+     catalogue Live now reads was never asked for again. */
+  if (v === "homeView"){
+    loadCatalogue(true).catch(() => {}).then(() => { if (window.timetable) window.timetable.paintHome(); });
+    return;
+  }
   restoreSpot(lastSpot()).catch(() => {});
 }
 const toHome    = () => { show("homeView"); };

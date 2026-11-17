@@ -1136,12 +1136,6 @@
     dash.appendChild(p);
     return p;
   }
-  function count(p, n){
-    const h = p.querySelector(".dash-head");
-    let c = h.querySelector(".dash-count");
-    if (!c){ c = el("span","dash-count"); h.appendChild(c); }
-    c.textContent = String(n);
-  }
   function body(p){
     Array.from(p.children).forEach(k => { if (!k.classList.contains("dash-head")) k.remove(); });
   }
@@ -1178,7 +1172,7 @@
   function paintToday(p){
     body(p);
     const now = new Date();
-    const head = p.querySelector(".dash-head span:not(.hi-wrap):not(.dash-count)");
+    const head = p.querySelector(".dash-head span:not(.hi-wrap)");
     if (!hasLessons(tt)){
       if (head) head.textContent = "Today";
       p.appendChild(el("p","hint","Add your timetable and the classes you teach today will be here, in period order."));
@@ -1208,7 +1202,6 @@
     }
     if (head) head.textContent = label;
     list = withDoubles(list);
-    count(p, list.filter(x => x.slot.cls).length);
     const isToday = when === now;
     let nextMarked = false;
     list.forEach(x => {
@@ -1253,8 +1246,14 @@
   };
   function paintLive(p, ours){
     body(p);
-    const live = (assigns || []).filter(a => ours(a.group_name) && liveNow(a));
-    count(p, live.length);
+    /* First released at the top. One published straight away has no
+       release_at, so it counts as out before anything that waited for a
+       time, and the catalogue's own order (the order they were added)
+       settles the rest. */
+    const live = (assigns || []).map((a, i) => ({ a, i }))
+      .filter(x => ours(x.a.group_name) && liveNow(x.a))
+      .sort((x, y) => String(x.a.release_at || "").localeCompare(String(y.a.release_at || "")) || x.i - y.i)
+      .map(x => x.a);
     if (!live.length){ p.appendChild(el("p","hint","Nothing is open to your classes at the moment.")); return; }
     const byClass = new Map();
     live.forEach(a => {
@@ -1262,7 +1261,9 @@
       if (!byClass.has(k)) byClass.set(k, []);
       byClass.get(k).push(a);
     });
-    Array.from(byClass.keys()).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric:true })).slice(0, 8).forEach(g => {
+    /* A Map keeps keys in the order they went in, so each class sits where
+       its first released lesson does. */
+    Array.from(byClass.keys()).slice(0, 8).forEach(g => {
       const list = byClass.get(g);
       const names = list.map(a => titleOf(a.lesson_id));
       /* Straight to the unit when everything open is in the one unit (and
