@@ -28,6 +28,7 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.2.2", text:"Console in a lesson preview now goes straight back to the console on the first press. Refresh works on Home, the numbers beside Today and Live now have gone, and Live now lists lessons in the order they were released." },
   { v:"18.2.1", text:"GCSE and A Level students: the Learning Map is now a map. Each strand is a block of topic tiles, coloured by how confident they are, with a bar for lessons done and a mark when revised. Tapping a tile opens the topic." },
   { v:"18.2", text:"GCSE and A Level students: the home page is now Home, Learning Map and Feedback. The Learning Map shows every topic under Component 1 or Component 2, marked for done in lesson, revised and how confident they are, with home learning and anything worth revising at the top." },
   { v:"18.1.1", text:"GCSE and A Level students: the Due choice on Lessons has gone. Home still lists what is due in the next week." },
