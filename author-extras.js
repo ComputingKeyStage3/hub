@@ -401,6 +401,9 @@ function taskProblems(b){
       else if (/\.(avi|wmv|mov|mkv|flv)(\?|#|$)/i.test(String(b.url).trim())) out.push("Browsers cannot play that kind of video: save it as .mp4");
       else if (Number(b.end) > 0 && Number(b.end) <= (Number(b.start) || 0)) out.push("It stops before it starts");
       break;
+    case "pdfview":
+      if (!(b.pages || []).length) out.push("No PDF chosen");
+      break;
     case "embed": case "frame": case "link":
       if (!String(b.url || "").trim()) out.push("No address");
       break;

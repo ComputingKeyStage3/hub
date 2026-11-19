@@ -1993,6 +1993,21 @@ html.builder .loadscreen{z-index:90}
 .picimg{max-width:100%; height:auto; border-radius:var(--rad-md); border:1px solid var(--line); display:block}
 .piccap{margin:7px 0 0; color:var(--muted); font-size:var(--text-base); text-align:center}
 
+/* A PDF's pages, one under another, each the full width of the column.
+   width:100% is what lets a page drawn at 2200px fit a phone: the
+   width and height on the img give it its shape, and height:auto keeps
+   that shape at whatever width it gets. The zoom button's wrapper is
+   fit-content everywhere else, which here would shrink round nothing. */
+.pdfview{display:flex; flex-direction:column; gap:14px}
+.pdf-page{margin:0; min-width:0}
+.pdf-page .zoomwrap{width:100%}
+.pdf-img{width:100%; height:auto; background:#fff}
+.pdf-download{align-self:flex-start; text-decoration:none}
+/* the builder's row of the pages it has kept */
+.pdf-thumbs{display:flex; flex-wrap:wrap; gap:8px}
+.pdf-thumb{height:120px; width:auto; max-width:100%; background:#fff;
+  border-radius:var(--rad-sm); border:1px solid var(--line)}
+
 /* written answer: background, then the question itself */
 .q-context{font-size:var(--text-lg); line-height:1.55; color:var(--text); margin:0 0 9px}
 .q-ask{font-family:var(--display); font-size:var(--text-xl); font-weight:800; line-height:1.35;

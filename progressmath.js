@@ -394,7 +394,7 @@
      carried in, or has been run, or has a line ticked. Response tasks are
      not looked at: they come after marking, so they say nothing about
      whether somebody was in the lesson being marked. */
-  const NOT_WORK = { text:1, picture:1, video:1, link:1, embed:1, frame:1 };
+  const NOT_WORK = { text:1, picture:1, video:1, link:1, embed:1, frame:1, pdfview:1 };
   const HOLDS = { page:1, group:1, extension:1, choice:1 };
   /* Whether a lesson asks a student to do anything at all, or is only there
      to be read. hasWork can never say yes about one that is. */

@@ -1495,7 +1495,7 @@ function defaultLocks(){
   let firstDo = -1;
   for (let i = 0; i < blocks.length; i++){
     const t = blocks[i].type;
-    const reading = t === "text" || t === "picture" || t === "video";
+    const reading = t === "text" || t === "picture" || t === "video" || t === "pdfview";
     if (!reading){ firstDo = i; break; }
   }
   if (firstDo === -1) return out;                 // all reading: nothing to gate
@@ -3752,6 +3752,9 @@ const TASK_ICON = {
   video:     { name:"Video",
                d:'<rect x="3" y="5" width="18" height="14" rx="2"/>' +
                  '<path d="M3 9h18M3 15h18M10.5 10.3l3.5 1.7-3.5 1.7z"/>' },
+  /* a sheet of paper with its corner turned */
+  pdfview:   { name:"PDF",
+               d:'<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 9h2M9 13h6M9 17h4"/>' },
   /* a browser window */
   frame:     { name:"Website",
                d:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/>' +
@@ -5014,7 +5017,7 @@ let qCounter = 0;
 const questionNo = {};
 /* What an assessment shows to be read rather than asks. A run of these
    before the first question is its welcome page. */
-const ASSESS_READING = ["text","picture","video","embed","link","frame"];
+const ASSESS_READING = ["text","picture","video","embed","link","frame","pdfview"];
 /* Builds one activity without putting it on the page, used both for ordinary
    steps and for the several activities that share a "page". */
 function buildBlock(b, i){
@@ -5022,7 +5025,7 @@ function buildBlock(b, i){
   const R = { text:rText, question:rQuestion, python:rPython, embed:rEmbed, link:rLink,
               quiz:rQuiz, password:rPassword, caesar:rCaesar, image:rImage,
               picture:rPicture, video:rVideo, pastelink:rPasteLink, frame:rFrame, web:rWeb,
-              scratch:rScratch, binary:rBinary, binadd:rBinAdd,
+              pdfview:rPdfView, scratch:rScratch, binary:rBinary, binadd:rBinAdd,
               board:rBoardTask, storyboard:rStoryboardTask, label:rLabelTask, notes:rNotesTask, mindmap:rMindmapTask, web:rWeb,
               keywords:rKeywordsTask, helper:rHelperTask,
               mc:rMC, order:rOrder, blanks:rBlanks, short:rShort, ide:rIDE, page:rPage,
@@ -6032,6 +6035,54 @@ function rPicture(b){
   s.appendChild(fig);
   return { section:s, check:() => ({ ok:true }),
            brief:{ eyebrow:"Look", title:b.title || "", text:b.note || "" } };
+}
+
+/* A PDF, a knowledge organiser most often. It arrives as pictures, one a
+   page, because the builder read it into them (author-pdf.js): a PDF in a
+   frame shows only its first page on an iPad and nothing at all on an
+   Android phone. Each page gets the full screen button every picture has,
+   and its zoom is how dense small print gets read on a phone.
+
+   Nothing is saved. It is in ASSESS_READING, so home learning gives it no
+   number and nothing to mark, and the revision tasks after it are where the
+   work is. */
+function rPdfView(b){
+  const s = el("section","pdfview");
+  const pages = (Array.isArray(b.pages) ? b.pages : []).filter(p => p && (p.imgId || p.src));
+  const url = String(b.url || "").trim();
+  if (url){
+    const a = el("a","btn-ghost pdf-download", "Download the PDF");
+    a.href = url;
+    /* Saved rather than opened for a file on this site, which is what
+       printing it at home needs. Anywhere else the browser only honours
+       it as an ordinary link, so that opens in a tab. */
+    if (/^(files|images)\//i.test(url)) a.setAttribute("download", "");
+    else { a.target = "_blank"; a.rel = "noopener"; }
+    s.appendChild(a);
+  }
+  if (!pages.length){
+    s.appendChild(el("p","hint","There is nothing to show here yet. Carry on, and tell your teacher."));
+  }
+  const many = pages.length > 1;
+  pages.forEach((p, i) => {
+    const fig = el("figure","pdf-page");
+    const img = el("img","picimg pdf-img");
+    img.src = p.imgId ? pictureSrc({ imgId: p.imgId }) : p.src;
+    /* Width and height given up front, so the page holds its place while it
+       loads and the task below does not jump when it arrives. */
+    if (+p.w > 0 && +p.h > 0){ img.width = +p.w; img.height = +p.h; }
+    img.alt = (b.alt || b.heading || "PDF") + (many ? ", page " + (i + 1) : "");
+    img.loading = i ? "lazy" : "eager";
+    img.addEventListener("error", () => {
+      fig.innerHTML = "";
+      fig.appendChild(el("p","hint", "Page " + (i + 1) + " could not be loaded. Carry on, and tell your teacher."));
+    });
+    fig.appendChild(img);
+    if (many) fig.appendChild(el("figcaption","piccap", "Page " + (i + 1) + " of " + pages.length));
+    s.appendChild(fig);
+  });
+  return { section:s, check:() => ({ ok:true }),
+           brief:{ eyebrow:"Read", title:b.heading || "", text:stripTags(b.task || "") } };
 }
 
 function rEmbed(b){
@@ -10082,7 +10133,7 @@ function fullScreenButton(getSrc, getPsd){
    means something else, and a screenshot has its button already. A picture
    too small to need it (an icon, a key) is left as it is, which can only be
    told once it has loaded. */
-const ZOOM_TYPES = ["text","picture","quiz","mc","short","question","order","blanks","table","keywords","exam"];
+const ZOOM_TYPES = ["text","picture","pdfview","quiz","mc","short","question","order","blanks","table","keywords","exam"];
 function zoomablePictures(root){
   if (!root) return;
   root.querySelectorAll("img").forEach(img => {
@@ -12606,7 +12657,7 @@ function renderResponses(container, targetTopic, statusEl){
        put there never reached anyone. */
     const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort,
                 text:rText, picture:rPicture, video:rVideo, ide:rIDE, web:rWeb, order:rOrder, image:rImage,
-                embed:rEmbed, link:rLink, pastelink:rPasteLink, frame:rFrame, page:rPage,
+                embed:rEmbed, link:rLink, pastelink:rPasteLink, frame:rFrame, pdfview:rPdfView, page:rPage,
                 choice:rChoice }[b.type];
     if (!R) return;
     try{
@@ -12646,7 +12697,7 @@ function renderResponses(container, targetTopic, statusEl){
       if (!b.id) b.id = "ext_" + i;
       const R = { question:rQuestion, quiz:rQuiz, python:rPython, blanks:rBlanks, mc:rMC, short:rShort,
                   text:rText, picture:rPicture, video:rVideo, ide:rIDE, web:rWeb, order:rOrder, image:rImage,
-                  embed:rEmbed, link:rLink, pastelink:rPasteLink, frame:rFrame }[b.type];
+                  embed:rEmbed, link:rLink, pastelink:rPasteLink, frame:rFrame, pdfview:rPdfView }[b.type];
       if (!R) return;
       try{
         const built = R(b);
@@ -13788,7 +13839,7 @@ function buildPdf(){
     }
     /* A picture the teacher put there and a window onto another site are not
        the student's work, so a hand-in says nothing about them. */
-    if (b.type === "picture" || b.type === "video" || b.type === "frame") return out;
+    if (b.type === "picture" || b.type === "video" || b.type === "frame" || b.type === "pdfview") return out;
 
     if (b.type === "embed"){
       out.push({ t: "text", face: "task", text: title || "Video" });

@@ -42,6 +42,7 @@
 <script src="docs-import.js"></script>
 <script src="author-docs.js"></script>
 <script src="author-pictures.js"></script>
+<script src="author-pdf.js"></script>
 <script src="ui.js"></script>
 <script src="settings.js"></script>
 </head>
@@ -236,6 +237,7 @@
           <button class="pal" data-add="picture"><b>Image</b><span>Show a picture from a link</span></button>
           <button class="pal" data-add="embed"><b>Video</b><span>Embed a clip</span></button>
           <button class="pal" data-add="video"><b>Video file</b><span>Play an .mp4 on the page</span></button>
+          <button class="pal" data-add="pdfview"><b>PDF</b><span>Show a PDF, such as a knowledge organiser</span></button>
           <button class="pal" data-add="frame"><b>Embedded page</b><span>A site inside the lesson</span></button>
           <button class="pal" data-add="link"><b>Link to a site</b><span>Send them somewhere</span></button>
         </div>
@@ -648,6 +650,7 @@ const BLANK = {
   embed:    () => ({ type:"embed", url:"", title:"", note:"", confirm:false }),
   video:    () => ({ type:"video", title:"", url:"", caption:"", note:"", size:"full", width:"", align:"left",
                      sound:"on", autoplay:false, loop:false, controls:true, start:"", end:"", frame:true }),
+  pdfview:  () => ({ type:"pdfview", heading:"", task:"", pages:[], name:"", url:"", alt:"" }),
   frame:    () => ({ type:"frame", url:"", heading:"", task:"", width:"100%", height:520, confirm:false }),
   link:     () => ({ type:"link", url:"", title:"Open this", heading:"", task:"", confirm:false }),
   mc:       () => ({ type:"mc", prompt:"", options:["",""], answer:0, topic:"" }),
@@ -764,7 +767,7 @@ function codeTaskLabel(entry){
 
 const LABEL = { text:"Paragraph", picture:"Image", pastelink:"Paste a link", ide:"Python task", question:"Written answer", quiz:"Quiz", image:"Screenshot",
                 embed:"Video", video:"Video file", link:"Link to a site", mc:"Multiple choice", blanks:"Fill the gaps", order:"Put in order",
-                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", revise:"Revision", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boardgame:"Board game", swipe:"Swipe", quest:"Quest", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
+                short:"Short answer", page:"Page", extension:"Extension tasks", group:"Group", choice:"Choice", frame:"Embedded page", pdfview:"PDF", binary:"Binary conversion", binadd:"Binary addition", notes:"Notes", helper:"Photoshop help", mindmap:"Mind map", revise:"Revision", board:"Whiteboard", storyboard:"Storyboard", poster:"Poster", pixels:"Pixel studio", boardgame:"Board game", swipe:"Swipe", quest:"Quest", boss:"Boss battle", label:"Label a picture", keywords:"Keyword definitions", code:"Coding task", web:"Web page", scratch:"Block coding",
                 password:"Password checker", caesar:"Caesar cipher", exam:"Exam question",
                 table:"Table", hotspot:"Click the right spot" };
 
@@ -857,7 +860,7 @@ function tidyIntoPages(){
    the top level, where the lesson page, the marking and the markbook have
    always looked for them, and questionsPage says what the page around them
    was called. So this puts the page back round them as the lesson opens. */
-const LEAD_READING = ["text","picture","video","embed","link","frame"];
+const LEAD_READING = ["text","picture","video","embed","link","frame","pdfview"];
 function tidyAssessment(){
   const info = lesson.questionsPage || null;
   delete lesson.questionsPage;
@@ -1659,6 +1662,16 @@ function compileOne(b, id, target){
     else if (b.type === "frame")
       push(keepArrays({ type:"frame", id, url: b.url || "", heading: b.heading || "", task: b.task || "",
              width: b.width || "100%", height: b.height || 520, confirm: b.confirm === true }));
+    /* The pages are the PDF: they are all that is kept of it. name and cut
+       only tell the builder what was chosen and whether it was cut short,
+       so reopening it can still say so. */
+    else if (b.type === "pdfview")
+      push(keepArrays({ type:"pdfview", id, heading: b.heading || "", task: b.task || "",
+             pages: (Array.isArray(b.pages) ? b.pages : []).filter(p => p && (p.imgId || p.src))
+               .map(p => p.imgId ? { imgId: p.imgId, w: +p.w || 0, h: +p.h || 0 }
+                                 : { src: p.src, w: +p.w || 0, h: +p.h || 0 }),
+             name: b.name || "", cut: +b.cut > 0 ? +b.cut : undefined,
+             url: String(b.url || "").trim(), alt: b.alt || "" }));
     else if (b.type === "link")
       push(keepArrays({ type:"link", id, url: b.url || "", title: b.title || "Open this",   // the button needs words
              heading: b.heading || "", task: b.task || "", confirm: b.confirm === true,
@@ -5906,6 +5919,7 @@ const BANK_TYPES = [
   ["picture","Image","Show a picture from a link"],
   ["embed","Video","Embed a clip"],
   ["video","Video file","Play an .mp4 on the page"],
+  ["pdfview","PDF","Show a PDF, such as a knowledge organiser"],
   ["notes","Notes","Their own notes, with formatting"],
   ["helper","Photoshop help","A help chat they can ask"]
 ];

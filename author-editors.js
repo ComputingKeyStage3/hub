@@ -396,6 +396,7 @@ const TASK_ICONS = {
   embed:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
   video:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18M10.5 10.3l3.5 1.7-3.5 1.7z"/>',
   frame:     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M6.5 6.5h.01M9 6.5h.01"/>',
+  pdfview:   '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 9h2M9 13h6M9 17h4"/>',
   link:      '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   notes:     '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/>',
   helper:    '<path d="M4 5h16v11H9l-5 4z"/><path d="M10 9.2a2 2 0 1 1 2.8 1.8c-.5.2-.8.6-.8 1.1"/><path d="M12 14h.01"/>',
@@ -886,6 +887,83 @@ EDITORS.picture = function(b, k){
     if (!b.beside && b.size && b.size !== "full")
       pickRow("Where it sits", "align", [["left","Left"],["centre","Middle"],["right","Right"]]);
     toggleRow([["frame","Border", true]], "Style");
+  });
+};
+
+/* A PDF shown on the page, a knowledge organiser most often. The PDF itself
+   is never kept: author-pdf.js reads each page into a picture as it is
+   chosen, because a picture is what every phone and iPad can show and a
+   PDF is not. So the task is a list of pictures, and choosing again
+   replaces the lot. */
+EDITORS.pdfview = function(b, k){
+  const { F, add, redraw, settings } = k;
+  F("Heading (optional)", "heading");
+  F("Instruction above it (optional)", "task", { area:true, rows:2 });
+  const pages = Array.isArray(b.pages) ? b.pages : [];
+  const up = el("div","bfield");
+  up.appendChild(el("label","","The PDF"));
+  const row = el("div","brow");
+  const pick = el("button","btn-ghost bmini2", pages.length ? "Choose a different PDF" : "Choose a PDF");
+  const file = el("input","sb-picker");
+  file.type = "file"; file.accept = "application/pdf,.pdf";
+  const said = el("span","bhelp","");
+  pick.addEventListener("click", () => file.click());
+  file.addEventListener("change", async () => {
+    const f = file.files && file.files[0];
+    file.value = "";
+    if (!f) return;
+    if (!window.readPdfPages){ said.textContent = "The PDF reader is missing from this page. Reload and try again."; said.classList.add("warn"); return; }
+    pick.disabled = true;
+    said.classList.remove("warn");
+    said.textContent = "Opening the PDF…";
+    try{
+      const got = await window.readPdfPages(f, (n, of) => {
+        said.textContent = "Saving page " + n + " of " + of + "…";
+      });
+      b.pages = got.pages;
+      b.name = f.name;
+      b.cut = got.total > got.kept ? got.total : undefined;
+      redraw(); schedulePreview();
+    }catch(e){
+      pick.disabled = false;
+      said.textContent = e.message || "That PDF could not be read.";
+      said.classList.add("warn");
+    }
+  });
+  row.appendChild(pick);
+  if (pages.length){
+    const drop = el("button","btn-ghost bmini2","Remove it");
+    drop.addEventListener("click", () => { b.pages = []; b.name = ""; b.cut = undefined; redraw(); schedulePreview(); });
+    row.appendChild(drop);
+  }
+  row.appendChild(said);
+  up.appendChild(row);
+  up.appendChild(file);
+  add(up);
+  if (pages.length){
+    const prev = el("div","bfield");
+    const strip = el("div","pdf-thumbs");
+    pages.forEach((p, i) => {
+      const img = el("img","pdf-thumb");
+      img.src = p.imgId ? pictureSrc({ imgId: p.imgId }) : (p.src || "");
+      img.alt = "Page " + (i + 1);
+      strip.appendChild(img);
+    });
+    prev.appendChild(strip);
+    const n = pages.length === 1 ? "1 page" : pages.length + " pages";
+    prev.appendChild(el("p","bhelp",
+      (b.name ? b.name + ", " : "") + n + ", kept as pictures so it shows on phones and iPads too."
+      + (b.cut ? " It had " + b.cut + " pages, and only the first " + pages.length + " were kept." : "")));
+    add(prev);
+  } else {
+    add(el("p","bhelp","Up to " + (window.PDF_MAX_PAGES || 10) + " pages. Each page becomes a picture, which takes a moment."));
+  }
+  settings(() => {
+    F("Where to download it (optional)", "url",
+      { help:"Adds a Download button, for printing it at home. A file in the site's files folder is written "
+           + "as files/Year 9/whatever.pdf; a OneDrive link works too." });
+    F("Words for a screen reader (optional)", "alt",
+      { help:"What the PDF is about, read out to anyone who cannot see the pages." });
   });
 };
 
