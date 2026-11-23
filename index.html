@@ -14,6 +14,7 @@
 <script src="icons.js"></script>
 <script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
 <script src="config.js"></script>
+<script src="signin.js"></script>
 <script src="lessonfile.js"></script>
 <script src="lessonorder.js"></script>
 <script src="practice.js"></script>
@@ -412,7 +413,26 @@ on("helpFix", "click", () => {
   try{ window.hubClearStrays(); }catch(e){}
   setTimeout(() => location.reload(), 700);
 });
+/* A sign-in that has run out, or that a teacher has signed out, shows the
+   sign-in card rather than a home page that cannot save anything. Only the
+   sign-in goes: hub_user stays, so the same student signing back in keeps
+   the work this computer is holding for them (see the sign-in below). */
+/* `loaded` is false as the page starts, when nothing has been fetched yet
+   and forgetEverything() would reach variables not declared until further
+   down: that threw, and took the rest of this script with it. */
+function signInRanOut(loaded){
+  ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
+  if (loaded) forgetEverything();
+  const u = $("u"), who = localStorage.getItem("hub_user");
+  if (u && who && !u.value) u.value = who;
+}
+if (!OFFLINE && localStorage.getItem("hub_token") && window.hubSignIn
+    && window.hubSignIn.expired(localStorage.getItem("hub_token"))) signInRanOut(false);
 renderAuth();
+/* Once a week, a fresh 28 days (signin.js). */
+if (!OFFLINE && window.hubSignIn) window.hubSignIn.renew().then(r => {
+  if (r === "refused"){ signInRanOut(true); renderAuth(); }
+});
 
 /* ---- signing in ----
    Username and password together. Nothing is sent until both are there and
@@ -906,6 +926,9 @@ on("npGo", "click", async () => {
       body: JSON.stringify({ action:"set-password", newPassword: a }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Could not save it.");
+    /* Choosing a password signs out every other browser, and this one is
+       handed the sign-in that still works. */
+    if (d.token) localStorage.setItem("hub_token", d.token);
     $("pwModal").hidden = true;
     $("np1").value = $("np2").value = "";
     if (!openWantedLesson()) loadLessons();

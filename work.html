@@ -858,6 +858,29 @@ function niceSaved(iso){
   return d.toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" }) + ", " +
          String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
 }
+/* Goes before the one on screen, kept by Retake on the student's summary as
+   { got, max, at } under __tries. The work in the row is always the newest
+   go, so the Marks column is that, and these only add to it. */
+function earlierGoes(data){
+  return (data && Array.isArray(data.__tries)) ? data.__tries.filter(t => t && typeof t.got === "number") : [];
+}
+/* A go only counts once something was done in it: a retake nobody has
+   started yet is the earlier goes and nothing more. */
+function triesTaken(data, state){
+  return earlierGoes(data).length + (state && state.began ? 1 : 0);
+}
+let homeLearningAllGoes = false;     // earlier goes shown under each mark
+function allGoesToggle(){
+  const sw = el("button","pace-switch progress-ext" + (homeLearningAllGoes ? " on" : ""));
+  sw.type = "button";
+  sw.setAttribute("role", "switch");
+  sw.setAttribute("aria-checked", homeLearningAllGoes ? "true" : "false");
+  sw.title = "Show every score, not just the most recent one";
+  sw.appendChild(el("span","pace-switch-words", "Earlier goes"));
+  sw.appendChild(el("span","pace-knob"));
+  sw.addEventListener("click", () => { homeLearningAllGoes = !homeLearningAllGoes; paintProgress(); });
+  return sw;
+}
 let homeLearningShowing = "all";     // all, done or not
 function homeLearningShows(state){
   return homeLearningShowing === "all" ||
@@ -1081,6 +1104,8 @@ function paintProgress(){
                            state: hl ? homeLearningState(data) : null };
   });
   if (hl) homeLearningPills(left, marks);
+  /* Only offered once somebody has retaken it, so there is something to show. */
+  if (hl && shown.length && roster.some(st => earlierGoes(marks[st.username].data).length)) left.appendChild(allGoesToggle());
 
   const copyAll = el("button","btn-ghost bmini2","Copy all");
   copyAll.type = "button";
@@ -1104,6 +1129,8 @@ function paintProgress(){
     else if (k === "displayName"){ x = a.display_name || ""; y = b.display_name || ""; }
     else if (k === "state"){ x = marks[a.username].state.rank; y = marks[b.username].state.rank; }
     else if (k === "saved"){ x = lastSavedAt(marks[a.username].data); y = lastSavedAt(marks[b.username].data); }
+    else if (k === "tries"){ x = triesTaken(marks[a.username].data, marks[a.username].state);
+                             y = triesTaken(marks[b.username].data, marks[b.username].state); }
     else if (k === "total"){ x = marks[a.username].total.got; y = marks[b.username].total.got; }
     else { x = marks[a.username].perTask[k] ? marks[a.username].perTask[k].got : -1;
            y = marks[b.username].perTask[k] ? marks[b.username].perTask[k].got : -1; }
@@ -1126,7 +1153,7 @@ function paintProgress(){
   /* Home learning with no scores has no Marks column to fill. */
   const showTotal = !hl || shown.length > 0;
   const nameBlank = el("th","pcol-page pcol-lead");
-  nameBlank.colSpan = 2 + (hl ? 2 : 0) + (showTotal ? 1 : 0);
+  nameBlank.colSpan = 2 + (hl ? 3 : 0) + (showTotal ? 1 : 0);
   rowPage.appendChild(nameBlank);
   let i = 0;
   while (i < shown.length){
@@ -1157,6 +1184,7 @@ function paintProgress(){
   if (hl){
     rowTask.appendChild(head("Status", "state"));
     rowTask.appendChild(head("Last saved", "saved"));
+    rowTask.appendChild(head("Tries", "tries", "", "How many goes they have had, counting Retake"));
   }
   if (showTotal) rowTask.appendChild(head("Marks", "total", "pcol-total"));
   shown.forEach(t => {
@@ -1202,10 +1230,26 @@ function paintProgress(){
       status.dataset.copy = m.state.label;
       tr.appendChild(status);
       tr.appendChild(el("td","hlsaved", niceSaved(lastSavedAt(m.data))));
+      const n = triesTaken(m.data, m.state);
+      const tries = el("td","hltries", n ? String(n) : "");
+      tries.dataset.copy = n ? String(n) : "";
+      tr.appendChild(tries);
     }
     if (showTotal){
       const total = el("td","pcol-total", scored ? m.total.got + " / " + m.total.max : "");
       total.dataset.copy = scored ? String(m.total.got) : "";
+      /* Earlier goes under the newest, oldest first, so the row reads as how
+         they got there. Left out of the copy: it is the newest mark. */
+      const before = hl && homeLearningAllGoes ? earlierGoes(m.data) : [];
+      if (before.length){
+        const list = el("div","hlgoes");
+        before.forEach((g, gi) => {
+          const line = el("span","", "Go " + (gi + 1) + ": " + g.got + " / " + g.max);
+          if (g.at) line.title = niceSaved(g.at);
+          list.appendChild(line);
+        });
+        total.appendChild(list);
+      }
       tr.appendChild(total);
     }
     shown.forEach(t => {
@@ -1251,15 +1295,21 @@ function extToggle(){
 function saveLessonMarkbook(shown, marks){
   const sheet = window.markbook && window.markbook.sheet;
   const hl = homeLearning();
-  const head = ["Username", "Display name"].concat(hl ? ["Status", "Last saved"] : [], ["Marks", "Out of"]);
+  const head = ["Username", "Display name"].concat(hl ? ["Status", "Last saved", "Tries"] : [], ["Marks", "Out of"]);
+  /* Every earlier go gets a pair of columns of its own, as many as the most
+     anyone has had, so the spreadsheet holds the whole history. */
+  const most = hl ? Math.max(0, ...roster.map(st => earlierGoes(marks[st.username].data).length)) : 0;
+  for (let g = 1; g <= most; g++) head.push("Go " + g + " marks");
   shown.forEach(t => head.push(t.pageTitle + ": " + t.label));
   const out = [head];
   roster.slice().sort((a, b) => (a.username || "").localeCompare(b.username || "")).forEach(st => {
     const m = marks[st.username];
     const scored = !!m.total.max && (!hl || m.state.began);
     const row = [st.username || "", st.display_name || ""].concat(
-      hl ? [m.state.label, niceSaved(lastSavedAt(m.data))] : [],
+      hl ? [m.state.label, niceSaved(lastSavedAt(m.data)), triesTaken(m.data, m.state) || ""] : [],
       [scored ? m.total.got : "", m.total.max || ""]);
+    const goes = earlierGoes(m.data);
+    for (let g = 0; g < most; g++) row.push(goes[g] ? goes[g].got : "");
     shown.forEach(t => row.push(attempted(m.data, t.id) ? m.perTask[t.id].got : ""));
     out.push(row);
   });

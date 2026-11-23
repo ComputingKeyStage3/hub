@@ -28,6 +28,8 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.5.1", text:"Home learning that marks itself has Retake on the student's summary, to start again from blank and master the questions. The mark book shows the latest mark with a Tries column, an Earlier goes switch to see every score, and every go in Save for Excel." },
+  { v:"18.5", text:"Students stay signed in as long as they use the site at least once every 28 days, so most will never see the sign-in page again. If a sign-in has run out, they are asked for their password as the lesson opens, not when they try to save. Edit student has Sign out everywhere, and a new password signs them out everywhere too." },
   { v:"18.4.3", text:"When a student has been signed in so long that saving stops working, the lesson asks for their password there and then and saves, instead of only showing Try again. Their work stays on the page." },
   { v:"18.4.2", text:"A picture can be uploaded at Full quality, on an Image task or in a table cell. It is kept exactly as chosen, so a student who copies it into Photoshop gets the original." },
   { v:"18.4", text:"A new PDF task, under Media, shows a PDF such as a knowledge organiser on the page. Each page can go full screen and zoom, and it works on phones and iPads too." },

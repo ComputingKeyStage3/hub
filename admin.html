@@ -4646,7 +4646,24 @@ function editStudent(st){
         closeModal(); loadStudents();
       }catch(e){ b.fail(); msg.textContent = e.message; }
     });
-    box.appendChild(go); box.appendChild(msg);
+    /* Students stay signed in for weeks and never sign out, so a sign-in
+       left open on somebody else's computer is the thing to take back.
+       A new password does this as well; this is for keeping the password. */
+    const out = el("button","btn-ghost modal-stay","Sign out everywhere");
+    out.title = "Sign " + st.display_name + " out on every computer. Their password and work stay the same.";
+    out.addEventListener("click", async () => {
+      const b = hubMotion.busy(out, "Signing out");
+      msg.textContent = "";
+      try{
+        const r = await fetch(API + "/api/teacher/sign-out-student", { method:"POST", headers: HJ(),
+          body: JSON.stringify({ username: st.username }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || "Could not sign them out.");
+        await b.done("Signed out");
+        msg.textContent = st.display_name + " will need to sign in again on every computer.";
+      }catch(e){ b.fail(); msg.textContent = e.message; }
+    });
+    box.appendChild(go); box.appendChild(out); box.appendChild(msg);
   });
 }
 /* Moving a student to another class. Their work and their marks hang off

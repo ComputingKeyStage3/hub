@@ -34,6 +34,7 @@
 <script src="blendview.js"></script>
 <script src="dragline.js"></script>
 <script src="config.js"></script>
+<script src="signin.js"></script>
 <script src="worklink.js"></script>
 <script src="settings.js"></script>
 <script src="slides.js"></script>
@@ -921,6 +922,10 @@ function snapshot(){
   const psd = psdAll();
   if (Object.keys(psd).length) data.__psd = psd;
   if (coverOn()) data.__cover = Object.assign(coverData(), { pages: coverPagesDone() });
+  /* Earlier goes at home learning, carried on every save or the next one
+     after a retake would lose them. See retakeHomework(). */
+  const tries = restoredData && restoredData.__tries;
+  if (Array.isArray(tries) && tries.length) data.__tries = tries;
   return data;
 }
 let voiceAnswers = null;          // question id -> option picked, once they answer here
@@ -4269,7 +4274,7 @@ function askSignInAgain(pressed){
     x.addEventListener("click", () => close(false));
     box.appendChild(x);
     box.appendChild(el("h2", "", "Sign in again to save"));
-    box.appendChild(el("p", "hint", "You have been signed in for a long time, so you need to sign in again. Your work is still here and will not be lost."));
+    box.appendChild(el("p", "hint", "You need to sign in again before your work can be saved. Your work is still here and will not be lost."));
     const user = localStorage.getItem("hub_user") || "";
     const row = (label, input) => {
       const r = el("div", "bfield");
@@ -4327,6 +4332,22 @@ function askSignInAgain(pressed){
   });
   return signInAsking;
 }
+
+/* At the start, not the end. A sign-in that has already run out, or that
+   renewing finds a teacher has signed out, is asked for as the lesson opens,
+   before there is any work to lose. Otherwise, once a week, a fresh 28 days
+   (signin.js). A password changed in Settings on this page hands over the
+   sign-in that still works. */
+window.addEventListener("hub-signin", (e) => { if (!guest && e.detail){ token = e.detail; needSignIn = false; } });
+setTimeout(() => {
+  if (OFFLINE || spectate || inPreview || guest || !token || !apiReady || !window.hubSignIn) return;
+  const refused = () => { needSignIn = true; askSignInAgain(true); };
+  if (window.hubSignIn.expired(token)){ refused(); return; }
+  window.hubSignIn.renew().then(r => {
+    if (r === "refused") refused();
+    else if (r && localStorage.getItem("hub_token") === r) token = r;
+  });
+}, 0);
 
 /* ---------- handing in at the end: the rocket ----------
    A whole class presses Finish within the same few seconds, and the free
@@ -11874,6 +11895,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   }
   if (home) homeworkHandIn(hero, justFinished);
   if (home) reviseOnSummary(hero);
+  if (home) retakeOnSummary(hero, res);
   /* A way straight into the marked work, where the "result saved" line used
      to sit. It fades in last, once the cards have settled. */
   const seeBtn = el("button","btn-primary done-save fadein", home ? "View my work" : "View my assessment");
@@ -12017,6 +12039,69 @@ function reviseOnSummary(hero){
     go.addEventListener("click", () => window.reviseKit.open(b, v, () => countRevision(b.id)));
     hero.appendChild(go);
   });
+}
+/* Retake: home learning with a mark can be done again from blank, to get
+   every question right. Each go before this one is kept as its score only,
+   under __tries in the same work row (a few dozen bytes a go, no column and
+   no route), and the mark book reads the newest answers as the result and
+   the list as the earlier goes. The answers themselves are not kept: the
+   work row would grow with every go, and the score is what a teacher asked
+   to see. Not offered once a teacher has locked it or given feedback on it,
+   since that feedback is about the answers this would clear. */
+function retakeOnSummary(hero, res){
+  if (spectate || markingLocked || workFrozen || !res || !res.outOf) return;
+  const tries = (restoredData && Array.isArray(restoredData.__tries)) ? restoredData.__tries : [];
+  const goes = tries.length + 1;
+  hero.appendChild(el("p","hl-tries", goes === 1 ? "This was your first go."
+    : "This was go number " + goes + "."));
+  const again = el("button","btn-ghost fadein hl-retake", "Retake to master it");
+  again.type = "button";
+  again.addEventListener("click", () => handInModal({
+    title: "Start again from blank?",
+    text: "Your answers will be cleared so you can try every question again. Your teacher will still see the score you got this time.",
+    yes: { label: "Yes, retake it", act: () => retakeHomework(res) },
+    no:  { label: "Not now", act: () => {} },
+    focus: "no"
+  }));
+  hero.appendChild(again);
+}
+async function retakeHomework(res){
+  const tries = (restoredData && Array.isArray(restoredData.__tries)) ? restoredData.__tries.slice() : [];
+  const now = snapshot();
+  tries.push({ got: res.score, max: res.outOf, at: now.__saved });
+  /* Blank work carrying only what is not an answer. Written here and to the
+     server before reloading: the page then opens it the way it opens any
+     unfinished home learning, so no task's set() has to know how to empty
+     itself. */
+  const fresh = { __step: 0, __saved: new Date().toISOString(), __done: false, __tries: tries };
+  if (now.__voice) fresh.__voice = now.__voice;
+  /* Every save stops while restoreDone is false, which keeps pagehide on the
+     way out of the reload from writing the old answers back over these. */
+  restoreDone = false;
+  clearTimeout(saveTimer);
+  try{ localStorage.setItem(WORK_KEY, JSON.stringify(fresh)); }catch(e){}
+  if (!OFFLINE && token && apiReady && !guest){
+    try{
+      const r = await fetch(API + "/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ lesson: lessonId, data: fresh })
+      });
+      if (!r.ok) throw new Error(String(r.status));
+    }catch(e){
+      /* The finished copy on the server would win on reload and quietly
+         undo the retake, so say so and stay on the summary. */
+      console.warn("Retake was not saved", e);
+      try{ localStorage.removeItem(WORK_KEY); }catch(e2){}
+      restoreDone = true;
+      lastSaved = "";
+      save();
+      const btn = document.querySelector(".hl-retake");
+      if (btn) btn.textContent = "Could not start again. Try once more";
+      return;
+    }
+  }
+  location.reload();
 }
 function homeworkHandIn(hero, justFinished){
   const status = el("p","handin");
