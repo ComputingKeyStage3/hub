@@ -24,9 +24,14 @@
       return JSON.parse(atob(part)) || null;
     }catch(e){ return null; }
   }
+  /* Only a sign-in that can be read and says it has run out. The lesson
+     Preview's pretend student holds "preview", which is not one at all,
+     and reading that as run out put the sign-in card over the preview's
+     home page. Anything unreadable is left for the server to judge. */
   function expired(token){
+    if (window.hubInPreview) return false;
     const p = payload(token);
-    return !p || !p.exp || Date.now() > p.exp;
+    return !!(p && p.exp && Date.now() > p.exp);
   }
   /* Sign-ins from before 18.5 carry no iat, and lasted 60 days: they are
      due straight away, so the whole school moves onto the new kind on its
@@ -46,7 +51,7 @@
     renewing = (async () => {
       const H = window.HUB || {};
       const token = localStorage.getItem("hub_token");
-      if (H.OFFLINE || !H.API || !token) return null;
+      if (window.hubInPreview || H.OFFLINE || !H.API || !token || !payload(token)) return null;
       if (expired(token)) return "refused";
       if (!due(token)) return null;
       try{
