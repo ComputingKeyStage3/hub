@@ -1605,6 +1605,7 @@ function compileOne(b, id, target){
              width: (b.size === "custom") ? String(b.width || "") : "",
              align: (b.align === "centre" || b.align === "right") ? b.align : "",
              beside: (b.beside === "left" || b.beside === "right") ? b.beside : "",
+             full: b.full === true ? true : undefined,
              frame: b.frame === false ? false : undefined }));
     else if (b.type === "pastelink")
       push(keepArrays({ type:"pastelink", id, heading: b.heading || "",
@@ -1716,6 +1717,7 @@ function compileOne(b, id, target){
              uploaded. Other answers only go with an answer to sit beside. */
           if (o.imgId) kept.imgId = String(o.imgId);
           else if (String(o.url || "").trim()) kept.url = String(o.url).trim();
+          if (o.full === true && (kept.imgId || kept.url)) kept.full = true;
           const also = (Array.isArray(o.also) ? o.also : []).map(x => String(x == null ? "" : x).trim()).filter(Boolean);
           if (o.fill && text && also.length) kept.also = also;
           out.push(kept);
@@ -7376,18 +7378,46 @@ function shrinkPicture(source, cb){
   }
 }
 
-/* Shrink it, send it, and come back with the id to point at. */
-function uploadPicture(source, alt, cb){
+/* Full quality: the file exactly as it was chosen, not drawn through a
+   canvas. For a picture students copy into Photoshop and work on, where a
+   1400px JPEG of a photograph is visibly worse than the one the teacher
+   had. Stored once, not per student, so a few at 3MB is still nothing
+   against 5GB. The cap is what fits under Vercel's 4.5MB request body
+   with the rest of the JSON beside it. */
+const PIC_FULL_MAX = 4000000;       // base64 length, about 3MB of picture
+function rawPicture(source, cb){
+  const take = (url) => {
+    const m = /^data:(image\/(?:png|jpeg|gif|webp));base64,/i.exec(url);
+    if (!m){ cb(null, "Full quality works for PNG, JPEG, GIF and WebP pictures. Turn it off to upload this one."); return; }
+    if (url.length - m[0].length > PIC_FULL_MAX){
+      cb(null, "That picture is over 3MB, too big to keep at full quality. Turn Full quality off, or save it smaller."); return;
+    }
+    const probe = new Image();
+    probe.onload = () => cb({ data: url, mime: m[1].toLowerCase(),
+                              width: probe.naturalWidth, height: probe.naturalHeight, full: true }, null);
+    probe.onerror = () => cb(null, "That file is not a picture this can read.");
+    probe.src = url;
+  };
+  if (typeof source === "string"){ take(source); return; }
+  const reader = new FileReader();
+  reader.onerror = () => cb(null, "That file could not be read.");
+  reader.onload = () => take(String(reader.result));
+  reader.readAsDataURL(source);
+}
+
+/* Shrink it (unless full is asked for), send it, and come back with the id
+   to point at. */
+function uploadPicture(source, alt, cb, full){
   if (OFFLINE){ cb(null, "Pictures are uploaded to the database, and there is no server in offline mode. Use an address instead."); return; }
-  shrinkPicture(source, async (made, why) => {
+  (full ? rawPicture : shrinkPicture)(source, async (made, why) => {
     if (!made){ cb(null, why); return; }
     const API = (window.HUB && window.HUB.API) || "";
     try{
       const r = await fetch(API + "/api/teacher/upload-image", { method:"POST",
         headers: window.teacherAuth.json(),
-        body: JSON.stringify({ data: made.data, mime: made.mime,
+        body: JSON.stringify({ data: made.data, mime: made.mime, full: made.full === true,
                                width: made.width, height: made.height, alt: alt || "" }) });
-      if (authFailed(r.status, () => uploadPicture(source, alt, cb))) return;
+      if (authFailed(r.status, () => uploadPicture(source, alt, cb, full))) return;
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "That picture could not be saved.");
       cb({ id: d.id, width: made.width, height: made.height }, null);
@@ -7577,8 +7607,14 @@ async function uploadCarriedPictures(data, msg){
   /* One upload per picture, however many places it is used. */
   const ids = {};
   const distinct = found.map(f => f.src).filter((s, i, all) => all.indexOf(s) === i);
+  /* A picture marked full in the file goes up exactly as it is in there,
+     not redrawn and squeezed the way slidePicture() does everything else. */
+  const fullSrc = new Set(found.filter(f => f.block && f.block.full === true).map(f => f.src));
+  const sendRaw = (src) => new Promise((resolve, reject) =>
+    uploadPicture(src, "", (made, why) => made ? resolve({ imgId: made.id }) : reject(new Error(why)), true));
   for (let i = 0; i < distinct.length; i++){
     if (msg) msg.textContent = "Uploading picture " + (i + 1) + " of " + distinct.length + "…";
+    if (fullSrc.has(distinct[i])){ ids[distinct[i]] = (await sendRaw(distinct[i])).imgId; continue; }
     const blob = await (await fetch(distinct[i])).blob();
     const made = await window.slidePicture(blob);
     if (!made || !made.imgId) throw new Error("A picture in that file could not be uploaded. Try again.");
