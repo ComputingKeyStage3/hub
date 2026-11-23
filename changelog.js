@@ -28,8 +28,8 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.4.3", text:"When a student has been signed in so long that saving stops working, the lesson asks for their password there and then and saves, instead of only showing Try again. Their work stays on the page." },
   { v:"18.4.2", text:"A picture can be uploaded at Full quality, on an Image task or in a table cell. It is kept exactly as chosen, so a student who copies it into Photoshop gets the original." },
-  { v:"18.4.1", text:"When a student has been signed in so long that saving stops working, the lesson asks for their password there and then and saves, instead of only showing Try again. Their work stays on the page." },
   { v:"18.4", text:"A new PDF task, under Media, shows a PDF such as a knowledge organiser on the page. Each page can go full screen and zoom, and it works on phones and iPads too." },
   { v:"18.3.4", text:"The class starting password works even when a space or quotes were saved with it on the server." },
   { v:"18.3.3", text:"A student who gets their password wrong too many times waits a few minutes before trying again. Passwords lists anyone locked out, with Let them back in to end the wait straight away." },

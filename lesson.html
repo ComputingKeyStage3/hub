@@ -1415,7 +1415,9 @@ async function dbLesson(){
   if (!d.lesson) throw new Error("missing");
   return { ok:true, json: async () => d.lesson };
 }
-const token = guest ? "" : (localStorage.getItem("hub_token") || "");
+/* let, not const: a sign-in that has run out is replaced in place by
+   askSignInAgain(), so the work on the page is never left behind. */
+let token = guest ? "" : (localStorage.getItem("hub_token") || "");
 /* A real student's own tab has no reason to say which class it is in the
    address, so this is normally read from what signing in cached. The
    teacher console's work pop-ups are a second student nobody signed in
@@ -4200,6 +4202,18 @@ async function submitWork(){
        now, after queueing as long as it can. That is not the same as not
        reaching it, and the child is told so, with a way to try again. */
     if (r.status === 503) return "busy";
+    /* The sign-in has run out (they last 60 days) or is no longer accepted.
+       The lesson still opens and puts their work back from this computer, so
+       nothing looks wrong until a save is turned away, and reloading reads the
+       same sign-in again. That is how a Year 10 class lost a lesson's work
+       with only Try again to press. So ask for the password here, and send
+       again. Behind the rocket the rocket asks instead (fall()), because a
+       pop-up over it would leave its 35 second clock running. */
+    if (r.status === 401 && !guest){
+      needSignIn = true;
+      if (!rocketUp && await askSignInAgain(false)) return submitWork();
+      return "signin";
+    }
     if (r.status === 423){
       /* Locked for marking since this page opened. */
       markingLocked = true;
@@ -4218,6 +4232,100 @@ async function submitWork(){
     sendExamMarks();
     return "done";
   }catch(e){ return "failed"; }
+}
+
+/* ---------- signing back in without leaving the page ----------
+   Only ever as the same student: the username is the one this computer
+   signed in with and cannot be changed here, and a sign-in that comes back
+   as anybody else is refused, so one child's work can never be sent under
+   another child's name. */
+let needSignIn = false;            // the server has turned this sign-in away
+let signInAsking = null;           // the pop-up's answer, while it is up
+let signInDeclinedAt = 0;
+function tokenSid(t){
+  try{
+    const part = String(t || "").split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(part)).sid || null;
+  }catch(e){ return null; }
+}
+/* Answers true once they are signed in again. `pressed` is a button they
+   pressed for it; a save in the background that meets the same problem
+   does not ask again for a minute after they closed it, or every few
+   seconds of typing would bring it back. */
+function askSignInAgain(pressed){
+  if (signInAsking) return signInAsking;
+  if (!pressed && Date.now() - signInDeclinedAt < 60000) return Promise.resolve(false);
+  signInAsking = new Promise(answer => {
+    const back = el("div", "modal-back signin-again no-print");
+    const box = el("div", "modal narrow");
+    const close = (ok) => {
+      back.remove();
+      signInAsking = null;
+      if (!ok) signInDeclinedAt = Date.now();
+      answer(ok);
+    };
+    const x = el("button", "btn-ghost iconbtn modal-x", "✕");
+    x.setAttribute("aria-label", "Close");
+    x.addEventListener("click", () => close(false));
+    box.appendChild(x);
+    box.appendChild(el("h2", "", "Sign in again to save"));
+    box.appendChild(el("p", "hint", "You have been signed in for a long time, so you need to sign in again. Your work is still here and will not be lost."));
+    const user = localStorage.getItem("hub_user") || "";
+    const row = (label, input) => {
+      const r = el("div", "bfield");
+      r.appendChild(el("label", "", label));
+      r.appendChild(input);
+      box.appendChild(r);
+    };
+    const name = el("input");
+    name.type = "text"; name.value = user; name.autocomplete = "username";
+    if (user){ name.readOnly = true; }
+    row("Username", name);
+    const pw = el("input");
+    pw.type = "password"; pw.autocomplete = "current-password"; pw.maxLength = 200;
+    row("Password", pw);
+    const msg = el("p", "hint", "");
+    msg.setAttribute("role", "alert");
+    box.appendChild(msg);
+    const go = el("button", "btn-primary modal-cta", "Sign in and save");
+    const oldSid = tokenSid(token);
+    const send = async () => {
+      const u = name.value.trim(), p = pw.value;
+      if (!u){ msg.textContent = "Type your username."; name.focus(); return; }
+      if (!p){ msg.textContent = "Type your password."; pw.focus(); return; }
+      const busy = hubMotion.busy(go, "Signing in");
+      try{
+        const r = await fetch(API + "/api/login", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || "That did not work. Check your password and try again.");
+        if (oldSid && tokenSid(d.token) !== oldSid)
+          throw new Error("That is a different account. Sign in as yourself to save this work.");
+        token = d.token;
+        localStorage.setItem("hub_token", d.token);
+        if (!user) localStorage.setItem("hub_user", u.toLowerCase());
+        if (d.name) localStorage.setItem("hub_name", d.name);
+        if (d.group) localStorage.setItem("hub_group", d.group);
+        needSignIn = false;
+        busy.reset();
+        close(true);
+      }catch(e){
+        busy.reset();
+        msg.textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message;
+        pw.focus();
+      }
+    };
+    go.addEventListener("click", send);
+    pw.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    box.appendChild(go);
+    scrollBody(box);
+    back.appendChild(box);
+    document.body.appendChild(back);
+    setTimeout(() => (user ? pw : name).focus(), 30);
+  });
+  return signInAsking;
 }
 
 /* ---------- handing in at the end: the rocket ----------
@@ -4392,13 +4500,23 @@ function rocketScreen(){
       fallAt = performance.now();
       clearInterval(words);
       back.classList.add("fallen");
-      warn.textContent = why === "failed" ? "We could not reach the server." : "The server is very busy just now.";
+      /* A sign-in turned away is not a connection problem, and pressing
+         Try again would only be turned away again, which is what a whole
+         class did for the last ten minutes of a lesson. */
+      const signIn = needSignIn;
+      const again = actions.querySelector(".rs-again");
+      warn.textContent = signIn ? "You need to sign in again to save."
+                       : why === "failed" ? "We could not reach the server." : "The server is very busy just now.";
       msg.textContent = "Your work is safe on this computer.";
+      again.textContent = signIn ? "Sign in again" : "Try again";
       actions.hidden = false;
       return new Promise(answer => {
         let settled = false;
         const settle = (choice) => { if (settled) return; settled = true; actions.hidden = true; answer(choice); };
-        actions.querySelector(".rs-again").onclick = () => settle("again");
+        again.onclick = () => {
+          if (!signIn){ settle("again"); return; }
+          askSignInAgain(true).then(ok => { if (ok) settle("again"); });
+        };
         actions.querySelector(".rs-leave").onclick = () => settle("summary");
         if (late) late.then(r => { if (r === "done") settle("done"); });
       });
@@ -4588,7 +4706,7 @@ async function manualSave(){
   finally{ savingNow = false; }
   if (state === "done"){ noteSaved(false); paintSaveButtons("saved"); return; }
   paintSaveButtons("idle");
-  btn.textContent = state === "offline" ? "Sign in to save"
+  btn.textContent = state === "offline" || state === "signin" ? "Sign in to save"
                   : state === "locked" ? "Locked for marking" : "Try again";
   btn.classList.add("flash-bad");
   hubMotion.nudge(btn);

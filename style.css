@@ -572,6 +572,9 @@ details.answers pre{white-space:pre-wrap; font-family:var(--mono); font-size:var
   display:grid; place-items:center; backdrop-filter:blur(3px);
 }
 .modal-back[hidden]{display:none}
+/* Signing back in is asked from on top of the rocket (z-index 400) as well
+   as from the lesson. */
+.modal-back.signin-again{z-index:450}
 .modal{ border:1px solid var(--line-2); border-radius:var(--rad-lg);
   padding:34px 32px 28px; max-width:440px; width:100%; text-align:center;
   box-shadow:0 24px 60px rgba(0,0,0,.5);
