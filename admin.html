@@ -5807,7 +5807,7 @@ function arborInstructions(id){
   const lines = ["Your home learning is on the Computing Lesson Hub.", "",
                  "1. Click this link:", homeLearningLink(id),
                  "2. Sign in with your username and password if it asks you to.",
-                 "3. Your home learning will open. Answer every question, then press Finish."];
+                 "3. Your home learning will open. Do every task, then press Hand in."];
   const later = a && a.release_at && a.release_at > new Date().toISOString();
   if (later || (a && a.close_on)) lines.push("");
   if (later) lines.push("It opens on " + longDate(localDay(a.release_at)) + " at " + hhmm(a.release_at) + ".");

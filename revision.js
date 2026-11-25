@@ -93,7 +93,10 @@
   const KIND_HUE = { cards: HUES[0], mindmap: HUES[1], poster: HUES[2], quiz: HUES[3], photo: HUES[5] };
   const stamps = () => (window.drawKit && window.drawKit.STAMPS) || [];
   const stampOf = (name) => stamps().find(s => s.name === name) || null;
-  function iconSvg(name, size){
+  const pack = () => window.iconPack || null;
+  const known = (name) => !!stampOf(name) || !!(pack() && pack().has(name));
+  function iconSvg(name, size, hue){
+    if (/^ip:/.test(name || "")) return pack() ? pack().svg(name, size, hue) : "";
     const def = stampOf(name);
     if (!def) return "";
     const INK = "#1D1D1B";
@@ -139,41 +142,103 @@
     [/\bsetting|\boperating system|\butility|\bsystem/, "gear"],
     [/\bpeople|\busers?\b|\bsocial|\bfriend|\bcyberbull|\bstranger|\bperson/, "people"],
     [/\bimportant|\bremember|\bfast|\bspeed|\bpower|\belectric/, "spark"],
-    [/\bidea|\bwhat\b|\bwhy\b|\bhow\b|\bexample|\bmeans?\b|\bdefin/, "bulb"]
+    [/\bidea\b|\bthink/, "bulb"]
   ];
   function guess(words){
     const t = String(words || "").toLowerCase();
     if (t.trim().length < 2) return "";
     const hit = GUESSES.find(g => g[0].test(t));
-    return hit ? hit[1] : "";
+    if (hit) return hit[1];
+    return pack() ? pack().guess(t) : "";
   }
+  /* How long after the last key a picture is chosen. Chosen as they typed, it
+     changed its mind at every word, and a card flickered through four. */
+  const CHOOSE_MS = 2000;
   /* The icon a card shows: what they picked, nothing if they took it off,
      or one to go with the front, and failing that the back. */
   function cardIcon(x, a, z){
     if (x.i === "none") return "";
-    if (x.i && stampOf(x.i)) return x.i;
+    if (x.i && known(x.i)) return x.i;
+    /* one they picked, from a pack that has not arrived: wait for it rather
+       than show them something else in its place */
+    if (x.i) return "";
     return guess(x[a]) || guess(x[z]) || "";
   }
-  /* All the pictures there are, under whatever was pressed. One at a time. */
+  /* All the pictures there are, under whatever was pressed. One at a time.
+     `o.words` is what is on the card, for what to offer first; `o.hue` the
+     colour they come in; `o.always` leaves out Choose for me and No picture,
+     for a poster, where nothing chooses and nothing is an option already. */
   let openPicker = null;
-  function pickIcon(anchor, now, chosen){
+  const FIRST = 90;             // as many as are drawn before scrolling asks for more
+  function pickIcon(anchor, now, chosen, o){
+    o = o || {};
     if (openPicker){ const same = openPicker.anchor === anchor; openPicker.close(); if (same) return; }
     const box = make("div", "rv-picker no-print");
     box.setAttribute("role", "dialog");
     box.setAttribute("aria-label", "Pick a picture");
-    const top = make("div", "rv-picker-top");
-    top.appendChild(button("btn-ghost" + (!now ? " on" : ""), "Choose for me", () => done("")));
-    top.appendChild(button("btn-ghost" + (now === "none" ? " on" : ""), "No picture", () => done("none")));
-    box.appendChild(top);
+    const find = make("input", "rv-picker-find");
+    find.type = "search"; find.placeholder = "Search for a picture"; find.autocomplete = "off"; find.spellcheck = false;
+    find.setAttribute("aria-label", "Search for a picture");
+    find.setAttribute("enterkeyhint", "search");
+    box.appendChild(find);
+    if (!o.always){
+      const top = make("div", "rv-picker-top");
+      [["Choose for me", ""], ["No picture", "none"]].forEach(([said, name]) => {
+        const on = (now || "") === name;
+        const b = button("btn-ghost" + (on ? " on" : ""), said, () => done(name));
+        b.setAttribute("aria-pressed", String(on));
+        top.appendChild(b);
+      });
+      box.appendChild(top);
+    }
+    const said = make("p", "rv-picker-said");
+    said.setAttribute("role", "status");
+    box.appendChild(said);
     const grid = make("div", "rv-picker-grid");
-    stamps().slice().sort((m, n) => (n.group === "Computing") - (m.group === "Computing")).forEach(st => {
-      const b = button("rv-picker-one" + (now === st.name ? " on" : ""), "", () => done(st.name));
-      b.innerHTML = iconSvg(st.name, 34);
-      b.title = st.label; b.setAttribute("aria-label", st.label);
-      grid.appendChild(b);
-    });
     box.appendChild(grid);
     document.body.appendChild(box);
+    const labelOf = (name) => { const st = stampOf(name); return st ? st.label : pack() ? pack().label(name) : name; };
+    let list = [], drawn = 0;
+    function more(){
+      list.slice(drawn, drawn + FIRST).forEach(name => {
+        const b = button("rv-picker-one" + (now === name ? " on" : ""), "", () => done(name));
+        b.innerHTML = iconSvg(name, 34, o.hue);
+        b.title = labelOf(name); b.setAttribute("aria-label", b.title);
+        grid.appendChild(b);
+      });
+      drawn = Math.min(list.length, drawn + FIRST);
+    }
+    /* Nothing searched for: what goes with the card, then the computing ones,
+       then everything else. */
+    function fill(){
+      const q = find.value.trim();
+      const P = pack();
+      if (q){
+        list = P ? P.search(q, 300) : stamps().filter(st => st.label.toLowerCase().indexOf(q.toLowerCase()) >= 0).map(st => st.name);
+        said.textContent = list.length ? list.length + (list.length === 1 ? " picture" : " pictures") + " for " + q
+          : P && !P.ready() ? "Getting the pictures…" : "Nothing found for " + q + ". Try another word.";
+      } else {
+        const mine = P && o.words ? P.search(o.words, 12) : [];
+        const own = stamps().slice().sort((m, n) => (n.group === "Computing") - (m.group === "Computing")).map(st => st.name);
+        list = [...new Set(mine.concat(own, P ? P.all() : []))];
+        said.textContent = mine.length ? "The first few go with your words" : "";
+      }
+      grid.innerHTML = ""; drawn = 0; grid.scrollTop = 0;
+      more();
+    }
+    let findTimer = 0;
+    find.addEventListener("input", () => { clearTimeout(findTimer); findTimer = setTimeout(fill, 140); });
+    find.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      clearTimeout(findTimer); fill();
+      if (find.value.trim() && list.length) done(list[0]);
+    });
+    /* An iPad's keyboard covers the bottom of the screen, and the list with it. */
+    find.addEventListener("focus", () => { if (window.matchMedia("(pointer:coarse)").matches) box.style.top = "8px"; });
+    grid.addEventListener("scroll", () => { if (grid.scrollTop + grid.clientHeight > grid.scrollHeight - 120 && drawn < list.length) more(); });
+    fill();
+    if (pack() && !pack().ready()) pack().when(() => { if (box.isConnected) fill(); });
     /* Again a moment later: opening it takes the keyboard away on an iPad,
        and the page slides back down from where that had pushed it. */
     const opened = Date.now();
@@ -184,7 +249,7 @@
       box.style.top = Math.max(8, Math.min(innerHeight - h - 8, under + h < innerHeight - 8 ? under : over > 8 ? over : under)) + "px";
     }
     place();
-    setTimeout(() => { if (box.isConnected) place(); }, 500);
+    setTimeout(() => { if (box.isConnected && document.activeElement !== find) place(); }, 500);
     anim(box, [{ opacity: 0, transform: "scale(.94)" }, { opacity: 1, transform: "none" }], 160);
     function close(){
       box.remove();
@@ -197,13 +262,19 @@
     function away(e){ if (!box.contains(e.target) && !anchor.contains(e.target)) close(); }
     function key(e){ if (e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); close(); } }
     /* it is fixed to the screen, so it cannot follow the page scrolling away */
-    function scrolled(e){ if (e.target !== grid && !box.contains(e.target) && Date.now() - opened > 900) close(); }
+    function scrolled(e){
+      /* the keyboard coming up for the search box moves the page behind */
+      if (document.activeElement === find) return;
+      if (e.target !== grid && !box.contains(e.target) && Date.now() - opened > 900) close();
+    }
     document.addEventListener("pointerdown", away, true);
     document.addEventListener("keydown", key, true);
     window.addEventListener("scroll", scrolled, true);
     openPicker = { anchor, close };
-    const first = box.querySelector(".on") || box.querySelector("button");
-    if (first) first.focus({ preventScroll: true });
+    /* With a mouse the search box is ready to type in. On a touch screen that
+       would bring the keyboard up over the pictures before they were seen. */
+    if (!window.matchMedia("(pointer:coarse)").matches) find.focus({ preventScroll: true });
+    else { const first = box.querySelector(".on") || box.querySelector("button"); if (first) first.focus({ preventScroll: true }); }
   }
 
   /* The drawing on each choice: the thing itself, small. */
@@ -359,8 +430,11 @@
           const c = make("div", "rv-fan-card rv-pat-" + look.p);
           c.style.setProperty("--rv", hueOf(look, i));
           c.style.transform = "rotate(" + (shown.length === 1 ? 0 : (i - (shown.length - 1) / 2) * 11) + "deg)";
-          const icon = cardIcon(x, a, z);
-          if (icon) c.innerHTML = iconSvg(icon, 34);
+          const pic = make("span", "rv-fan-icon");
+          const drawPic = () => { const icon = cardIcon(x, a, z); if (icon) pic.innerHTML = iconSvg(icon, 34, hueOf(look, i)); };
+          drawPic();
+          if (pack() && !pack().ready()) pack().when(drawPic);
+          c.appendChild(pic);
           c.appendChild(make("span", "", x[a].slice(0, 40)));
           box.appendChild(c);
           anim(c, [{ transform: "translateY(40px) rotate(0deg)", opacity: 0 }, { transform: c.style.transform, opacity: 1 }], 420, { delay: 120 * i, fill: "backwards" });
@@ -394,6 +468,7 @@
     const s = make("section", "revise");
     const allowed = ORDER.filter(k => !Array.isArray(b.kinds) || !b.kinds.length || b.kinds.indexOf(k) >= 0);
     const words = wordsOf(b);
+    if (pack()) pack().load();
     let v = { kind: "", cards: [], quiz: [], map: null, poster: null, pwords: undefined, photos: [], look: cleanLook() };
     let sub = null;               // the mind map or poster drawn inside this task
     let meter = null;             // repaints the target and the key words
@@ -622,6 +697,7 @@
           r.li.style.setProperty("--rv", hueOf(v.look, i));
           PATTERNS.forEach(([id]) => r.front.classList.toggle("rv-pat-" + id, v.look.p === id));
           r.num.textContent = String(i + 1);
+          r.paintIcon();                        // in the card's own colour
           r.boxA.setAttribute("aria-label", aSaid + " " + (i + 1));
           r.boxZ.setAttribute("aria-label", zSaid + " " + (i + 1));
           r.del.setAttribute("aria-label", "Remove " + KINDS[key].one + " " + (i + 1));
@@ -631,18 +707,31 @@
         const li = make("li", "rv-pair");
         const front = make("div", "rv-face rv-front"), back = make("div", "rv-face rv-backside");
         const num = make("span", "rv-num");
+        const myHue = () => hueOf(v.look, Math.max(0, v[key].indexOf(item)));
         const iconBtn = button("rv-iconbtn", "", () => pickIcon(iconBtn, item.i || "", (name) => {
           if (name) item.i = name; else delete item.i;
           paintIcon(); changed();
-        }));
+        }, { words: item[a] + " " + item[z], hue: myHue() }));
         iconBtn.title = "Change the picture"; iconBtn.setAttribute("aria-label", "Change the picture");
-        let shown;
+        let shown, chooseTimer = 0;
+        /* Typing only starts the wait again. What is there stays until then. */
+        function chooseSoon(){
+          if (item.i) return;
+          clearTimeout(chooseTimer);
+          iconBtn.classList.add("is-waiting");
+          chooseTimer = setTimeout(() => { iconBtn.classList.remove("is-waiting"); paintIcon(); }, CHOOSE_MS);
+        }
         function paintIcon(){
-          const name = cardIcon(item, a, z);
-          if (name === shown) return;
-          const first = shown === undefined;
-          shown = name;
-          iconBtn.innerHTML = name ? iconSvg(name, 40) : '<span class="rv-addicon" aria-hidden="true">+</span>';
+          clearTimeout(chooseTimer);
+          iconBtn.classList.remove("is-waiting");
+          const name = cardIcon(item, a, z), hue = myHue();
+          if (shown === name + hue) return;
+          const first = shown === undefined || shown.indexOf(name) === 0;
+          shown = name + hue;
+          iconBtn.innerHTML = name ? iconSvg(name, 40, hue)
+            : item.i === "none" ? '<span class="rv-noicon" aria-hidden="true"></span>'
+            : '<span class="rv-addicon" aria-hidden="true">+</span>';
+          iconBtn.title = item.i === "none" ? "No picture. Press to choose one" : "Change the picture";
           iconBtn.classList.toggle("is-empty", !name);
           if (!first && name) anim(iconBtn.firstChild, [{ transform: "scale(.2) rotate(-25deg)" }, { transform: "scale(1.2) rotate(6deg)", offset: .6 }, { transform: "none" }], 420);
         }
@@ -654,8 +743,8 @@
         const nudge = make("p", "rv-nudge", "That is a lot to learn. Can you say it in one short sentence?");
         nudge.hidden = true;
         const look = () => { nudge.hidden = boxZ.value.trim().length <= LONG; };
-        boxA.addEventListener("input", () => { item[a] = boxA.value; grow(boxA); paintIcon(); changed(); });
-        boxZ.addEventListener("input", () => { item[z] = boxZ.value; grow(boxZ); paintIcon(); look(); changed(); });
+        boxA.addEventListener("input", () => { item[a] = boxA.value; grow(boxA); chooseSoon(); changed(); });
+        boxZ.addEventListener("input", () => { item[z] = boxZ.value; grow(boxZ); chooseSoon(); look(); changed(); });
         boxA.addEventListener("focus", () => { lastFront = boxA; });
         /* Enter moves on, as it does in the mind map, so a deck can be typed
            without reaching for the mouse. Shift and Enter is a new line. */
@@ -671,8 +760,9 @@
         front.appendChild(num); front.appendChild(iconBtn); front.appendChild(make("span", "rv-label", aSaid)); front.appendChild(boxA);
         back.appendChild(make("span", "rv-label", zSaid)); back.appendChild(boxZ); back.appendChild(nudge);
         li.appendChild(front); li.appendChild(back); li.appendChild(del);
-        const r = { item, li, front, num, boxA, boxZ, del };
+        const r = { item, li, front, num, boxA, boxZ, del, paintIcon };
         paintIcon(); look();
+        if (pack() && !pack().ready()) pack().when(() => { if (li.isConnected) paintIcon(); });
         requestAnimationFrame(() => { grow(boxA); grow(boxZ); });
         return r;
       }
@@ -759,7 +849,8 @@
         if (kind === "mindmap") v.map = made.get();
         else { const got = made.get(); if (got){ v.poster = got; if (words.length && sub) v.pwords = posterWords(); } }
         changed();
-      }, icon: guess, iconSvg, pickIcon, assessment: ctx && ctx.assessment });
+      }, icon: guess, iconSvg, pickIcon, chooseMs: CHOOSE_MS, assessment: ctx && ctx.assessment });
+      if (kind === "mindmap" && pack() && !pack().ready()) pack().when(() => { if (made.section.isConnected) made.repaintIcons(); });
       sub = { kind, made, hadImg: !!had, was: Array.isArray(v.pwords) ? v.pwords : [], loaded: false };
       if (had) made.set(had);
       s.appendChild(made.section);
@@ -892,7 +983,7 @@
     };
     const items = window.reviseKit.items(v);
     const a = v.kind === "quiz" ? "q" : "f", z = v.kind === "quiz" ? "a" : "b";
-    const deck = items.map((x, i) => ({ front: x[a], back: x[z], icon: cardIcon(x, a, z), hue: hueOf(look, i), pat: look.p }));
+    const deck = items.map((x, i) => ({ front: x[a], back: x[z], get icon(){ return cardIcon(x, a, z); }, hue: hueOf(look, i), pat: look.p }));
     const modes = v.kind === "cards" ? [["Flip the cards", () => flipGame(stage, deck, started)]]
       : v.kind === "quiz" ? [["Type the answers", () => typeGame(stage, deck, started)]]
       : v.kind === "mindmap" ? [["Cover it up", () => mapTest(stage, b, v)]]
@@ -905,7 +996,9 @@
     }
     page.appendChild(stage);
     /* after it is on the page: a mind map has to be measured */
-    page.start = () => go(modes, 0);
+    page.start = () => {
+      if (pack()) pack().load().then(() => { if (page.isConnected) go(modes, 0); }); else go(modes, 0);
+    };
     page.stop = () => { if (leave) leave(); leave = null; };
     return page;
   }
@@ -975,7 +1068,7 @@
   function face(card, cls, words, label){
     const f = make("div", "rv-cardface " + cls);
     f.appendChild(make("span", "rv-label", label));
-    if (card.icon){ const i = make("span", "rv-cardicon"); i.innerHTML = iconSvg(card.icon, 84); f.appendChild(i); }
+    if (card.icon){ const i = make("span", "rv-cardicon"); i.innerHTML = iconSvg(card.icon, 84, card.hue); f.appendChild(i); }
     const t = make("p", "rv-cardwords" + (words.length > 110 ? " is-long" : ""), words);
     f.appendChild(t);
     return f;
@@ -1051,7 +1144,7 @@
       const c = deck[current];
       card.innerHTML = "";
       card.appendChild(side === "front" ? face(c, "is-front rv-pat-" + c.pat, c.front, "Front")
-                                        : face(Object.assign({}, c, { icon: "" }), "is-back", c.back, "Back"));
+                                        : face({ icon: "" }, "is-back", c.back, "Back"));
       card.setAttribute("aria-label", side === "front" ? "Front: " + c.front + ". Press to turn it over" : "Back: " + c.back);
     }
     async function answer(right){
@@ -1100,7 +1193,7 @@
       box.innerHTML = "";
       box.style.setProperty("--rv", c.hue);
       const q = make("div", "rv-q rv-pat-" + c.pat);
-      if (c.icon){ const i = make("span", "rv-cardicon"); i.innerHTML = iconSvg(c.icon, 72); q.appendChild(i); }
+      if (c.icon){ const i = make("span", "rv-cardicon"); i.innerHTML = iconSvg(c.icon, 72, c.hue); q.appendChild(i); }
       q.appendChild(make("p", "rv-cardwords" + (c.front.length > 110 ? " is-long" : ""), c.front));
       box.appendChild(q);
       const input = make("textarea", "rv-in rv-typed");
@@ -1185,7 +1278,7 @@
       const tiles = shuffle(some.reduce((out, c) => out.concat([{ c, side: "front" }, { c, side: "back" }]), []));
       tiles.forEach((t, i) => {
         const btn = button("rv-tile is-" + t.side + (t.c[t.side].length > 60 ? " is-long" : ""), "", () => press(t, btn));
-        if (t.side === "front" && t.c.icon) btn.innerHTML = iconSvg(t.c.icon, 34);
+        if (t.side === "front" && t.c.icon) btn.innerHTML = iconSvg(t.c.icon, 34, t.c.hue);
         btn.appendChild(make("span", "", t.c[t.side]));
         t.btn = btn;
         grid.appendChild(btn);

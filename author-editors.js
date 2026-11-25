@@ -1871,7 +1871,7 @@ EDITORS.revise = function(b, k){
     });
     row.appendChild(btn);
   });
-  row.appendChild(helpDot("A photo is up to two pictures of work done on paper. Once they press Finish, everything else opens on a page where they test themselves, and every go at it is counted for you in Mark work."));
+  row.appendChild(helpDot("A photo is up to two pictures of work done on paper. Once they hand it in, everything else opens on a page where they test themselves, and every go at it is counted for you in Mark work."));
   w.appendChild(row);
   add(w);
   F("How many flashcards or quiz questions to aim for", "target", { num:true,

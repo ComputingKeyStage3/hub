@@ -2981,7 +2981,7 @@
         out.push({ id: String(n.id), text: String(n.text || "").slice(0, MAP_WORDS),
                    parent: n.parent === null || n.parent === undefined ? null : String(n.parent),
                    side: n.side === "left" || n.side === "right" ? n.side : undefined,
-                   i: typeof n.i === "string" ? n.i.slice(0, 20) : undefined });
+                   i: typeof n.i === "string" ? n.i.slice(0, 60) : undefined });
       });
       let root = out.find(n => n.parent === null);
       if (!root){
@@ -3101,7 +3101,7 @@
             if (name) box.node.i = name; else delete box.node.i;
             paintBadge(box);
             ctx.changed();
-          }));
+          }, { words: box.node.text, hue: colourOf(box.node) }));
         }
         wrap.appendChild(box.badge);
       }
@@ -3122,7 +3122,7 @@
         /* a pasted line break would make a box no layout expects */
         if (/\n/.test(text.value)) text.value = text.value.replace(/\s*\n\s*/g, " ");
         box.node.text = text.value;
-        paintBadge(box);
+        badgeSoon(box);
         layout();
         ctx.changed();
       });
@@ -3154,13 +3154,22 @@
       return box;
     }
 
+    /* Typing only starts the wait again, so a box does not run through a
+       picture for every word of what is being written in it. */
+    function badgeSoon(box){
+      if (!box.badge || box.node.i) return;
+      clearTimeout(box.badgeTimer);
+      box.badgeTimer = setTimeout(() => paintBadge(box), ctx.chooseMs || 0);
+    }
     function paintBadge(box){
       if (!box.badge) return;
+      clearTimeout(box.badgeTimer);
       const name = box.node.i === "none" ? "" : box.node.i || ctx.icon(box.node.text);
-      if (box.badgeName === name) return;
+      const drawn = name ? ctx.iconSvg(name, 22, colourOf(box.node)) : "";
+      if (box.badgeName === name && box.badge.innerHTML !== "" === !!drawn) return;
       const was = box.badgeName;
       box.badgeName = name;
-      box.badge.innerHTML = name ? ctx.iconSvg(name, 22) : "";
+      box.badge.innerHTML = drawn;
       box.badge.classList.toggle("is-empty", !name);
       box.wrap.classList.toggle("has-badge", !!name);
       if (name && was !== undefined && window.hubMotion) window.hubMotion.pop(box.badge);
@@ -3419,6 +3428,8 @@
         paint(); ctx.changed(); focusOn(bare);
         return bare;
       },
+      /* once the pictures have arrived */
+      repaintIcons: () => boxes.forEach(box => paintBadge(box)),
       /* every box but the middle, with how far out it is, for covering up */
       each: (fn) => nodes.forEach(n => { if (n.parent !== null) fn(boxes.get(n.id).wrap, depthOf(n), n); }),
       done: () => nodes.filter(n => n.parent !== null && String(n.text).trim()).length > 0
@@ -4135,6 +4146,7 @@
       bg: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 100 18c1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a5 5 0 005-5C21 6.5 17 3 12 3z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.5" cy="11" r="1.4"/><circle cx="10" cy="7" r="1.4"/><circle cx="15" cy="7" r="1.4"/></svg>',
       text: '<svg viewBox="0 0 24 24"><path d="M4 5h16v3h-2V7h-5v11h2v2H9v-2h2V7H6v1H4z"/></svg>',
       photo: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-5 4 4 3-3 4 4z"/></svg>',
+      icons: '<svg viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.8"><circle cx="7.5" cy="7.5" r="4"/><rect x="13.5" y="4" width="7" height="7" rx="1.5"/><path d="M7.5 13.5l4.2 7H3.3z"/><path d="M17 13.2v7.6M13.2 17h7.6"/></svg>',
       stickers: '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.8 6 6.5.7-4.9 4.4 1.4 6.4L12 16.8 6.2 20l1.4-6.4L2.7 9.2l6.5-.7z"/></svg>',
       undo: '<svg viewBox="0 0 24 24"><path d="M7 8h7a6 6 0 010 12h-4v-2.5h4a3.5 3.5 0 000-7H7V14L1.5 9.2 7 4.5z"/></svg>'
     };
@@ -4152,6 +4164,19 @@
     /* the same pop-up as every other drawing: paste one copied from the
        internet, or browse for one on the computer */
     bigBtn(ICON.photo, "Add an image", () => window.pictureKit.ask(loadPhoto));
+    if (ctx.pickIcon){
+      const iconBtn = bigBtn(ICON.icons, "Icons", () => ctx.pickIcon(iconBtn, "", (name) => {
+        const url = window.iconPack && /^ip:/.test(name) ? window.iconPack.dataUrl(name, 480) : "";
+        if (!url){ addStamp(name, POSTER_W / 2, POSTER_H / 2); return; }
+        const img = new Image();
+        img.onload = () => {
+          remember();
+          const it = { kind: "photo", img: img, x: POSTER_W / 2, y: POSTER_H / 2, w: 150, h: 150, filter: "none", frame: false };
+          items.push(it); pick(it); changed();
+        };
+        img.src = url;
+      }, { always: true, words: b.heading || "" }));
+    }
     const stickBtn = bigBtn(ICON.stickers, "Stickers", () => { pick(null); open = open === "stickers" ? "" : "stickers"; paintPanel(); });
     const undoBtn = bigBtn(ICON.undo, "Undo", () => {
       const last = history.pop();
@@ -4172,6 +4197,13 @@
       s.classList.add("has-brief");
     }
 
+    function addStamp(name, x, y, remembered){
+      if (!remembered) remember();
+      const it = { kind: "stamp", name: name, x: x, y: y, size: 150, flip: false };
+      items.push(it);
+      pick(it);
+      changed();
+    }
     function addWords(said){
       remember();
       const given = typeof said === "string" ? said : "";
@@ -4319,11 +4351,8 @@
         const tray = window.drawKit.tray(canvas, (name, cx, cy) => {
           remember();
           const p = cx === null ? [POSTER_W / 2, POSTER_H / 2] : at({ clientX: cx, clientY: cy });
-          const it = { kind: "stamp", name: name, x: p[0], y: p[1], size: 150, flip: false };
-          items.push(it);
           open = "";
-          pick(it);
-          changed();
+          addStamp(name, p[0], p[1], true);
         });
         tray.classList.add("poster-tray");
         panel.appendChild(tray);

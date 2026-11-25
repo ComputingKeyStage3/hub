@@ -26,6 +26,8 @@
 <script src="pyedit.js"></script>
 <script src="teacher.js"></script>
 <script src="tasks-extra.js"></script>
+<script src="homelearning.js"></script>
+<script src="iconpack.js"></script>
 <script src="revision.js"></script>
 <script src="pixels.js"></script>
 <script src="games.js"></script>
@@ -1797,7 +1799,8 @@ const handedOver = handedLesson();
     document.title = l.title;
     $("lessonTitle").textContent = l.title;
     l.blocks.forEach(renderBlock);
-    if (assessLayout()){ if (homeworkView()) arrangeHomework(); else arrangeAssessment(); }
+    if (assessLayout()) arrangeAssessment();
+    else if (homeLayout()) arrangeHomework();
     buildTracker();
     startSlides(l);
     startDocs(l);
@@ -2333,7 +2336,7 @@ function rubricOnSummary(){
    pages and is left alone. */
 let assessPages = null;
 function assessLayout(){
-  return !!(lesson && ((lesson.assessment && !lesson.practical) || homeworkView())) &&
+  return !!(lesson && lesson.assessment && !lesson.practical) &&
     pdfParam === null && allParam === null;
 }
 /* Home learning is sat the way an assessment is: one page of numbered
@@ -2444,61 +2447,6 @@ function arrangeAssessment(){
                   nav: null, navBtn: null, pinnedUntil: 0 };
   watchQuestionScroll();
 }
-/* Every page of a piece of home learning, one after another on one screen.
-   The pages' own sections are moved here whole rather than their tasks being
-   lifted out: the section is what holds a page's extension tasks and shows
-   them, and it has to stay itself for any of that to go on working. Each task
-   still gets its number and its card. */
-function arrangeHomework(){
-  /* Back to the list this came from, not the Lessons one it is not in. */
-  const way = $("homeLink");
-  if (way && !spectate) way.href = "index.html?tab=homework";
-  const questions = el("section","assess-page assess-questions");
-  const screen = { el: questions, kind: "questions", title: "Questions",
-                   text: "Answer every question, then press Finish at the bottom.", step: 0 };
-  const items = [];
-  let num = 0;
-  /* The name of a page only helps where there is another page to tell it from. */
-  const named = steps.length > 1;
-  steps.forEach((st, i) => {
-    const b = (lesson.blocks || []).find(x => x.id === st.qid);
-    if (!b) return;
-    st.section.hidden = false;
-    /* An older lesson can have tasks with no page round them. */
-    if (b.type !== "page"){
-      const reading = ASSESS_READING.includes(b.type);
-      const n = reading ? null : ++num;
-      const item = assessItem(st, b, n);
-      questions.appendChild(item);
-      if (!reading){ items.push({ step: i, block: b, num: n, item: item, built: st }); questionNo[b.id] = n; }
-      return;
-    }
-    if (named && b.title) st.section.insertBefore(tel("h2","assess-part", b.title), st.section.firstChild);
-    questions.appendChild(st.section);
-    (st.taskItems || []).forEach(entry => {
-      if (ASSESS_READING.includes(entry.type)) return;
-      const n = ++num;
-      entry.item.classList.add("aq-card");
-      entry.item.insertBefore(tel("p","aq-num", entry.block && entry.block.type === "revise" ? "Revision" : "Question " + n), entry.item.firstChild);
-      items.push({ step: i, block: entry.block, num: n, item: entry.item, built: entry.built });
-      questionNo[entry.block.id] = n;     // the marked work numbers them the same
-    });
-  });
-  questions.appendChild(el("p","assess-end", "That was the last question. Check your answers, then press Finish."));
-  /* Nothing here is a question, so nothing should say it is. */
-  if (onlyRevision(items)){
-    screen.title = items.length === 1 ? "Make your revision resource" : "Make your revision resources";
-    screen.text = "Press Finish when you are done, then test yourself with it.";
-    document.body.classList.add("rv-only");
-  }
-  steps.forEach(st => organiserBeside(st));
-  screen.el.hidden = true;
-  $("blocks").appendChild(screen.el);
-  assessPages = { screens: [screen], qAt: 0, at: 0, items, onQuestions: false, shown: false,
-                  nav: null, navBtn: null, pinnedUntil: 0, homework: true, now: null };
-  watchQuestionScroll();
-}
-const onlyRevision = (items) => items.length > 0 && items.every(it => it.block && it.block.type === "revise");
 /* A knowledge organiser on the same page as a Revision task sits beside it,
    because the task is made out of it: one above the other, they were two
    screens apart and a student scrolled between them for every card.
@@ -2689,7 +2637,7 @@ function questionAnswered(it){
      which can hold them, that would count them as answered before they were
      touched. An assessment does not offer them. A quiz has to be answered all
      the way through, or question 3 of 5 left empty would never be pointed out. */
-  if (assessPages && assessPages.homework){
+  if (homePage){
     if (b.type === "quiz") return !!(v && Array.isArray(v.checked) && v.checked.length && v.checked.every(Boolean));
     return gateAttempted(b, v);
   }
@@ -2697,10 +2645,9 @@ function questionAnswered(it){
 }
 
 /* Whether this is the question in view. In an assessment every question is a
-   step of its own, so the step says. In home learning a step is a page with
-   several questions on it, so the question is kept by itself. */
+   step of its own, so the step says. */
 function questionInView(it){
-  return assessPages.homework ? assessPages.now === it : it.step === step;
+  return it.step === step;
 }
 /* The screen a step is on. */
 function screenOfStep(i){
@@ -2742,8 +2689,7 @@ function showAssessScreen(k, i){
 
   const last = k === A.screens.length - 1;
   $("backBtn").disabled = k === 0;
-  /* One screen has nothing to go back to. */
-  $("backBtn").hidden = !!A.homework;
+  $("backBtn").hidden = false;
   $("nextBtn").textContent = !last
     ? (A.screens[k + 1].kind === "questions" ? "Start →" : "Continue →")
     : workFrozen ? "STAR Feedback" : "Finish";
@@ -2896,9 +2842,6 @@ function stopGlide(){
 function questionWheel(e){
   const A = assessPages;
   if (!A || !A.onQuestions || e.ctrlKey || e.defaultPrevented) return;
-  /* A question at a time is no use when there are none: thirty flashcards
-     are one card here, and each turn of the wheel jumped most of a screen. */
-  if (onlyRevision(A.items)) return;
   if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || !e.deltaY) return;
   const dir = e.deltaY > 0 ? 1 : -1;
   const stage = $("stage");
@@ -3044,12 +2987,7 @@ function paintAssessTracker(){
   const onSummaryNow = !!(ds && !ds.hidden);
   /* Only while the questions are on screen: the pages before them have no
      questions to count, and the summary has a score to show instead. */
-  /* Home learning that is nothing but revision has one thing to do, and a
-     bar numbering it down the side is clutter. */
-  const justRevision = onlyRevision(A.items);
-  const showing = A.onQuestions && !onSummaryNow && !justRevision;
-  /* nor is there a "last question" to have reached */
-  A.screens.forEach(sc => sc.el.querySelectorAll(".assess-end").forEach(p => { p.hidden = justRevision; }));
+  const showing = A.onQuestions && !onSummaryNow;
   A.bar.hidden = !showing;
   A.navBtn.hidden = !showing;
   document.body.classList.toggle("assess-on-questions", showing);
@@ -3123,7 +3061,7 @@ function openQuestionSheet(){
    with what is on screen, so it is painted once a frame at most. */
 let assessPaintQueued = false;
 function assessRepaintSoon(){
-  if (!assessPages || assessPaintQueued) return;
+  if ((!assessPages && !homePage) || assessPaintQueued) return;
   assessPaintQueued = true;
   requestAnimationFrame(() => { assessPaintQueued = false; paintTracker(); });
 }
@@ -3136,11 +3074,7 @@ function assessRepaintSoon(){
    from it without a teacher. */
 function askToHandIn(){
   const missing = assessPages.items.filter(it => !questionAnswered(it));
-  /* Home learning says what is missing and stops there. Done alone at home,
-     one question is plenty, and it has none at all when nothing is missing. */
-  const home = !!assessPages.homework;
-  const handIn = home ? finishLesson : confirmHandIn;
-  if (!missing.length){ handIn(); return; }
+  if (!missing.length){ confirmHandIn(); return; }
   assessPages.flagMissing = true;
   paintTracker();
   const count = missing.length;
@@ -3153,7 +3087,7 @@ function askToHandIn(){
     text: phone ? "Press the button at the bottom and look for the questions marked red."
                 : "Look for the questions marked red on the side.",
     yes: { label: "Go back and complete the questions", act: () => goToQuestion(missing[0], true) },
-    no:  { label: home ? "Submit my home learning anyway" : "Submit my assessment anyway", act: handIn },
+    no:  { label: "Submit my assessment anyway", act: confirmHandIn },
     focus: "yes"
   });
 }
@@ -3175,8 +3109,10 @@ function handInModal(o){
   if (o.eyebrow) box.appendChild(tel("p","modal-eyebrow", o.eyebrow));
   box.appendChild(tel("h2","", o.title));
   if (o.text) box.appendChild(tel("p","modal-text", o.text));
+  if (o.extra) box.appendChild(o.extra);
   const onKey = (e) => { if (e.key === "Escape") close(); };
   const close = () => { back.remove(); document.removeEventListener("keydown", onKey); };
+  if (o.opened) o.opened(close);
   const yes = tel("button","btn-primary modal-cta", o.yes.label);
   yes.type = "button";
   yes.addEventListener("click", () => { close(); o.yes.act(); });
@@ -3207,11 +3143,13 @@ function reopenAssessment(){
   paintFrozenNote(false);
   save();
   submitWork();
+  if (homePage){ homePage.flag = false; showHomeScreen(0); return; }
   const first = assessPages.items[0];
   showAssessScreen(assessPages.qAt, first ? first.step : 0);
 }
 
 function buildTracker(){
+  if (homePage){ $("tracker").innerHTML = ""; $("tracker").hidden = true; return; }
   if (assessPages){ buildAssessTracker(); return; }
   const t = $("tracker"); t.innerHTML = "";
   steps.forEach((_, i) => {
@@ -3338,7 +3276,8 @@ function showStep(i){
   }
   /* An assessment's screens are not the pages its tasks were built on, so
      there any floating help shows throughout, as it always did. */
-  if (assessPages) try{ showHelpFor(null); Object.keys(helpFloats).forEach(id => { helpFloats[id].fab.hidden = false; }); }catch(e){}
+  if (assessPages || homePage) try{ showHelpFor(null); Object.keys(helpFloats).forEach(id => { helpFloats[id].fab.hidden = false; }); }catch(e){}
+  if (homePage){ showHomeScreen(i); return; }
   if (assessPages){
     /* Anyone coming back with answers already saved goes straight to the
        questions rather than through the welcome again, and so does a
@@ -3463,6 +3402,14 @@ function swapChoiceHere(){
 }
 async function tryContinue(){
   if (coolingDown()) return;                       // still in the waiting period
+  if (homePage){
+    if (workFrozen){ backToFeedback(); return; }
+    /* a teacher reading the work goes on to the marked summary */
+    if (viewParam !== null){ finishLesson(); return; }
+    if (finished && !spectate) return;             // on its way already
+    askToHandInHome();
+    return;
+  }
   if (assessPages){
     const A = assessPages;
     /* Every screen but the last moves on. The last one is where Finish is,
@@ -3783,6 +3730,7 @@ function hideLockTip(){
 }
 
 function paintTracker(){
+  if (homePage){ paintHomeTracker(); return; }
   if (assessPages){ paintAssessTracker(); return; }
   /* A teacher is not working through the lesson, they are looking at it: the
      builder's preview, the console's preview and the work viewer all want
@@ -4021,8 +3969,8 @@ const taskIcon = (type) =>
    one task, or if there is only one task on the page: a bar with a single
    button on it describes nothing. */
 function railList(){
-  /* The bar of questions does this job on the one page. */
-  if (assessPages && assessPages.homework) return null;
+  /* The stepping stones do this job on the one page. */
+  if (homePage) return null;
   const st = steps[step];
   if (!st || typeof st.railItems !== "function") return null;
   const list = st.railItems();
@@ -5106,13 +5054,13 @@ function askBypass(){
      student who opened it by mistake starts guessing. */
   box.appendChild(el("h2","","Teacher code console"));
   box.appendChild(el("p","modal-text","<b>Only to be used by your teacher. Close this if you have opened it accidentally!</b>"));
-  const reopening = !!assessPages && finished;
+  const reopening = (!!assessPages || !!homePage) && finished;
   /* The summary is not a page, and skipping from it went back into the
      pages: past a marked practical's summary, or into a handed-in test. */
   const doneUp = $("doneScreen");
   const fromSummary = !!(doneUp && !doneUp.hidden);
   box.appendChild(el("p","modal-text", reopening
-    ? "Type in the correct code below to let this student back into their assessment to change their answers."
+    ? "Type in the correct code below to let this student back into their " + (homePage ? "home learning" : "assessment") + " to change their answers."
     : fromSummary
     ? "Type in the correct code below to enable teacher checklist marking."
     : "Type in the correct code below to either skip a page, skip all pages, or enable teacher checklist marking."));
@@ -5130,8 +5078,8 @@ function askBypass(){
     const wanted = (lesson && lesson.bypassHash) || 2667650483;   // default: SKIP-2026
     const word = typed.toUpperCase();
     if (strHash(word) === REOPEN_HASH){
-      if (!assessPages || !finished){
-        msg.textContent = "That code lets a student back into an assessment they have handed in.";
+      if ((!assessPages && !homePage) || !finished){
+        msg.textContent = "That code lets a student back into work they have handed in.";
         return;
       }
       if (markingLocked){ msg.textContent = "This is locked for marking. Unlock it in the console first."; return; }
@@ -5785,7 +5733,7 @@ function rPage(b){
   const scrollToNextTask = () => {
     /* Every question is on the screen already and the student moves down
        them at their own pace, as in an assessment. */
-    if (assessPages && assessPages.homework) return;
+    if (homePage) return;
     items.forEach((entry, i) => {
       if (!FINISHABLE.includes(entry.type)) return;
       let ok = false;
@@ -12226,8 +12174,11 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   if (home) retakeOnSummary(hero, res);
   /* A way straight into the marked work, where the "result saved" line used
      to sit. It fades in last, once the cards have settled. */
-  const seeBtn = el("button","btn-primary done-save fadein", home ? "View my work" : "View my assessment");
-  hero.appendChild(seeBtn);
+  const seeBtn = el("button","btn-primary done-save fadein", home ? "View my marked work" : "View my assessment");
+  /* Home learning with nothing marked in it has nothing to show there: a
+     revision resource is a line saying "8 flashcards", and the way to see it
+     is to be tested with it, just above. */
+  if (res.outOf || !home || spectate) hero.appendChild(seeBtn);
 
   /* The hero and the two cards sit side by side, and the cards slide in
      from the right once the score has landed. */
@@ -13437,6 +13388,7 @@ function confetti(){
 
 function doneShell(title){
   steps.forEach(st => { st.section.hidden = true; });
+  if (homePage) homePage.el.hidden = true;
   if (assessPages){
     assessPages.screens.forEach(s => { s.el.hidden = true; });
     assessPages.onQuestions = false;        // so the question numbers go too
@@ -13456,7 +13408,7 @@ function doneShell(title){
     note.innerHTML = lockIcon(17);
     note.appendChild(document.createTextNode(" Your teacher has locked this while they mark it, so it cannot be changed just now."));
     box.appendChild(note);
-  } else if (steps.length && !(assessPages && !spectate) && !(practicalMarked() && !spectate)){
+  } else if (steps.length && !((assessPages || homePage) && !spectate) && !(practicalMarked() && !spectate)){
     /* Not for a marked assessment a student has handed in. They were told
        twice that there was no going back; their answers are under View my
        assessment, and a teacher's code is the way back in. Nor for a
@@ -13465,7 +13417,7 @@ function doneShell(title){
     const back = el("button","btn-ghost done-back", workFrozen ? "← View my original work" : "← Back to my work");
     /* Only a teacher, for home learning. Back to the top of its one page, not
        the last of its pages. */
-    back.addEventListener("click", () => leaveSummary(assessPages && assessPages.homework ? 0 : Math.max(0, steps.length - 1)));
+    back.addEventListener("click", () => leaveSummary(homePage ? 0 : Math.max(0, steps.length - 1)));
     box.appendChild(back);
   }
   /* No title in the bar at the top: the summary says what it is in the big

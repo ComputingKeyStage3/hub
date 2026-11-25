@@ -140,6 +140,7 @@ html:not([data-motion=less]) .online-pill .odot{animation:opulse 1.3s ease-in-ou
    just jumped to. jump-found keeps the outline style.css gives it instead,
    for anyone with Reduce animation on. */
 html:not([data-motion=less]) :is(.pg-item, .pg-pair, .extension).justopened{animation:taskflash 1.4s ease-out !important}
+html:not([data-motion=less]) .home-page .pg-item.justopened,
 html:not([data-motion=less]) .assess-questions > .pg-item.justopened{animation:qcardflash 1.6s ease-out !important}
 html:not([data-motion=less]) .ide-hl .hl-line.flash{animation:ideFlash 1.6s ease-out !important}
 html:not([data-motion=less]) .jump-found{animation:jumpfound 2.2s ease-out !important; outline:none !important}

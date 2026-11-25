@@ -7465,6 +7465,67 @@ body.assess-on-questions .stagerow > #blocks{flex:0 1 800px}
 .assess-part{margin:32px 0 14px; font-size:var(--text-xl)}
 .assess-questions > .pagegroup:first-child > .assess-part{margin-top:20px}
 .assess-part + .pg-item{margin-top:0 !important}
+/* ---------- home learning (homelearning.js) ----------
+   Nothing of an assessment's: no cards with a number over them, no bar up
+   the side. Each task has a strip along its top and the page has a row of
+   stepping stones. --hl is its colour, the green of things done, where an
+   assessment is the school's blue. */
+body.home-learning{--hl:var(--mint)}
+.home-page{max-width:940px; margin:0 auto}
+.home-page > .pg-item, .home-page > .pagegroup > .pg-item,
+.home-page .pg-pair > .pg-item.hl-task{background:var(--panel); border:2px solid color-mix(in srgb, var(--hl) 24%, var(--line)); border-radius:var(--rad-lg);
+  padding:0 24px 24px; margin:16px 0 22px; overflow:clip}
+.home-page > .pg-item.hl-read, .home-page > .pagegroup > .pg-item.hl-read{padding-top:20px; border-style:dashed; border-color:var(--line-2); background:var(--panel-2)}
+.hl-part{margin:30px 2px 12px; font-size:var(--text-2xl)}
+.hl-head{display:flex; align-items:center; gap:12px; margin:0 -24px 18px; padding:10px 18px 10px 14px;
+  background:color-mix(in srgb, var(--hl) 13%, var(--panel)); border-bottom:2px solid color-mix(in srgb, var(--hl) 24%, var(--line))}
+.hl-icon{flex:none; display:grid; place-items:center; width:38px; height:38px; border-radius:var(--rad-md); background:var(--panel);
+  color:var(--hl); border:1.5px solid color-mix(in srgb, var(--hl) 34%, var(--line))}
+.hl-icon svg{width:23px; height:23px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+.hl-name{font-family:var(--display); font-size:var(--text-xl); font-weight:800}
+.hl-pill{margin-left:auto; padding:5px 14px; border-radius:var(--rad-pill); background:var(--panel); border:1.5px solid var(--line-2);
+  font-size:var(--text-sm); font-weight:700; color:var(--muted); white-space:nowrap}
+.hl-task.is-done > .hl-head .hl-pill{background:var(--hl); border-color:var(--hl); color:var(--panel)}
+.hl-task.is-missed{border-color:var(--gold) !important}
+.hl-task.is-missed > .hl-head{background:color-mix(in srgb, var(--gold) 24%, var(--panel)); border-color:var(--gold)}
+.hl-task.is-missed > .hl-head .hl-pill{background:var(--gold); border-color:var(--gold); color:var(--gold-ink)}
+.home-page .pg-item > .pg-h{font-size:var(--text-xl); line-height:1.45; margin:0 0 14px}
+.home-page .pg-item > .pg-t{margin:-6px 0 16px}
+.home-page .pg-item.justopened{animation:qcardflash 1.6s ease-out}
+.hl-strip{position:sticky; top:-12px; z-index:30; display:flex; align-items:center; gap:12px; margin:0; padding:4px 8px 4px 18px;
+  background:var(--panel); border:2px solid color-mix(in srgb, var(--hl) 24%, var(--line)); border-radius:var(--rad-lg); box-shadow:0 4px 16px rgba(0,0,0,.07)}
+.hl-said{flex:none; font-weight:800; font-size:var(--text-md); min-width:86px}
+/* the stones sit on one line, the part behind them is the path */
+.hl-chips{position:relative; flex:1 1 auto; min-width:0; display:flex; gap:12px; overflow-x:auto; padding:8px; scrollbar-width:none}
+.hl-chips::-webkit-scrollbar{display:none}
+.hl-chip{position:relative; flex:none; width:44px; height:44px; padding:0; border-radius:50%; cursor:pointer; font:inherit; font-weight:800; font-size:var(--text-md);
+  background:var(--panel); color:var(--muted); border:2.5px solid var(--line-2)}
+.hl-chip:not(:last-child)::after{content:""; position:absolute; left:100%; top:50%; width:12px; height:3px; margin:-1.5px 0 0 2px; background:var(--line-2)}
+.hl-chip.done{background:var(--hl); border-color:var(--hl); color:var(--panel)}
+.hl-chip.done::after{background:var(--hl) !important}
+.hl-chip.done .hl-chip-n{font-size:0}
+.hl-chip.done .hl-chip-n::before{content:"\2713"; font-size:var(--text-xl)}
+.hl-chip.missed{border-color:var(--gold); background:color-mix(in srgb, var(--gold) 26%, var(--panel)); color:var(--text)}
+.hl-chip.now{box-shadow:0 0 0 2.5px var(--panel), 0 0 0 5.5px color-mix(in srgb, var(--hl) 60%, var(--panel))}
+.hl-end{margin:8px 0 26px; padding:18px 22px; text-align:center; border-radius:var(--rad-lg); border:2px dashed color-mix(in srgb, var(--hl) 45%, var(--line));
+  color:var(--muted); font-weight:600}
+.hl-end p{margin:0}
+.hl-missing{display:flex; flex-direction:column; gap:8px; max-height:38vh; max-height:38dvh; overflow-y:auto; margin:4px 0 18px}
+.hl-missing-one{display:flex; align-items:center; gap:12px; min-height:52px; padding:6px 14px 6px 8px; text-align:left; cursor:pointer; font:inherit; color:var(--text);
+  background:color-mix(in srgb, var(--gold) 14%, var(--panel)); border:1.5px solid color-mix(in srgb, var(--gold) 60%, var(--line)); border-radius:var(--rad-md)}
+.hl-missing-one:hover{border-color:var(--amber)}
+.hl-missing-one b{flex:none}
+.hl-missing-what{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted)}
+/* a box being typed in is scrolled to clear of the stones */
+body.home-learning #stage{scroll-padding-top:84px}
+@media (max-width:720px){
+  .home-page > .pg-item, .home-page > .pagegroup > .pg-item, .home-page .pg-pair > .pg-item.hl-task{padding:0 14px 18px; margin:12px 0 16px}
+  .home-page > .pg-item.hl-read, .home-page > .pagegroup > .pg-item.hl-read{padding-top:14px}
+  .hl-head{margin:0 -14px 14px; padding:8px 12px}
+  .hl-name{font-size:var(--text-lg)}
+  .hl-strip{gap:4px; padding:2px 4px 2px 12px}
+  .hl-said{min-width:0; font-size:var(--text-sm)}
+}
 /* One swipe on a touch screen is one question, landing with the card at the
    top, the same place a turn of the wheel takes it (glideStage in
    lesson.html does the wheel, because it has to work with reduced motion
@@ -9054,6 +9115,11 @@ html[data-bg=dark] .rv-icon, html[data-bg=night] .rv-icon{filter:drop-shadow(0 0
   background:var(--panel); border:1.5px solid color-mix(in srgb, var(--rv) 45%, var(--panel)); border-radius:var(--rad-md)}
 .revise .rv-iconbtn.is-empty{border-style:dashed}
 .revise .rv-iconbtn:hover{border-color:var(--rv)}
+/* deciding: the last key was a moment ago (chooseSoon in revision.js) */
+.revise .rv-iconbtn.is-waiting{border-style:dotted}
+.revise .rv-iconbtn.is-waiting::after{content:"\2026"; position:absolute; font-weight:800; color:var(--muted); transform:translateY(16px)}
+.revise .rv-iconbtn{position:relative}
+.revise .rv-noicon{width:20px; height:3px; border-radius:var(--rad-pill); background:var(--line-2); transform:rotate(-45deg)}
 .revise .rv-addicon{font-size:var(--text-2xl); color:var(--muted); line-height:1}
 .rv-label{font-size:var(--text-2xs); font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
 .revise .rv-in, .rv-test .rv-in{width:100%; box-sizing:border-box; resize:none; overflow:hidden; font:inherit; font-size:var(--text-lg); line-height:1.4;
@@ -9079,8 +9145,8 @@ html[data-bg=dark] .rv-icon, html[data-bg=night] .rv-icon{filter:drop-shadow(0 0
 .revise .rv-small, .revise .rv-note{color:var(--muted); font-size:var(--text-sm); margin:8px 0 0}
 /* A poster has to be seen whole to be arranged, and here it has the choice,
    the strip and the words above it as well as the task's heading. */
-.revise[data-kind=poster] .poster-canvas{width:min(100%, max(260px, calc((100vh - 340px) * 0.7075)));
-  width:min(100%, max(260px, calc((100dvh - 340px) * 0.7075)))}
+.revise[data-kind=poster] .poster-canvas{width:min(100%, max(260px, calc((100vh - 400px) * 0.7075)));
+  width:min(100%, max(260px, calc((100dvh - 400px) * 0.7075)))}
 .revise[data-kind=poster] .rv-top{margin-bottom:8px}
 .revise[data-kind=poster] .rv-words{margin-bottom:8px}
 
@@ -9090,14 +9156,20 @@ html[data-bg=dark] .rv-icon, html[data-bg=night] .rv-icon{filter:drop-shadow(0 0
   .revise .poster-body{grid-template-columns:122px minmax(0,1fr) 160px}
   .revise .poster-bar{flex-direction:column; flex-wrap:nowrap; height:0; min-height:100%; overflow-y:auto; border-bottom:none; border-right:1px solid var(--line)}
   .revise .poster-btn{flex:none; font-size:var(--text-xs)}
+  .revise[data-kind=poster] .poster-canvas{width:min(100%, max(260px, calc((100vh - 446px) * 0.7075)));
+    width:min(100%, max(260px, calc((100dvh - 446px) * 0.7075)))}
   .revise .poster-panel{order:0; height:0; min-height:100%; overflow-y:auto; border-top:none; border-left:1px solid var(--line)}
 }
 /* all the pictures there are */
-.rv-picker{position:fixed; z-index:300; width:min(330px, calc(100vw - 16px)); box-sizing:border-box; padding:10px; background:var(--panel);
+.rv-picker{position:fixed; z-index:300; width:min(390px, calc(100vw - 16px)); box-sizing:border-box; padding:10px; background:var(--panel);
   border:1.5px solid var(--line-2); border-radius:var(--rad-lg); box-shadow:0 10px 34px rgba(0,0,0,.22)}
 .rv-picker-top{display:flex; gap:6px; margin-bottom:8px}
 .rv-picker-top .on{border-color:var(--amber); font-weight:700}
-.rv-picker-grid{display:grid; grid-template-columns:repeat(6, 1fr); gap:5px; max-height:220px; overflow-y:auto}
+.rv-picker input.rv-picker-find{width:100%; box-sizing:border-box; height:44px; margin:0 0 8px; padding:0 14px; font:inherit; font-size:var(--text-lg);
+  color:var(--text); background:var(--panel); border:1.5px solid var(--line-2); border-radius:var(--rad-pill)}
+.rv-picker-said{margin:0 2px 6px; min-height:18px; font-size:var(--text-sm); color:var(--muted)}
+.rv-picker-grid{display:grid; grid-template-columns:repeat(6, 1fr); gap:5px; height:250px; overflow-y:auto; align-content:start; overscroll-behavior:contain}
+.rv-picker-one .rv-icon{width:34px; height:34px}
 .rv-picker-one{display:grid; place-items:center; padding:5px 0; cursor:pointer; background:var(--panel); border:1.5px solid var(--line); border-radius:var(--rad-sm)}
 .rv-picker-one:hover, .rv-picker-one.on{border-color:var(--amber)}
 .rv-bit{position:fixed; z-index:500; width:9px; height:9px; margin:-4px; border-radius:var(--rad-xs); pointer-events:none}
@@ -9124,9 +9196,10 @@ button.map-badge{cursor:pointer}
 .rv-sheet-open{display:none}
 .rv-beside > .rv-sheet-open{display:block; position:fixed; right:18px; bottom:calc(82px + env(safe-area-inset-bottom)); z-index:60;
   min-height:46px; box-shadow:0 4px 16px rgba(0,0,0,.25)}
-.assess-questions > .rv-beside > .rv-sheet{display:none}
+.home-page > .rv-beside > .rv-sheet{display:none}
 /* so the last card can be scrolled out from under the button */
-.assess-questions > .rv-beside{padding-bottom:64px}
+.home-page > .rv-beside{padding-bottom:64px}
+.rv-beside.rv-away > .rv-sheet-open{display:none}
 .rv-sheet{overscroll-behavior:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch}
 .rv-sheet .pdf-page{width:100%}
 /* the picture has its own full screen button; a pinch that starts on it must
@@ -9139,27 +9212,29 @@ button.map-badge{cursor:pointer}
 .rv-sheet-said{min-width:64px; font-size:var(--text-sm)}
 .rv-sheet-btn:hover{background:var(--panel-2)}
 /* over the top: a poster, a mind map or a phone */
-.assess-questions > .rv-beside.rv-drawer-open > .rv-sheet{display:block; position:fixed; z-index:59; top:64px; right:0; left:0;
+.home-page > .rv-beside.rv-drawer-open > .rv-sheet{display:block; position:fixed; z-index:59; top:64px; right:0; left:0;
   bottom:calc(140px + env(safe-area-inset-bottom)); margin:0 8px; padding:10px; overflow:auto; box-shadow:0 8px 34px rgba(0,0,0,.32)}
 /* along the top, the work scrolling underneath: an iPad held upright */
 @media (min-width:700px) and (min-height:600px){
-  .assess-questions > .rv-beside:not(.rv-wide).rv-drawer-open > .rv-sheet{position:sticky; top:8px; right:auto; left:auto; bottom:auto; z-index:20;
+  .home-page > .rv-beside:not(.rv-wide).rv-drawer-open > .rv-sheet{position:sticky; top:8px; right:auto; left:auto; bottom:auto; z-index:20;
     margin:16px 0 14px; max-height:40vh; max-height:40dvh; box-shadow:0 6px 22px rgba(0,0,0,.16)}
 }
 /* and a box being typed in is scrolled to below it, not behind it */
 @media (min-width:700px) and (max-width:999px) and (min-height:600px){
   body.rv-docked #stage{scroll-padding-top:calc(40vh + 40px); scroll-padding-top:calc(40dvh + 40px)}
 }
+/* and clear of the stones, where there are other tasks on the page */
+@media (min-width:700px) and (min-height:600px){ .home-page.has-strip > .rv-beside.rv-drawer-open:not(.rv-wide) > .rv-sheet{top:64px} }
 /* side by side: an iPad on its side, a laptop */
 @media (min-width:1000px){
-  body:not(.assess-on-questions) .assess-questions > .rv-beside:not(.rv-wide){display:grid; grid-template-columns:minmax(0,1fr) minmax(340px, 42%); column-gap:16px; align-items:start}
-  body:not(.assess-on-questions) .assess-questions > .rv-beside.rv-land:not(.rv-wide){grid-template-columns:minmax(0,1fr) minmax(400px, 50%)}
-  body:not(.assess-on-questions) .assess-questions > .rv-beside:not(.rv-wide) > *{grid-column:1; min-width:0}
-  body:not(.assess-on-questions) .assess-questions > .rv-beside:not(.rv-wide) > .rv-sheet,
-  body:not(.assess-on-questions) .assess-questions > .rv-beside:not(.rv-wide).rv-drawer-open > .rv-sheet{display:block; position:sticky; top:16px; right:auto; left:auto; bottom:auto; z-index:1;
+  body.rv-only .home-page > .rv-beside:not(.rv-wide){display:grid; grid-template-columns:minmax(0,1fr) minmax(340px, 42%); column-gap:16px; align-items:start}
+  body.rv-only .home-page > .rv-beside.rv-land:not(.rv-wide){grid-template-columns:minmax(0,1fr) minmax(400px, 50%)}
+  body.rv-only .home-page > .rv-beside:not(.rv-wide) > *{grid-column:1; min-width:0}
+  body.rv-only .home-page > .rv-beside:not(.rv-wide) > .rv-sheet,
+  body.rv-only .home-page > .rv-beside:not(.rv-wide).rv-drawer-open > .rv-sheet{display:block; position:sticky; top:16px; right:auto; left:auto; bottom:auto; z-index:1;
     width:auto; grid-column:2; grid-row:1 / span 60; margin:16px 0 0; padding:10px; overflow:auto; box-shadow:none;
     max-height:calc(100vh - 165px); max-height:calc(100dvh - 165px)}
-  body:not(.assess-on-questions) .rv-beside:not(.rv-wide) > .rv-sheet-open{display:none}
+  body.rv-only .rv-beside:not(.rv-wide) > .rv-sheet-open{display:none}
 }
 /* With half the screen gone the two faces of a card go one above the other.
    By the width the task has, not the screen's, because that is what ran out. */
@@ -9172,9 +9247,11 @@ button.map-badge{cursor:pointer}
 
 /* Nothing on the page but the work: the room either side of it, which is for
    the numbers down the side of a set of questions, is wanted for the cards. */
+body.rv-only .home-page{max-width:none}
 @media (max-width:1400px){
   body.lesson.rv-only #stage > .stagerow, body.lesson.rv-only #stage .stagerow{padding-left:0; padding-right:0; margin-left:0; margin-right:0; max-width:none; width:auto}
-  body.lesson.rv-only .assess-questions > .pagegroup > .pg-item{padding-left:18px; padding-right:18px}
+  body.lesson.rv-only .home-page > .pagegroup > .pg-item{padding-left:18px; padding-right:18px}
+  body.lesson.rv-only .home-page > .pagegroup > .pg-item > .hl-head{margin-left:-18px; margin-right:-18px}
 }
 
 /* Fingers: an iPad is what most of this is done on. Nothing smaller than 44px
@@ -9191,9 +9268,9 @@ button.map-badge{cursor:pointer}
   .topbar .home{position:relative}
   .topbar .home::after{content:""; position:absolute; inset:-6px}
   .rv-patbtn, .rv-mode{min-height:46px}
-  .rv-picker{width:min(400px, calc(100vw - 16px))}
+  .rv-picker{width:min(420px, calc(100vw - 16px))}
   .rv-picker-top .btn-ghost{min-height:44px}
-  .rv-picker-grid{max-height:300px; gap:7px}
+  .rv-picker-grid{height:300px; gap:7px}
   .rv-picker-one{min-height:50px}
   .map-add::after, .map-badge::after, .map-del::after{content:""; position:absolute; inset:-10px; border-radius:50%}
   .map-badge::after{inset:-7px}
