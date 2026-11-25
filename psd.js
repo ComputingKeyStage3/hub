@@ -784,20 +784,27 @@
      have handed in and their files still answer it. */
   const IMAGE_KINDS = { pixel: 1, smart: 1 };
   const isImage = (l) => IMAGE_KINDS[l.k] && !l.e && !/^background$/i.test(String(l.n || "").trim());
-  const COUNT = {
-    psdLayers:  (L) => L.filter(l => l.k !== "group").length,
-    psdImages:  (L) => L.filter(isImage).length,
-    psdText:    (L) => L.filter(l => l.k === "text").length,
-    psdShapes:  (L) => L.filter(l => l.k === "shape").length,
-    psdStyles:  (L) => L.filter(l => l.fx && l.fx.length).length,
-    psdEffects: (L) => new Set([].concat.apply([], L.map(l => l.fx || []))).size,
-    psdAdjust:  (L) => L.filter(l => l.k === "adjust").length,
-    psdCutout:  (L) => L.filter(l => isImage(l) && (l.cut || l.m === 1)).length,
-    psdMasks:   (L) => L.filter(l => l.m === 1 || l.vm).length,
-    psdGroups:  (L) => L.filter(l => l.k === "group").length,
-    psdBlend:   (L) => L.filter(l => l.b).length,
-    psdSmart:   (L) => L.filter(l => l.k === "smart").length,
-    psdFonts:   (L) => new Set([].concat.apply([], L.map(l => l.fo || []))).size
+  /* Each kind answers with the things it counted, by name, rather than only
+     how many: a teacher checking a line by eye wants to know which layers
+     the file check meant. */
+  const named = (test) => (L) => L.filter(test).map(l => String(l.n || "").trim() || "No name");
+  const each = (key) => (L) => Array.from(new Set([].concat.apply([], L.map(l => l[key] || []))));
+  const FOUND = {
+    psdLayers:  named(l => l.k !== "group"),
+    psdImages:  named(isImage),
+    /* the words themselves, which say more than the layer's name does */
+    psdText:    (L) => L.filter(l => l.k === "text")
+                        .map(l => String(l.t || l.n || "").replace(/\s+/g, " ").trim() || "No words"),
+    psdShapes:  named(l => l.k === "shape"),
+    psdStyles:  named(l => l.fx && l.fx.length),
+    psdEffects: each("fx"),
+    psdAdjust:  named(l => l.k === "adjust"),
+    psdCutout:  named(l => isImage(l) && (l.cut || l.m === 1)),
+    psdMasks:   named(l => l.m === 1 || l.vm),
+    psdGroups:  named(l => l.k === "group"),
+    psdBlend:   named(l => l.b),
+    psdSmart:   named(l => l.k === "smart"),
+    psdFonts:   each("fo")
   };
   /* Which layers are showing in the picture. A layer is off when its own
      eye is, when any group it sits in is, or when it is clipped to a layer
@@ -822,25 +829,43 @@
     return L.filter((l, i) => !off[i]);
   }
   /* Every layer by default; only the ones showing when asked. */
-  function psdCount(stats, kind, onlyShowing){
+  function psdFound(stats, kind, onlyShowing){
     let L = (stats && Array.isArray(stats.layers)) ? stats.layers : [];
     if (onlyShowing) L = showing(L);
-    return COUNT[kind] ? COUNT[kind](L) : null;
+    return FOUND[kind] ? FOUND[kind](L) : null;
+  }
+  function psdCount(stats, kind, onlyShowing){
+    const found = psdFound(stats, kind, onlyShowing);
+    return found ? found.length : null;
   }
   /* Hidden layers count: work switched off is still work done, and a
      student hiding a layer to compare two ideas should not lose the tick.
      A teacher should still know when that is what decided it, so a line
      whose answer would be different with only the showing layers carries
-     a flag saying so. */
+     a flag saying so.
+
+     A line can be the teacher's to tick and still name a kind, marked
+     `suggest`. Counting layers cannot tell a person cut out of a photo from
+     a photo with one corner rubbed out, so on a line like that the count is
+     never a tick. It comes back as `clue`, for whoever does tick it. */
   window.runPsdChecks = function(checks, stats){
     return (checks || []).map(c => {
       const label = (c && c.label) || "Check";
-      if (c && c.manual === true) return { ok:false, manual:true, label };
-      const n = psdCount(stats, c && c.kind);
-      if (n === null) return { ok:false, broken:true, label, note:"Unknown kind of check: " + (c && c.kind) };
+      const suggest = !!(c && c.manual === true && c.suggest === true);
+      if (c && c.manual === true && !suggest) return { ok:false, manual:true, label };
+      const names = psdFound(stats, c && c.kind);
+      const n = names ? names.length : null;
+      if (n === null) return suggest ? { ok:false, manual:true, label }
+        : { ok:false, broken:true, label, note:"Unknown kind of check: " + (c && c.kind) };
       const want = Math.max(0, parseInt(c.count, 10) || 1);
       const meets = (k) => c.compare === "exactly" ? k === want : c.compare === "atMost" ? k <= want : k >= want;
       const ok = !!stats && meets(n);
+      if (suggest){
+        const line = { ok:false, manual:true, label, hint: String(c.hint || "").trim() };
+        if (stats) line.clue = { found: ok, count: n, names: names,
+                                 hidden: meets(psdCount(stats, c.kind, true)) !== ok };
+        return line;
+      }
       /* As on a coding task, a line not met yet says only the teacher's hint. */
       const out = { label, ok, note: ok ? "" : String(c.hint || "").trim() };
       if (stats && meets(psdCount(stats, c.kind, true)) !== ok)

@@ -1178,37 +1178,56 @@
      list rather than totals worked out when the file was read, so a
      checklist changed after students handed in is answered from the files
      they already gave. */
-  const kindIs = (k) => (O) => O.filter(o => o.k === k).length;
-  const COUNT = {
-    blendObjects:  (O) => O.length,
+  /* As in psd.js, each kind answers with the things it counted, by name.
+     The three that only ever come to a number answer with that. */
+  const nameOf = (o) => String((o && o.n) || "").trim() || "No name";
+  const named = (test) => (O) => O.filter(test).map(nameOf);
+  const each = (lists) => Array.from(new Set([].concat.apply([], lists)));
+  const kindIs = (k) => named(o => o.k === k);
+  const FOUND = {
+    blendObjects:  named(() => true),
     blendMeshes:   kindIs("mesh"),
     blendLights:   kindIs("light"),
     blendCameras:  kindIs("camera"),
     blendText:     kindIs("text"),
-    blendMaterials:(O) => new Set([].concat.apply([], O.map(o => o.m || []))).size,
+    blendMaterials:(O) => each(O.map(o => o.m || [])),
     blendTextured: (O, st) => (st.materials || []).filter(m => (m.im && m.im.length) ||
-                                 (m.k || []).some(k => /Texture/.test(k))).length,
-    blendModified: (O) => O.filter(o => o.mods && o.mods.length).length,
-    blendModKinds: (O) => new Set([].concat.apply([], O.map(o => (o.mods || []).map(m => m.replace(/ \d+$/, ""))))).size,
-    blendAnimated: (O) => O.filter(o => o.anim).length,
+                                 (m.k || []).some(k => /Texture/.test(k))).map(nameOf),
+    blendModified: named(o => o.mods && o.mods.length),
+    blendModKinds: (O) => each(O.map(o => (o.mods || []).map(m => m.replace(/ \d+$/, "")))),
+    blendAnimated: named(o => o.anim),
     blendKeys:     (O, st) => (st.anim && st.anim.keys) || 0,
     blendFaces:    (O) => O.reduce((n, o) => n + (o.f || 0), 0),
     blendFrames:   (O, st) => st.scene && st.scene.end >= st.scene.start ? st.scene.end - st.scene.start + 1 : 0
   };
-  function blendCount(stats, kind, onlyShowing){
+  function blendFound(stats, kind, onlyShowing){
     let O = (stats && Array.isArray(stats.objects)) ? stats.objects : [];
     if (onlyShowing) O = O.filter(o => !o.h);
-    return COUNT[kind] ? COUNT[kind](O, stats || {}) : null;
+    return FOUND[kind] ? FOUND[kind](O, stats || {}) : null;
+  }
+  function blendCount(stats, kind, onlyShowing){
+    const found = blendFound(stats, kind, onlyShowing);
+    return Array.isArray(found) ? found.length : found;
   }
   window.runBlendChecks = function(checks, stats){
     return (checks || []).map(c => {
       const label = (c && c.label) || "Check";
-      if (c && c.manual === true) return { ok:false, manual:true, label };
-      const n = blendCount(stats, c && c.kind);
-      if (n === null) return { ok:false, broken:true, label, note:"Unknown kind of check: " + (c && c.kind) };
+      /* A clue for the teacher rather than a tick, as in runPsdChecks. */
+      const suggest = !!(c && c.manual === true && c.suggest === true);
+      if (c && c.manual === true && !suggest) return { ok:false, manual:true, label };
+      const found = blendFound(stats, c && c.kind);
+      const n = Array.isArray(found) ? found.length : found;
+      if (n === null) return suggest ? { ok:false, manual:true, label }
+        : { ok:false, broken:true, label, note:"Unknown kind of check: " + (c && c.kind) };
       const want = Math.max(0, parseInt(c.count, 10) || 1);
       const meets = (k) => c.compare === "exactly" ? k === want : c.compare === "atMost" ? k <= want : k >= want;
       const ok = !!stats && meets(n);
+      if (suggest){
+        const line = { ok:false, manual:true, label, hint: String(c.hint || "").trim() };
+        if (stats) line.clue = { found: ok, count: n, names: Array.isArray(found) ? found : [],
+                                 hidden: meets(blendCount(stats, c.kind, true)) !== ok };
+        return line;
+      }
       const out = { label, ok, note: ok ? "" : String(c.hint || "").trim() };
       if (stats && meets(blendCount(stats, c.kind, true)) !== ok)
         out.flag = ok ? "From a hidden object" : "Hidden objects counted";

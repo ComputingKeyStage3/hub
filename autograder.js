@@ -1011,7 +1011,9 @@
     }
     const autoList = autoCount ? column("auto", null) : null;
     const manualList = manualCount
-      ? column("manual", "Your teacher will check " + (manualCount === 1 ? "this one" : "these") + " after the lesson.")
+      ? column("manual", "Your teacher will check " + (manualCount === 1 ? "this one" : "these") + " after the lesson." +
+          (all.some(c => isManual(c) && c.suggest === true)
+            ? " \u201cFound in the file\u201d is only a clue." : ""))
       : null;
 
     /* Kept in the order they were written, so results line up by position. */
@@ -1086,6 +1088,8 @@
        do themselves before one only a teacher can tick. */
     function nextToDo(){
       let at = items.findIndex(it => !it.manual && !done(it));
+      /* a line their file already seems to do is not the next thing to do */
+      if (at < 0) at = items.findIndex(it => it.manual && it.looked && !it.found && !done(it));
       if (at < 0) at = items.findIndex(it => !done(it));
       return at;
     }
@@ -1108,7 +1112,8 @@
     let hintsWait = false;
     function paintHints(){
       items.forEach(it => {
-        const want = !hintsWait && it.hintReady && it.li.dataset.state === "no";
+        const want = !hintsWait && it.hintReady &&
+          (it.li.dataset.state === "no" || (it.manual && !done(it)));
         it.hint.hidden = !want;
         if (!want && it.li.dataset.state === "yes"){
           it.hintBtn.hidden = false;
@@ -1237,6 +1242,30 @@
       return doneCount === counted;
     }
 
+    /* A line only a teacher ticks, where the file check has something to say
+       about it: a label saying it looks done, or the hint when it does not,
+       and the tick left for the teacher either way. Results without a word
+       on it, such as ticks put back from a save, leave it as it was. */
+    function showClue(it, r){
+      if (!r || !("hint" in r) || !r.manual) return;
+      it.looked = !!r.clue;
+      it.found = !!(r.clue && r.clue.found);
+      if (!it.foundTag){
+        it.foundTag = document.createElement("span");
+        it.foundTag.className = "check-found";
+        it.foundTag.innerHTML = (window.hubIcons ? window.hubIcons.icon("filefound", 13) : "") + "Found in the file";
+        it.text.appendChild(it.foundTag);
+      }
+      it.foundTag.hidden = !it.found;
+      it.hintText.textContent = r.hint || "";
+      it.hintReady = it.looked && !it.found && !!String(r.hint || "").trim();
+    }
+    wrap.showClues = function(results){
+      (results || []).forEach((r, i) => { if (items[i] && items[i].manual) showClue(items[i], r); });
+      follow();
+      paintOne();
+    };
+
     /* Called with the results of running the checks. `hold` is the lines to
        leave exactly as they are, which is how a line a run has just turned
        waits for the tick over the console to point at it rather than quietly
@@ -1247,6 +1276,7 @@
       let turned = false;
       (results || []).forEach((r, i) => {
         const it = items[i];
+        if (it && it.manual) showClue(it, r);
         if (!it || it.manual) return;         // a teacher's tick is not overwritten
         /* A word on what decided the line, such as a Photoshop line met only
            by a hidden layer. Information rather than a tick, so it is drawn
