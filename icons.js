@@ -88,7 +88,7 @@
   /* Each character, with the variation selectors that ask for a text or an
      emoji drawing of it taken off first, and what it was standing in for. */
   const GLYPH = {
-    "\u{1F512}": "lock", "\u{1F513}": "unlock", "\u{1F4BE}": "backup", "\u{1F4DC}": "log",
+    "\u{1F512}": "lock", "\u{1F513}": "unlock", "\u{1F511}": "key", "\u{1F4BE}": "backup", "\u{1F4DC}": "log",
     "⚙": "settings", "✎": "edit", "\u{1F5D1}": "trash", "\u{1F441}": "eye",
     "\u{1F465}": "classes", "\u{1F4C4}": "log", "↻": "refresh", "⟳": "refresh",
     "\u{1F4C5}": "calendar", "\u{1F517}": "link", "\u{1F50D}": "search",

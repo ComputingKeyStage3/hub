@@ -4589,7 +4589,8 @@ function paintStudents(){
     }
     const td2 = el("td"); td2.style.color = "var(--muted)";
     td2.appendChild(el("span","", st.username));
-    if (!st.pw_set) td2.appendChild(el("span","statechip shut","No password yet"));
+    const chip = passwordChip(st);
+    if (chip) td2.appendChild(el("span","statechip shut", chip));
     if (st.reset_req) td2.appendChild(el("span","statechip open","Reset asked"));
     const td3 = el("td");
     const ed = el("button","btn-ghost iconbtn","\u270E"); ed.title = "Edit " + st.display_name;
@@ -4597,6 +4598,11 @@ function paintStudents(){
     ed.addEventListener("click", () => editStudent(st));
     dl.addEventListener("click", () => confirmDelete(st));
     td3.appendChild(ed);
+    if (!OFFLINE){
+      const rp = el("button","btn-ghost iconbtn","\u{1F511}"); rp.title = "Reset " + st.display_name + "'s password"; rp.style.marginLeft = "6px";
+      rp.addEventListener("click", () => confirmReset(st, loadStudents));
+      td3.appendChild(rp);
+    }
     /* Only in the All (Admin) view. A child changing set happens a handful of
        times a year, and that view is the one that already holds every class,
        so the pop-up has something to offer without fetching anything. */
@@ -4610,6 +4616,56 @@ function paintStudents(){
     td3.appendChild(dl);
     tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
     t.appendChild(tr);
+  });
+}
+/* What a student with no password of their own is waiting on, in the class
+   list and on their profile. "" when they have one. */
+function passwordChip(st){
+  if (st.pw_set) return "";
+  if (!st.reset_at) return "No password yet";
+  return Number(st.reset_lapsed) ? "Reset ran out" : "Password reset";
+}
+/* Reset password, from the class list and a student's profile. The server
+   puts the account back to its first sign-in, so there is nothing to type
+   here and nothing to wait for: the student chooses a new one themself,
+   wherever they are. `after` redraws the screen it was pressed on. */
+function confirmReset(st, after){
+  const first = String(st.display_name || st.username).trim().split(/\s+/)[0];
+  openModal(box => {
+    /* Never chosen one, so the starting password already lets them in. */
+    if ((st.pw_set === 0 || st.pw_set === false) && !st.reset_at){
+      modalTitle(box, first + " has no password yet");
+      box.appendChild(el("p","modal-text","There is nothing to reset. They sign in with their username, " + st.username +
+        ", and the class starting password, then choose a password of their own."));
+      const ok = el("button","btn-primary modal-cta","Close");
+      ok.addEventListener("click", closeModal);
+      box.appendChild(ok);
+      return;
+    }
+    modalTitle(box, "Reset " + st.display_name + "'s password?");
+    box.appendChild(el("p","modal-text","Their old password stops working and they are signed out on every computer. Their work stays as it is."));
+    box.appendChild(el("p","modal-text","They sign in with their username, " + st.username +
+      ", and the class starting password, then choose a new password. They have 7 days to do it."));
+    const msg = el("p","hint","");
+    const go = el("button","btn-primary modal-cta","Yes, reset password");
+    const no = el("button","btn-ghost modal-stay","Cancel");
+    no.addEventListener("click", closeModal);
+    go.addEventListener("click", async () => {
+      const b = hubMotion.busy(go, "Resetting");
+      msg.textContent = "";
+      try{
+        const r = await fetch(API + "/api/teacher/reset-student", { method:"POST", headers: HJ(), body: JSON.stringify({ username: st.username }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || "Could not reset their password.");
+        await b.done("Password reset");
+        /* The list reads it again; a profile is drawn from the record it was
+           opened with, so that has to be told as well. */
+        st.pw_set = 0; st.reset_req = ""; st.reset_lapsed = 0; st.reset_at = new Date().toISOString();
+        closeModal();
+        if (after) after();
+      }catch(e){ b.fail(); msg.textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message; }
+    });
+    box.appendChild(go); box.appendChild(no); box.appendChild(msg);
   });
 }
 function pwField(box, label){

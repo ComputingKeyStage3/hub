@@ -4401,12 +4401,64 @@ function askSignInAgain(pressed){
         if (d.group) localStorage.setItem("hub_group", d.group);
         needSignIn = false;
         busy.reset();
+        if (d.mustSet){ chooseNew(); return; }
         close(true);
       }catch(e){
         busy.reset();
         msg.textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message;
         pw.focus();
       }
+    };
+    /* A teacher pressed Reset password while this lesson was open, so they
+       are back in on the class starting password. They choose their own
+       here, as the front page asks on a first sign-in. Closing it does not
+       hold up the work: they are signed in, it saves, and the front page
+       asks next time instead. */
+    const chooseNew = () => {
+      localStorage.setItem("hub_must_set", localStorage.getItem("hub_user") || "");
+      box.querySelector("h2").textContent = "Choose your new password";
+      box.querySelectorAll(".bfield").forEach(r => r.remove());
+      box.querySelector(".hint").textContent = "Your teacher reset your password. Pick one only you know, 12 to 25 characters long.";
+      x.replaceWith(x.cloneNode(true));
+      box.querySelector(".modal-x").addEventListener("click", () => close(true));
+      const boxes = ["New password", "Type it again"].map(label => {
+        const r = el("div", "bfield");
+        r.appendChild(el("label", "", label));
+        const i = el("input");
+        i.type = "password"; i.autocomplete = "new-password"; i.maxLength = 25;
+        i.setAttribute("aria-label", label);
+        r.appendChild(i);
+        msg.parentNode.insertBefore(r, msg);
+        return i;
+      });
+      msg.textContent = "";
+      const save = go.cloneNode(false);
+      save.textContent = "Save my password";
+      go.replaceWith(save);
+      const saveNew = async () => {
+        const a = boxes[0].value;
+        if (a.length < 12 || a.length > 25){ msg.textContent = "It must be 12 to 25 characters long."; boxes[0].focus(); return; }
+        if (a !== boxes[1].value){ msg.textContent = "The two boxes don't match."; boxes[1].focus(); return; }
+        const busy = hubMotion.busy(save, "Saving");
+        try{
+          const r = await fetch(API + "/api/login", {
+            method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+            body: JSON.stringify({ action: "set-password", newPassword: a })
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || "Could not save it.");
+          if (d.token){ token = d.token; localStorage.setItem("hub_token", d.token); }
+          localStorage.removeItem("hub_must_set");
+          busy.reset();
+          close(true);
+        }catch(e){
+          busy.reset();
+          msg.textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message;
+        }
+      };
+      save.addEventListener("click", saveNew);
+      boxes[1].addEventListener("keydown", (e) => { if (e.key === "Enter") saveNew(); });
+      setTimeout(() => boxes[0].focus(), 30);
     };
     go.addEventListener("click", send);
     pw.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });

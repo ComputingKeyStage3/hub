@@ -266,9 +266,14 @@ function sessionLasting(){
     return !exp || Date.now() < exp;
   }catch(e){ return true; }       // not one we can read: the server will say
 }
+/* Signed in with the starting password, and the new one not chosen yet. */
+function mustSetPassword(){
+  const who = localStorage.getItem("hub_must_set");
+  return !!who && !!localStorage.getItem("hub_token") && who === localStorage.getItem("hub_user");
+}
 if (wantedLesson){
-  if (OFFLINE || sessionLasting()) openWantedLesson();   // offline there is nothing to sign in to
-  else ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
+  if (OFFLINE || (sessionLasting() && !mustSetPassword())) openWantedLesson();   // offline there is nothing to sign in to
+  else if (!sessionLasting()) ["hub_token","hub_name","hub_group"].forEach(k => localStorage.removeItem(k));
 }
 
 /* Nothing about lessons is shown until a student has signed in.
@@ -486,6 +491,11 @@ async function signIn(){
     localStorage.setItem("hub_name", d.name);
     localStorage.setItem("hub_group", d.group || "");
     renderAuth();
+    /* Remembered, so loading the page again does not get past choosing one:
+       until they do, the starting password the whole class knows still
+       opens their account. */
+    if (d.mustSet) localStorage.setItem("hub_must_set", uname);
+    else localStorage.removeItem("hub_must_set");
     if (d.mustSet) forcePassword(d.name);
     else if (!openWantedLesson()) loadLessons();
   }catch(e){
@@ -977,11 +987,14 @@ on("npGo", "click", async () => {
     /* Choosing a password signs out every other browser, and this one is
        handed the sign-in that still works. */
     if (d.token) localStorage.setItem("hub_token", d.token);
+    localStorage.removeItem("hub_must_set");
     $("pwModal").hidden = true;
     $("np1").value = $("np2").value = "";
     if (!openWantedLesson()) loadLessons();
   }catch(e){ $("npMsg").textContent = e.message; }
 });
+
+if (!OFFLINE && mustSetPassword()) forcePassword(localStorage.getItem("hub_name"));
 
 /* our own message box, never the browser's grey pop-up */
 function say(title, text, then){
@@ -1011,6 +1024,7 @@ document.addEventListener("keydown", (e) => {
    And not from a home learning link, where there is no teacher at all. */
 let rsUser = "", rsTicket = "", rsPoll = null, rsDeadline = 0;
 let coverOn = null;
+let rsReset = null;      // { state, words } when their teacher has pressed Reset password
 
 on("forgotBtn", "click", async () => {
   const u = $("u").value.trim();
@@ -1029,6 +1043,11 @@ on("forgotBtn", "click", async () => {
       return;
     }
     rsUser = u;
+    rsReset = d.reset || null;
+    /* Their teacher has already reset it, so there is nothing to ask for.
+       Not when a cover lesson is on: the teacher in the room may not know
+       the starting password, so that is still offered first. */
+    if (rsReset && (rsReset.state === "waiting" ? !coverOffer(d) : wantedLesson)){ sayReset(); return; }
     /* Here from a home learning link, so most likely at home. A reset waits
        for a teacher to approve it within five minutes, and there is no
        teacher to do that, so it would only run out. Nor is a cover lesson
@@ -1040,11 +1059,18 @@ on("forgotBtn", "click", async () => {
           "and ask them to reset your password for the Lesson Hub.");
       return;
     }
-    if (d.cover && d.cover.k) openCover(d.cover);
+    if (coverOffer(d)) openCover(d.cover);
     else openReset();
   }catch(e){ $("loginErr").textContent = e.message; }
   finally{ $("forgotBtn").textContent = "Forgot password?"; }
 });
+const coverOffer = (d) => !wantedLesson && !!(d.cover && d.cover.k);
+/* The server's own words, which are what signing in with the old password
+   says as well. */
+function sayReset(){
+  say(rsReset.state === "waiting" ? "Your password has been reset" : "Your reset has run out", rsReset.words,
+      () => { $("p").value = ""; $("p").focus(); });
+}
 function openReset(){
   $("rsWho").textContent = "Signing in as " + rsUser + ". Choose a new password, then your teacher will approve it.";
   $("rsStep1").hidden = false; $("rsStep2").hidden = true;
@@ -1094,7 +1120,10 @@ on("cvForm", "submit", (e) => {
   }
   location.href = "lesson.html?id=" + encodeURIComponent(coverOn.lesson) + "&guest=1";
 });
-on("cvReset", "click", () => { $("coverModal").hidden = true; openReset(); });
+on("cvReset", "click", () => {
+  $("coverModal").hidden = true;
+  if (rsReset && rsReset.state === "waiting") sayReset(); else openReset();
+});
 on("coverModal", "mousedown", (e) => { if (e.target === $("coverModal")) $("coverModal").hidden = true; });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("coverModal").hidden){ $("coverModal").hidden = true; $("p").focus(); }
@@ -1143,6 +1172,7 @@ async function pollReset(){
     const d = await r.json();
     if (d.status === "approved"){
       stopReset();
+      localStorage.removeItem("hub_must_set");
       if (localStorage.getItem("hub_user") !== rsUser.toLowerCase()) clearStudentCache();
       localStorage.setItem("hub_user", rsUser.toLowerCase());
       forgetEverything();          // never inherit the last student's data

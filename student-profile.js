@@ -101,12 +101,14 @@
     line.appendChild(document.createTextNode("  ·  " + (group || "No class")));
     words.appendChild(line);
     const chips = el("div","prof-chips");
-    if (st.pw_set === false || st.pw_set === 0) chips.appendChild(el("span","statechip shut","No password yet"));
+    const chip = st.pw_set === false || st.pw_set === 0 ? passwordChip(st) : "";
+    if (chip) chips.appendChild(el("span","statechip shut", chip));
     if (st.reset_req) chips.appendChild(el("span","statechip open","Password reset asked"));
     if (chips.children.length) words.appendChild(chips);
     hero.appendChild(words);
     const acts = el("div","prof-acts");
     acts.appendChild(btn("Practice programs", "btn-ghost bmini2", () => openPrograms(st)));
+    acts.appendChild(btn("Reset password", "btn-ghost bmini2", () => confirmReset(st, () => { if (who === st) paint(); })));
     acts.appendChild(btn("Edit", "btn-ghost bmini2", () => editStudent(st)));
     hero.appendChild(acts);
     box.appendChild(hero);

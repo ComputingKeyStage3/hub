@@ -2398,6 +2398,9 @@ pre, code{overflow-wrap:anywhere}
   .who-row{flex-wrap:wrap; gap:6px}
   .who-row .nm{flex:1 1 100%}
   .stutable td{padding:9px 6px; font-size:var(--text-md)}
+  /* Four buttons in a row are wider than a phone, and the bin went off the edge: two by two. */
+  .stutable td:last-child{white-space:normal; min-width:104px}
+  .stutable td:last-child .iconbtn{margin:2px 0 2px 4px !important}
   .result-card{flex-wrap:wrap}
   .result-card .st{max-width:100%; flex:1 1 100%}
 
