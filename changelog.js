@@ -28,6 +28,8 @@ window.HIGHLIGHTS = {
 };
 
 window.CHANGES = [
+  { v:"18.7", text:"Revision task: students see how many cards or branches to aim for and tick off key words you set, every card and mind map branch gets a picture, and the Quiz is now typed. Testing themselves has its own page after Finish, with flip, match and cover up, and My revision on Practice brings it back later. A knowledge organiser on the same page sits beside their work. Pictures and PDFs now zoom by pinch, double tap or buttons on an iPad. Home learning is held and tried again when the server is busy, as a lesson is." },
+  { v:"18.6", text:"Photoshop and Blender checklists: a line can be yours to tick with the file check as a clue. Mark work shows a small icon beside it for what the check found, and pressing the icon names the layers or objects it counted. Nothing on those lines is ticked until you tick it." },
   { v:"18.5.3", text:"Photoshop help has a page students can open without signing in: ps-help.html, with the chat in the middle of the screen." },
   { v:"18.5.2", text:"The lesson Preview's Home view shows Example Student's home page again, rather than the sign-in screen." },
   { v:"18.5.1", text:"Home learning that marks itself has Retake on the student's summary, to start again from blank and master the questions. The mark book shows the latest mark with a Tries column, an Earlier goes switch to see every score, and every go in Save for Excel." },

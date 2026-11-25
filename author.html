@@ -661,7 +661,7 @@ const BLANK = {
                      task:"Type what you want to do in Photoshop, or what has gone wrong." }),
   mindmap:  () => ({ type:"mindmap", title:"", task:"", centre:"", lockCentre:false, starter:[] }),
   revise:   () => ({ type:"revise", title:"", task:"Use your Knowledge Organiser to make a revision resource. Make it here, or do it on paper and take a photo.",
-                     kinds:["cards","mindmap","poster","quiz","photo"] }),
+                     kinds:["cards","mindmap","poster","quiz","photo"], target:10, branches:8, words:[] }),
   board:    () => ({ type:"board", title:"", task:"", height:420 }),
   poster:   () => ({ type:"poster", title:"Make a poster", task:"", heading:"" }),
   pixels:   () => ({ type:"pixels", title:"", task:"", w:8, h:8, depth:1 }),
@@ -1457,7 +1457,10 @@ function compileOne(b, id, target){
       const ALL = ["cards","mindmap","poster","quiz","photo"];
       const kinds = (Array.isArray(b.kinds) ? b.kinds : []).filter(k => ALL.indexOf(k) >= 0);
       push(keepArrays({ type:"revise", id, title: b.title || "", task: b.task || "",
-        kinds: kinds.length ? ALL.filter(k => kinds.indexOf(k) >= 0) : ALL }));
+        kinds: kinds.length ? ALL.filter(k => kinds.indexOf(k) >= 0) : ALL,
+        target: Math.max(0, Math.min(59, Math.round(Number(b.target) || 0))),
+        branches: Math.max(0, Math.min(59, Math.round(Number(b.branches) || 0))),
+        words: (Array.isArray(b.words) ? b.words : []).map(w => String(w || "").trim().slice(0, 40)).filter(Boolean).slice(0, 30) }));
     }
     else if (b.type === "board")
       push(keepArrays({ type:"board", id, title: b.title || "", task: b.task || "",
@@ -3549,7 +3552,7 @@ function condKind(kinds){
    text as "Has this tag..." with no tag. "The code contains...", or "A file
    contains..." on a web task, is what those words were asking for. */
 function settleCheck(c, kinds){
-  if (!c || c.manual === true) return c;
+  if (!c || (c.manual === true && c.suggest !== true)) return c;
   if (!c.kind){
     let kind = kinds[0][0];
     const said = String(c.value || "").trim().toLowerCase();
@@ -3617,9 +3620,10 @@ function checklistPopup(block, isWeb, fromFile){
     box.classList.add("narrow", "checkmodal");
     box.appendChild(el("h2","","Checklist"));
     box.appendChild(el("p","modal-text", fromFile
-      ? "Each line is ticked from the " + (fromFile === "blend" ? "Blender" : "Photoshop") +
-        " file the student chooses, or by you when you mark it. " +
-        "Keep the wording plain, it is what they read when they are stuck."
+      ? "Each line is ticked by you when you mark it, or on its own from the " +
+        (fromFile === "blend" ? "Blender" : "Photoshop") + " file the student chooses. A file check counts " +
+        (fromFile === "blend" ? "objects" : "layers") + " and can be wrong, so for anything you are marking " +
+        "have it as a clue and tick the line yourself."
       : "Each line becomes something the student can tick off. Keep the wording plain, " +
         "it is what they read when they are stuck."));
     /* Students get one line at a time unless this is on: a long list read
@@ -3658,6 +3662,17 @@ function checklistPopup(block, isWeb, fromFile){
     });
     paintLive();
     showRow.appendChild(liveBtn);
+    /* Every line the file ticks on its own, over to the teacher in one go,
+       with what the file check found kept as a clue. */
+    const allMine = el("button","btn-ghost bmini2","I tick every line, with clues");
+    allMine.type = "button";
+    const fileTicked = () => fromFile ? block.checks.filter(c => c && c.manual !== true) : [];
+    const paintAllMine = () => { allMine.hidden = !fileTicked().length; };
+    allMine.addEventListener("click", () => {
+      fileTicked().forEach(c => { settleCheck(c, kinds); c.manual = true; c.suggest = true; });
+      saveDraft(); paint(); schedulePreview();
+    });
+    showRow.appendChild(allMine);
     showRow.appendChild(helpDot(["Start with every line showing: off, students see one line at a time, with the "
       + "rest numbered above it and a button to show them all. On, they start with the whole list and can "
       + "switch to one at a time.",
@@ -3675,6 +3690,7 @@ function checklistPopup(block, isWeb, fromFile){
       const scroller = list.closest(".modal-scroll");
       const wasAt = scroller ? scroller.scrollTop : 0;
       list.innerHTML = "";
+      paintAllMine();
       if (!block.checks.length)
         list.appendChild(el("p","hint","Nothing yet, press \u201c+ New check\u201d."));
       block.checks.forEach((c, i) => {
@@ -3714,8 +3730,9 @@ function checklistPopup(block, isWeb, fromFile){
         /* What it looks for, in the words of the dropdown, so a folded line
            says what sort of check it is without being opened. */
         if (shut){
-          const what = c.manual === true ? "Teacher checks this"
-            : ((kinds.find(k => k[0] === (c.kind || kinds[0][0])) || [])[1] || RETIRED_CHECKS[c.kind] || "");
+          const what = (c.manual === true ? "Teacher checks this" : "") +
+            (c.manual === true && c.suggest !== true ? "" : (c.manual === true ? ", clue: " : "") +
+             ((kinds.find(k => k[0] === (c.kind || kinds[0][0])) || [])[1] || RETIRED_CHECKS[c.kind] || ""));
           const extra = (Array.isArray(c.more) ? c.more.filter(m => m && (m.value || m.count || m.selector)) : []).length;
           head.appendChild(el("span","checkkind",
             what + (extra ? "  +" + extra + " more" : "")));
@@ -3793,6 +3810,29 @@ function checklistPopup(block, isWeb, fromFile){
         const whoField = el("div","bfield checkfield");
         whoField.appendChild(el("label","","Who checks this"));
         const manual = c.manual === true;
+        /* On a file, there is something in between: the teacher ticks it and
+           is shown what the file check found. */
+        const suggest = manual && !!fromFile && c.suggest === true;
+        if (fromFile){
+          const whoRow = el("div","brow");
+          [["You, with a clue", suggest, true, true, "You tick this off, and an icon shows what the file check found"],
+           ["You", manual && !suggest, true, false, "You tick this off, and the file is not checked for it"],
+           ["The file", !manual, false, false, "Ticked on its own from the file, right or wrong"]
+          ].forEach(([words, on, isManual, isClue, help]) => {
+            const pick = el("button","btn-ghost bmini2" + (on ? " right" : ""), words);
+            pick.type = "button";
+            pick.title = help;
+            pick.setAttribute("aria-pressed", String(on));
+            pick.addEventListener("click", () => {
+              c.manual = isManual;
+              if (isClue) c.suggest = true; else delete c.suggest;
+              settleCheck(c, kinds);
+              saveDraft(); paint();
+            });
+            whoRow.appendChild(pick);
+          });
+          whoField.appendChild(whoRow);
+        } else {
         const mbtn = el("button","btn-ghost bmini2" + (manual ? " right" : ""),
                         manual ? "Teacher" : "Checked automatically");
         mbtn.type = "button";
@@ -3805,11 +3845,12 @@ function checklistPopup(block, isWeb, fromFile){
           saveDraft(); paint();
         });
         whoField.appendChild(mbtn);
+        }
         topRow.appendChild(whoField);
         /* Nothing to look for when a person is doing the looking. The card has
            to go on the page before dropping out of this line, or a
            teacher-checked line would disappear from the list entirely. */
-        if (manual){ list.appendChild(card); return; }
+        if (manual && !suggest){ list.appendChild(card); return; }
 
         const row = el("div","bfield checkfield grow");
         row.appendChild(el("label","","What to look for"));
@@ -4022,6 +4063,9 @@ function checklistPopup(block, isWeb, fromFile){
       if (isScratch) settleKind(made, true);
       /* a Photoshop line counts something, and starts at one */
       if (fromFile){ delete made.value; made.count = "1"; }
+      /* In a practical somebody is marking it, so the line is theirs to tick
+         and what the file check finds is a clue. */
+      if (fromFile && lesson.practical){ made.manual = true; made.suggest = true; }
       block.checks.push(made);
       /* whatever was just added is the thing being written, so it opens */
       open.clear();

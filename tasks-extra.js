@@ -424,6 +424,145 @@
     ] },
     { name:"speech", label:"Speech bubble", group:"Objects", parts: [
       ["#FFFFFF", "M14 18h72a6 6 0 0 1 6 6v36a6 6 0 0 1-6 6h-46l-16 16v-16h-10a6 6 0 0 1-6-6v-36a6 6 0 0 1 6-6z"]
+    ] },
+    /* What the subject is about. Stickers on a poster, and the pictures on
+       flashcards and mind maps, where revision.js picks one to go with the
+       words being typed. */
+    { name:"cpu", label:"Processor", group:"Computing", parts: [
+      [null, "M34 14v14M50 14v14M66 14v14M34 72v14M50 72v14M66 72v14M14 34h14M14 50h14M14 66h14M72 34h14M72 50h14M72 66h14", 4],
+      ["#7FB2E5", "M32 26h36a6 6 0 0 1 6 6v36a6 6 0 0 1-6 6h-36a6 6 0 0 1-6-6v-36a6 6 0 0 1 6-6z"],
+      ["#FFD54A", "M40 40h20v20h-20z"]
+    ] },
+    { name:"binary", label:"Binary", group:"Computing", parts: [
+      ["#2B2B2B", "M16 24h68a6 6 0 0 1 6 6v40a6 6 0 0 1-6 6h-68a6 6 0 0 1-6-6v-40a6 6 0 0 1 6-6z"],
+      [null, "M24 42l7-5v26M67 42l7-5v26", 5, "#7CE0B0"],
+      [null, "M48 37a8 13 0 0 1 0 26a8 13 0 0 1 0-26z", 5, "#7CE0B0"]
+    ] },
+    { name:"keyboard", label:"Keyboard", group:"Computing", parts: [
+      ["#D5D9E0", "M14 32h72a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6h-72a6 6 0 0 1-6-6v-28a6 6 0 0 1 6-6z"],
+      [null, "M18 43h6M32 43h6M46 43h6M60 43h6M74 43h8M18 52h6M32 52h6M46 52h6M60 52h6M74 52h8M30 62h40", 4]
+    ] },
+    { name:"mouse", label:"Mouse", group:"Computing", parts: [
+      ["#FFFFFF", "M50 14a24 24 0 0 1 24 24v24a24 24 0 0 1-48 0v-24a24 24 0 0 1 24-24z"],
+      ["#7FB2E5", "M50 14a24 24 0 0 1 24 24v8h-24z"],
+      [null, "M26 46h48M50 14v32"]
+    ] },
+    { name:"codewin", label:"Code", group:"Computing", parts: [
+      ["#FFFFFF", "M14 18h72a6 6 0 0 1 6 6v52a6 6 0 0 1-6 6h-72a6 6 0 0 1-6-6v-52a6 6 0 0 1 6-6z"],
+      ["#B79BE0", "M14 18h72a6 6 0 0 1 6 6v10h-84v-10a6 6 0 0 1 6-6z"],
+      [null, "M36 46l-12 12l12 12M64 46l12 12l-12 12M55 43l-10 30", 4.5]
+    ] },
+    { name:"flow", label:"Algorithm", group:"Computing", parts: [
+      [null, "M50 28v14M50 64v12M66 53h14v23", 3.5],
+      ["#7CC5A0", "M36 10h28a9 9 0 0 1 0 18h-28a9 9 0 0 1 0-18z"],
+      ["#FFD54A", "M50 40l20 13l-20 13l-20-13z"],
+      ["#7FB2E5", "M34 74h32v16h-32z"], ["#F5A65B", "M72 74h18v16h-18z"]
+    ] },
+    { name:"loop", label:"Loop", group:"Computing", parts: [
+      ["#7CC5A0", "M50 16a34 34 0 0 1 33 26l8-2l-12 22l-18-15l9-2a22 22 0 1 0-4 20l10 8a34 34 0 1 1-26-57z"]
+    ] },
+    { name:"server", label:"Server", group:"Computing", parts: [
+      ["#B8C2CC", "M22 14h56v22h-56z"], ["#D5D9E0", "M22 39h56v22h-56z"], ["#B8C2CC", "M22 64h56v22h-56z"],
+      ["#7CE0B0", dot(34, 25, 4)], ["#7CE0B0", dot(34, 50, 4)], ["#FFD54A", dot(34, 75, 4)],
+      [null, "M48 25h22M48 50h22M48 75h22", 3]
+    ] },
+    { name:"database", label:"Storage", group:"Computing", parts: [
+      ["#7FB2E5", "M20 24v52c0 8 13 13 30 13s30-5 30-13v-52z"],
+      ["#B9D8F5", "M20 24c0-8 13-13 30-13s30 5 30 13s-13 13-30 13s-30-5-30-13z"],
+      [null, "M20 42c0 8 13 13 30 13s30-5 30-13M20 60c0 8 13 13 30 13s30-5 30-13"]
+    ] },
+    { name:"folder", label:"Folder", group:"Computing", parts: [
+      ["#F2B705", "M10 24a5 5 0 0 1 5-5h24l8 10h38a5 5 0 0 1 5 5v42a5 5 0 0 1-5 5h-70a5 5 0 0 1-5-5z"],
+      ["#FFD54A", "M10 40h80v36a5 5 0 0 1-5 5h-70a5 5 0 0 1-5-5z"]
+    ] },
+    { name:"globe", label:"Internet", group:"Computing", parts: [
+      ["#9CD3F0", dot(50, 50, 38)],
+      [null, "M12 50h76M50 12c-30 24-30 52 0 76M50 12c30 24 30 52 0 76M18 31h64M18 69h64", 3]
+    ] },
+    { name:"wifi", label:"Wi-Fi", group:"Computing", parts: [
+      [null, "M12 42a54 54 0 0 1 76 0", 8, "#2F6BAE"], [null, "M25 56a36 36 0 0 1 50 0", 8, "#2F6BAE"],
+      [null, "M37 69a19 19 0 0 1 26 0", 8, "#2F6BAE"], ["#2F6BAE", dot(50, 82, 6)]
+    ] },
+    { name:"network", label:"Network", group:"Computing", parts: [
+      [null, "M50 50L22 24M50 50L78 24M50 50L22 78M50 50L78 78", 4],
+      ["#F5A65B", dot(50, 50, 14)], ["#7FB2E5", dot(22, 24, 11)], ["#7CC5A0", dot(78, 24, 11)],
+      ["#B79BE0", dot(22, 78, 11)], ["#E8736E", dot(78, 78, 11)]
+    ] },
+    { name:"padlock", label:"Padlock", group:"Computing", parts: [
+      [null, "M32 46v-12a18 18 0 0 1 36 0v12", 8],
+      ["#FFD54A", "M26 44h48a6 6 0 0 1 6 6v32a6 6 0 0 1-6 6h-48a6 6 0 0 1-6-6v-32a6 6 0 0 1 6-6z"],
+      ["eye", dot(50, 62, 6)], [null, "M50 64v12", 5]
+    ] },
+    { name:"keys", label:"Key", group:"Computing", parts: [
+      ["#F2B705", "M30 30a20 20 0 0 1 19 26l37 0l6 8l-8 8h-6l-6-5l-6 5h-17a20 20 0 1 1-19-42z"],
+      ["#FFFFFF", dot(25, 51, 6)]
+    ] },
+    { name:"shield", label:"Shield", group:"Computing", parts: [
+      ["#7CC5A0", "M50 10l34 12v26c0 21-14 34-34 42c-20-8-34-21-34-42v-26z"],
+      [null, "M34 49l12 13l22-26", 7, "#FFFFFF"]
+    ] },
+    { name:"bug", label:"Virus", group:"Computing", parts: [
+      [null, "M22 34l14 10M78 34l-14 10M16 58h18M84 58h-18M24 84l13-13M76 84l-13-13M40 20l6 12M60 20l-6 12", 4],
+      ["#E8736E", "M50 30c14 0 20 14 20 28s-8 28-20 28s-20-14-20-28s6-28 20-28z"],
+      [null, "M50 46v40"], ["eye", dot(42, 43, 4)], ["eye", dot(58, 43, 4)]
+    ] },
+    { name:"hook", label:"Phishing", group:"Computing", parts: [
+      [null, "M62 10v48a17 17 0 0 1-34 0l12 8", 6, "#5E6B78"], ["#B8C2CC", dot(62, 12, 5)],
+      ["#FFFFFF", "M44 34h42v28h-42z"], [null, "M44 34l21 16l21-16"]
+    ] },
+    { name:"mail", label:"Email", group:"Computing", parts: [
+      ["#FFFFFF", "M14 24h72a5 5 0 0 1 5 5v42a5 5 0 0 1-5 5h-72a5 5 0 0 1-5-5v-42a5 5 0 0 1 5-5z"],
+      ["#9CD3F0", "M10 26l40 30l40-30"]
+    ] },
+    { name:"sound", label:"Sound", group:"Computing", parts: [
+      ["#B79BE0", "M12 38h16l22-18v60l-22-18h-16z"], [null, "M62 38a17 17 0 0 1 0 24M73 28a31 31 0 0 1 0 44", 5]
+    ] },
+    { name:"photo", label:"Picture", group:"Computing", parts: [
+      ["#9CD3F0", "M12 20h76a5 5 0 0 1 5 5v50a5 5 0 0 1-5 5h-76a5 5 0 0 1-5-5v-50a5 5 0 0 1 5-5z"],
+      ["#FFD54A", dot(72, 37, 8)], ["#7CC5A0", "M8 78l26-34l20 26l12-14l26 22z"]
+    ] },
+    { name:"pixelart", label:"Pixels", group:"Computing", parts: [
+      ["#E8736E", "M14 14h24v24h-24z"], ["#FFFFFF", "M38 14h24v24h-24z"], ["#7FB2E5", "M62 14h24v24h-24z"],
+      ["#FFFFFF", "M14 38h24v24h-24z"], ["#FFD54A", "M38 38h24v24h-24z"], ["#FFFFFF", "M62 38h24v24h-24z"],
+      ["#7CC5A0", "M14 62h24v24h-24z"], ["#FFFFFF", "M38 62h24v24h-24z"], ["#B79BE0", "M62 62h24v24h-24z"]
+    ] },
+    { name:"letters", label:"Text", group:"Computing", parts: [
+      ["#FFFFFF", "M18 12h64a6 6 0 0 1 6 6v64a6 6 0 0 1-6 6h-64a6 6 0 0 1-6-6v-64a6 6 0 0 1 6-6z"],
+      [null, "M28 70l14-40l14 40M33 57h18M64 48h14M71 48v22", 5, "#2F6BAE"]
+    ] },
+    { name:"sums", label:"Numbers", group:"Computing", parts: [
+      ["#5E6B78", "M28 10h44a6 6 0 0 1 6 6v68a6 6 0 0 1-6 6h-44a6 6 0 0 1-6-6v-68a6 6 0 0 1 6-6z"],
+      ["#D6F0E0", "M30 18h40v16h-40z"],
+      ["#FFFFFF", "M30 42h10v10h-10zM45 42h10v10h-10zM30 57h10v10h-10zM45 57h10v10h-10zM30 72h10v10h-10zM45 72h10v10h-10z"],
+      ["#F5A65B", "M60 42h10v40h-10z"]
+    ] },
+    { name:"bulb", label:"Idea", group:"Computing", parts: [
+      ["#FFD54A", "M50 10a28 28 0 0 1 17 50c-4 4-5 7-5 11h-24c0-4-1-7-5-11a28 28 0 0 1 17-50z"],
+      ["#B8C2CC", "M38 71h24v8h-24zM41 79h18v8h-18z"], [null, "M42 46l8 8l8-8M50 54v16", 3]
+    ] },
+    { name:"gear", label:"Settings", group:"Computing", parts: [
+      ["#B8C2CC", (() => {
+        let d = "";
+        for (let k = 0; k < 32; k++){
+          const r = k % 4 < 2 ? 40 : 30, a = (k + (k % 2 ? 0.2 : -0.2)) * Math.PI / 16;
+          d += (k ? "L" : "M") + (50 + r * Math.cos(a)).toFixed(1) + " " + (50 + r * Math.sin(a)).toFixed(1);
+        }
+        return d + "z";
+      })()], ["#FFFFFF", dot(50, 50, 12)]
+    ] },
+    { name:"lens", label:"Search", group:"Computing", parts: [
+      [null, "M62 62l24 24", 11, "#5E6B78"], ["#CDEBFA", dot(42, 42, 28)], [null, "M27 40a16 16 0 0 1 14-14", 4, "#FFFFFF"]
+    ] },
+    { name:"spark", label:"Important", group:"Computing", parts: [
+      ["#FFD54A", "M54 6L20 56h24l-8 38l44-56h-26z"]
+    ] },
+    { name:"people", label:"People", group:"Computing", parts: [
+      ["#7CC5A0", dot(68, 34, 13)], ["#7CC5A0", "M46 84c0-20 8-32 22-32s24 12 24 32z"],
+      ["#F5A65B", dot(36, 36, 16)], ["#F5A65B", "M8 88c0-22 10-34 28-34s28 12 28 34z"]
+    ] },
+    { name:"law", label:"Law", group:"Computing", parts: [
+      [null, "M50 14v66M22 28h56", 5], ["#B8C2CC", "M32 80h36v8h-36z"],
+      ["#F2B705", "M8 56h30a15 15 0 0 1-30 0zM62 56h30a15 15 0 0 1-30 0z"], [null, "M23 28l-14 28M23 28l14 28M77 28l-14 28M77 28l14 28", 2.5]
     ] }
   ];
   const STAMPS = {};
@@ -2758,6 +2897,14 @@
      Each first branch keeps the side it was added on. Below 620 pixels
      across, a map with two sides does not fit, so it is laid out as a tree
      down the page instead, from the same data.
+
+     A revision resource asks for three things more, all off by default:
+       icons     a picture on each box, saved as `i` where the student
+                 picked it and worked out from the words where they did not
+       readOnly  a map to look at: nothing to press, and always shrunk to
+                 fit, because there is nothing to type that has to be read
+                 at full size while it is being written
+       and addBranch(words) on what comes back, for a key word pressed.
      =================================================================== */
   const MAP_COLOURS = ["#2F6BAE","#C0392B","#2E7D5B","#8C5BC4","#DC8A3E","#1F8A8A","#B8930A","#D35D8A"];
   const MAP_MOST = 60;          // boxes in one map, the middle included
@@ -2765,7 +2912,7 @@
   const MAP_WORDS = 80;         // characters in one box
 
   window.rMindmap = function(b, ctx){
-    const s = make("section", "mindmap");
+    const s = make("section", "mindmap" + (b.readOnly ? " map-read" : ""));
     const bar = make("div", "map-bar");
     const hint = make("p", "map-hint",
       "Press + to add a branch. Press Enter in a box to add another one beside it.");
@@ -2833,7 +2980,8 @@
         seen.add(String(n.id));
         out.push({ id: String(n.id), text: String(n.text || "").slice(0, MAP_WORDS),
                    parent: n.parent === null || n.parent === undefined ? null : String(n.parent),
-                   side: n.side === "left" || n.side === "right" ? n.side : undefined });
+                   side: n.side === "left" || n.side === "right" ? n.side : undefined,
+                   i: typeof n.i === "string" ? n.i.slice(0, 20) : undefined });
       });
       let root = out.find(n => n.parent === null);
       if (!root){
@@ -2860,11 +3008,11 @@
     function say(text){ full.textContent = text; full.hidden = !text; }
 
     /* --- adding and taking away --- */
-    function addUnder(parent, side, after){
+    function addUnder(parent, side, after, words){
       if (nodes.length >= MAP_MOST){ say("This mind map is full. Remove a branch to add another."); return null; }
       if (parent.parent !== null && depthOf(parent) >= MAP_DEEP) return null;
       remember();
-      const n = { id: newId(), text: "", parent: parent.id };
+      const n = { id: newId(), text: String(words || "").slice(0, MAP_WORDS), parent: parent.id };
       if (parent.parent === null) n.side = side || quieterSide();
       /* straight after the box Enter was pressed in, so it lands beside it */
       const at = after ? nodes.indexOf(after) : -1;
@@ -2936,9 +3084,33 @@
       text.spellcheck = true;
       text.value = n.text;
       text.setAttribute("aria-label", isRoot ? "The idea in the middle" : "A branch");
-      text.readOnly = isRoot && b.lockCentre === true;
+      text.readOnly = b.readOnly === true || (isRoot && b.lockCentre === true);
+      if (b.readOnly) text.tabIndex = -1;
       wrap.appendChild(text);
-      const box = { wrap: wrap, text: text, add: null, del: null, node: n };
+      const box = { wrap: wrap, text: text, add: null, del: null, badge: null, node: n };
+      if (b.icons && ctx.icon){
+        box.badge = make(b.readOnly ? "span" : "button", "map-badge");
+        if (!b.readOnly){
+          box.badge.type = "button";
+          box.badge.title = "Change the picture";
+          box.badge.setAttribute("aria-label", "Change the picture on this box");
+          /* pressed before the box loses the focus, as the cross is */
+          box.badge.addEventListener("pointerdown", (e) => e.preventDefault());
+          box.badge.addEventListener("click", () => ctx.pickIcon(box.badge, box.node.i || "", (name) => {
+            remember();
+            if (name) box.node.i = name; else delete box.node.i;
+            paintBadge(box);
+            ctx.changed();
+          }));
+        }
+        wrap.appendChild(box.badge);
+      }
+      /* A box that has just been added grows out of nothing, so it can be
+         seen arriving. Not the ones there when the map was opened. */
+      if (opened && window.hubMotion && !window.hubMotion.off() && wrap.animate){
+        wrap.animate([{ transform: "scale(.3)", opacity: 0 }, { transform: "scale(1.08)", opacity: 1, offset: .7 }, { transform: "scale(1)" }],
+                     { duration: 260, easing: "cubic-bezier(.16, 1, .3, 1)" });
+      }
       text.addEventListener("focus", () => { box.typedFrom = text.value; });
       text.addEventListener("input", () => {
         /* one undo step for a run of typing, taken as it starts */
@@ -2950,6 +3122,7 @@
         /* a pasted line break would make a box no layout expects */
         if (/\n/.test(text.value)) text.value = text.value.replace(/\s*\n\s*/g, " ");
         box.node.text = text.value;
+        paintBadge(box);
         layout();
         ctx.changed();
       });
@@ -2964,7 +3137,7 @@
           remove(me);
         }
       });
-      if (!isRoot){
+      if (!isRoot && !b.readOnly){
         const del = make("button", "map-del", "✕");
         del.type = "button";
         del.title = "Remove this branch and anything on it";
@@ -2981,6 +3154,17 @@
       return box;
     }
 
+    function paintBadge(box){
+      if (!box.badge) return;
+      const name = box.node.i === "none" ? "" : box.node.i || ctx.icon(box.node.text);
+      if (box.badgeName === name) return;
+      const was = box.badgeName;
+      box.badgeName = name;
+      box.badge.innerHTML = name ? ctx.iconSvg(name, 22) : "";
+      box.badge.classList.toggle("is-empty", !name);
+      box.wrap.classList.toggle("has-badge", !!name);
+      if (name && was !== undefined && window.hubMotion) window.hubMotion.pop(box.badge);
+    }
     /* --- how much room the words take --- */
     let ruler = null;
     function textWidth(str, el){
@@ -3091,8 +3275,9 @@
       let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
       const reach = (x, y, w, h) => { x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x + w); y2 = Math.max(y2, y + h); };
       Object.values(pos).forEach(p => reach(p.x, p.y, p.w, p.h));
-      Object.values(plus).concat([rootPlus.right, rootPlus.left]).forEach(q => { if (q) reach(q.x, q.y, PLUS, PLUS); });
-      const PAD = 10;
+      /* A map to read has no + buttons, so it keeps no room for them. */
+      if (!b.readOnly) Object.values(plus).concat([rootPlus.right, rootPlus.left]).forEach(q => { if (q) reach(q.x, q.y, PLUS, PLUS); });
+      const PAD = b.icons ? 16 : 10;      // a picture sits over the corner of its box
       const W = Math.ceil(x2 - x1 + PAD * 2), H = Math.ceil(y2 - y1 + PAD * 2);
       const dx = PAD - x1, dy = PAD - y1;
       Object.values(pos).forEach(p => { p.x += dx; p.y += dy; });
@@ -3160,7 +3345,7 @@
          words are still easy to read. Past that it scrolls. */
       board.style.width = W + "px";
       board.style.height = H + "px";
-      const k = Math.max(0.7, Math.min(1, (avail - 4) / W));
+      const k = Math.max(b.readOnly ? 0.25 : 0.7, Math.min(1, (avail - (b.readOnly ? 18 : 4)) / W));
       board.style.transform = k < 1 ? "scale(" + k + ")" : "";
       sizer.style.width = Math.ceil(W * k) + "px";
       sizer.style.height = Math.ceil(H * k) + "px";
@@ -3180,6 +3365,7 @@
         const box = boxFor(n);
         box.node = n;                 // undo hands back new objects with the same ids
         if (box.text.value !== n.text) box.text.value = n.text;
+        paintBadge(box);
         box.text.placeholder = n.parent === null ? (b.centre ? "" : "The big idea")
                              : depthOf(n) === 1 ? "A branch" : "An idea";
       });
@@ -3191,8 +3377,10 @@
     rootAdds.right.classList.add("map-add-root");
     rootAdds.left.classList.add("map-add-root");
 
+    let opened = false;            // once the map is drawn, what comes next has been added
     nodes = tidy(Array.isArray(b.starter) && b.starter.length ? JSON.parse(JSON.stringify(b.starter)) : []);
     paint();
+    opened = true;
 
     /* A page not on screen yet has no width, so it is laid out again once
        it has one, and again when the fonts arrive and the words change size. */
@@ -3210,6 +3398,7 @@
       get: () => ({ nodes: nodes.map(n => {
         const o = { id: n.id, text: n.text, parent: n.parent };
         if (n.side) o.side = n.side;
+        if (n.i) o.i = n.i;
         return o;
       }) }),
       set: (v) => {
@@ -3217,8 +3406,21 @@
         nodes = tidy(v.nodes);
         history.length = 0;
         undoBtn.disabled = true;
+        opened = false;
         paint();
+        opened = true;
       },
+      /* a key word pressed: an empty branch takes it before a new one is made */
+      addBranch: (words) => {
+        const bare = nodes.find(n => n.parent !== null && !String(n.text).trim() && !kidsOf(n.id).length);
+        if (!bare) return addUnder(rootOf(), quieterSide(), null, words);
+        remember();
+        bare.text = String(words || "").slice(0, MAP_WORDS);
+        paint(); ctx.changed(); focusOn(bare);
+        return bare;
+      },
+      /* every box but the middle, with how far out it is, for covering up */
+      each: (fn) => nodes.forEach(n => { if (n.parent !== null) fn(boxes.get(n.id).wrap, depthOf(n), n); }),
       done: () => nodes.filter(n => n.parent !== null && String(n.text).trim()).length > 0
     };
   };
@@ -3970,15 +4172,16 @@
       s.classList.add("has-brief");
     }
 
-    function addWords(){
+    function addWords(said){
       remember();
-      const it = { kind: "text", text: "Your words", x: POSTER_W / 2, y: POSTER_H / 2, size: 48,
+      const given = typeof said === "string" ? said : "";
+      const it = { kind: "text", text: given || "Your words", x: POSTER_W / 2, y: POSTER_H / 2, size: 48,
                    colour: bg.kind === "colour" && /^#(1D1D1B|2F6BAE)$/.test(bg.c1) ? "#FFFFFF" : "#1D1D1B",
                    font: "bold", outline: false };
       items.push(it);
       pick(it);
       changed();
-      startTyping(it, true);
+      if (!given) startTyping(it, true);
     }
     function loadPhoto(file){
       if (!file || !/^image\//.test(file.type)){ say("That file is not a picture."); return; }
@@ -4294,7 +4497,13 @@
         img.onload = () => { base = img; items = []; picked = null; paintPanel(); draw(); };
         img.src = v.img;
       },
-      done: () => !!saved
+      done: () => !!saved,
+      /* For a revision resource's key words: one to put on, and what is
+         written on it now. A poster reopened is one picture, with nothing
+         left in it to read, which is what fresh() says. */
+      addWords: (words) => addWords(String(words || "")),
+      texts: () => items.filter(it => it.kind === "text").map(it => it.text),
+      fresh: () => !base
     };
   };
   /* For the PDF and anything else that only wants the picture. */
@@ -4526,469 +4735,6 @@
       /* Two lost fights are enough, unless a cover lesson's teacher wants
          it won (ctx.carryOn). */
       done: () => won || (tries >= 2 && (!ctx.carryOn || ctx.carryOn()))
-    };
-  };
-
-  /* ===================================================================
-     REVISION RESOURCE
-     { type:"revise", title, task, kinds:["cards","mindmap","poster","quiz","photo"] }
-     Saved as { kind, cards:[{f,b}], quiz:[{q,a}], map:{nodes}, poster:{img},
-                photos:[data url], binned }
-
-     Home learning near the end of a unit: make something to revise from,
-     here or on paper. Each kind keeps its own part of the value, so
-     changing their mind from flashcards to a quiz and back loses nothing,
-     and only `kind` says which one is handed in.
-
-     Everything made here is words, a few KB. The one exception is a photo
-     of paper work, which is why there are at most two and why each is
-     squeezed harder than a screenshot (see squeezePhoto). A teacher can
-     clear photos away once they have looked; `binned` is then the time
-     they did, and the photos are in the recycle bin, not here.
-     =================================================================== */
-  const REVISE_KINDS = {
-    cards:   { name: "Flashcards",     say: "A question or word on the front, the answer on the back" },
-    mindmap: { name: "Mind map",       say: "The big idea in the middle, with branches" },
-    poster:  { name: "Poster",         say: "One page with the key facts on it" },
-    quiz:    { name: "Quiz questions", say: "Questions with their answers, to test yourself" }
-  };
-  const REVISE_MOST = 60;        // cards or questions
-  const REVISE_WORDS = 300;      // characters on one side of a card
-  const PHOTO_MOST = 2;
-  /* A photo of a page of handwriting. Longest side 1400px keeps pencil
-     legible when the teacher zooms in. Colour is kept but turned down:
-     a page of paper is mostly white with a few pens on it, and the
-     strength of the colour is a big part of what a JPEG has to store.
-     Measured on a made-up 12MP photo of a page of coloured-pen notes
-     (noise and lighting added, 3.9MB from the "camera"): 141KB this way
-     against 300KB as a full-colour 0.8 JPEG at the same size. Not yet
-     measured on a real phone photo. */
-  const PHOTO_SIDE = 1400;
-  const PHOTO_BYTES = 260000;    // characters of data URL, about 190KB
-  function squeezePhoto(file, cb){
-    if (!file || !/^image\//.test(file.type || "")){ cb(null, "That file is not a picture. Try a different one."); return; }
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let w = img.naturalWidth, h = img.naturalHeight;
-      if (!w || !h){ cb(null, "That picture could not be opened."); return; }
-      const r = Math.min(1, PHOTO_SIDE / Math.max(w, h));
-      w = Math.round(w * r); h = Math.round(h * r);
-      const c = make("canvas");
-      c.width = w; c.height = h;
-      const pen = c.getContext("2d");
-      pen.fillStyle = "#FFFFFF";
-      pen.fillRect(0, 0, w, h);
-      pen.filter = "saturate(0.5)";
-      pen.imageSmoothingQuality = "high";
-      pen.drawImage(img, 0, 0, w, h);
-      let out = c.toDataURL("image/jpeg", 0.6);
-      for (const q of [0.5, 0.4, 0.3]) if (out.length > PHOTO_BYTES) out = c.toDataURL("image/jpeg", q);
-      cb(out, null);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); cb(null, "That picture could not be opened. Try taking it again."); };
-    img.src = url;
-  }
-  /* A quarter turn of a photo already squeezed. The canvas has no filter
-     this time: the colour was turned down once and doing it again would
-     wash it out. */
-  function turnPhoto(src, cb){
-    const img = new Image();
-    img.onload = () => {
-      const c = make("canvas");
-      c.width = img.naturalHeight; c.height = img.naturalWidth;
-      const pen = c.getContext("2d");
-      pen.translate(c.width, 0);
-      pen.rotate(Math.PI / 2);
-      pen.drawImage(img, 0, 0);
-      cb(c.toDataURL("image/jpeg", 0.6));
-    };
-    img.onerror = () => cb(src);
-    img.src = src;
-  }
-  const cleanPairs = (list, a, b) => (Array.isArray(list) ? list : []).slice(0, REVISE_MOST)
-    .filter(x => x && typeof x === "object")
-    .map(x => ({ [a]: String(x[a] || "").slice(0, REVISE_WORDS), [b]: String(x[b] || "").slice(0, REVISE_WORDS) }));
-  /* The ones with something on both sides, which are the only ones a
-     student can be tested on. */
-  const fullPairs = (list, a, b) => cleanPairs(list, a, b).filter(x => x[a].trim() && x[b].trim());
-
-  /* Test me: one card at a time, front first. "Not yet" puts it back at
-     the end, so a round finishes once every card has been known once.
-     Nothing in here is saved: it is practice, and the only thing anyone
-     learns from it is that it was opened (onStart, which the lesson page
-     counts). */
-  function revisePlayer(items, kind, onStart){
-    if (!items.length) return;
-    if (onStart) try{ onStart(); }catch(e){}
-    const quiz = kind === "quiz";
-    const back = make("div", "modal-back no-print rv-play-back");
-    const box = make("div", "modal rv-play");
-    box.setAttribute("role", "dialog");
-    box.setAttribute("aria-modal", "true");
-    box.setAttribute("aria-label", "Test me");
-    const x = make("button", "btn-ghost iconbtn modal-x", "✕");
-    x.type = "button"; x.title = "Close"; x.setAttribute("aria-label", "Close");
-    box.appendChild(x);
-    const count = make("p", "rv-count");
-    const card = make("button", "rv-card");
-    card.type = "button";
-    const side = make("p", "rv-side");
-    const words = make("p", "rv-words");
-    card.appendChild(side); card.appendChild(words);
-    const row = make("div", "rv-moves");
-    const turn = make("button", "btn-primary", quiz ? "Show the answer" : "Turn over");
-    const yes = make("button", "btn-primary", "I knew it");
-    const no = make("button", "btn-ghost", "Not yet");
-    [turn, yes, no].forEach(btn => { btn.type = "button"; });
-    row.appendChild(no); row.appendChild(turn); row.appendChild(yes);
-    box.appendChild(count); box.appendChild(card); box.appendChild(row);
-    back.appendChild(box);
-    document.body.appendChild(back);
-
-    let queue, firstGo, knewFirst, total, flipped, current;
-    function start(){
-      queue = items.map((it, i) => i);
-      for (let i = queue.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [queue[i], queue[j]] = [queue[j], queue[i]]; }
-      firstGo = new Set(queue); knewFirst = 0; total = queue.length;
-      next();
-    }
-    function next(){
-      if (!queue.length){ finish(); return; }
-      current = queue.shift();
-      flipped = false;
-      paint();
-    }
-    function paint(){
-      const it = items[current];
-      count.textContent = (total - queue.length) + " of " + total;
-      side.textContent = flipped ? (quiz ? "Answer" : "Back") : (quiz ? "Question" : "Front");
-      words.textContent = flipped ? (quiz ? it.a : it.b) : (quiz ? it.q : it.f);
-      card.classList.toggle("over", flipped);
-      card.setAttribute("aria-label", flipped ? "Showing the answer" : "Press to see the answer");
-      turn.hidden = flipped; yes.hidden = !flipped; no.hidden = !flipped;
-      (flipped ? yes : turn).focus();
-    }
-    function flip(){ if (!flipped){ flipped = true; paint(); } }
-    function finish(){
-      box.innerHTML = "";
-      box.appendChild(x);
-      box.appendChild(make("h2", "", "That's the lot!"));
-      box.appendChild(make("p", "modal-text",
-        "You knew " + knewFirst + " of " + total + " first time." +
-        (knewFirst === total ? " Brilliant." : " Go again to practise the ones you didn't know yet.")));
-      const again = make("button", "btn-primary modal-cta", "Go again");
-      again.type = "button";
-      again.addEventListener("click", () => {
-        box.innerHTML = "";
-        box.appendChild(x); box.appendChild(count); box.appendChild(card); box.appendChild(row);
-        if (onStart) try{ onStart(); }catch(e){}
-        start();
-      });
-      box.appendChild(again);
-      again.focus();
-    }
-    card.addEventListener("click", flip);
-    turn.addEventListener("click", flip);
-    yes.addEventListener("click", () => { if (firstGo.has(current)) knewFirst++; firstGo.delete(current); next(); });
-    no.addEventListener("click", () => { firstGo.delete(current); queue.push(current); next(); });
-    const close = () => { back.remove(); document.removeEventListener("keydown", onKey, true); };
-    function onKey(e){
-      if (e.key === "Escape"){ e.preventDefault(); close(); }
-    }
-    x.addEventListener("click", close);
-    back.addEventListener("pointerdown", (e) => { if (e.target === back) close(); });
-    document.addEventListener("keydown", onKey, true);
-    start();
-  }
-
-  /* What a value holds for its kind, in the order Test me and the
-     finished screen want it. */
-  window.reviseKit = {
-    items(v){
-      if (!v || typeof v !== "object") return [];
-      if (v.kind === "cards") return fullPairs(v.cards, "f", "b");
-      if (v.kind === "quiz") return fullPairs(v.quiz, "q", "a");
-      return [];
-    },
-    /* Can be revised from on screen: the ones Test me runs, and a mind map
-       or poster, which are looked at again. A photo cannot, which is why
-       its revising is never counted. */
-    canRevise(v){
-      if (!v || typeof v !== "object") return false;
-      if (v.kind === "cards" || v.kind === "quiz") return this.items(v).length > 0;
-      if (v.kind === "mindmap") return !!(v.map && Array.isArray(v.map.nodes) && v.map.nodes.some(n => n.parent !== null && String(n.text || "").trim()));
-      if (v.kind === "poster") return !!(v.poster && v.poster.img);
-      return false;
-    },
-    open(b, v, onStart){
-      if (!this.canRevise(v)) return;
-      if (v.kind === "cards" || v.kind === "quiz"){ revisePlayer(this.items(v), v.kind, onStart); return; }
-      if (onStart) try{ onStart(); }catch(e){}
-      const back = make("div", "modal-back no-print rv-look-back");
-      const box = make("div", "modal rv-look");
-      box.setAttribute("role", "dialog");
-      box.setAttribute("aria-modal", "true");
-      box.setAttribute("aria-label", REVISE_KINDS[v.kind].name);
-      const x = make("button", "btn-ghost iconbtn modal-x", "✕");
-      x.type = "button"; x.title = "Close"; x.setAttribute("aria-label", "Close");
-      box.appendChild(x);
-      const middle = make("div", "modal-scroll");
-      box.appendChild(middle);
-      middle.appendChild(make("h2", "", (b && b.title) || "Your " + REVISE_KINDS[v.kind].name.toLowerCase()));
-      if (v.kind === "poster"){
-        const im = make("img", "rv-look-img");
-        im.src = v.poster.img; im.alt = "Your poster";
-        middle.appendChild(im);
-      } else {
-        /* The map's own drawing, with its buttons hidden: this is for reading,
-           and a change made here would go nowhere. */
-        const made = window.rMindmap({ type: "mindmap", centre: (b && b.title) || "" }, { changed(){} });
-        made.set(v.map);
-        made.section.classList.add("rv-readonly");
-        middle.appendChild(made.section);
-      }
-      back.appendChild(box);
-      document.body.appendChild(back);
-      const close = () => { back.remove(); document.removeEventListener("keydown", onKey, true); };
-      function onKey(e){ if (e.key === "Escape"){ e.preventDefault(); close(); } }
-      x.addEventListener("click", close);
-      back.addEventListener("pointerdown", (e) => { if (e.target === back) close(); });
-      document.addEventListener("keydown", onKey, true);
-      setTimeout(() => x.focus(), 30);
-    },
-    squeezePhoto
-  };
-
-  window.rRevise = function(b, ctx){
-    const s = make("section", "revise");
-    const allowed = (Array.isArray(b.kinds) && b.kinds.length ? b.kinds : ["cards","mindmap","poster","quiz","photo"])
-      .filter(k => k === "photo" || REVISE_KINDS[k]);
-    const digital = allowed.filter(k => k !== "photo");
-    let v = { kind: "", cards: [], quiz: [], map: null, poster: null, photos: [] };
-    /* "here" or "paper", before a kind is picked. Worked out from kind once
-       there is one, so it is never saved. */
-    let route = "";
-    let sub = null;               // the mind map or poster drawn inside this task
-    const changed = () => { if (ctx && ctx.changed) ctx.changed(); };
-
-    function pickBtn(title, said, cls, fn){
-      const btn = make("button", "rv-pick " + (cls || ""));
-      btn.type = "button";
-      btn.appendChild(make("b", "", title));
-      if (said) btn.appendChild(make("span", "", said));
-      btn.addEventListener("click", fn);
-      return btn;
-    }
-    function backLink(words, fn){
-      const btn = make("button", "btn-ghost rv-back", "← " + words);
-      btn.type = "button";
-      btn.addEventListener("click", fn);
-      return btn;
-    }
-
-    function paint(){
-      /* the poster keeps its picture a moment after the last change, so
-         take it before its editor is thrown away */
-      if (sub && sub.kind === "poster" && sub.made) v.poster = sub.made.get();
-      if (sub && sub.kind === "mindmap" && sub.made) v.map = sub.made.get();
-      sub = null;
-      s.innerHTML = "";
-      const kind = v.kind;
-      if (!kind && !route){
-        if (!digital.length){ route = "paper"; return paint(); }
-        if (allowed.indexOf("photo") < 0){ route = "here"; return paint(); }
-        s.appendChild(make("p", "rv-ask", "How are you making your revision resource?"));
-        const two = make("div", "rv-two");
-        two.appendChild(pickBtn("Make it here", "Flashcards, a mind map, a poster or a quiz", "rv-big", () => { route = "here"; paint(); }));
-        two.appendChild(pickBtn("I did it on paper", "Take a photo of it and hand that in", "rv-big", () => { route = "paper"; v.kind = "photo"; changed(); paint(); }));
-        s.appendChild(two);
-        return;
-      }
-      if (!kind && route === "here"){
-        if (allowed.indexOf("photo") >= 0) s.appendChild(backLink("Back", () => { route = ""; paint(); }));
-        s.appendChild(make("p", "rv-ask", "What would you like to make?"));
-        const grid = make("div", "rv-kinds");
-        digital.forEach(k => grid.appendChild(pickBtn(REVISE_KINDS[k].name, REVISE_KINDS[k].say, "", () => {
-          v.kind = k; changed(); paint();
-        })));
-        s.appendChild(grid);
-        return;
-      }
-      const others = kind === "photo" ? digital.length > 0 : (digital.length > 1 || allowed.indexOf("photo") >= 0);
-      if (others) s.appendChild(backLink(kind === "photo" ? "Make it here instead" : "Make something else", () => {
-        v.kind = ""; route = kind === "photo" ? "here" : (digital.length > 1 ? "here" : ""); changed(); paint();
-      }));
-      if (kind === "cards") paintPairs("cards", "f", "b", "Front", "Back", "+ Add a card");
-      else if (kind === "quiz") paintPairs("quiz", "q", "a", "Question", "Answer", "+ Add a question");
-      else if (kind === "mindmap" || kind === "poster") paintDrawn(kind);
-      else if (kind === "photo") paintPhotos();
-    }
-
-    /* Flashcards and quiz questions are the same thing with different
-       words on: two boxes a row, and Test me once two rows are full. */
-    let testBtn = null;
-    function paintPairs(key, a, z, aSaid, zSaid, addSaid){
-      if (!v[key].length) v[key] = [{ [a]: "", [z]: "" }, { [a]: "", [z]: "" }];
-      const list = make("ol", "rv-pairs");
-      function row(item, i){
-        const li = make("li", "rv-pair");
-        const boxA = make("textarea", "rv-in");
-        const boxZ = make("textarea", "rv-in");
-        boxA.rows = 2; boxZ.rows = 2;
-        boxA.maxLength = REVISE_WORDS; boxZ.maxLength = REVISE_WORDS;
-        boxA.placeholder = aSaid; boxZ.placeholder = zSaid;
-        boxA.setAttribute("aria-label", aSaid + " " + (i + 1));
-        boxZ.setAttribute("aria-label", zSaid + " " + (i + 1));
-        boxA.value = item[a]; boxZ.value = item[z];
-        boxA.addEventListener("input", () => { item[a] = boxA.value; changed(); paintTest(); });
-        boxZ.addEventListener("input", () => { item[z] = boxZ.value; changed(); paintTest(); });
-        const del = make("button", "btn-ghost iconbtn rv-del", "✕");
-        del.type = "button"; del.title = "Remove this one"; del.setAttribute("aria-label", "Remove " + aSaid.toLowerCase() + " " + (i + 1));
-        del.addEventListener("click", () => {
-          v[key].splice(v[key].indexOf(item), 1);
-          changed(); paint();
-        });
-        li.appendChild(boxA); li.appendChild(boxZ); li.appendChild(del);
-        return li;
-      }
-      v[key].forEach((item, i) => list.appendChild(row(item, i)));
-      s.appendChild(list);
-      const foot = make("div", "row rv-foot");
-      const add = make("button", "btn-ghost", addSaid);
-      add.type = "button";
-      add.disabled = v[key].length >= REVISE_MOST;
-      add.addEventListener("click", () => {
-        v[key].push({ [a]: "", [z]: "" });
-        changed(); paint();
-        const boxes = s.querySelectorAll(".rv-pair:last-child .rv-in");
-        if (boxes[0]) boxes[0].focus();
-      });
-      testBtn = make("button", "btn-primary rv-test", "Test me");
-      testBtn.type = "button";
-      testBtn.addEventListener("click", () => window.reviseKit.open(b, v, ctx && ctx.revised));
-      foot.appendChild(add); foot.appendChild(testBtn);
-      s.appendChild(foot);
-      paintTest();
-    }
-    function paintTest(){
-      if (!testBtn) return;
-      const n = window.reviseKit.items(v).length;
-      testBtn.hidden = n < 2;
-    }
-
-    /* The lesson's own mind map and poster, drawn inside this task with
-       this task's part of the value. */
-    function paintDrawn(kind){
-      const inner = { type: kind, id: b.id + "_" + kind, title: "", task: "",
-                      centre: kind === "mindmap" ? (b.title || "") : undefined,
-                      heading: kind === "poster" ? (b.title || "") : undefined };
-      const build = kind === "mindmap" ? window.rMindmap : window.rPoster;
-      const made = build(inner, { changed(){
-        if (kind === "mindmap") v.map = made.get(); else v.poster = made.get();
-        changed();
-      }, assessment: ctx && ctx.assessment });
-      const had = kind === "mindmap" ? v.map : v.poster;
-      if (had) made.set(had);
-      sub = { kind, made };
-      s.appendChild(made.section);
-    }
-
-    function paintPhotos(){
-      s.appendChild(make("p", "rv-ask", v.photos.length ? "Your photos" : "Take a photo of your revision resource"));
-      if (v.binned && !v.photos.length)
-        s.appendChild(make("p", "rv-note", "Your teacher has looked at your photos and cleared them away."));
-      const grid = make("div", "rv-photos");
-      v.photos.forEach((src, i) => {
-        const fig = make("figure", "rv-photo");
-        const im = make("img");
-        im.src = src; im.alt = "Photo " + (i + 1) + " of your revision resource";
-        fig.appendChild(im);
-        const tools = make("div", "rv-photo-tools");
-        const turn = make("button", "btn-ghost", "↻ Turn");
-        turn.type = "button"; turn.title = "Turn it round a quarter";
-        turn.addEventListener("click", () => turnPhoto(src, (out) => { v.photos[i] = out; changed(); paint(); }));
-        const del = make("button", "btn-ghost", "✕ Remove");
-        del.type = "button";
-        del.addEventListener("click", () => { v.photos.splice(i, 1); changed(); paint(); });
-        tools.appendChild(turn); tools.appendChild(del);
-        fig.appendChild(tools);
-        grid.appendChild(fig);
-      });
-      s.appendChild(grid);
-      const msg = make("p", "rv-note");
-      msg.setAttribute("role", "status");
-      msg.hidden = true;
-      if (v.photos.length < PHOTO_MOST){
-        /* accept="image/*" and no capture attribute: a phone then offers
-           the camera and the photo library both, and a computer the
-           Pictures folder. */
-        const input = make("input");
-        input.type = "file"; input.accept = "image/*"; input.multiple = true; input.hidden = true;
-        const take = make("button", "btn-primary rv-take", v.photos.length ? "+ Add another photo" : "Take or choose a photo");
-        take.type = "button";
-        take.addEventListener("click", () => input.click());
-        input.addEventListener("change", () => {
-          const files = [...(input.files || [])].slice(0, PHOTO_MOST - v.photos.length);
-          if (!files.length) return;
-          take.disabled = true; take.textContent = "Getting it ready…";
-          let left = files.length;
-          files.forEach(f => squeezePhoto(f, (out, err) => {
-            if (out && v.photos.length < PHOTO_MOST){ v.photos.push(out); v.binned = undefined; }
-            if (err){ msg.textContent = err; msg.hidden = false; }
-            if (--left === 0){ changed(); paint(); if (err){ const m = s.querySelector(".rv-photos + .rv-note"); if (m){ m.textContent = err; m.hidden = false; } } }
-          }));
-        });
-        s.appendChild(msg);
-        s.appendChild(take);
-        s.appendChild(input);
-        s.appendChild(make("p", "rv-small", "Up to " + PHOTO_MOST + " photos. Make sure all your writing is in the picture and easy to read."));
-      } else {
-        s.appendChild(msg);
-        s.appendChild(make("p", "rv-small", "That's the most photos you can add. Remove one to take it again."));
-      }
-    }
-
-    paint();
-    return {
-      section: s,
-      get: () => {
-        if (sub && sub.kind === "mindmap") v.map = sub.made.get();
-        if (sub && sub.kind === "poster") v.poster = sub.made.get();
-        const out = { kind: v.kind || "" };
-        if (v.cards.length) out.cards = cleanPairs(v.cards, "f", "b");
-        if (v.quiz.length) out.quiz = cleanPairs(v.quiz, "q", "a");
-        if (v.map) out.map = v.map;
-        if (v.poster) out.poster = v.poster;
-        if (v.photos.length) out.photos = v.photos.slice(0, PHOTO_MOST);
-        if (v.binned) out.binned = v.binned;
-        return out;
-      },
-      set: (val) => {
-        if (!val || typeof val !== "object") return;
-        v = {
-          kind: (val.kind === "photo" || REVISE_KINDS[val.kind]) ? val.kind : "",
-          cards: cleanPairs(val.cards, "f", "b"),
-          quiz: cleanPairs(val.quiz, "q", "a"),
-          map: val.map && typeof val.map === "object" ? val.map : null,
-          poster: val.poster && typeof val.poster === "object" ? val.poster : null,
-          photos: (Array.isArray(val.photos) ? val.photos : []).filter(p => typeof p === "string" && /^data:image\//.test(p)).slice(0, PHOTO_MOST),
-          binned: typeof val.binned === "string" ? val.binned : undefined
-        };
-        route = v.kind === "photo" ? "paper" : v.kind ? "here" : "";
-        sub = null;
-        paint();
-      },
-      /* Handed in once there is something of the kind they chose. A photo
-         that a teacher has already cleared away still counts: they did it. */
-      done: () => {
-        if (v.kind === "photo") return v.photos.length > 0 || !!v.binned;
-        if (v.kind === "cards" || v.kind === "quiz") return window.reviseKit.items({ kind: v.kind, cards: v.cards, quiz: v.quiz }).length > 0;
-        if (v.kind === "mindmap"){ if (sub) v.map = sub.made.get(); return window.reviseKit.canRevise({ kind: "mindmap", map: v.map }); }
-        if (v.kind === "poster"){ if (sub) v.poster = sub.made.get(); return !!(v.poster && v.poster.img); }
-        return false;
-      }
     };
   };
 

@@ -175,6 +175,9 @@
 <script src="coverwork.js"></script>
 <script src="ordermarks.js"></script>
 <script src="progressmath.js"></script>
+<script src="psd.js"></script>
+<script src="blend.js"></script>
+<script src="revision.js"></script>
 <script src="voice.js"></script>
 <script src="xlsx.js"></script>
 <script src="markbook.js"></script>
@@ -671,6 +674,14 @@ function glanceCard(st, row, t, v, check){
   } else {
     look.appendChild(el("p","glance-words", kind ? "Started, nothing in it yet" : "Nothing handed in yet"));
   }
+  /* Against what was asked for, where the task asked for anything. */
+  const kit = window.reviseKit, aims = [];
+  if (kit && kind && kind !== "photo"){
+    const aim = kit.target(t, kind), got = kit.count(v), used = kit.wordsUsed(t, v);
+    const wordCount = (t.words || []).filter(w => String(w || "").trim()).length;
+    if (aim) aims.push(el("p","glance-aim" + (got >= aim ? " met" : ""), got + " of " + aim + " " + kit.KINDS[kind].many));
+    if (used) aims.push(el("p","glance-aim" + (used.length >= wordCount ? " met" : ""), used.length + " of " + wordCount + " key words used"));
+  }
   look.addEventListener("click", () => {
     const at = roster.findIndex(x => x.username === st.username);
     if (at >= 0) idx = at;
@@ -678,6 +689,7 @@ function glanceCard(st, row, t, v, check){
     showStudent(idx);
   });
   card.appendChild(look);
+  aims.forEach(p => card.appendChild(p));
 
   /* How often they have revised from it. Only a digital one can say: a
      sheet of paper is revised from at the kitchen table. */
@@ -2421,6 +2433,7 @@ function askItems(row, ladder){
                    strength, target, level, from: t.type,
                    met: window.progressMath.checkDone(c, i, v),
                    task: t.id, line: i, manual: !!(c && c.manual),
+                   clue: fileClue(t.block, i, data),
                    /* ticked by their program rather than by a teacher */
                    byCode: !(c && c.manual) && !!(Array.isArray(v.checks) && v.checks[i]) &&
                            !(v.teacher && v.teacher[i]) });
@@ -2431,6 +2444,63 @@ function askItems(row, ladder){
      ones on no level. sort is stable, so the builder's order holds. */
   const rank = (it) => it.level < 0 ? Infinity : it.level;
   return out.sort((x, y) => rank(x) - rank(y));
+}
+
+/* What the file check makes of a line the teacher ticks, or null where it
+   has nothing to say. Never a tick: it counts layers and objects and cannot
+   see whether they are what the rubric asked for. Worked out here from the
+   account of the file kept with the work, so a line added to the checklist
+   after they handed in has its clue too. `none` is work with no file in it,
+   a screenshot pasted because the file would not open. */
+function fileClue(block, i, data){
+  const c = (block.checks || [])[i];
+  if (!c || c.manual !== true || c.suggest !== true) return null;
+  const check = block.blend === true ? window.runBlendChecks : block.psd === true ? window.runPsdChecks : null;
+  if (!check) return null;
+  const stats = data.__psd && data.__psd[block.id];
+  const v = data[block.id];
+  if (!stats) return (v && (typeof v === "string" || v.src)) ? { none: true } : null;
+  let clue = null;
+  try{ clue = check([c], stats)[0].clue || null; }catch(e){}
+  if (!clue) return null;
+  const want = Math.max(0, parseInt(c.count, 10) || 1);
+  return Object.assign(clue, { want: want, atLeast: c.compare === undefined || c.compare === "atLeast",
+                               blend: block.blend === true });
+}
+/* The same thing in words: what was counted, so a teacher knows where in
+   their work to look. */
+const CLUE_NAMES = 8;
+function clueWords(clue){
+  if (clue.none) return "There is no file to check, only a picture.";
+  const shown = clue.names.slice(0, CLUE_NAMES).map(n => "\u201c" + (n.length > 40 ? n.slice(0, 39) + "\u2026" : n) + "\u201d");
+  const more = clue.names.length - shown.length;
+  const list = shown.join(", ") + (more > 0 ? " and " + more + " more" : "");
+  return (clue.found ? "The file check thinks this is done." : "The file check does not think this is done.") +
+    " It counted " + clue.count +
+    (clue.atLeast && !clue.found ? " and the line asks for " + clue.want : "") +
+    (list ? ": " + list + "." : ".") +
+    (clue.found && clue.hidden ? (clue.blend ? " Some are hidden objects." : " Some are on hidden layers.") : "");
+}
+/* The small icon beside a line. Pressing it says what was counted, under the
+   line, because a tablet has nothing to hover with. */
+function clueChip(clue, under){
+  const chip = el("button", "clue" + (clue.none ? " none" : clue.found ? " found" : ""));
+  chip.type = "button";
+  chip.innerHTML = window.hubIcons.icon(clue.found ? "filefound" : "filenone", 15);
+  chip.appendChild(el("span","", clue.none ? "No file" : clue.found || !clue.atLeast
+    ? String(clue.count) : clue.count + " of " + clue.want));
+  const words = clueWords(clue);
+  chip.title = words;
+  chip.setAttribute("aria-label", words);
+  chip.setAttribute("aria-expanded", "false");
+  chip.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();     // it sits in the line's label, and is not a tick
+    under.hidden = !under.hidden;
+    chip.setAttribute("aria-expanded", String(!under.hidden));
+  });
+  under.textContent = words;
+  under.hidden = true;
+  return chip;
 }
 
 function showAsk(asking){
@@ -2459,7 +2529,9 @@ function startAsk(row, saved, force){
      thirty students' worth of pressing Yes to things the work has decided.
      They wait behind a button for the teacher who disagrees with a tick. */
   const onlyChecklist = items.length > 0 && items.every(it => it.met !== undefined && !it.manual);
-  ask = { row, items, ladder, answers: items.map(it => it.met === undefined ? null : it.met),
+  /* A line with only a clue is nobody's answer yet, so neither button is
+     picked for it. Already ticked by the teacher, it is a Yes. */
+  ask = { row, items, ladder, answers: items.map(it => it.met === undefined || (it.clue && !it.met) ? null : it.met),
           at: 0, phase: "strength", stop: -1, target: "", targetChosen: false,
           strength: "", strengthEdited: false, editingStrength: false, onlyChecklist };
   if (!items.length || saved || (onlyChecklist && !force)){ showAsk(false); return; }
@@ -2551,7 +2623,9 @@ function paintAsk(){
     const card = el("div","fbask-card");
     card.appendChild(el("b","", it.topic));
     if (it.strength) card.appendChild(el("p","", it.strength));
-    if (it.met !== undefined)
+    if (it.clue)
+      card.appendChild(el("p","fbask-met", clueWords(it.clue) + (it.clue.none ? "" : " It can be wrong, so look before you answer.")));
+    else if (it.met !== undefined)
       card.appendChild(el("p","fbask-met", it.met ? "Their checklist says this is done." : "Their checklist says this is not done yet."));
     box.appendChild(card);
     const row = el("div","fbask-yesno");
@@ -2855,7 +2929,17 @@ function paintList(row){
     dots.appendChild(dot);
   });
   box.appendChild(dots);
-  g.items.forEach(it => box.appendChild(listRow(row, it)));
+  /* said once above the lines rather than on every one of them */
+  if (g.items.some(it => it.clue && !it.clue.none)){
+    const key = el("p","clue-key");
+    key.innerHTML = window.hubIcons.icon("filefound", 15);
+    key.appendChild(el("span","", "What the file check found. It can be wrong, so look before you tick."));
+    box.appendChild(key);
+  }
+  g.items.forEach(it => {
+    box.appendChild(listRow(row, it));
+    if (it.clueUnder) box.appendChild(it.clueUnder);
+  });
   /* Done ticking leads on to reading what the ticks have written, from any
      level: a student who stopped early has nothing further on to tick. */
   const last = at === groups.length - 1;
@@ -2961,6 +3045,10 @@ function listRow(row, it){
   if (locked) words.appendChild(el("span","fblist-by", it.from === "image" ? " from their file" : " by their code"));
   line.appendChild(words);
   line.title = it.topic;
+  if (it.clue){
+    it.clueUnder = el("p","clue-words");
+    line.appendChild(clueChip(it.clue, it.clueUnder));
+  }
   tick.addEventListener("change", () => listTick(row, it, tick.checked));
   return line;
 }

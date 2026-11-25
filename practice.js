@@ -371,8 +371,22 @@
     try{ return JSON.stringify(a) === JSON.stringify(b); }catch(e){ return false; }
   }
 
+  /* What they have made with a Revision task and handed in: a list of
+     { lesson_id, task, kind }, empty when there is nothing, null when the
+     server could not be asked. A server that has not been given the route
+     yet answers with an error, which is null as well. */
+  async function revision(){
+    if (OFFLINE || asTeacher() || !token()) return [];
+    try{
+      const r = await fetch(API + "/api/work?revision=1", { headers: { Authorization: "Bearer " + token() }, cache: "no-store" });
+      if (!r.ok) return null;
+      const d = await r.json();
+      return Array.isArray(d.revision) ? d.revision : null;
+    }catch(e){ return null; }
+  }
+
   window.practice = {
-    ACTIVITIES,
+    ACTIVITIES, revision,
     /* The ones with a page behind them. Everything else waits here until
        it is written. */
     live(){ return ACTIVITIES.filter(a => a.ready); },

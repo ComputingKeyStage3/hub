@@ -89,6 +89,7 @@
     <p class="hint" style="margin:0 0 18px">Extra activities to practise on your own.
       Nothing here is marked or handed in.</p>
     <div id="practiceList"></div>
+    <div id="myRevision"></div>
   </div>
 
 </div>
@@ -234,6 +235,7 @@ function on(id, ev, fn){
 /* Which tab is open. Declared up here because signing in shows that tab and
    hides the rest, and renderAuth runs before the rest of this script has been
    read: a `let` further down is not there yet when it is asked for. */
+let revisionAsked = false;      // My revision, on Practice: asked for once (see paintMyRevision)
 let openTab = "lessons";
 /* The sandbox sends a student back here with ?tab=practice on the address, so
    they land on the list they came from rather than on their lessons. */
@@ -506,6 +508,9 @@ function pruneStorage(validIds){
   for (let i = 0; i < localStorage.length; i++){
     const k = localStorage.key(i);
     if (!k || k.indexOf("hub_work_") !== 0) continue;
+    /* Home learning that was finished and never got through, remembered
+       until it does. It goes when its lesson goes, not before. */
+    if (/_unsent$/.test(k) && keep.has(k.slice(0, -7))) continue;
     if (!keep.has(k)){ doomed.push(k); continue; }
     try{
       const d = JSON.parse(localStorage.getItem(k));
@@ -598,6 +603,8 @@ async function fetchLessons(){
     lastById = byId;
     loadedOk = true;
     paintLessons(byId);
+    /* Practice opened before the list had arrived could not name anything. */
+    if (openTab === "practice") paintMyRevision();
     /* A GCSE or A Level student gets the sectioned home page, drawn from
        what has just arrived. Everyone else is left exactly as they were. */
     try{ if (window.gcseHome) window.gcseHome.loaded(); }catch(e){ console.error("GCSE home failed:", e); }
@@ -838,6 +845,9 @@ function forgetEverything(){
   doneLessons = new Set();
   lockedLessons = new Set();
   markingLessons = new Set();
+  revisionAsked = false;
+  const madeBox = $("myRevision");
+  if (madeBox) madeBox.innerHTML = "";
   catalogue = null;
   myResults = null;
   try{ if (window.gcseHome) window.gcseHome.reset(); }catch(e){}
@@ -879,6 +889,7 @@ function paintPractice(){
     return;
   }
   const wrap = el("div","lessons");
+  paintMyRevision();
   acts.forEach(a => {
     const card = document.createElement("a");
     card.className = "lessonCard";
@@ -889,6 +900,43 @@ function paintPractice(){
     const body = el("span","body");
     body.appendChild(el("b","", a.title));
     body.appendChild(el("span","", a.blurb));
+    card.appendChild(body);
+    card.appendChild(el("span","go","→"));
+    wrap.appendChild(card);
+  });
+  box.appendChild(wrap);
+}
+/* My revision: everything they have made with a Revision task and handed in,
+   ready to be tested with again. The only part of Practice that asks the
+   server anything, and it asks when the tab is opened. Nothing to show, or no
+   answer, shows nothing: the rest of the tab needs neither. */
+async function paintMyRevision(){
+  const box = $("myRevision");
+  if (!box || OFFLINE || revisionAsked || !window.practice || !window.practice.revision) return;
+  revisionAsked = true;
+  const asked = localStorage.getItem("hub_token");
+  const found = await window.practice.revision();
+  /* signed out, or somebody else signed in, while the answer was coming */
+  if (localStorage.getItem("hub_token") !== asked) return;
+  if (!found){ revisionAsked = false; return; }      // not reached: asked again next time
+  const cat = ((catalogue && catalogue.lessons) || []);
+  if (!cat.length){ revisionAsked = false; return; }
+  const mine = found.map(r => ({ r, c: cat.find(c => c.lesson_id === r.lesson_id) })).filter(x => x.c && x.c.homework);
+  box.innerHTML = "";
+  if (!mine.length) return;
+  box.appendChild(el("h3","unit-head", "My revision"));
+  const wrap = el("div","lessons");
+  const NAMES = { cards: "Flashcards", quiz: "Quiz", mindmap: "Mind map", poster: "Poster" };
+  mine.forEach(({ r, c }) => {
+    const card = document.createElement("a");
+    card.className = "lessonCard";
+    card.href = "lesson.html?id=" + encodeURIComponent(r.lesson_id) + "&revise=" + encodeURIComponent(r.task);
+    const icon = el("span","num pracIcon", "★");
+    icon.setAttribute("aria-hidden","true");
+    card.appendChild(icon);
+    const body = el("span","body");
+    body.appendChild(el("b","", c.title || lessonTitles[c.lesson_id] || "Home learning"));
+    body.appendChild(el("span","", "Test yourself with your " + NAMES[r.kind].toLowerCase() + (c.unit ? ", " + c.unit : "")));
     card.appendChild(body);
     card.appendChild(el("span","go","→"));
     wrap.appendChild(card);

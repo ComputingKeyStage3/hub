@@ -1714,11 +1714,11 @@ function checklistField(b, k, fromFile){
   const checkRow = el("div","brow");
   checkRow.appendChild(open2);
   checkRow.appendChild(helpDot(fromFile === "blend"
-    ? "Ticked from the Blender file they choose: how many models, materials, modifiers, lights, keyframes and so on. " +
-      "A line can be yours to tick instead, for anything the file cannot show, like whether the scene suits the brief."
+    ? "Looks inside the Blender file they choose: how many models, materials, modifiers, lights, keyframes and so on. " +
+      "It can tick a line on its own, or be a clue beside a line you tick yourself."
     : fromFile
-    ? "Ticked from the Photoshop file they choose: how many text layers, shapes, layer styles and so on. " +
-      "A line can be yours to tick instead, for anything the file cannot show, like whether the design suits the brief."
+    ? "Looks inside the Photoshop file they choose: how many text layers, shapes, layer styles and so on. " +
+      "It can tick a line on its own, or be a clue beside a line you tick yourself."
     : "Students see these above the editor and press Check my work. Leave empty for no checklist."));
   w.appendChild(checkRow);
   add(w);
@@ -1871,9 +1871,28 @@ EDITORS.revise = function(b, k){
     });
     row.appendChild(btn);
   });
-  row.appendChild(helpDot("A photo is up to two pictures of work done on paper. Flashcards and quiz questions get a Test me button, and every go at it is counted for you in Mark work."));
+  row.appendChild(helpDot("A photo is up to two pictures of work done on paper. Once they press Finish, everything else opens on a page where they test themselves, and every go at it is counted for you in Mark work."));
   w.appendChild(row);
   add(w);
+  F("How many flashcards or quiz questions to aim for", "target", { num:true,
+    help:"Counted off as they write them. It never stops anyone finishing. 0 for no number." });
+  F("How many branches to aim for on a mind map", "branches", { num:true,
+    help:"Every box but the one in the middle counts. 0 for no number." });
+  /* One to a line while it is being typed, so a comma can be part of one. */
+  const ww = el("div","bfield");
+  ww.appendChild(el("label","", "Key words to use (optional, one on each line)"));
+  const box = el("textarea","");
+  box.rows = 4;
+  box.value = (Array.isArray(b.words) ? b.words : []).join("\n");
+  box.placeholder = "bit\nbyte\ndenary";
+  box.addEventListener("input", () => {
+    b.words = box.value.split("\n").map(x => x.trim()).filter(Boolean).slice(0, 30);
+    saveDraft(); schedulePreview();
+  });
+  ww.appendChild(box);
+  ww.appendChild(el("p","hint", "Students press a word to start a card or a branch with it, and it ticks itself off once it is used. Mark work says how many they used."));
+  add(ww);
+  add(el("p","hint", "Put a PDF task on the same page for a knowledge organiser that sits beside their work."));
 };
 
 EDITORS.board = function(b, k){

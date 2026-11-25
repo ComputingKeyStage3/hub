@@ -26,6 +26,7 @@
 <script src="pyedit.js"></script>
 <script src="teacher.js"></script>
 <script src="tasks-extra.js"></script>
+<script src="revision.js"></script>
 <script src="pixels.js"></script>
 <script src="games.js"></script>
 <script src="quest.js"></script>
@@ -133,6 +134,7 @@ const builderParam = qs.get("builder");
 const allParam = qs.get("all");                                  // every page on one scroll
 const embedParam = qs.get("embed");
 const summaryParam = qs.get("summary");   // show the finished screen instead of a task                              // shown inside the teacher console                          // preview inside the lesson builder
+const reviseParam = qs.get("revise");     // My revision on the Practice tab: straight to testing themselves
 const highlightParam = qs.get("highlight");   // scroll to and flash one task, for the Progress tab
 /* Mark work on a standard assessment: the marked answers and a score to
    change on every question, in place of the test as it was sat. */
@@ -2017,6 +2019,7 @@ const handedOver = handedLesson();
       await fetchRelease();
       hideLoader();
       showSummary();
+      openAskedRevision();
       return;
     }
     hideLoader("Checking your work\u2026");
@@ -2482,12 +2485,143 @@ function arrangeHomework(){
     });
   });
   questions.appendChild(el("p","assess-end", "That was the last question. Check your answers, then press Finish."));
+  /* Nothing here is a question, so nothing should say it is. */
+  if (onlyRevision(items)){
+    screen.title = items.length === 1 ? "Make your revision resource" : "Make your revision resources";
+    screen.text = "Press Finish when you are done, then test yourself with it.";
+    document.body.classList.add("rv-only");
+  }
+  steps.forEach(st => organiserBeside(st));
   screen.el.hidden = true;
   $("blocks").appendChild(screen.el);
   assessPages = { screens: [screen], qAt: 0, at: 0, items, onQuestions: false, shown: false,
                   nav: null, navBtn: null, pinnedUntil: 0, homework: true, now: null };
   watchQuestionScroll();
 }
+const onlyRevision = (items) => items.length > 0 && items.every(it => it.block && it.block.type === "revise");
+/* A knowledge organiser on the same page as a Revision task sits beside it,
+   because the task is made out of it: one above the other, they were two
+   screens apart and a student scrolled between them for every card.
+
+   Side by side where there is room, which takes in an iPad on its side. An
+   iPad held upright has it along the top with the work scrolling underneath.
+   A poster and a mind map want all the room there is, and so does a phone,
+   so there it opens over the top and shuts again. style.css decides which;
+   the classes only say what is wanted.
+
+   An organiser is usually a landscape page and half a screen is not wide
+   enough to read one, so it zooms where it is: the buttons, a pinch, or two
+   taps, and a finger moves it about.
+
+   Nothing is moved: the wheel looks for the cards as children of the page. */
+function organiserBeside(st){
+  const pdf = (st.taskItems || []).filter(e => e.type === "pdfview");
+  const work = (st.taskItems || []).filter(e => e.type === "revise");
+  if (pdf.length !== 1 || work.length !== 1) return;
+  const sheet = pdf[0].item, page = sheet.parentNode;
+  if (!page || work[0].item.parentNode !== page) return;
+  page.classList.add("rv-beside");
+  sheet.classList.add("rv-sheet");
+  const shape = ((pdf[0].block && pdf[0].block.pages) || [])[0] || {};
+  page.classList.toggle("rv-land", +shape.w > +shape.h);
+  sheetZoom(sheet);
+  const open = el("button","btn-primary rv-sheet-open no-print", "Show my organiser");
+  open.type = "button";
+  open.setAttribute("aria-expanded", "false");
+  const set = (on) => {
+    page.classList.toggle("rv-drawer-open", on);
+    document.body.classList.toggle("rv-docked", on && !page.classList.contains("rv-wide"));
+    open.setAttribute("aria-expanded", String(on));
+    open.textContent = on ? "Hide my organiser" : "Show my organiser";
+    if (on && window.hubMotion && !window.hubMotion.off() && sheet.animate)
+      sheet.animate([{ transform: "translateX(40px)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 220, easing: "cubic-bezier(.16, 1, .3, 1)" });
+  };
+  open.addEventListener("click", () => set(!page.classList.contains("rv-drawer-open")));
+  page.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && page.classList.contains("rv-drawer-open")){ set(false); open.focus(); }
+  });
+  page.appendChild(open);
+  /* Along the top it is out from the start, because it is in nobody's way.
+     Opened over the top it would cover what they came to do. */
+  let was = null;
+  const wide = (kind) => {
+    const big = kind === "poster" || kind === "mindmap";
+    page.classList.toggle("rv-wide", big);
+    if (big !== was) set(!big && window.innerWidth >= 700);
+    was = big;
+  };
+  wide("");
+  reviseKinds[work[0].block.id] = wide;
+  const f = fields[work[0].block.id];
+  try{ if (f) wide(f.get().kind); }catch(e){}
+}
+/* Zooming a page that scrolls, which is not what the full screen viewer does:
+   here the page is made wider and the box it is in scrolls, so one finger
+   moving it about is the browser's own scrolling, with its own momentum. */
+function sheetZoom(sheet){
+  const body = sheet.querySelector(".pdfview");
+  if (!body) return;
+  let zoom = 1;
+  const bar = el("div","rv-sheet-bar no-print");
+  const said = el("button","rv-sheet-btn rv-sheet-said","100%");
+  const at = (next, x, y) => {
+    next = Math.min(5, Math.max(1, next));
+    const r = sheet.getBoundingClientRect();
+    if (x === undefined){ x = r.left + r.width / 2; y = r.top + r.height / 2; }
+    /* the same point of the page stays under the fingers */
+    const inner = body.getBoundingClientRect();
+    const fx = (x - inner.left) / Math.max(1, inner.width), fy = (y - inner.top) / Math.max(1, inner.height);
+    zoom = next;
+    body.style.width = (zoom * 100) + "%";
+    const now = body.getBoundingClientRect();
+    sheet.scrollLeft += now.left + fx * now.width - x;
+    sheet.scrollTop += now.top + fy * now.height - y;
+    said.textContent = Math.round(zoom * 100) + "%";
+    sheet.classList.toggle("is-zoomed", zoom > 1);
+  };
+  const step = (label, words, fn) => {
+    const btn = tel("button","rv-sheet-btn", label);
+    btn.type = "button"; btn.title = words; btn.setAttribute("aria-label", words);
+    btn.addEventListener("click", fn);
+    bar.appendChild(btn);
+  };
+  step("\u2212", "Smaller", () => at(zoom / 1.4));
+  said.type = "button"; said.title = "Fit the page"; said.setAttribute("aria-label", "Fit the page");
+  said.addEventListener("click", () => at(1));
+  bar.appendChild(said);
+  step("+", "Bigger", () => at(zoom * 1.4));
+  sheet.insertBefore(bar, sheet.firstChild);
+  /* Touch events and not pointer events: the browser cancels a pointer the
+     moment it starts scrolling with it, and one finger has to scroll. */
+  const gap = (t) => ({ d: Math.max(1, Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)),
+                        x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+  let from = null, tapAt = 0, tapX = 0, tapY = 0, moved = false;
+  sheet.addEventListener("touchstart", (e) => {
+    moved = false;
+    if (e.touches.length === 2){ from = gap(e.touches); e.preventDefault(); }
+  }, { passive: false });
+  sheet.addEventListener("touchmove", (e) => {
+    moved = true;
+    if (e.touches.length !== 2 || !from) return;
+    e.preventDefault();
+    const now = gap(e.touches);
+    sheet.scrollLeft -= now.x - from.x; sheet.scrollTop -= now.y - from.y;
+    at(zoom * now.d / from.d, now.x, now.y);
+    from = now;
+    tapAt = 0;
+  }, { passive: false });
+  sheet.addEventListener("touchend", (e) => {
+    if (e.touches.length < 2) from = null;
+    if (e.touches.length || moved || e.target.closest("button, a")) return;
+    const p = e.changedTouches[0], t = Date.now();
+    if (t - tapAt < 350 && Math.hypot(p.clientX - tapX, p.clientY - tapY) < 40){
+      tapAt = 0; e.preventDefault();
+      at(zoom > 1 ? 1 : 2.2, p.clientX, p.clientY);
+    } else { tapAt = t; tapX = p.clientX; tapY = p.clientY; }
+  });
+  sheet.addEventListener("gesturestart", (e) => e.preventDefault());
+}
+const reviseKinds = {};            // task id -> told each time they choose what to make
 function watchQuestionScroll(){
   /* Which question is in view, worked out as they scroll, once a frame. */
   let queued = false;
@@ -2762,6 +2896,9 @@ function stopGlide(){
 function questionWheel(e){
   const A = assessPages;
   if (!A || !A.onQuestions || e.ctrlKey || e.defaultPrevented) return;
+  /* A question at a time is no use when there are none: thirty flashcards
+     are one card here, and each turn of the wheel jumped most of a screen. */
+  if (onlyRevision(A.items)) return;
   if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || !e.deltaY) return;
   const dir = e.deltaY > 0 ? 1 : -1;
   const stage = $("stage");
@@ -2909,10 +3046,10 @@ function paintAssessTracker(){
      questions to count, and the summary has a score to show instead. */
   /* Home learning that is nothing but revision has one thing to do, and a
      bar numbering it down the side is clutter. */
-  const onlyRevision = A.items.length > 0 && A.items.every(it => it.block && it.block.type === "revise");
-  const showing = A.onQuestions && !onSummaryNow && !onlyRevision;
+  const justRevision = onlyRevision(A.items);
+  const showing = A.onQuestions && !onSummaryNow && !justRevision;
   /* nor is there a "last question" to have reached */
-  A.screens.forEach(sc => sc.el.querySelectorAll(".assess-end").forEach(p => { p.hidden = onlyRevision; }));
+  A.screens.forEach(sc => sc.el.querySelectorAll(".assess-end").forEach(p => { p.hidden = justRevision; }));
   A.bar.hidden = !showing;
   A.navBtn.hidden = !showing;
   document.body.classList.toggle("assess-on-questions", showing);
@@ -4233,6 +4370,7 @@ async function submitWork(){
       return "failed";
     }
     lastSubmittedPayload = payload;
+    noteUnsent(false);
     if (typedAt === mark) unsavedTyping = false;   // it has reached the teacher
     sendExamMarks();
     return "done";
@@ -4568,8 +4706,83 @@ function rocketScreen(){
   };
 }
 
+/* The same wait for home learning, with no rocket. It answers the same
+   three calls the rocket does, so rocketSave() does not know which of the
+   two it has been given: the only difference is what there is to look at.
+   The bar is moved on a timer for the reason the rocket is moved from
+   JavaScript: the school's reduced motion setting stops CSS doing it. */
+function sendingScreen(){
+  const back = el("div", "rocket-save plain-save no-print");
+  back.setAttribute("role", "status");
+  back.setAttribute("aria-live", "polite");
+  back.innerHTML =
+    '<div class="rs-panel">' +
+      '<div class="rs-bar"><div class="rs-fill"></div></div>' +
+      '<p class="rs-warn"></p>' +
+      '<p class="rs-msg"></p>' +
+      '<div class="rs-actions" hidden>' +
+        '<button class="btn-primary rs-again">Try again</button>' +
+        '<button class="btn-ghost rs-leave">Go to my summary</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(back);
+  const fill = back.querySelector(".rs-fill"), msg = back.querySelector(".rs-msg");
+  const warn = back.querySelector(".rs-warn"), actions = back.querySelector(".rs-actions");
+  let t0 = 0, tick = 0;
+  function going(){
+    t0 = Date.now();
+    back.classList.remove("fallen");
+    actions.hidden = true;
+    warn.textContent = "Handing in your work";
+    msg.textContent = "Please keep this page open.";
+    clearInterval(tick);
+    /* Creeps towards nine tenths, as the rocket's does: nobody can know how
+       long the database will take, and only the answer fills the rest. */
+    const creep = () => { fill.style.width = (90 * (1 - Math.exp(-(Date.now() - t0) / 4000))).toFixed(1) + "%"; };
+    creep();
+    tick = setInterval(creep, 120);
+  }
+  going();
+  return {
+    fall(late, why){
+      clearInterval(tick);
+      back.classList.add("fallen");
+      const signIn = needSignIn;
+      const again = back.querySelector(".rs-again");
+      warn.textContent = signIn ? "You need to sign in again to save."
+                       : why === "failed" ? "We could not reach the server." : "The server is very busy just now.";
+      msg.textContent = "Your work is safe on this computer.";
+      again.textContent = signIn ? "Sign in again" : "Try again";
+      actions.hidden = false;
+      again.focus();
+      return new Promise(answer => {
+        let settled = false;
+        const settle = (choice) => { if (settled) return; settled = true; actions.hidden = true; answer(choice); };
+        again.onclick = () => {
+          if (!signIn){ settle("again"); return; }
+          askSignInAgain(true).then(ok => { if (ok) settle("again"); });
+        };
+        back.querySelector(".rs-leave").onclick = () => settle("summary");
+        if (late) late.then(r => { if (r === "done") settle("done"); });
+      });
+    },
+    relaunch: going,
+    async finish(sent){
+      clearInterval(tick);
+      if (sent){
+        fill.style.width = "100%";
+        warn.textContent = "Sent to your teacher";
+        msg.textContent = "";
+        await pause(700);
+      }
+      back.remove();
+    }
+  };
+}
+
 /* The wait, the send, and the screen over both. `send` is whatever hands the
-   work in and answers "done" when it has arrived.
+   work in and answers "done" when it has arrived. `screen` is the rocket,
+   or for home learning sendingScreen().
 
    An attempt that comes back busy, or has not come back in 35 seconds, makes
    the rocket fall, and the student chooses: Try again, which waits its short
@@ -4577,9 +4790,9 @@ function rocketScreen(){
    nothing on this site traps a child on a screen (CLAUDE.md), and where the
    summary says the work is safe and has its own Try again. */
 let rocketUp = false;
-async function rocketSave(send){
+async function rocketSave(send, screen){
   rocketUp = true;
-  const screen = rocketScreen();
+  screen = screen || rocketScreen();
   let result = "failed";
   for (;;){
     await pause(Math.random() * ROCKET_STAGGER_MS);
@@ -4784,16 +4997,36 @@ async function tryFinish(){
   showLessonComplete(false, true);   // they have just pressed Finish
 }
 
-/* Home learning goes straight to its mark, with no rocket. The rocket is there
-   for a room handing in at the same moment, and these arrive one at a time
-   across an evening. The summary sends the work and says how that went. */
-function homeworkFinish(){
+/* Home learning has no rocket, but it is sent the way the rocket sends: a
+   short random wait, a limit, and Try again. Most of it arrives one at a time
+   across an evening, until a class is given the last ten minutes of a lesson
+   to finish it, or five classes are due in on the same night. */
+async function homeworkFinish(){
   if (!spectate){
     finished = true;
     tickWrittenCode();                 // before the save, so the ticks go with it
     save();
+    noteUnsent(true);
+  }
+  if (rocketWanted()){
+    const sent = await rocketSave(submitWork, sendingScreen());
+    renderAssessmentComplete(true, null, null, sent);
+    return;
   }
   renderAssessmentComplete(!spectate);
+}
+/* Finished here, and not yet taken by the server. It outlives the page, so
+   a student who closed the laptop on "The server is very busy" has it sent
+   the next time they open it. The finished copy in this browser is opened
+   without asking the server anything, so without this nothing would ever
+   notice that it had not arrived, and the summary told them it had. */
+const UNSENT_KEY = WORK_KEY + "_unsent";
+function noteUnsent(yes){
+  if (OFFLINE || spectate || (!token && !guest)) return;
+  try{ if (yes) localStorage.setItem(UNSENT_KEY, "1"); else localStorage.removeItem(UNSENT_KEY); }catch(e){}
+}
+function stillUnsent(){
+  try{ return localStorage.getItem(UNSENT_KEY) === "1"; }catch(e){ return false; }
 }
 
 /* ---------- finish pop-up ---------- */
@@ -7203,6 +7436,7 @@ function attachChecklist(section, checks, runner, blockId, b){
      ticked anything, so the caller knows there is something to save. */
   function tickWritten(results){
     if (!Array.isArray(results)) return false;
+    if (list.showClues) list.showClues(results);
     const had = list.ticked();
     const given = list.getTeacher ? list.getTeacher() : {};
     const gained = [];
@@ -9102,11 +9336,11 @@ function floatHelp(b, section){
   return true;
 }
 const rMindmapTask = (b) => wrapExtra(b, window.rMindmap, "Mind map");
-/* A revision resource is a wrapExtra task that also says when it is used
-   to revise from, which the lesson page counts (countRevision). */
+/* A revision resource is a wrapExtra task that also says which kind is being
+   made, which decides where a knowledge organiser beside it goes. */
 function rReviseTask(b){
   const made = window.rRevise(b, { changed: markDirty, assessment: marksAtEnd(),
-                                   revised: () => countRevision(b.id) });
+                                   kind: (k) => { if (reviseKinds[b.id]) reviseKinds[b.id](k); } });
   fields[b.id] = { get: made.get, set: made.set };
   return {
     section: made.section,
@@ -9118,8 +9352,7 @@ function rReviseTask(b){
 }
 
 /* ---------- how often a revision resource is revised from ----------
-   Each Test me, or each look at a mind map or poster from the finished
-   screen, is one go. Kept in the student's own row under the reserved
+   Each round of a test on the page after Finish is one go. Kept in the student's own row under the reserved
    lesson id __revision, the way the practice sandbox keeps its programs:
    { <lesson id>: { <task id>: { n, last } } }. Not in this lesson's work,
    because that row is written whole from whatever this browser holds and
@@ -10308,6 +10541,15 @@ function reopenFullPicture(){
   };
   setTimeout(go, 0);
 }
+/* A tablet or a phone, rather than a laptop with a touch screen. An iPad
+   says it is a Mac, and with a keyboard case on it says its pointer is fine,
+   so it is known by a Mac having fingers, which no Mac does. */
+function fingerFirst(){
+  try{
+    if (matchMedia("(pointer:coarse)").matches) return true;
+    return (navigator.maxTouchPoints || 0) > 1 && /iPad|Macintosh/.test(navigator.userAgent);
+  }catch(e){ return false; }
+}
 function showPictureFull(src, blockId, psd){
   /* the marking screen around an embedded view keeps it open between students */
   const tellParent = (id) => {
@@ -10320,6 +10562,7 @@ function showPictureFull(src, blockId, psd){
   view.setAttribute("aria-label","Picture, full screen");
   const big = el("img","shot-viewer-img");
   big.src = src; big.alt = "Screenshot, full screen";
+  big.draggable = false;
   const x = el("button","shot-viewer-close","&times;");
   x.type = "button"; x.title = "Close"; x.setAttribute("aria-label","Close full screen");
   /* From a Photoshop file, the picture goes into a Photoshop window with
@@ -10363,6 +10606,9 @@ function showPictureFull(src, blockId, psd){
        request to close it. Nor is one on the Photoshop panels, which is a
        teacher picking a layer or scrolling. */
     if (e.target === big && (dragged || scale > 1)) return;
+    /* A finger on the picture is there to zoom it, and the first tap of a
+       double tap must not shut it. The cross is the way out. */
+    if (e.target === big && touched) return;
     if (ps && !ps.stage.contains(e.target)) return;
     close();
   });
@@ -10372,7 +10618,9 @@ function showPictureFull(src, blockId, psd){
   /* The mouse wheel zooms, about the point under the pointer, so the line
      of code being read stays where it is while it grows. Zoomed in, the
      picture is dragged to move around it. */
-  let scale = 1, tx = 0, ty = 0, dragged = false;
+  let scale = 1, tx = 0, ty = 0, dragged = false, touched = false;
+  const MOST = 8;
+  let bar = null, barSaid = null;
   /* Photoshop's percentage is of the file's own pixels, not of the 1400px
      copy kept, so it is worked out from what is drawn against the canvas
      width the file gave. object-fit leaves the box the full stage, so the
@@ -10383,8 +10631,47 @@ function showPictureFull(src, blockId, psd){
     const fitted = Math.min(big.offsetWidth / nw, big.offsetHeight / nh) * nw;   // before the zoom transform
     ps.zoomed(fitted ? fitted * scale / (psd.w || nw) * 100 : 100);
   };
-  const paint = () => { big.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
-                        view.classList.toggle("zoomed", scale > 1); showZoom(); };
+  const paint = () => {
+    /* Never dragged right off the screen, where there is nothing to drag
+       back. The picture grows from its top left corner, so its edges meet
+       the screen's when it has moved by nothing, or by all it has grown. */
+    tx = Math.min(0, Math.max(big.offsetWidth * (1 - scale), tx));
+    ty = Math.min(0, Math.max(big.offsetHeight * (1 - scale), ty));
+    big.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
+    view.classList.toggle("zoomed", scale > 1);
+    if (barSaid) barSaid.textContent = Math.round(scale * 100) + "%";
+    showZoom();
+  };
+  /* To a size, keeping the point (x, y) of the screen where it is. */
+  const zoomAt = (next, x, y) => {
+    next = Math.min(MOST, Math.max(1, next));
+    const box = big.getBoundingClientRect();
+    const px = (x - box.left) / scale, py = (y - box.top) / scale;
+    tx += px * (scale - next); ty += py * (scale - next);
+    scale = next;
+    if (scale === 1){ tx = 0; ty = 0; }
+    paint();
+  };
+  const zoomMiddle = (next) => {
+    const r = view.getBoundingClientRect();
+    zoomAt(next, r.left + r.width / 2, r.top + r.height / 2);
+  };
+  if (!ps){
+    bar = el("div","shot-zoombar");
+    const step = (label, said, fn) => {
+      const btn = tel("button","shot-zoombtn", label);
+      btn.type = "button"; btn.title = said; btn.setAttribute("aria-label", said);
+      btn.addEventListener("click", (e) => { e.stopPropagation(); fn(); });
+      bar.appendChild(btn);
+      return btn;
+    };
+    step("\u2212", "Smaller", () => zoomMiddle(scale / 1.5));
+    barSaid = step("100%", "Back to the whole picture", () => zoomMiddle(1));
+    barSaid.classList.add("shot-zoomsaid");
+    step("+", "Bigger", () => zoomMiddle(scale * 1.5));
+    bar.addEventListener("click", (e) => e.stopPropagation());
+    view.appendChild(bar);
+  }
   if (ps){
     ps.zoomed(100);
     if (big.complete) requestAnimationFrame(showZoom); else big.addEventListener("load", showZoom);
@@ -10393,17 +10680,55 @@ function showPictureFull(src, blockId, psd){
   /* Over the Photoshop panels the wheel scrolls them, as it would there. */
   (ps ? ps.stage : view).addEventListener("wheel", (e) => {
     e.preventDefault();
-    const box = big.getBoundingClientRect();
-    const next = Math.min(8, Math.max(1, scale * Math.exp(-e.deltaY * 0.0015)));
-    if (next === 1){ scale = 1; tx = 0; ty = 0; paint(); return; }
-    // the point of the picture under the pointer, before and after, stays put
-    const px = (e.clientX - box.left) / scale, py = (e.clientY - box.top) / scale;
-    tx += px * (scale - next); ty += py * (scale - next);
-    scale = next;
-    paint();
+    zoomAt(scale * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
   }, { passive: false });
+  /* Fingers. Two pinch, one moves it about once it is bigger, and two quick
+     taps are in and out again. The site's own, because real full screen on an
+     iPad switches off pinching the page, and that was the only zoom there
+     was: the wheel above is a mouse's. */
+  const fingers = new Map();
+  let pinch = null, tapAt = 0, tapX = 0, tapY = 0;
+  const apart = () => { const [a, b] = [...fingers.values()];
+    return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
   big.addEventListener("pointerdown", (e) => {
-    if (scale === 1) return;
+    if (e.pointerType !== "touch") return;
+    touched = true;
+    e.preventDefault();
+    try{ big.setPointerCapture(e.pointerId); }catch(err){}
+    fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
+    pinch = fingers.size === 2 ? apart() : null;
+  });
+  big.addEventListener("pointermove", (e) => {
+    const f = fingers.get(e.pointerId);
+    if (!f) return;
+    const dx = e.clientX - f.x, dy = e.clientY - f.y;
+    f.x = e.clientX; f.y = e.clientY;
+    if (fingers.size === 2 && pinch){
+      const now = apart();
+      tx += now.x - pinch.x; ty += now.y - pinch.y;      // both fingers carried along
+      zoomAt(scale * now.d / pinch.d, now.x, now.y);
+      pinch = now;
+      tapAt = 0;
+    } else if (fingers.size === 1 && scale > 1){ tx += dx; ty += dy; paint(); }
+  });
+  const lifted = (e) => {
+    const f = fingers.get(e.pointerId);
+    if (!f) return;
+    fingers.delete(e.pointerId);
+    pinch = fingers.size === 2 ? apart() : null;
+    if (e.type !== "pointerup" || fingers.size || Math.hypot(e.clientX - f.sx, e.clientY - f.sy) > 12) return;
+    const t = Date.now();
+    if (t - tapAt < 350 && Math.hypot(e.clientX - tapX, e.clientY - tapY) < 40){
+      tapAt = 0;
+      zoomAt(scale > 1 ? 1 : 2.5, e.clientX, e.clientY);
+    } else { tapAt = t; tapX = e.clientX; tapY = e.clientY; }
+  };
+  big.addEventListener("pointerup", lifted);
+  big.addEventListener("pointercancel", lifted);
+  /* Safari's own pinch, which would zoom the page underneath as well. */
+  view.addEventListener("gesturestart", (e) => e.preventDefault());
+  big.addEventListener("pointerdown", (e) => {
+    if (scale === 1 || e.pointerType === "touch") return;
     e.preventDefault();
     dragged = false;
     const sx = e.clientX - tx, sy = e.clientY - ty, ox = e.clientX, oy = e.clientY;
@@ -10419,8 +10744,10 @@ function showPictureFull(src, blockId, psd){
   /* The overlay fills this page, which in View Work is the frame the work
      is shown in: the marking column stays beside it, which is where the
      teacher is about to write. A student's own lesson goes further and
-     fills the monitor; phones that refuse it keep the overlay. */
-  if (window === window.top && view.requestFullscreen){
+     fills the monitor; phones that refuse it keep the overlay, and so does
+     anything worked with a finger. An iPad's full screen is left by dragging
+     a finger down, which is how a picture is moved about. */
+  if (window === window.top && view.requestFullscreen && !fingerFirst()){
     view.requestFullscreen().then(() => {
       if (shut) document.exitFullscreen().catch(() => {});
       else document.addEventListener("fullscreenchange", onFsChange);
@@ -10840,6 +11167,7 @@ function rImage(b){
       if (v.manual) checklist.list.setManual(v.manual);
       if (checklist.list.setTeacher) checklist.list.setTeacher(v.teacher || {});
       if (Array.isArray(v.checks)) checklist.list.show(v.checks.map(ok => ({ ok: !!ok })));
+      checklist.list.showClues(runChecks());
     }
   };
   return { section:s,
@@ -11893,7 +12221,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
     hero.appendChild(el("div","done-score", res.score + " / " + res.outOf));
     hero.appendChild(el("div","done-pct", pct + "%"));
   }
-  if (home) homeworkHandIn(hero, justFinished);
+  if (home) homeworkHandIn(hero, justFinished, sent);
   if (home) reviseOnSummary(hero);
   if (home) retakeOnSummary(hero, res);
   /* A way straight into the marked work, where the "result saved" line used
@@ -11912,7 +12240,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   box.appendChild(layout);
   /* Only when they have just finished, and never when nothing was earned —
      a celebration over a blank score reads as mockery. */
-  if (justFinished && res.score > 0) confetti();
+  if (justFinished && (res.score > 0 || (home && madeRevision()))) confetti();
 
   // per-question review, shown the way the questions looked
   const rev = buildReview(res);
@@ -12007,13 +12335,15 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   }
 }
 
-/* Home learning hands itself in from its summary, there being no rocket to do
-   it first, and this line is what says it arrived. Offline nothing has gone
-   anywhere, so the way to hand it in is here instead, as on a lesson's. */
 /* Home learning holding a revision resource: what the teacher made of it,
    and the way back into it to revise. This screen is where a student who
    has handed it in lands every time they open it again, so it is the
    place to revise from. */
+const madeRevision = () => !!window.reviseKit && homeworkTasks().some(b => {
+  if (b.type !== "revise" || !fields[b.id]) return false;
+  const v = fields[b.id].get();
+  return window.reviseKit.canRevise(v) || (v.kind === "photo" && !!v.photos);
+});
 function reviseOnSummary(hero){
   const tasks = homeworkTasks().filter(b => b.type === "revise");
   if (!tasks.length) return;
@@ -12032,13 +12362,63 @@ function reviseOnSummary(hero){
   tasks.forEach(b => {
     const v = fields[b.id] ? fields[b.id].get() : null;
     if (!window.reviseKit.canRevise(v)) return;
-    const word = v.kind === "cards" ? "Revise with my flashcards"
-               : v.kind === "quiz" ? "Test myself with my quiz"
-               : v.kind === "mindmap" ? "Revise with my mind map" : "Revise with my poster";
-    const go = el("button","btn-primary rv-go fadein", word);
-    go.addEventListener("click", () => window.reviseKit.open(b, v, () => countRevision(b.id)));
-    hero.appendChild(go);
+    const word = v.kind === "cards" ? "Test me with my flashcards"
+               : v.kind === "quiz" ? "Test me with my quiz"
+               : v.kind === "mindmap" ? "Test me with my mind map" : "Test me with my poster";
+    const box = el("div","rv-summary fadein");
+    box.appendChild(window.reviseKit.fan(v));
+    const go = el("button","btn-primary rv-go", word);
+    go.addEventListener("click", () => openRevisePage(b, v, "Back to my summary", closeRevisePage));
+    box.appendChild(go);
+    hero.appendChild(box);
   });
+}
+/* Testing themselves, which is a page and not a pop-up: it takes the place of
+   the summary until they go back. The browser's own Back button does the
+   same as the one on it, because on a phone that is the one they press. */
+let revisePage = null;
+function openRevisePage(b, v, backSaid, back){
+  const done = $("doneScreen");
+  if (revisePage) closeRevisePage();
+  if (done) done.hidden = true;
+  revisePage = window.reviseKit.page(b, v, { backSaid, back, onStart: () => countRevision(b.id) });
+  $("blocks").appendChild(revisePage);
+  $("dock").classList.add("gone");
+  $("stage").scrollTop = 0;
+  revisePage.start();
+  if (embedParam === null && !spectate){
+    try{ history.pushState({ hubRevise: true }, ""); }catch(e){}
+  }
+}
+function closeRevisePage(fromHistory){
+  if (!revisePage) return;
+  revisePage.stop();
+  revisePage.remove();
+  revisePage = null;
+  const done = $("doneScreen");
+  if (done) done.hidden = false;
+  $("dock").classList.toggle("gone", !rubricOnSummary() && !$("dock").classList.contains("keep-dot"));
+  $("stage").scrollTop = 0;
+  if (fromHistory !== true && history.state && history.state.hubRevise){
+    reviseBacking = true;
+    try{ history.back(); }catch(e){ reviseBacking = false; }
+  }
+}
+/* Going back is answered a moment later, and by then they may have opened it
+   again: the answer to our own going back must not shut the new one. */
+let reviseBacking = false;
+window.addEventListener("popstate", () => {
+  if (reviseBacking){ reviseBacking = false; return; }
+  if (revisePage) closeRevisePage(true);
+});
+/* From My revision: past the summary, to the resource they pressed. */
+function openAskedRevision(){
+  if (reviseParam === null || !window.reviseKit) return;
+  const b = homeworkTasks().find(t => t.type === "revise" && t.id === reviseParam) ||
+            homeworkTasks().find(t => t.type === "revise");
+  const v = b && fields[b.id] ? fields[b.id].get() : null;
+  if (!b || !window.reviseKit.canRevise(v)) return;
+  openRevisePage(b, v, "Back to Practice", () => { location.href = "index.html?tab=practice"; });
 }
 /* Retake: home learning with a mark can be done again from blank, to get
    every question right. Each go before this one is kept as its score only,
@@ -12103,7 +12483,10 @@ async function retakeHomework(res){
   }
   location.reload();
 }
-function homeworkHandIn(hero, justFinished){
+/* The line on home learning's summary that says whether it arrived. Offline
+   nothing has gone anywhere, so the way to hand it in is here instead, as on
+   a lesson's. `sent` is how the hand-in went, when there was one. */
+function homeworkHandIn(hero, justFinished, sent){
   const status = el("p","handin");
   hero.appendChild(status);
   if (OFFLINE && !spectate){
@@ -12112,12 +12495,19 @@ function homeworkHandIn(hero, justFinished){
     return;
   }
   if (spectate) return;
-  if (justFinished){
-    submitWork().then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
+  if (sent){
+    paintStatus(status, sent);
+    paintSaveButtons(sent === "done" ? "saved" : "idle");
     return;
   }
-  /* Opened again later. A copy that never reached the teacher is tried again,
-     and costs nothing if there is nothing new to send. */
+  /* Opened again later, and it never reached the teacher: tried again, after
+     the same short wait, since a whole class may be opening it together. */
+  if (justFinished || stillUnsent()){
+    status.textContent = "Sending your work to your teacher\u2026";
+    pause(justFinished ? 0 : Math.random() * ROCKET_STAGGER_MS).then(submitWork)
+      .then(st => { paintStatus(status, st); paintSaveButtons(st === "done" ? "saved" : "idle"); });
+    return;
+  }
   if (!token) return;
   paintStatus(status, "done");
   paintSaveButtons("saved");
@@ -13270,16 +13660,24 @@ function paintStatus(elm, state){
                   : state === "offline" ? "Sign in so your work can be sent to your teacher"
                   : state === "busy" ? "The server is very busy just now. Your work is safe on this computer."
                   : state === "locked" ? "Your teacher has locked this while they mark it"
+                  : state === "signin" && homeworkView() ? "You need to sign in again before this can be sent."
+                  : homeworkView() ? "Could not reach the server. Your work is safe on this computer."
                   : "Could not reach the server, press Save work to try again";
   /* Busy clears in a minute or so, when a few classes have finished handing
      in at once. The button is right beside the words that explain it, so
      nobody has to work out that Save work is the way to try again. */
-  if (state === "busy"){
+  /* A home learning summary has no Save work button to press, so a connection
+     that dropped is given the same one. */
+  if (state === "busy" || (homeworkView() && (state === "failed" || state === "signin"))){
     const again = el("button", "btn-ghost handin-retry", "Try again");
     again.addEventListener("click", async () => {
       again.disabled = true;
       again.textContent = "Trying again\u2026";
       paintSaveButtons("saving");
+      /* Pressed on purpose, so the password is asked for straight away. */
+      if (needSignIn && !(await askSignInAgain(true))){
+        paintStatus(elm, "signin"); paintSaveButtons("idle"); return;
+      }
       const st = await submitWork();
       if (st === "done") noteSaved(false);
       paintStatus(elm, st);
