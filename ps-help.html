@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="images/logo.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photoshop help</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="look.css">
+<link rel="stylesheet" href="motion.css">
+<script src="motion.js"></script>
+<script src="icons.js"></script>
+<script>try{var _p=JSON.parse(localStorage.getItem("hub_prefs")||"{}");document.documentElement.dataset.look="new";if(_p.bg)document.documentElement.dataset.bg=_p.bg;if(_p.font)document.documentElement.dataset.font=_p.font;}catch(e){}</script>
+<script src="config.js"></script>
+<script src="settings.js"></script>
+<script src="help-photoshop.js"></script>
+<script src="helper.js"></script>
+</head>
+<!-- The Photoshop helper for a student who has not signed in: a link to put on
+     the board. help.html is the same chat for a window beside Photoshop, under
+     the hub's own top bar. This one has no bar, because its only link is Home
+     and Home is a sign-in screen to anybody who came here by the link. Nothing
+     on it calls the server, so it works in offline mode too. -->
+<body class="hp-alone">
+<main class="hp-alone-box">
+  <header class="hp-alone-bar">
+    <h1>Photoshop help</h1>
+    <button type="button" class="btn-ghost iconbtn no-print" id="setBtn" title="Settings" aria-label="Settings">&#9881;&#65038;</button>
+  </header>
+  <div class="hp-alone-chat" id="chat"></div>
+</main>
+<script>
+window.hubHelper.mount(document.getElementById("chat"), window.HELP_PHOTOSHOP).focus();
+if (window.initSettings) initSettings(document.getElementById("setBtn"));
+</script>
+</body>
+</html>
