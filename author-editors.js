@@ -822,7 +822,7 @@ EDITORS.picture = function(b, k){
   pick.addEventListener("click", () => file.click());
   file.addEventListener("change", () => {
     if (!file.files || !file.files[0]) return;
-    said.textContent = "Shrinking and uploading\u2026";
+    said.textContent = b.full === true ? "Uploading at full quality\u2026" : "Shrinking and uploading\u2026";
     said.classList.remove("warn");
     uploadPicture(file.files[0], b.alt || "", (made, why) => {
       file.value = "";
@@ -830,7 +830,7 @@ EDITORS.picture = function(b, k){
       b.imgId = made.id;
       b.url = "";                 // the upload is the picture now
       redraw(); schedulePreview();
-    });
+    }, b.full === true);
   });
   upRow.appendChild(pick);
   /* A picture already uploaded, for this lesson or another, used again
@@ -851,6 +851,12 @@ EDITORS.picture = function(b, k){
   up.appendChild(upRow);
   up.appendChild(file);
   add(up);
+  /* Asked before the upload, because it decides what is uploaded: turning
+     it on afterwards cannot bring back what shrinking threw away. */
+  toggleRow([["full","Full quality", false]], "Uploading",
+    "On: the picture is kept exactly as it was chosen, up to 3MB, so a student who copies it gets the original. "
+    + "Use it for pictures students copy into Photoshop. Off: it is shrunk so it loads quickly. "
+    + "This changes the next upload, so upload the picture again after turning it on.");
   if (!b.imgId)
     F("Or the address of one", "url",
       { help:"Right-click a picture on the web and choose \u201cCopy image address\u201d. A picture in the "
@@ -2740,13 +2746,13 @@ EDITORS.table = function(b, k){
   file.type = "file"; file.accept = "image/*";
   const said = el("span","bhelp","");
   const putPicture = (cell, source) => {
-    said.textContent = "Shrinking and uploading…";
+    said.textContent = cell.full === true ? "Uploading at full quality…" : "Shrinking and uploading…";
     said.classList.remove("warn");
     uploadPicture(source, "", (made, why) => {
       if (!made){ said.textContent = why; said.classList.add("warn"); return; }
       cell.imgId = made.id; cell.url = "";
       redraw(); schedulePreview();
-    });
+    }, cell.full === true);
   };
   if (!pick){
     bar.appendChild(el("span","tt-ed-hint","Click a cell to make it a box, add a picture, or change its row or column."));
@@ -2800,6 +2806,18 @@ EDITORS.table = function(b, k){
     if (has) picGroup.appendChild(actionBtn("Remove the picture", () => {
       delete cell.imgId; delete cell.url; redraw(); schedulePreview();
     }));
+    /* The same choice a picture task has, per cell: a table of pictures for
+       students to copy wants the originals, a table of icons does not. It
+       decides the next upload, so it sits beside the button that does it. */
+    const fullBtn = el("button","btn-ghost bmini2" + (cell.full === true ? " right" : ""),
+                       "Full quality: " + (cell.full === true ? "on" : "off"));
+    fullBtn.type = "button";
+    fullBtn.title = "On: the next picture is kept exactly as chosen, up to 3MB, so copying it gives the original.";
+    fullBtn.addEventListener("click", () => {
+      if (cell.full === true) delete cell.full; else cell.full = true;
+      redraw(); schedulePreview();
+    });
+    picGroup.appendChild(fullBtn);
     picGroup.appendChild(said);
     bar.appendChild(picGroup);
     /* Offline nothing can be uploaded, so a picture is an address, which

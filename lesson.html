@@ -34,6 +34,7 @@
 <script src="blendview.js"></script>
 <script src="dragline.js"></script>
 <script src="config.js"></script>
+<script src="signin.js"></script>
 <script src="worklink.js"></script>
 <script src="settings.js"></script>
 <script src="slides.js"></script>
@@ -921,6 +922,10 @@ function snapshot(){
   const psd = psdAll();
   if (Object.keys(psd).length) data.__psd = psd;
   if (coverOn()) data.__cover = Object.assign(coverData(), { pages: coverPagesDone() });
+  /* Earlier goes at home learning, carried on every save or the next one
+     after a retake would lose them. See retakeHomework(). */
+  const tries = restoredData && restoredData.__tries;
+  if (Array.isArray(tries) && tries.length) data.__tries = tries;
   return data;
 }
 let voiceAnswers = null;          // question id -> option picked, once they answer here
@@ -1415,7 +1420,9 @@ async function dbLesson(){
   if (!d.lesson) throw new Error("missing");
   return { ok:true, json: async () => d.lesson };
 }
-const token = guest ? "" : (localStorage.getItem("hub_token") || "");
+/* let, not const: a sign-in that has run out is replaced in place by
+   askSignInAgain(), so the work on the page is never left behind. */
+let token = guest ? "" : (localStorage.getItem("hub_token") || "");
 /* A real student's own tab has no reason to say which class it is in the
    address, so this is normally read from what signing in cached. The
    teacher console's work pop-ups are a second student nobody signed in
@@ -4200,6 +4207,18 @@ async function submitWork(){
        now, after queueing as long as it can. That is not the same as not
        reaching it, and the child is told so, with a way to try again. */
     if (r.status === 503) return "busy";
+    /* The sign-in has run out (they last 60 days) or is no longer accepted.
+       The lesson still opens and puts their work back from this computer, so
+       nothing looks wrong until a save is turned away, and reloading reads the
+       same sign-in again. That is how a Year 10 class lost a lesson's work
+       with only Try again to press. So ask for the password here, and send
+       again. Behind the rocket the rocket asks instead (fall()), because a
+       pop-up over it would leave its 35 second clock running. */
+    if (r.status === 401 && !guest){
+      needSignIn = true;
+      if (!rocketUp && await askSignInAgain(false)) return submitWork();
+      return "signin";
+    }
     if (r.status === 423){
       /* Locked for marking since this page opened. */
       markingLocked = true;
@@ -4219,6 +4238,116 @@ async function submitWork(){
     return "done";
   }catch(e){ return "failed"; }
 }
+
+/* ---------- signing back in without leaving the page ----------
+   Only ever as the same student: the username is the one this computer
+   signed in with and cannot be changed here, and a sign-in that comes back
+   as anybody else is refused, so one child's work can never be sent under
+   another child's name. */
+let needSignIn = false;            // the server has turned this sign-in away
+let signInAsking = null;           // the pop-up's answer, while it is up
+let signInDeclinedAt = 0;
+function tokenSid(t){
+  try{
+    const part = String(t || "").split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(part)).sid || null;
+  }catch(e){ return null; }
+}
+/* Answers true once they are signed in again. `pressed` is a button they
+   pressed for it; a save in the background that meets the same problem
+   does not ask again for a minute after they closed it, or every few
+   seconds of typing would bring it back. */
+function askSignInAgain(pressed){
+  if (signInAsking) return signInAsking;
+  if (!pressed && Date.now() - signInDeclinedAt < 60000) return Promise.resolve(false);
+  signInAsking = new Promise(answer => {
+    const back = el("div", "modal-back signin-again no-print");
+    const box = el("div", "modal narrow");
+    const close = (ok) => {
+      back.remove();
+      signInAsking = null;
+      if (!ok) signInDeclinedAt = Date.now();
+      answer(ok);
+    };
+    const x = el("button", "btn-ghost iconbtn modal-x", "✕");
+    x.setAttribute("aria-label", "Close");
+    x.addEventListener("click", () => close(false));
+    box.appendChild(x);
+    box.appendChild(el("h2", "", "Sign in again to save"));
+    box.appendChild(el("p", "hint", "You need to sign in again before your work can be saved. Your work is still here and will not be lost."));
+    const user = localStorage.getItem("hub_user") || "";
+    const row = (label, input) => {
+      const r = el("div", "bfield");
+      r.appendChild(el("label", "", label));
+      r.appendChild(input);
+      box.appendChild(r);
+    };
+    const name = el("input");
+    name.type = "text"; name.value = user; name.autocomplete = "username";
+    if (user){ name.readOnly = true; }
+    row("Username", name);
+    const pw = el("input");
+    pw.type = "password"; pw.autocomplete = "current-password"; pw.maxLength = 200;
+    row("Password", pw);
+    const msg = el("p", "hint", "");
+    msg.setAttribute("role", "alert");
+    box.appendChild(msg);
+    const go = el("button", "btn-primary modal-cta", "Sign in and save");
+    const oldSid = tokenSid(token);
+    const send = async () => {
+      const u = name.value.trim(), p = pw.value;
+      if (!u){ msg.textContent = "Type your username."; name.focus(); return; }
+      if (!p){ msg.textContent = "Type your password."; pw.focus(); return; }
+      const busy = hubMotion.busy(go, "Signing in");
+      try{
+        const r = await fetch(API + "/api/login", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || "That did not work. Check your password and try again.");
+        if (oldSid && tokenSid(d.token) !== oldSid)
+          throw new Error("That is a different account. Sign in as yourself to save this work.");
+        token = d.token;
+        localStorage.setItem("hub_token", d.token);
+        if (!user) localStorage.setItem("hub_user", u.toLowerCase());
+        if (d.name) localStorage.setItem("hub_name", d.name);
+        if (d.group) localStorage.setItem("hub_group", d.group);
+        needSignIn = false;
+        busy.reset();
+        close(true);
+      }catch(e){
+        busy.reset();
+        msg.textContent = e.message === "Failed to fetch" ? "Could not reach the server. Try again in a moment." : e.message;
+        pw.focus();
+      }
+    };
+    go.addEventListener("click", send);
+    pw.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    box.appendChild(go);
+    scrollBody(box);
+    back.appendChild(box);
+    document.body.appendChild(back);
+    setTimeout(() => (user ? pw : name).focus(), 30);
+  });
+  return signInAsking;
+}
+
+/* At the start, not the end. A sign-in that has already run out, or that
+   renewing finds a teacher has signed out, is asked for as the lesson opens,
+   before there is any work to lose. Otherwise, once a week, a fresh 28 days
+   (signin.js). A password changed in Settings on this page hands over the
+   sign-in that still works. */
+window.addEventListener("hub-signin", (e) => { if (!guest && e.detail){ token = e.detail; needSignIn = false; } });
+setTimeout(() => {
+  if (OFFLINE || spectate || inPreview || guest || !token || !apiReady || !window.hubSignIn) return;
+  const refused = () => { needSignIn = true; askSignInAgain(true); };
+  if (window.hubSignIn.expired(token)){ refused(); return; }
+  window.hubSignIn.renew().then(r => {
+    if (r === "refused") refused();
+    else if (r && localStorage.getItem("hub_token") === r) token = r;
+  });
+}, 0);
 
 /* ---------- handing in at the end: the rocket ----------
    A whole class presses Finish within the same few seconds, and the free
@@ -4392,13 +4521,23 @@ function rocketScreen(){
       fallAt = performance.now();
       clearInterval(words);
       back.classList.add("fallen");
-      warn.textContent = why === "failed" ? "We could not reach the server." : "The server is very busy just now.";
+      /* A sign-in turned away is not a connection problem, and pressing
+         Try again would only be turned away again, which is what a whole
+         class did for the last ten minutes of a lesson. */
+      const signIn = needSignIn;
+      const again = actions.querySelector(".rs-again");
+      warn.textContent = signIn ? "You need to sign in again to save."
+                       : why === "failed" ? "We could not reach the server." : "The server is very busy just now.";
       msg.textContent = "Your work is safe on this computer.";
+      again.textContent = signIn ? "Sign in again" : "Try again";
       actions.hidden = false;
       return new Promise(answer => {
         let settled = false;
         const settle = (choice) => { if (settled) return; settled = true; actions.hidden = true; answer(choice); };
-        actions.querySelector(".rs-again").onclick = () => settle("again");
+        again.onclick = () => {
+          if (!signIn){ settle("again"); return; }
+          askSignInAgain(true).then(ok => { if (ok) settle("again"); });
+        };
         actions.querySelector(".rs-leave").onclick = () => settle("summary");
         if (late) late.then(r => { if (r === "done") settle("done"); });
       });
@@ -4588,7 +4727,7 @@ async function manualSave(){
   finally{ savingNow = false; }
   if (state === "done"){ noteSaved(false); paintSaveButtons("saved"); return; }
   paintSaveButtons("idle");
-  btn.textContent = state === "offline" ? "Sign in to save"
+  btn.textContent = state === "offline" || state === "signin" ? "Sign in to save"
                   : state === "locked" ? "Locked for marking" : "Try again";
   btn.classList.add("flash-bad");
   hubMotion.nudge(btn);
@@ -11756,6 +11895,7 @@ function renderAssessmentComplete(justFinished, res, st, sent){
   }
   if (home) homeworkHandIn(hero, justFinished);
   if (home) reviseOnSummary(hero);
+  if (home) retakeOnSummary(hero, res);
   /* A way straight into the marked work, where the "result saved" line used
      to sit. It fades in last, once the cards have settled. */
   const seeBtn = el("button","btn-primary done-save fadein", home ? "View my work" : "View my assessment");
@@ -11899,6 +12039,69 @@ function reviseOnSummary(hero){
     go.addEventListener("click", () => window.reviseKit.open(b, v, () => countRevision(b.id)));
     hero.appendChild(go);
   });
+}
+/* Retake: home learning with a mark can be done again from blank, to get
+   every question right. Each go before this one is kept as its score only,
+   under __tries in the same work row (a few dozen bytes a go, no column and
+   no route), and the mark book reads the newest answers as the result and
+   the list as the earlier goes. The answers themselves are not kept: the
+   work row would grow with every go, and the score is what a teacher asked
+   to see. Not offered once a teacher has locked it or given feedback on it,
+   since that feedback is about the answers this would clear. */
+function retakeOnSummary(hero, res){
+  if (spectate || markingLocked || workFrozen || !res || !res.outOf) return;
+  const tries = (restoredData && Array.isArray(restoredData.__tries)) ? restoredData.__tries : [];
+  const goes = tries.length + 1;
+  hero.appendChild(el("p","hl-tries", goes === 1 ? "This was your first go."
+    : "This was go number " + goes + "."));
+  const again = el("button","btn-ghost fadein hl-retake", "Retake to master it");
+  again.type = "button";
+  again.addEventListener("click", () => handInModal({
+    title: "Start again from blank?",
+    text: "Your answers will be cleared so you can try every question again. Your teacher will still see the score you got this time.",
+    yes: { label: "Yes, retake it", act: () => retakeHomework(res) },
+    no:  { label: "Not now", act: () => {} },
+    focus: "no"
+  }));
+  hero.appendChild(again);
+}
+async function retakeHomework(res){
+  const tries = (restoredData && Array.isArray(restoredData.__tries)) ? restoredData.__tries.slice() : [];
+  const now = snapshot();
+  tries.push({ got: res.score, max: res.outOf, at: now.__saved });
+  /* Blank work carrying only what is not an answer. Written here and to the
+     server before reloading: the page then opens it the way it opens any
+     unfinished home learning, so no task's set() has to know how to empty
+     itself. */
+  const fresh = { __step: 0, __saved: new Date().toISOString(), __done: false, __tries: tries };
+  if (now.__voice) fresh.__voice = now.__voice;
+  /* Every save stops while restoreDone is false, which keeps pagehide on the
+     way out of the reload from writing the old answers back over these. */
+  restoreDone = false;
+  clearTimeout(saveTimer);
+  try{ localStorage.setItem(WORK_KEY, JSON.stringify(fresh)); }catch(e){}
+  if (!OFFLINE && token && apiReady && !guest){
+    try{
+      const r = await fetch(API + "/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ lesson: lessonId, data: fresh })
+      });
+      if (!r.ok) throw new Error(String(r.status));
+    }catch(e){
+      /* The finished copy on the server would win on reload and quietly
+         undo the retake, so say so and stay on the summary. */
+      console.warn("Retake was not saved", e);
+      try{ localStorage.removeItem(WORK_KEY); }catch(e2){}
+      restoreDone = true;
+      lastSaved = "";
+      save();
+      const btn = document.querySelector(".hl-retake");
+      if (btn) btn.textContent = "Could not start again. Try once more";
+      return;
+    }
+  }
+  location.reload();
 }
 function homeworkHandIn(hero, justFinished){
   const status = el("p","handin");

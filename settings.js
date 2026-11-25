@@ -270,6 +270,13 @@
           body: JSON.stringify({ action:"set-password", newPassword: next }) });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || "Could not change it.");
+        /* Changing it signs out every other browser, and hands this one the
+           sign-in that still works. A lesson open here holds its own copy,
+           so it is told. */
+        if (d.token){
+          localStorage.setItem("hub_token", d.token);
+          try{ window.dispatchEvent(new CustomEvent("hub-signin", { detail: d.token })); }catch(e){}
+        }
         if (busy) await busy.done("Changed");
         msg.textContent = "Password changed \u2713";
         back.querySelector("#pwNew").value = back.querySelector("#pwNew2").value = "";
